@@ -1,0 +1,603 @@
+cmake_minimum_required(VERSION 3.4)
+PROJECT(libcat LANGUAGES C)
+
+cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
+cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+
+include(CMakePackageConfigHelpers)
+include(CMakeDependentOption)
+include(CheckCCompilerFlag)
+include(GNUInstallDirs)
+include(CTest)
+
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_C_STANDARD 90)
+
+# Qemu Build
+option(QEMU "build for qemu" OFF)
+if(QEMU)
+  add_definitions(-D__QEMU__=1)
+endif()
+
+# Compiler check
+message(STATUS "C Compiler is ${CMAKE_C_COMPILER_ID}")
+string(CONCAT is-msvc $<OR:
+  $<C_COMPILER_ID:MSVC>,
+  $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
+>)
+
+check_c_compiler_flag(/W4 CAT_LINT_W4)
+check_c_compiler_flag(/wd4100 CAT_LINT_NO_UNUSED_PARAMETER_MSVC)
+check_c_compiler_flag(/wd4127 CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC)
+check_c_compiler_flag(/wd4201 CAT_LINT_NO_NONSTANDARD_MSVC)
+check_c_compiler_flag(/wd4206 CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC)
+check_c_compiler_flag(/wd4210 CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC)
+check_c_compiler_flag(/wd4232 CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC)
+check_c_compiler_flag(/wd4456 CAT_LINT_NO_HIDES_LOCAL)
+check_c_compiler_flag(/wd4457 CAT_LINT_NO_HIDES_PARAM)
+check_c_compiler_flag(/wd4459 CAT_LINT_NO_HIDES_GLOBAL)
+check_c_compiler_flag(/wd4706 CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC)
+check_c_compiler_flag(/wd4996 CAT_LINT_NO_UNSAFE_MSVC)
+
+check_c_compiler_flag(-Wall CAT_LINT_WALL) # DO NOT use this under MSVC
+
+# TODO: Place these into its own function
+check_c_compiler_flag(-Wno-unused-parameter CAT_LINT_NO_UNUSED_PARAMETER)
+check_c_compiler_flag(-Wstrict-prototypes CAT_LINT_STRICT_PROTOTYPES)
+check_c_compiler_flag(-Wextra CAT_LINT_EXTRA)
+
+set(lint-no-unused-parameter $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER}>:-Wno-unused-parameter>)
+set(lint-strict-prototypes $<$<BOOL:${CAT_LINT_STRICT_PROTOTYPES}>:-Wstrict-prototypes>)
+set(lint-extra $<$<BOOL:${CAT_LINT_EXTRA}>:-Wextra>)
+set(lint-w4 $<$<BOOL:${CAT_LINT_W4}>:/W4>)
+set(lint-no-unused-parameter-msvc $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER_MSVC}>:/wd4100>)
+set(lint-no-conditional-constant-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC}>:/wd4127>)
+set(lint-no-nonstandard-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_MSVC}>:/wd4201>)
+set(lint-no-nonstandard-empty-tu-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC}>:/wd4206>)
+set(lint-no-nonstandard-file-scope-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC}>:/wd4210>)
+set(lint-no-nonstandard-nonstatic-dlimport-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC}>:/wd4232>)
+set(lint-no-hides-local-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_LOCAL}>:/wd4456>)
+set(lint-no-hides-param-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_PARAM}>:/wd4457>)
+set(lint-no-hides-global-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_GLOBAL}>:/wd4459>)
+set(lint-no-conditional-assignment-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC}>:/wd4706>)
+set(lint-no-unsafe-msvc $<$<BOOL:${CAT_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
+# Unfortunately, this one is complicated because MSVC and clang-cl support -Wall
+# but using it is like calling -Weverything
+string(CONCAT lint-default $<
+  $<AND:$<BOOL:${CAT_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
+>)
+
+list(APPEND cat_cflags ${lint-strict-prototypes} ${lint-extra} ${lint-default} ${lint-w4})
+list(APPEND cat_cflags ${lint-no-unused-parameter})
+list(APPEND cat_cflags ${lint-no-unused-parameter-msvc})
+list(APPEND cat_cflags ${lint-no-conditional-constant-msvc})
+list(APPEND cat_cflags ${lint-no-nonstandard-msvc})
+list(APPEND cat_cflags ${lint-no-nonstandard-empty-tu-msvc})
+list(APPEND cat_cflags ${lint-no-nonstandard-file-scope-msvc})
+list(APPEND cat_cflags ${lint-no-nonstandard-nonstatic-dlimport-msvc})
+list(APPEND cat_cflags ${lint-no-hides-local-msvc})
+list(APPEND cat_cflags ${lint-no-hides-param-msvc})
+list(APPEND cat_cflags ${lint-no-hides-global-msvc})
+list(APPEND cat_cflags ${lint-no-conditional-assignment-msvc})
+list(APPEND cat_cflags ${lint-no-unsafe-msvc})
+
+# ========== ASM ===========
+if (NOT MSVC)
+    enable_language(ASM)
+    if(CMAKE_ASM_COMPILER_WORKS)
+        message(STATUS "ASM enabled")
+        message(STATUS "ASM Compiler is ${CMAKE_ASM_COMPILER_ID}")
+    else()
+        # TODO: use ucontext
+        message(FATAL_ERROR "Enable ASM failed")
+    endif(CMAKE_ASM_COMPILER_WORKS)
+else()
+    set(MASMFound FALSE)
+    enable_language(ASM_MASM)
+    if(CMAKE_ASM_MASM_COMPILER_WORKS)
+        SET(MASMFound TRUE)
+        message(STATUS "ASM_MASM enabled")
+        message(STATUS "ASM_MASM Compiler is ${CMAKE_ASM_MASM_COMPILER_ID}")
+    else()
+        message(FATAL_ERROR "Enable ASM_MASM failed")
+    endif(CMAKE_ASM_MASM_COMPILER_WORKS)
+endif()
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
+# ========== msvc x86 disable safeseh ==========
+# if (MSVC AND "${LIBCOPP_FCONTEXT_OS_PLATFORM}" STREQUAL "i386")
+# 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
+# 	set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
+# 	set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
+# endif()
+
+set(cat_defines HAVE_LIBCAT=1)
+
+# TODO: configure it
+set(CMAKE_BUILD_TYPE Debug)
+list(APPEND cat_defines CAT_DEBUG=1)
+
+set(cat_includes include include/cat)
+
+set(cat_sources
+    src/cat/cat_cp.c
+    src/cat/cat_memory.c
+    src/cat/cat_string.c
+    src/cat/cat_error.c
+    src/cat/cat_module.c
+    src/cat/cat_log.c
+    src/cat.c
+    src/cat_api.c
+    src/cat_coroutine.c
+    src/cat_channel.c
+    src/cat_sync.c
+    src/cat_event.c
+    src/cat_time.c
+    src/cat_socket.c
+    src/cat_dns.c
+    src/cat_work.c
+    src/cat_buffer.c
+    src/cat_fs.c
+    src/cat_http.c
+    src/cat_websocket.c
+    # [optional]
+    src/cat_ssl.c
+)
+
+set(cat_libraries)
+
+# ========== Detect mac info (thanks to libcocpp) ==========
+if (1)
+    # ========== set os platform ==========
+    # CAT_CPU_ARCH can be set to arm/arm64/i386/x86_64/combined/mips/ppc32/ppc64/sparc/sparc64
+    if (NOT CAT_CPU_ARCH)
+        if(NOT CMAKE_SYSTEM_PROCESSOR)
+            set(CMAKE_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR})
+        endif()
+        string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} CAT_CPU_ARCH)
+    	if(CAT_CPU_ARCH STREQUAL "unknown" OR
+    		CAT_CPU_ARCH STREQUAL "i386" OR
+    		CAT_CPU_ARCH STREQUAL "i686" OR
+    		CAT_CPU_ARCH STREQUAL "x86_64" OR
+    		CAT_CPU_ARCH STREQUAL "amd64"
+    		)
+            if(CMAKE_SIZEOF_VOID_P MATCHES 8)
+                set(CMAKE_SYSTEM_PROCESSOR "x86_64")
+                set(CAT_CPU_ARCH "x86_64")
+            else()
+                set(CMAKE_SYSTEM_PROCESSOR "i386")
+                set(CAT_CPU_ARCH "i386")
+    		endif()
+    	elseif(
+    		CAT_CPU_ARCH MATCHES "^armv5" OR
+    		CAT_CPU_ARCH MATCHES "^armv7" OR
+    		CAT_CPU_ARCH MATCHES "^armeabi"
+    	)
+    		set(CAT_CPU_ARCH "arm")
+    	elseif(
+    			CAT_CPU_ARCH MATCHES "^arm64" OR
+    			CAT_CPU_ARCH MATCHES "^aarch64"
+    		)
+    			set(CAT_CPU_ARCH "arm64")
+        endif()
+        if (CAT_CPU_ARCH STREQUAL "unknown")
+            # TODO use ucontext
+            message(FATAL_ERROR RED "Can not detect the processor, please add -DCAT_CPU_ARCH=arm/arm64/i386/x86_64/combined/mips32/mips64/ppc32/ppc64 to help us to find target processor")
+        endif()
+    endif()
+    # patch for old -DCAT_CPU_ARCH=mips to -DCAT_CPU_ARCH=mips32
+    if (CAT_CPU_ARCH STREQUAL "mips")
+    	set(CAT_CPU_ARCH "mips32")
+    endif ()
+    # ========== set abi ==========
+    if( CAT_CPU_ARCH STREQUAL "arm" OR CAT_CPU_ARCH STREQUAL "arm64")
+        set(CAT_ABI "aapcs")
+    elseif( CAT_CPU_ARCH STREQUAL "mips32" )
+        set(CAT_ABI "o32")
+    elseif( CAT_CPU_ARCH STREQUAL "mips64" )
+        set(CAT_ABI "n64")
+    elseif (WIN32 OR WINCE OR WINDOWS_PHONE OR WINDOWS_STORE OR MINGW OR CYGWIN)
+        set(CAT_ABI "ms")
+    else()
+        set(CAT_ABI "sysv")
+    endif()
+    # ========== set binary format ==========
+    # CAT_BINARY_FORMAT can be set to elf/macho/pe/xcoff
+    if(NOT CAT_BINARY_FORMAT)
+        if(WIN32 OR WINCE OR WINDOWS_PHONE OR WINDOWS_STORE OR MINGW OR CYGWIN)
+            set(CAT_BINARY_FORMAT "pe")
+        elseif(APPLE)
+            set(CAT_BINARY_FORMAT "macho")
+        elseif(AIX) # cmake not supported now
+            set(CAT_BINARY_FORMAT "xcoff")
+        else()
+            set(CAT_BINARY_FORMAT "elf")
+        endif()
+    endif()
+    # ========== set as tool ==========
+    # CAT_ASM_TOOL can be set to gas/armasm/masm
+    if(NOT CAT_ASM_TOOL)
+        if(MSVC)
+            if ("${CAT_CPU_ARCH}" STREQUAL "arm" OR "${CAT_CPU_ARCH}" STREQUAL "arm64")
+                set(CAT_ASM_TOOL "armasm")
+            else()
+                set(CAT_ASM_TOOL "masm")
+            endif()
+        else()
+            set(CAT_ASM_TOOL "gas")
+        endif()
+        if (WIN32 OR MINGW)
+            set(CAT_COROUTINE_CONTEXT_AS_OUTPUT_SUFFIX "obj")
+        else()
+            set(CAT_COROUTINE_CONTEXT_AS_OUTPUT_SUFFIX "o")
+        endif()
+    endif()
+    # ========== set suffix ==========
+    if (WIN32 OR WINCE OR WINDOWS_PHONE OR WINDOWS_STORE OR MINGW OR CYGWIN)
+        set(CAT_ASM_SUFFIX "asm")
+    else()
+        set(CAT_ASM_SUFFIX "S")
+    endif()
+endif()
+
+# context dep
+if (1)
+    set(cat_coroutine_context_dir "deps/context/asm")
+    set(cat_coroutine_context_name "${CAT_CPU_ARCH}_${CAT_ABI}_${CAT_BINARY_FORMAT}_${CAT_ASM_TOOL}.${CAT_ASM_SUFFIX}")
+    message(STATUS "ASM of context is ${cat_coroutine_context_name}")
+    set(cat_context_sources
+        ${cat_coroutine_context_dir}/make_${cat_coroutine_context_name}
+        ${cat_coroutine_context_dir}/jump_${cat_coroutine_context_name}
+    )
+    list(APPEND cat_sources ${cat_context_sources})
+endif()
+
+# libuv dep /* $Id: 1c22b443802fdf3fcf3cfababcc62d13385242f2 $ */
+if (1)
+    set(uv_dir "deps/libuv")
+
+    set(uv_sources
+        ${uv_dir}/src/fs-poll.c
+        ${uv_dir}/src/idna.c
+        ${uv_dir}/src/inet.c
+        ${uv_dir}/src/random.c
+        ${uv_dir}/src/strscpy.c
+        ${uv_dir}/src/threadpool.c
+        ${uv_dir}/src/timer.c
+        ${uv_dir}/src/uv-common.c
+        ${uv_dir}/src/uv-data-getter-setters.c
+        ${uv_dir}/src/version.c)
+
+    if(WIN32)
+      list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0600)
+      list(APPEND uv_libraries
+           psapi
+           iphlpapi
+           userenv
+           ws2_32)
+      list(APPEND uv_sources
+           ${uv_dir}/src/win/async.c
+           ${uv_dir}/src/win/core.c
+           ${uv_dir}/src/win/detect-wakeup.c
+           ${uv_dir}/src/win/dl.c
+           ${uv_dir}/src/win/error.c
+           ${uv_dir}/src/win/fs.c
+           ${uv_dir}/src/win/fs-event.c
+           ${uv_dir}/src/win/getaddrinfo.c
+           ${uv_dir}/src/win/getnameinfo.c
+           ${uv_dir}/src/win/handle.c
+           ${uv_dir}/src/win/loop-watcher.c
+           ${uv_dir}/src/win/pipe.c
+           ${uv_dir}/src/win/thread.c
+           ${uv_dir}/src/win/poll.c
+           ${uv_dir}/src/win/process.c
+           ${uv_dir}/src/win/process-stdio.c
+           ${uv_dir}/src/win/signal.c
+           ${uv_dir}/src/win/snprintf.c
+           ${uv_dir}/src/win/stream.c
+           ${uv_dir}/src/win/tcp.c
+           ${uv_dir}/src/win/tty.c
+           ${uv_dir}/src/win/udp.c
+           ${uv_dir}/src/win/util.c
+           ${uv_dir}/src/win/winapi.c
+           ${uv_dir}/src/win/winsock.c)
+    else()
+      list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE)
+      if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|OS390")
+        # TODO: This should be replaced with find_package(Threads) if possible
+        # Android has pthread as part of its c library, not as a separate
+        # libpthread.so.
+        list(APPEND uv_libraries pthread)
+      endif()
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/async.c
+           ${uv_dir}/src/unix/core.c
+           ${uv_dir}/src/unix/dl.c
+           ${uv_dir}/src/unix/fs.c
+           ${uv_dir}/src/unix/getaddrinfo.c
+           ${uv_dir}/src/unix/getnameinfo.c
+           ${uv_dir}/src/unix/loop-watcher.c
+           ${uv_dir}/src/unix/loop.c
+           ${uv_dir}/src/unix/pipe.c
+           ${uv_dir}/src/unix/poll.c
+           ${uv_dir}/src/unix/process.c
+           ${uv_dir}/src/unix/random-devurandom.c
+           ${uv_dir}/src/unix/signal.c
+           ${uv_dir}/src/unix/stream.c
+           ${uv_dir}/src/unix/tcp.c
+           ${uv_dir}/src/unix/thread.c
+           ${uv_dir}/src/unix/tty.c
+           ${uv_dir}/src/unix/udp.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "AIX")
+      list(APPEND uv_defines
+           _ALL_SOURCE
+           _LINUX_SOURCE_COMPAT
+           _THREAD_SAFE
+           _XOPEN_SOURCE=500
+           HAVE_SYS_AHAFS_EVPRODS_H)
+      list(APPEND uv_libraries perfstat)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/aix.c
+           ${uv_dir}/src/unix/aix-common.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+      list(APPEND uv_libraries dl)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/android-ifaddrs.c
+           ${uv_dir}/src/unix/linux-core.c
+           ${uv_dir}/src/unix/linux-inotify.c
+           ${uv_dir}/src/unix/linux-syscalls.c
+           ${uv_dir}/src/unix/procfs-exepath.c
+           ${uv_dir}/src/unix/pthread-fixes.c
+           ${uv_dir}/src/unix/random-getentropy.c
+           ${uv_dir}/src/unix/random-getrandom.c
+           ${uv_dir}/src/unix/random-sysctl-linux.c)
+    endif()
+
+    if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux|OS390")
+      list(APPEND uv_sources ${uv_dir}/src/unix/proctitle.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME MATCHES "DragonFly|FreeBSD")
+      list(APPEND uv_sources ${uv_dir}/ ${uv_dir}/src/unix/freebsd.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME MATCHES "DragonFly|FreeBSD|NetBSD|OpenBSD")
+      list(APPEND uv_sources ${uv_dir}/src/unix/posix-hrtime.c ${uv_dir}/src/unix/bsd-proctitle.c)
+    endif()
+
+    if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "DragonFly|FreeBSD|NetBSD|OpenBSD")
+      list(APPEND uv_sources ${uv_dir}/src/unix/bsd-ifaddrs.c ${uv_dir}/src/unix/kqueue.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+      list(APPEND uv_sources ${uv_dir}/src/unix/random-getrandom.c)
+    endif()
+
+    if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+      list(APPEND uv_sources ${uv_dir}/src/unix/random-getentropy.c)
+    endif()
+
+    if(APPLE)
+      list(APPEND uv_defines _DARWIN_UNLIMITED_SELECT=1 _DARWIN_USE_64_BIT_INODE=1)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/darwin-proctitle.c
+           ${uv_dir}/src/unix/darwin.c
+           ${uv_dir}/src/unix/fsevents.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
+      list(APPEND uv_libraries dl rt)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/linux-core.c
+           ${uv_dir}/src/unix/linux-inotify.c
+           ${uv_dir}/src/unix/linux-syscalls.c
+           ${uv_dir}/src/unix/procfs-exepath.c
+           ${uv_dir}/src/unix/random-getrandom.c
+           ${uv_dir}/src/unix/random-sysctl-linux.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
+      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/netbsd.c)
+      list(APPEND uv_libraries kvm)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/openbsd.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
+      list(APPEND uv_defines PATH_MAX=255)
+      list(APPEND uv_defines _AE_BIMODAL)
+      list(APPEND uv_defines _ALL_SOURCE)
+      list(APPEND uv_defines _ISOC99_SOURCE)
+      list(APPEND uv_defines _LARGE_TIME_API)
+      list(APPEND uv_defines _OPEN_MSGQ_EXT)
+      list(APPEND uv_defines _OPEN_SYS_FILE_EXT)
+      list(APPEND uv_defines _OPEN_SYS_IF_EXT)
+      list(APPEND uv_defines _OPEN_SYS_SOCK_EXT3)
+      list(APPEND uv_defines _OPEN_SYS_SOCK_IPV6)
+      list(APPEND uv_defines _UNIX03_SOURCE)
+      list(APPEND uv_defines _UNIX03_THREADS)
+      list(APPEND uv_defines _UNIX03_WITHDRAWN)
+      list(APPEND uv_defines _XOPEN_SOURCE_EXTENDED)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/pthread-fixes.c
+           ${uv_dir}/src/unix/os390.c
+           ${uv_dir}/src/unix/os390-syscalls.c)
+      list(APPEND uv_cflags -Wc,DLL -Wc,exportall -Wc,xplink)
+      list(APPEND uv_libraries -Wl,xplink)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "OS400")
+      list(APPEND uv_defines
+           _ALL_SOURCE
+           _LINUX_SOURCE_COMPAT
+           _THREAD_SAFE
+           _XOPEN_SOURCE=500)
+      list(APPEND uv_sources
+        ${uv_dir}/src/unix/aix-common.c
+        ${uv_dir}/src/unix/ibmi.c
+        ${uv_dir}/src/unix/no-fsevents.c
+        ${uv_dir}/src/unix/no-proctitle.c
+        ${uv_dir}/src/unix/posix-poll.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+      list(APPEND ${uv_dir}/uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500)
+      list(APPEND ${uv_dir}/uv_libraries kstat nsl sendfile socket)
+      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/no-proctitle.c ${uv_dir}/src/unix/sunos.c)
+    endif()
+
+    # TODO: include => public, src => private
+    set(uv_includes ${uv_dir}/include ${uv_dir}/src)
+
+    list(APPEND cat_defines ${uv_defines})
+    list(APPEND cat_includes ${uv_includes})
+    list(APPEND cat_libraries ${uv_libraries})
+    list(APPEND cat_sources ${uv_sources})
+endif()
+
+# valgrind dep
+if(NOT WIN32)
+# Try to find Valgrind headers and libraries.
+#
+# Usage of this module as follows:
+# 	find_package(Valgrind)
+#
+# Variables used by this module, they can change the default behaviour and need
+# to be set before calling find_package:
+#
+# VALGRIND_ROOT Set this variable to the root installation of valgrind if the
+# module has problems finding the proper installation path.
+#
+# Variables defined by this module:
+# 	Valgrind_FOUND System has valgrind
+# 	Valgrind_INCLUDE_DIR where to find valgrind/memcheck.h, etc.
+# 	Valgrind_EXECUTABLE the valgrind executable.
+# Get hint from environment variable (if any)
+if(NOT VALGRIND_ROOT)
+    if (DEFINED ENV{VALGRIND_ROOT})
+        set(VALGRIND_ROOT "$ENV{VALGRIND_ROOT}" CACHE PATH "Valgrind base directory location (optional, used for nonstandard installation paths)")
+    else()
+        set(VALGRIND_ROOT "/usr/")
+    endif()
+    mark_as_advanced(VALGRIND_ROOT)
+endif()
+# Search path for nonstandard locations
+if(VALGRIND_ROOT)
+	set(Valgrind_INCLUDE_PATH PATHS "${VALGRIND_ROOT}/include" NO_DEFAULT_PATH)
+	set(Valgrind_BINARY_PATH PATHS "${VALGRIND_ROOT}/bin" NO_DEFAULT_PATH)
+endif()
+find_path(Valgrind_INCLUDE_DIR valgrind HINTS ${Valgrind_INCLUDE_PATH})
+find_program(Valgrind_EXECUTABLE NAMES valgrind PATH ${Valgrind_BINARY_PATH})
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(Valgrind DEFAULT_MSG Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
+mark_as_advanced(Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
+find_package(Valgrind QUIET)
+if (${VALGRIND_FOUND})
+    message(STATUS "Found Valgrind")
+    list(APPEND cat_defines HAVE_VALGRIND=1)
+    list(APPEND cat_includes ${VALGRIND_INCLUDE_DIR})
+else()
+    message(STATUS "No Valgrind")
+endif()
+endif()
+
+# llhttp dep
+if (1)
+    set(llhttp_dir "deps/llhttp")
+    list(APPEND cat_includes ${llhttp_dir}/include)
+    list(APPEND cat_sources
+        ${llhttp_dir}/src/api.c
+        ${llhttp_dir}/src/http.c
+        ${llhttp_dir}/src/llhttp.c
+    )
+endif()
+
+# openssl dep
+find_package(OpenSSL QUIET)
+if (${OPENSSL_FOUND})
+    message(STATUS "Found OpenSSL")
+    list(APPEND cat_defines HAVE_OPENSSL=1)
+    list(APPEND cat_includes ${OPENSSL_INCLUDE_DIR})
+    list(APPEND cat_libraries ${OPENSSL_LIBRARIES})
+else()
+    message(STATUS "No OpenSSL")
+endif()
+
+# Code Coverage Configuration
+add_library(coverage_config INTERFACE)
+
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
+if(CODE_COVERAGE)
+  target_compile_options(coverage_config INTERFACE
+    -O0
+    -g
+    --coverage
+  )
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
+    target_link_options(coverage_config INTERFACE --coverage)
+  else()
+    target_link_libraries(coverage_config INTERFACE --coverage)
+  endif()
+endif(CODE_COVERAGE)
+
+add_library(cat STATIC ${cat_sources})
+target_compile_definitions(cat PRIVATE ${cat_defines})
+target_compile_options(cat PRIVATE ${cat_cflags})
+# TODO: Separate public and private
+target_include_directories(cat PRIVATE ${cat_includes})
+target_link_libraries(cat ${cat_libraries})
+target_link_libraries(cat coverage_config)
+
+# tests
+find_package(GTest QUIET)
+if (${GTEST_FOUND})
+    message(STATUS "Found GTest")
+    enable_testing()
+    enable_language(CXX)
+    set(CMAKE_CXX_STANDARD 11)
+    message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
+    add_executable(cat_tests
+        tests/test.cc
+        tests/test_cat.cc
+        tests/test_cat_memory.cc
+        tests/test_cat_string.cc
+        tests/test_cat_error.cc
+        tests/test_cat_log.cc
+        tests/test_cat_coroutine.cc
+        tests/test_cat_event.cc
+        tests/test_cat_time.cc
+        tests/test_cat_channel.cc
+        tests/test_cat_socket.cc
+        tests/test_cat_dns.cc
+        tests/test_cat_work.cc
+        tests/test_cat_buffer.cc
+        tests/test_cat_http.cc
+        # [optional]
+        tests/test_cat_ssl.cc
+    )
+    target_compile_definitions(cat_tests PRIVATE ${cat_defines})
+    target_compile_options(cat_tests PRIVATE ${CMAKE_CXX_FLAGS} -Wall)
+    target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
+    target_link_libraries(cat_tests cat ${GTEST_BOTH_LIBRARIES})
+    add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+else()
+    message(STATUS "No GTest")
+endif()
+
+message(STATUS "summary of build options:
+    Install prefix:  ${CMAKE_INSTALL_PREFIX}
+    Target system:   ${CMAKE_SYSTEM_NAME}
+    Compiler:
+      C compiler:    ${CMAKE_C_COMPILER}
+      CFLAGS:        ${CMAKE_C_FLAGS_${_build_type}} ${CMAKE_C_FLAGS}
+")

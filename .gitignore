@@ -1,0 +1,32 @@
+# ide
+.idea
+.project
+.cproject
+.settings
+.vs
+.vscode
+
+# builder
+build*
+out
+CMakeSettings.json
+*.la
+*lo
+*.a
+*.o
+*.loT
+*.deps
+*.libs
+*.log
+
+# tests
+cat_tests
+
+# coverage
+coverage.info
+
+# config
+config*
+
+# others
+debug
