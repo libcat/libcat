@@ -42,19 +42,33 @@ if ! mkdir -p "${tmp_dir}"; then
   tmp_dir=""
   error "Make tmp dir failed"
 fi
-tmp_file="${tmp_dir}/source.tar.gz"
 
-if [ "$(wget --help 2>&1 | grep "\-\-version")"x = ""x ]; then
-  error "Unable to find wget"
+if [ "$(echo "${url}" | grep "\.git$")"x == ""x ]; then
+  # use wget to download source.tar.gz
+  tmp_file="${tmp_dir}/${name}.tar.gz"
+
+  if [ "$(wget --help 2>&1 | grep "\-\-version")"x = ""x ]; then
+    error "Unable to find wget"
+  fi
+
+  if ! wget "${url}" -x -O "${tmp_file}" || [ ! -f "${tmp_file}" ]; then
+    error "Download source file of ${name} failed"
+  fi
+
+  tar -zxvf "${tmp_file}" -C "${tmp_dir}"
+else
+  # use git clone to get source files
+  tmp_source_dir="${tmp_dir}/${name}"
+
+  if ! git clone --depth=1 "${url}" "${tmp_source_dir}" || [ ! -d "${tmp_source_dir}/.git" ]; then
+    error "Clone source files of ${name} failed"
+  fi
+
+  rm -rf "${tmp_source_dir}/.git"
 fi
 
-if ! wget "${url}" -x -O "${tmp_file}" || [ ! -f "${tmp_file}" ]; then
-  error "Download source file of ${name} failed"
-fi
-
-tar -zxvf "${tmp_file}" -C "${tmp_dir}"
 if [ ! -d "${tmp_dir}/${src_dir}" ]; then
-  error "Unable to find tmp source dir"
+  error "Unable to find source dir"
 fi
 
 if [ -d "${target_dir}" ]; then
