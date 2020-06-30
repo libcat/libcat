@@ -116,9 +116,10 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 
 set(cat_defines HAVE_LIBCAT=1)
 
-# TODO: configure it
-set(CMAKE_BUILD_TYPE Debug)
-list(APPEND cat_defines CAT_DEBUG=1)
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(CMAKE_BUILD_TYPE Debug)
+	list(APPEND cat_defines CAT_DEBUG=1)
+endif()
 
 set(cat_includes include include/cat)
 
@@ -600,4 +601,5 @@ message(STATUS "summary of build options:
     Compiler:
       C compiler:    ${CMAKE_C_COMPILER}
       CFLAGS:        ${CMAKE_C_FLAGS_${_build_type}} ${CMAKE_C_FLAGS}
+    Build type:      ${CMAKE_BUILD_TYPE}
 ")
