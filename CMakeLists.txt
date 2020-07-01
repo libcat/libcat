@@ -20,14 +20,14 @@ set(CMAKE_C_STANDARD 90)
 # Qemu Build
 option(QEMU "build for qemu" OFF)
 if(QEMU)
-  add_definitions(-D__QEMU__=1)
+    add_definitions(-D__QEMU__=1)
 endif()
 
 # Compiler check
 message(STATUS "C Compiler is ${CMAKE_C_COMPILER_ID}")
 string(CONCAT is-msvc $<OR:
-  $<C_COMPILER_ID:MSVC>,
-  $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
+    $<C_COMPILER_ID:MSVC>,
+    $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
 >)
 
 check_c_compiler_flag(/W4 CAT_LINT_W4)
@@ -118,6 +118,7 @@ set(cat_defines HAVE_LIBCAT=1)
 
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_BUILD_TYPE Debug)
+	set(CAT_DEBUG 1)
 	list(APPEND cat_defines CAT_DEBUG=1)
 endif()
 
@@ -150,7 +151,7 @@ set(cat_sources
 
 set(cat_libraries)
 
-# ========== Detect mac info (thanks to libcocpp) ==========
+# ========== Detect mac info (thanks to libcopp) ==========
 if (1)
     # ========== set os platform ==========
     # CAT_CPU_ARCH can be set to arm/arm64/i386/x86_64/combined/mips/ppc32/ppc64/sparc/sparc64
@@ -466,9 +467,7 @@ if (1)
     list(APPEND cat_sources ${uv_sources})
 endif()
 
-# valgrind dep
-if(NOT WIN32)
-# Try to find Valgrind headers and libraries.
+# Valgrind headers and libraries finder (UNIX-like only)
 #
 # Usage of this module as follows:
 # 	find_package(Valgrind)
@@ -484,32 +483,43 @@ if(NOT WIN32)
 # 	Valgrind_INCLUDE_DIR where to find valgrind/memcheck.h, etc.
 # 	Valgrind_EXECUTABLE the valgrind executable.
 # Get hint from environment variable (if any)
-if(NOT VALGRIND_ROOT)
-    if (DEFINED ENV{VALGRIND_ROOT})
-        set(VALGRIND_ROOT "$ENV{VALGRIND_ROOT}" CACHE PATH "Valgrind base directory location (optional, used for nonstandard installation paths)")
-    else()
-        set(VALGRIND_ROOT "/usr/")
-    endif()
-    mark_as_advanced(VALGRIND_ROOT)
+if(NOT WIN32)
+	if(NOT VALGRIND_ROOT)
+	    if (DEFINED ENV{VALGRIND_ROOT})
+	        set(VALGRIND_ROOT "$ENV{VALGRIND_ROOT}" CACHE PATH "Valgrind base directory location (optional, used for nonstandard installation paths)")
+	    else()
+	        set(VALGRIND_ROOT "/usr/")
+	    endif()
+	    mark_as_advanced(VALGRIND_ROOT)
+	endif()
+	# Search path for nonstandard locations
+	if(VALGRIND_ROOT)
+		set(Valgrind_INCLUDE_PATH PATHS "${VALGRIND_ROOT}/include" NO_DEFAULT_PATH)
+		set(Valgrind_BINARY_PATH PATHS "${VALGRIND_ROOT}/bin" NO_DEFAULT_PATH)
+	endif()
+	find_path(Valgrind_INCLUDE_DIR valgrind HINTS ${Valgrind_INCLUDE_PATH})
+	find_program(Valgrind_EXECUTABLE NAMES valgrind PATH ${Valgrind_BINARY_PATH})
+	include(FindPackageHandleStandardArgs)
+	find_package_handle_standard_args(Valgrind DEFAULT_MSG Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
+	mark_as_advanced(Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
 endif()
-# Search path for nonstandard locations
-if(VALGRIND_ROOT)
-	set(Valgrind_INCLUDE_PATH PATHS "${VALGRIND_ROOT}/include" NO_DEFAULT_PATH)
-	set(Valgrind_BINARY_PATH PATHS "${VALGRIND_ROOT}/bin" NO_DEFAULT_PATH)
-endif()
-find_path(Valgrind_INCLUDE_DIR valgrind HINTS ${Valgrind_INCLUDE_PATH})
-find_program(Valgrind_EXECUTABLE NAMES valgrind PATH ${Valgrind_BINARY_PATH})
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Valgrind DEFAULT_MSG Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
-mark_as_advanced(Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
-find_package(Valgrind QUIET)
-if (${VALGRIND_FOUND})
-    message(STATUS "Found Valgrind")
-    list(APPEND cat_defines HAVE_VALGRIND=1)
-    list(APPEND cat_includes ${VALGRIND_INCLUDE_DIR})
-else()
-    message(STATUS "No Valgrind")
-endif()
+
+# Valgrind dep (UNIX-like only)
+if (NOT WIN32)
+	find_package(Valgrind QUIET)
+	cmake_dependent_option(LIBCAT_WITH_VALGRIND
+		"Build with valgrind by default if build type is Debug and found Valgrind" ON
+		"${CAT_DEBUG}; ${VALGRIND_FOUND}" OFF)
+	if (${LIBCAT_WITH_VALGRIND})
+		if (NOT ${VALGRIND_FOUND})
+		    message(FATAL_ERROR "Require Valgrind but not found")
+		endif()
+	    message(STATUS "Build with Valgrind")
+	    list(APPEND cat_defines HAVE_VALGRIND=1)
+	    list(APPEND cat_includes ${VALGRIND_INCLUDE_DIR})
+	else()
+	    message(STATUS "Build without Valgrind")
+	endif()
 endif()
 
 # llhttp dep
@@ -523,33 +533,20 @@ if (1)
     )
 endif()
 
-# openssl dep
+# OpenSSL dep
 find_package(OpenSSL QUIET)
-if (${OPENSSL_FOUND})
-    message(STATUS "Found OpenSSL")
+cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON "${OPENSSL_FOUND}" OFF)
+if (${LIBCAT_ENABLE_OPENSSL})
+	if (NOT ${OPENSSL_FOUND})
+	    message(FATAL_ERROR "Require OpenSSL but not found")
+	endif()
+    message(STATUS "Enable OpenSSL")
     list(APPEND cat_defines HAVE_OPENSSL=1)
     list(APPEND cat_includes ${OPENSSL_INCLUDE_DIR})
     list(APPEND cat_libraries ${OPENSSL_LIBRARIES})
 else()
-    message(STATUS "No OpenSSL")
+    message(STATUS "OpenSSL is not enabled")
 endif()
-
-# Code Coverage Configuration
-add_library(coverage_config INTERFACE)
-
-option(CODE_COVERAGE "Enable coverage reporting" OFF)
-if(CODE_COVERAGE)
-  target_compile_options(coverage_config INTERFACE
-    -O0
-    -g
-    --coverage
-  )
-  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
-    target_link_options(coverage_config INTERFACE --coverage)
-  else()
-    target_link_libraries(coverage_config INTERFACE --coverage)
-  endif()
-endif(CODE_COVERAGE)
 
 add_library(cat STATIC ${cat_sources})
 target_compile_definitions(cat PRIVATE ${cat_defines})
@@ -557,17 +554,39 @@ target_compile_options(cat PRIVATE ${cat_cflags})
 # TODO: Separate public and private
 target_include_directories(cat PRIVATE ${cat_includes})
 target_link_libraries(cat ${cat_libraries})
+
+# Code Coverage Configuration
+add_library(coverage_config INTERFACE)
+option(CODE_COVERAGE "Enable coverage reporting" OFF)
+if(${CODE_COVERAGE})
+    target_compile_options(coverage_config INTERFACE
+        -O0
+        -g
+        --coverage
+    )
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
+        target_link_options(coverage_config INTERFACE --coverage)
+    else()
+        target_link_libraries(coverage_config INTERFACE --coverage)
+    endif()
+endif()
 target_link_libraries(cat coverage_config)
 
 # tests
 find_package(GTest QUIET)
-if (${GTEST_FOUND})
-    message(STATUS "Found GTest")
+cmake_dependent_option(LIBCAT_BUILD_TESTS
+	"Build the GTest-based unit tests when we have GTest and we are the root project" ON
+	"${GTEST_FOUND}; CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+if (${LIBCAT_BUILD_TESTS})
+	if (NOT ${GTEST_FOUND})
+	    message(FATAL_ERROR "Require GTest to build tests but not found")
+	endif()
+    message(STATUS "Enable testing (GTest-based)")
     enable_testing()
     enable_language(CXX)
     set(CMAKE_CXX_STANDARD 11)
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
-    add_executable(cat_tests
+	set(cat_test_sources
         tests/test.cc
         tests/test_cat.cc
         tests/test_cat_memory.cc
@@ -586,13 +605,14 @@ if (${GTEST_FOUND})
         # [optional]
         tests/test_cat_ssl.cc
     )
+    add_executable(cat_tests ${cat_test_sources})
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
     target_compile_options(cat_tests PRIVATE ${CMAKE_CXX_FLAGS} -Wall)
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
     target_link_libraries(cat_tests cat ${GTEST_BOTH_LIBRARIES})
     add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else()
-    message(STATUS "No GTest")
+    message(STATUS "Tests will not be built")
 endif()
 
 message(STATUS "summary of build options:
