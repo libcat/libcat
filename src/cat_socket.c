@@ -627,13 +627,16 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         goto _failed;
     }
     if (fd != CAT_SOCKET_INVALID_FD) {
-        error = CAT_EINVAL;
         if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
             error = uv_tcp_open(&isocket->u.tcp, fd);
         } else if ((type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) {
             error = uv_udp_open(&isocket->u.udp, fd);
         } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
             error = uv_pipe_open(&isocket->u.pipe, fd);
+        } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
+            error = 0;
+        } else {
+            error = CAT_EINVAL;
         }
     }
     if (unlikely(error != 0)) {
@@ -669,7 +672,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 #endif
 
     if (fd != CAT_SOCKET_INVALID_FD) {
-        if (cat_socket_getpeername_fast(socket) != NULL) {
+        if (
+            ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) ||
+            cat_socket_getpeername_fast(socket) != NULL
+        ) {
             isocket->connected = cat_true;
         }
         if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -1398,6 +1404,7 @@ static ssize_t cat_socket_internal_read(
     cat_bool_t is_udp = ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP);
 #ifdef CAT_OS_UNIX_LIKE
     cat_bool_t is_udg = (socket->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG;
+    cat_bool_t support_inline_read = isocket->u.stream.type != UV_TTY && !(isocket->u.stream.type == UV_NAMED_PIPE && isocket->u.pipe.ipc);
 #endif
     size_t nread = 0;
     ssize_t error;
@@ -1420,7 +1427,7 @@ static ssize_t cat_socket_internal_read(
          * because recv usually returns EAGAIN error,
          * and there is an additional system call overhead */
         cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
-        if (!(isocket->u.stream.type == UV_NAMED_PIPE && isocket->u.pipe.ipc)) {
+        if (support_inline_read) {
             _recv:
             while (1) {
                 if (!is_dgram) {
