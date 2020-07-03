@@ -25,7 +25,7 @@ src_dir="$4"
 target_dir="$5"
 
 if [ -L "${target_dir}" ]; then
-  error "${target_dir} is a symbol link"
+  rm -f "${target_dir}"
 fi
 
 if ! cd "${work_dir}"; then
