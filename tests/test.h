@@ -31,7 +31,7 @@
 
 #define TEST_IO_TIMEOUT                    ::testing::CONFIG_IO_TIMEOUT
 
-#define TEST_MAX_REQUEST                   ::testing::CONFIG_MAX_REQUEST
+#define TEST_MAX_REQUESTS                  ::testing::CONFIG_MAX_REQUESTS
 #define TEST_MAX_CONCURRENCY               ::testing::CONFIG_MAX_CONCURRENCY
 
 #define TEST_LISTEN_HOST                   "localhost"
@@ -87,6 +87,6 @@ static inline bool is_offline(void)
 namespace testing
 {
     extern cat_timeout_t CONFIG_IO_TIMEOUT;
-    extern uint32_t CONFIG_MAX_REQUEST;
+    extern uint32_t CONFIG_MAX_REQUESTS;
     extern uint32_t CONFIG_MAX_CONCURRENCY;
 }

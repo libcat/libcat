@@ -22,7 +22,7 @@
 namespace testing
 {
     cat_timeout_t CONFIG_IO_TIMEOUT = (!is_valgrind() ? 10 : 60) * 1000;
-    uint32_t CONFIG_MAX_REQUEST = !is_valgrind() ? 256 : 64;
+    uint32_t CONFIG_MAX_REQUESTS = !is_valgrind() ? 256 : 64;
     uint32_t CONFIG_MAX_CONCURRENCY = !is_valgrind() ? 128 : 8;
 }
 

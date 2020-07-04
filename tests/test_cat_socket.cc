@@ -717,7 +717,7 @@ TEST(cat_socket, echo_tcp_client)
     ASSERT_TRUE(cat_socket_connect(&echo_client, CAT_STRL(TEST_LISTEN_IPV4), echo_tcp_server_port));
 
     /* normal loop */
-    for (n = TEST_MAX_REQUEST; n--;) {
+    for (n = TEST_MAX_REQUESTS; n--;) {
         char read_buffer[TEST_BUFFER_SIZE_STD];
         char write_buffer[TEST_BUFFER_SIZE_STD];
         /* send request */
@@ -733,17 +733,17 @@ TEST(cat_socket, echo_tcp_client)
 
     /* pipeline */
     do {
-        char *read_buffers[TEST_MAX_REQUEST];
-        char *write_buffers[TEST_MAX_REQUEST];
+        char *read_buffers[TEST_MAX_REQUESTS];
+        char *write_buffers[TEST_MAX_REQUESTS];
         /* send requests */
-        for (n = 0; n < TEST_MAX_REQUEST; n++) {
+        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(write_buffers[n], nullptr);
             cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
             ASSERT_TRUE(cat_socket_send(&echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
         }
         /* recv responses */
-        for (n = 0; n < TEST_MAX_REQUEST; n++) {
+        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(read_buffers[n], nullptr);
             ret = cat_socket_read(&echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
