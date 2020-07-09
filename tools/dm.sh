@@ -83,9 +83,6 @@ if ! mv "${tmp_dir}/${src_dir}" "${target_dir}"; then
   error "Update dir failed"
 fi
 
-rm -rf "${tmp_dir}" 2>&1
-tmp_dir=""
-
 git add --ignore-errors -A
 
 ok "${name} updated"
