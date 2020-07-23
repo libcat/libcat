@@ -164,7 +164,7 @@
 
 #ifdef CAT_DEBUG
 #define CAT_SOURCE_POSITION             1
-#ifndef __FUNCTION__
+#ifdef __FUNCTION__
 #define CAT_SOURCE_POSITION_D           const char *function, const char *file, const unsigned int line
 #define CAT_SOURCE_POSITION_RELAY_C     function, file, line
 #define CAT_SOURCE_POSITION_C           __FUNCTION__, __FILE__, __LINE__
