@@ -81,15 +81,20 @@ typedef union
 {
     cat_coroutine_t *coroutine;
     uv_handle_t handle;
-    uv_timer_t uv;
+    uv_timer_t timer;
 } cat_sleep_timer_t;
 
-static void cat_sleep_timer_callback(cat_sleep_timer_t *timer)
+static void cat_sleep_timer_callback(uv_timer_t* handle)
 {
+    cat_sleep_timer_t *timer = (cat_sleep_timer_t *) handle;
     cat_coroutine_t *coroutine = timer->coroutine;
+    cat_bool_t ret;
 
     timer->coroutine = NULL;
-    if (unlikely(!cat_coroutine_resume_ez(coroutine))) {
+
+    ret = cat_coroutine_resume_ez(coroutine);
+
+    if (unlikely(!ret)) {
         cat_core_error_with_last(TIME, "Timer schedule failed");
     }
 }
@@ -136,8 +141,8 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
         return -1;
     } else {
         cat_bool_t ret;
-        (void) uv_timer_init(cat_event_loop, &timer->uv);
-        (void) uv_timer_start(&timer->uv, (uv_timer_cb) cat_sleep_timer_callback, msec, 0);
+        (void) uv_timer_init(cat_event_loop, &timer->timer);
+        (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);
 #ifdef CAT_DEBUG
         do {
             char *tmp = NULL;
@@ -153,7 +158,7 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
             return -1;
         }
         if (unlikely(timer->coroutine != NULL)) {
-            cat_msec_t reserve = timer->uv.timeout - cat_event_loop->time;
+            cat_msec_t reserve = timer->timer.timeout - cat_event_loop->time;
             cat_update_last_error(CAT_ECANCELED, "Time waiter has been canceled");
             if (unlikely(reserve <= 0)) {
                 /* blocking IO lead it to be negative or 0
