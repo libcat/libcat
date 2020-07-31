@@ -16,43 +16,19 @@
   +--------------------------------------------------------------------------+
  */
 
-#ifndef CAT_API_H
-#define CAT_API_H
+#ifndef CAT_SIGNAL_H
+#define CAT_SIGNAL_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "cat.h"
-#include "cat_coroutine.h"
-#include "cat_channel.h"
-#include "cat_sync.h"
-#include "cat_event.h"
 #include "cat_time.h"
-#include "cat_socket.h"
-#include "cat_dns.h"
-#include "cat_work.h"
-#include "cat_buffer.h"
-#include "cat_fs.h"
-#include "cat_signal.h"
-#include "cat_ssl.h"
 
-typedef enum
-{
-    CAT_RUN_EASY = 0,
-} cat_run_mode;
-
-CAT_API cat_bool_t cat_init_all(void);
-CAT_API cat_bool_t cat_shutdown_all(void);
-CAT_API cat_bool_t cat_run(cat_run_mode run_mode);
-CAT_API void cat_stop(void);
-
-#ifdef CAT_DEBUG
-CAT_API void cat_enable_debug_mode(void);
-#else
-#define cat_enable_debug_mode()
-#endif
+CAT_API cat_bool_t cat_kill(int pid, int signum);
+CAT_API cat_bool_t cat_signal_wait(int signum, cat_timeout_t timeout);
 
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_API_H */
+#endif  /* CAT_SIGNAL_H */
