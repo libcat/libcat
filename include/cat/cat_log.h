@@ -105,7 +105,11 @@ typedef enum
     CAT_SOURCE_POSITION_DC, int code, const char *format, ...
 
 #ifdef CAT_SOURCE_POSITION
+#ifndef CAT_DISABLE___FUNCTION__
 #define CAT_LOG_ATTRIBUTES CAT_ATTRIBUTE_PTR_FORMAT(printf, 8, 9)
+#else
+#define CAT_LOG_ATTRIBUTES CAT_ATTRIBUTE_PTR_FORMAT(printf, 7, 8)
+#endif
 #else
 #define CAT_LOG_ATTRIBUTES CAT_ATTRIBUTE_PTR_FORMAT(printf, 5, 6)
 #endif
