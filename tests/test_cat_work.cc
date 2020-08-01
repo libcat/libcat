@@ -26,8 +26,8 @@ TEST(cat_work, base)
     cat_msec_t s = cat_time_msec();
 
     for (int n = 0; n < 10; n++) {
-        coroutine_run([&, n](void) {
-            EXPECT_TRUE(work([&](void) {
+        coroutine_run([&, n] {
+            EXPECT_TRUE(work([&] {
                 usleep((n + 1) * 1000); /* 1ms ~ 10ms */
                 buckets[n] = n;
             }, 50)); /* wait max 50ms */

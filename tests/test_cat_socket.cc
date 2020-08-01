@@ -883,7 +883,7 @@ TEST(cat_socket, cross_close_when_dns_resolve)
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    coroutine_run([&](void) {
+    coroutine_run([&] {
         cat_time_sleep(0);
         if (!exited) {
             cat_socket_close(socket);
@@ -910,7 +910,7 @@ TEST(cat_socket, cross_close_when_connecting)
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    coroutine_run([&](void) {
+    coroutine_run([&] {
         cat_time_sleep(0);
         ASSERT_FALSE(exited);
         cat_socket_close(socket);
@@ -928,7 +928,7 @@ TEST(cat_socket, cancel_connect)
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    coroutine_run([&](void) {
+    coroutine_run([&] {
         cat_time_sleep(0);
         ASSERT_FALSE(exited);
         cat_coroutine_resume_ez(waiter);
