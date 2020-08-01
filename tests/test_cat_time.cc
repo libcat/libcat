@@ -44,16 +44,14 @@ TEST(cat_time, nanosleep)
 
 TEST(cat_time, msleep_cancel)
 {
-    static bool done = false;
-    cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data) {
-        cat_coroutine_t *sleep_coroutine = (cat_coroutine_t *) data;
+    cat_coroutine_t *waiter = cat_coroutine_get_current();
+    bool done = false;
+    coroutine_run([&](void) {
         EXPECT_EQ(cat_time_msleep(5), 0);
         // cancel the sleep of main
-        cat_coroutine_resume_ez(sleep_coroutine);
+        cat_coroutine_resume_ez(waiter);
         done = true;
-        return CAT_COROUTINE_DATA_NULL;
     });
-    cat_coroutine_resume(coroutine, cat_coroutine_get_current());
     cat_msec_t s = cat_time_msec();
     EXPECT_GT(cat_time_msleep(100), 0);
     s = cat_time_msec() - s;

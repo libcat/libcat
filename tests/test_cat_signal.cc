@@ -23,20 +23,20 @@
 TEST(cat_signal, wait)
 {
     const std::array<int, 4> signals{ SIGINT, SIGTERM, SIGUSR1, SIGUSR2 };
-    static bool killed, wait_done;
+    bool killed, wait_done;
 
-    for (static int signal : signals) {
+    for (int signum : signals) {
         killed = wait_done = false;
 
-        cat_coroutine_run_ez(NULL, []() {
+        coroutine_run([&, signum](void) {
             cat_time_sleep(0);
             // TODO: cat_getpid()
-            EXPECT_TRUE(cat_kill(getpid(), signal));
+            EXPECT_TRUE(cat_kill(getpid(), signum));
             EXPECT_FALSE(wait_done);
             killed = true;
         });
 
-        EXPECT_TRUE(cat_signal_wait(signal, TEST_IO_TIMEOUT));
+        EXPECT_TRUE(cat_signal_wait(signum, TEST_IO_TIMEOUT));
         EXPECT_TRUE(killed);
         wait_done = true;
     }
@@ -46,26 +46,25 @@ TEST(cat_signal, invalid_kill)
 {
     const std::array<int, 2> invalid_signals{ SIGKILL, SIGSTOP };
 
-    for (int signal : invalid_signals) {
-        EXPECT_FALSE(cat_signal_wait(signal, TEST_IO_TIMEOUT));
+    for (int signum : invalid_signals) {
+        EXPECT_FALSE(cat_signal_wait(signum, TEST_IO_TIMEOUT));
         EXPECT_EQ(CAT_EINVAL, cat_get_last_error_code());
     }
 }
 
 TEST(cat_signal, timeout)
 {
-    ASSERT_FALSE(cat_signal_wait(SIGTERM, 1));
+    ASSERT_FALSE(cat_signal_wait(SIGUSR1, 1));
     ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
 }
 
 TEST(cat_signal, cancel)
 {
-    cat_coroutine_run(NULL, [](cat_data_t *data) {
-        cat_coroutine_t *coroutine = (cat_coroutine_t *) data;
+    cat_coroutine_t *waiter = cat_coroutine_get_current();
+    coroutine_run([&](void) {
         cat_time_sleep(0);
-        EXPECT_TRUE(cat_coroutine_resume_ez(coroutine));
-        return CAT_COROUTINE_DATA_NULL;
-    }, cat_coroutine_get_current());
-    ASSERT_FALSE(cat_signal_wait(SIGTERM, TEST_IO_TIMEOUT));
+        EXPECT_TRUE(cat_coroutine_resume_ez(waiter));
+    });
+    ASSERT_FALSE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
     ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
 }

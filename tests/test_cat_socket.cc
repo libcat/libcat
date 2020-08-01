@@ -629,7 +629,7 @@ TEST(cat_socket, set_tcp_nodelay)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, true));
+    ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
 }
 
 TEST(cat_socket, set_tcp_keepalive)
@@ -638,7 +638,7 @@ TEST(cat_socket, set_tcp_keepalive)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, true, 1));
+    ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 1));
 }
 
 TEST(cat_socket, set_tcp_accept_balance)
@@ -647,7 +647,7 @@ TEST(cat_socket, set_tcp_accept_balance)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, true));
+    ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
 }
 
 cat_coroutine_t *echo_tcp_server;
@@ -879,24 +879,21 @@ TEST(cat_socket, query_remote_http_server)
 TEST(cat_socket, cross_close_when_dns_resolve)
 {
     SKIP_IF(is_offline());
-    static bool exited;
-    exited = false;
+    bool exited = false;
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_socket_t *socket = (cat_socket_t *) data;
+    coroutine_run([&](void) {
         cat_time_sleep(0);
         if (!exited) {
             cat_socket_close(socket);
         }
-        return CAT_COROUTINE_DATA_NULL;
-    }, socket);
+    });
     ASSERT_FALSE(cat_socket_connect(socket, TEST_REMOTE_HTTP_SERVER));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
-const char *test_remote_http_server_ip;
+static const char *test_remote_http_server_ip;
 
 TEST(cat_socket, get_test_remote_http_server_ip)
 {
@@ -909,19 +906,15 @@ TEST(cat_socket, get_test_remote_http_server_ip)
 TEST(cat_socket, cross_close_when_connecting)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
-    static bool exited;
-    exited = false;
+    bool exited = false;
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_socket_t *socket = (cat_socket_t *) data;
+    coroutine_run([&](void) {
         cat_time_sleep(0);
-        if (!exited) {
-            cat_socket_close(socket);
-        }
-        return CAT_COROUTINE_DATA_NULL;
-    }, socket);
+        ASSERT_FALSE(exited);
+        cat_socket_close(socket);
+    });
     ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
@@ -929,19 +922,17 @@ TEST(cat_socket, cross_close_when_connecting)
 TEST(cat_socket, cancel_connect)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
-    static bool exited;
+    cat_coroutine_t *waiter = cat_coroutine_get_current();
+    bool exited;
     exited = false;
     DEFER(exited = true);
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_coroutine_t *coroutine = (cat_coroutine_t *) data;
+    coroutine_run([&](void) {
         cat_time_sleep(0);
-        if (!exited) {
-            cat_coroutine_resume_ez(coroutine);
-        }
-        return CAT_COROUTINE_DATA_NULL;
-    }, cat_coroutine_get_current());
+        ASSERT_FALSE(exited);
+        cat_coroutine_resume_ez(waiter);
+    });
     ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }

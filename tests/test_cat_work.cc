@@ -22,18 +22,16 @@ TEST(cat_work, base)
 {
     SKIP_IF(is_valgrind());
 
-    static int buckets[10] = { };
+    int buckets[10] = { };
     cat_msec_t s = cat_time_msec();
 
     for (int n = 0; n < 10; n++) {
-        cat_coroutine_run(NULL, [](cat_data_t *data) {
-            cat_work([](cat_data_t *data) {
-                int n = (int) (intptr_t) data;
+        coroutine_run([&, n](void) {
+            EXPECT_TRUE(work([&](void) {
                 usleep((n + 1) * 1000); /* 1ms ~ 10ms */
                 buckets[n] = n;
-            }, data, 50); /* wait max 50ms */
-            return CAT_COROUTINE_DATA_NULL;
-        }, (cat_data_t *) (intptr_t) n);
+            }, 50)); /* wait max 50ms */
+        });
     }
 
     s = cat_time_msec() - s;

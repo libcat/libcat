@@ -64,28 +64,49 @@
 
 #define DEFER(X) std::shared_ptr<void> UNIQUE_NAME(defer)(nullptr, [&](...){ X; })
 
-/* common functions */
+/* cover all test source files */
 
-static inline bool env_is(const char *name, const char *value)
-{
-    char *env = getenv(name);
-    return env && strcmp(env, value) == 0;
-}
-
-static inline bool is_valgrind(void)
-{
-    return env_is("USE_VALGRIND", "1");
-}
-
-static inline bool is_offline(void)
-{
-    return env_is("OFFLINE", "1");
-}
-
-/* common vars */
+using namespace testing;
 
 namespace testing
 {
+    /* common functions */
+
+    static inline bool env_is(const char *name, const char *value)
+    {
+        char *env = getenv(name);
+        return env && strcmp(env, value) == 0;
+    }
+
+    static inline bool is_valgrind(void)
+    {
+        return env_is("USE_VALGRIND", "1");
+    }
+
+    static inline bool is_offline(void)
+    {
+        return env_is("OFFLINE", "1");
+    }
+
+    static inline cat_coroutine_t *coroutine_run(std::function<void(void)> function)
+    {
+        return cat_coroutine_run(NULL, [](cat_data_t *data){
+            auto function = *((std::function<void(void)> *) data);
+            function();
+            return CAT_COROUTINE_DATA_NULL;
+        }, (cat_data_t *) &function);
+    }
+
+    static inline bool work(std::function<void(void)> function, cat_timeout_t timeout)
+    {
+        return cat_work([](cat_data_t *data){
+            auto function = (std::function<void(void)> *) data;
+            (*function)();
+        }, (cat_data_t *) &function, timeout);
+    }
+
+    /* common vars */
+
     extern cat_timeout_t CONFIG_IO_TIMEOUT;
     extern uint32_t CONFIG_MAX_REQUESTS;
     extern uint32_t CONFIG_MAX_CONCURRENCY;
