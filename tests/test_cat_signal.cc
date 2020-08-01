@@ -42,6 +42,27 @@ TEST(cat_signal, wait)
     }
 }
 
+TEST(cat_signal, wait_multi)
+{
+    cat_coroutine_t *coroutine = cat_coroutine_get_current();
+    size_t count = 0;
+
+    for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
+        coroutine_run([&](void) {
+            EXPECT_TRUE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
+            if (++count == TEST_MAX_CONCURRENCY) {
+                cat_coroutine_resume_ez(coroutine);
+            }
+        });
+    }
+
+    // TODO: cat_getpid()
+    EXPECT_TRUE(cat_kill(getpid(), SIGUSR1));
+    EXPECT_TRUE(cat_time_wait(TEST_IO_TIMEOUT));
+    EXPECT_EQ(CAT_ECANCELED, cat_get_last_error_code());
+    EXPECT_EQ(TEST_MAX_CONCURRENCY, count);
+}
+
 TEST(cat_signal, invalid_kill)
 {
     const std::array<int, 2> invalid_signals{ SIGKILL, SIGSTOP };
