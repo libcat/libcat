@@ -29,3 +29,13 @@ TEST(cat_event, scheduler_function)
     ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
     ASSERT_STREQ("Event loop is running", cat_get_last_error_message());
 }
+
+TEST(cat_event, defer)
+{
+    bool done = false;
+    ASSERT_TRUE(cat_event_defer([](cat_data_t *data) {
+        *((bool *) data) = true;
+    }, &done));
+    cat_time_sleep(0);
+    ASSERT_TRUE(done);
+}

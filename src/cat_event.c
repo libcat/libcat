@@ -121,7 +121,7 @@ static void cat_event_run(uv_loop_t *loop)
         alive = uv_crun(loop);
 
         /* if we have unfinished tasks, continue to loop  */
-        alive = alive || cat_event_do_defer_tasks();
+        alive = cat_event_do_defer_tasks() || alive;
 
         if (!alive) {
             break;
