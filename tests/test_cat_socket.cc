@@ -481,6 +481,7 @@ TEST(cat_socket, getpeername)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    info.length = sizeof(info.address);
     ASSERT_FALSE(cat_socket_getpeername(&socket, &info.address.common, &info.length));
 }
 
