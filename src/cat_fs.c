@@ -125,14 +125,14 @@ CAT_API off_t cat_lseek(int fd, off_t offset, int whence)
 
 CAT_API ssize_t cat_fs_read(int fd, void *buffer, size_t size)
 {
-    uv_buf_t buf = { buffer, size };
+    uv_buf_t buf = uv_buf_init(buffer, size);
 
     CAT_FS_DO_RESULT(read, fd, &buf, 1, 0);
 }
 
 CAT_API ssize_t cat_fs_write(int fd, const void *buffer, size_t length)
 {
-    uv_buf_t buf = { (char *) buffer, length };
+    uv_buf_t buf = uv_buf_init((char *) buffer, length);
 
     CAT_FS_DO_RESULT(write, fd, &buf, 1, 0);
 }

@@ -1745,7 +1745,7 @@ static cat_always_inline cat_bool_t cat_socket__write(cat_socket_t *socket, cons
 
 static cat_always_inline cat_bool_t cat_socket__send(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
-    cat_socket_write_vector_t vector = { buffer, length };
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, length);
     return cat_socket__write(socket, &vector, 1, address, address_length, timeout);
 }
 
@@ -1817,7 +1817,7 @@ static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_wr
 
 static cat_always_inline cat_bool_t cat_socket__send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
-    cat_socket_write_vector_t vector = { buffer, length };
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, length);
     return cat_socket__write_to(socket, &vector, 1, name, name_length, port, timeout);
 }
 

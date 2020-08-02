@@ -144,13 +144,41 @@ typedef union
     uv_file tty;
 } cat_socket_fd_union_t;
 
-/* socket buf */
+/* socket vector */
 
+#ifndef CAT_OS_WIN
+typedef size_t cat_socket_vector_length_t;
+#else
+typedef ULONG cat_socket_vector_length_t;
+#endif
+
+#ifndef CAT_OS_WIN
+/* Note: May be cast to struct iovec. See writev(2). */
 typedef struct
 {
     const char *base;
-    size_t length;
+    cat_socket_vector_length_t length;
 } cat_socket_write_vector_t;
+#else
+/**
+ * It should be possible to cast uv_buf_t[] to WSABUF[]
+ * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx
+ */
+typedef struct {
+    cat_socket_vector_length_t length;
+    const char* base;
+} cat_socket_write_vector_t;
+#endif
+
+static cat_always_inline cat_socket_write_vector_t cat_socket_write_vector_init(const char *base, cat_socket_vector_length_t length)
+{
+    cat_socket_write_vector_t vector;
+
+    vector.base = base;
+    vector.length = length;
+
+    return vector;
+}
 
 CAT_API size_t cat_socket_write_vectors_length(const cat_socket_write_vector_t *vectors, unsigned int vector_count);
 
