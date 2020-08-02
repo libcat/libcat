@@ -54,10 +54,10 @@ TEST(cat_log, null)
 
 TEST(cat_log, error)
 {
-    ASSERT_DEATH(cat_error(TEST, "error log"), "Error: <TEST> error log in R1" CAT_EOL);
+    ASSERT_DEATH_IF_SUPPORTED(cat_error(TEST, "error log"), "Error: <TEST> error log in R1" CAT_EOL);
 }
 
 TEST(cat_log, core_error)
 {
-    ASSERT_DEATH(cat_core_error(TEST, "core error log"), "Core Error: <TEST> core error log in R1" CAT_EOL);
+    ASSERT_DEATH_IF_SUPPORTED(cat_core_error(TEST, "core error log"), "Core Error: <TEST> core error log in R1" CAT_EOL);
 }

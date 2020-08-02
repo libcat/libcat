@@ -264,7 +264,7 @@ TEST(cat_coroutine, init)
 TEST(cat_coroutine, close_null)
 {
     /* we can't pass nullptr */
-    ASSERT_DEATH(cat_coroutine_close(nullptr), "");
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_close(nullptr), "");
 }
 
 TEST(cat_coroutine, close_double_close)
@@ -276,7 +276,7 @@ TEST(cat_coroutine, close_double_close)
     });
 
     cat_coroutine_close(coroutine);
-    ASSERT_DEATH(cat_coroutine_close(coroutine), "");
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_close(coroutine), "");
 }
 
 TEST(cat_coroutine, get_id_main)
@@ -473,7 +473,7 @@ TEST(cat_coroutine, register_main_nullptr)
     cat_coroutine_t *new_main = nullptr;
 
     /* we can't register nullptr main coroutine */
-    ASSERT_DEATH(cat_coroutine_register_main(new_main), "");
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_register_main(new_main), "");
 }
 
 TEST(cat_coroutine, register_main)
