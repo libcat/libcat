@@ -86,6 +86,7 @@ CAT_API cat_bool_t cat_event_is_running(void)
 static void cat_event_dead_lock_callback(cat_data_t *data)
 {
     uv_timer_stop((uv_timer_t *) data);
+    uv_close((uv_handle_t *) data, NULL);
 }
 
 static void cat_event_forever_timer_callback(uv_timer_t *forever_timer)
@@ -201,7 +202,7 @@ CAT_API void cat_event_wait(void)
     while (unlikely(CAT_COROUTINE_G(active_count) != 2 /* scheduler + main */)) {
         cat_coroutine_yield_ez();
     }
-    /* dead lock was broken by signal (we use while loop to fix it now, but we do not know if it is right) */
+    /* dead lock was broken by some magic ways (we use while loop to fix it now, but we do not know if it is right) */
 }
 
 static cat_bool_t cat_event_do_defer_tasks(void)

@@ -12,11 +12,19 @@
   | See the License for the specific language governing permissions and      |
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
+  | Author: twosee <twose@qq.com>                                            |
   | Author: codinghuang <2812240764@qq.com>                                  |
   +--------------------------------------------------------------------------+
  */
 
 #include "test.h"
+
+#include <thread>
+#include <chrono>
+
+#ifdef CAT_OS_UNIX_LIKE
+#include <sched.h>
+#endif
 
 TEST(cat_event, is_running)
 {
@@ -38,4 +46,19 @@ TEST(cat_event, defer)
     }, &done));
     cat_time_sleep(0);
     ASSERT_TRUE(done);
+}
+
+TEST(cat_event, dead_lock)
+{
+    ASSERT_DEATH_IF_SUPPORTED([] {
+        auto t = std::thread([&](pid_t pid) {
+#ifdef CAT_OS_UNIX_LIKE
+            sched_yield();
+#endif
+            std::this_thread::sleep_for(std::chrono::milliseconds(!is_valgrind() ? 1 : 100));
+            cat_kill(pid, SIGTERM);
+        }, getpid() /* TODO: cat_getpid() */);
+        DEFER(t.join());
+        cat_coroutine_yield_ez();
+    }(), "Dead lock");
 }
