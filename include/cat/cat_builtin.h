@@ -139,7 +139,13 @@
 # define CAT_NORETURN
 #endif
 
-/* function special prefix */
+#ifdef __GNUC__  /* Also covers __clang__ and __INTEL_COMPILER */
+#define CAT_DESTRUCTOR __attribute__((destructor))
+#else
+#define CAT_DESTRUCTOR
+#endif
+
+/* function special suffix */
 
 #define CAT_INTERNAL   /* The API is designed for internal use, it is not recommended unless there are special circumstances */
 #define CAT_UNSAFE     /* incorrect usage can lead to security problem */

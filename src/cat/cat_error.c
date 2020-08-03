@@ -29,7 +29,7 @@ CAT_API const char *cat_get_last_error_message(void)
     return message ? message : "";
 }
 
-CAT_API void cat_clear_last_error(void)
+CAT_API CAT_DESTRUCTOR void cat_clear_last_error(void)
 {
     cat_error_t *last_error = &CAT_G(last_error);
     last_error->code = 0;
