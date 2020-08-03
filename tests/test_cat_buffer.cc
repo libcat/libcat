@@ -29,7 +29,7 @@ bool operator==(const cat_buffer_allocator_t& lhs, const cat_buffer_allocator_t&
 
 bool operator==(const cat_buffer_t& lhs, const cat_buffer_t& rhs)
 {
-	// TODO: cat_buffer_equal
+    // TODO: cat_buffer_equal
     return lhs.size == rhs.size && lhs.length == rhs.length && ((lhs.value == nullptr && rhs.value == nullptr) || memcmp(lhs.value, rhs.value, rhs.length) == 0);
 }
 

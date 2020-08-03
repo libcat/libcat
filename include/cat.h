@@ -88,4 +88,4 @@ CAT_API cat_bool_t cat_runtime_shutdown(void);
 #ifdef __cplusplus
 }
 #endif
-#endif	/* CAT_H */
+#endif    /* CAT_H */

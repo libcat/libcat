@@ -64,4 +64,4 @@ CAT_API cat_bool_t cat_event_defer(cat_data_callback_t callback, cat_data_t *dat
 #ifdef __cplusplus
 }
 #endif
-#endif	/* CAT_EVENT_H */
+#endif    /* CAT_EVENT_H */
