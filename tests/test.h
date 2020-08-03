@@ -72,20 +72,14 @@ namespace testing
 {
     /* common functions */
 
-    static inline bool env_is(const char *name, const char *value)
-    {
-        char *env = getenv(name);
-        return env && strcmp(env, value) == 0;
-    }
-
     static inline bool is_valgrind(void)
     {
-        return env_is("USE_VALGRIND", "1");
+        return cat_env_is_true("USE_VALGRIND", cat_false);
     }
 
     static inline bool is_offline(void)
     {
-        return env_is("OFFLINE", "1");
+        return cat_env_is_true("OFFLINE", cat_false);
     }
 
     static inline cat_coroutine_t *coroutine_run(std::function<void(void)> function)

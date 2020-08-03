@@ -42,14 +42,19 @@ CAT_API cat_bool_t cat_module_init(void)
     CAT_GLOBALS_REGISTER(cat, CAT_GLOBALS_CTOR(cat), NULL);
 
     do {
-        const char *tmp;
-        tmp = getenv("CAT_TPS");
-        if (tmp != NULL) {
-            setenv("UV_THREADPOOL_SIZE", tmp, 1);
-        } else if (getenv("UV_THREADPOOL_SIZE") == NULL) {
-            // TODO: cpu_num * 2
-            // setenv("UV_THREADPOOL_SIZE", "4", 1);
+        char *env;
+        env = cat_env_get("CAT_TPS");
+        if (env == NULL) {
+             env = cat_env_get("UV_THREADPOOL_SIZE");
+             if (env == NULL) {
+                 // TODO: default to cpu_num * 2
+                 // cat_env_set("UV_THREADPOOL_SIZE", "4");
+                 break;
+             }
+        } else {
+            cat_env_set("UV_THREADPOOL_SIZE", env);
         }
+        cat_free(env);
     } while (0);
 
     return cat_true;
@@ -81,20 +86,19 @@ CAT_API cat_bool_t cat_runtime_init(void)
 
 #ifdef CAT_DEBUG
 do {
-    const char *tmp;
-    tmp = getenv("CAT_DEBUG");
-    if (tmp != NULL && strcmp(tmp, "1") == 0) {
+    /* enable all log types and log module types */
+    if (cat_env_is_true("CAT_DEBUG", cat_false)) {
         CAT_G(log_types) = CAT_LOG_TYPES_ALL;
         CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
     }
 #ifdef CAT_SOURCE_POSITION
-    tmp = getenv("CAT_SP"); /* show source position */
-    if (tmp != NULL && strcmp(tmp, "1") == 0) {
+    /* show source position */
+    if (cat_env_is_true("CAT_SP", cat_false)) {
         CAT_G(log_source_postion) = cat_true;
     }
 #endif
-    tmp = getenv("CAT_SLE"); /* show last error */
-    if (tmp != NULL && strcmp(tmp, "1") == 0) {
+    /* show last error */
+    if (cat_env_is_true("CAT_SLE", cat_false)) {
         CAT_G(show_last_error) = cat_true;
     }
 } while (0);

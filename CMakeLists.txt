@@ -131,6 +131,7 @@ set(cat_sources
     src/cat/cat_error.c
     src/cat/cat_module.c
     src/cat/cat_log.c
+    src/cat/cat_env.c
     src/cat.c
     src/cat_api.c
     src/cat_coroutine.c
@@ -594,6 +595,7 @@ if (${LIBCAT_BUILD_TESTS})
         tests/test_cat_string.cc
         tests/test_cat_error.cc
         tests/test_cat_log.cc
+        tests/test_cat_env.cc
         tests/test_cat_coroutine.cc
         tests/test_cat_event.cc
         tests/test_cat_time.cc

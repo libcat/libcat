@@ -57,6 +57,8 @@ extern "C" {
 #include "cat_log.h"
 /* debug */
 #include "cat_debug.h"
+/* env */
+#include "cat_env.h"
 
 /* global */
 
