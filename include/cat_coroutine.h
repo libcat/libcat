@@ -89,13 +89,13 @@ typedef enum
 typedef uint8_t cat_coroutine_flags_t;
 
 #define CAT_COROUTINE_STATE_MAP(XX) \
-    XX(INIT,     0)  \
-    XX(READY,    1)  \
-    XX(RUNNING,  2)  \
-    XX(WAITING,  3)  \
-    XX(FINISHED, 4)  \
-    XX(LOCKED,   5)  \
-    XX(DEAD,     6)  \
+    XX(INIT,     0) \
+    XX(READY,    1) \
+    XX(RUNNING,  2) \
+    XX(WAITING,  3) \
+    XX(FINISHED, 4) \
+    XX(LOCKED,   5) \
+    XX(DEAD,     6) \
 
 typedef enum
 {

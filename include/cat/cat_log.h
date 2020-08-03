@@ -92,7 +92,7 @@ typedef enum
     } \
 } while (0)
 
-#define CAT_NEVER_HERE(module_type, reason, ...)  \
+#define CAT_NEVER_HERE(module_type, reason, ...) \
        cat_core_error(module_type, reason, ##__VA_ARGS__)
 
 #define cat_syscall_failure(type, module_type, format, ...) do { \

@@ -17,19 +17,19 @@
  */
 
 #define CAT_MODULE_BUILTIN_TYPE_MAP(XX) \
-   XX(CORE,    1 << 0)  \
-   XX(COROUTINE, 1 << 1)  \
-   XX(CHANNEL, 1 << 2)  \
-   XX(SYNC,    1 << 3)  \
-   XX(EVENT,   1 << 4)  \
-   XX(TIME,    1 << 5)  \
-   XX(SOCKET,  1 << 6)  \
-   XX(DNS,     1 << 7)  \
-   XX(WORK,    1 << 8)  \
-   XX(BUFFER,  1 << 9)  \
-   XX(HTTP,    1 << 10)  \
+   XX(CORE,    1 << 0) \
+   XX(COROUTINE, 1 << 1) \
+   XX(CHANNEL, 1 << 2) \
+   XX(SYNC,    1 << 3) \
+   XX(EVENT,   1 << 4) \
+   XX(TIME,    1 << 5) \
+   XX(SOCKET,  1 << 6) \
+   XX(DNS,     1 << 7) \
+   XX(WORK,    1 << 8) \
+   XX(BUFFER,  1 << 9) \
+   XX(HTTP,    1 << 10) \
    /* optional (19 ~ 22) */ \
-   XX(SSL,     1 << 22)  \
+   XX(SSL,     1 << 22) \
    /* test */ \
    XX(TEST,    1 << 23)
 
@@ -38,14 +38,14 @@
 
 #define CAT_MODULE_USR_TYPE_MAP(XX) \
    /* usr (24 ~ 31) */ \
-   XX(USR1, 1 << 24)  \
-   XX(USR2, 1 << 25)  \
-   XX(USR3, 1 << 26)  \
-   XX(USR4, 1 << 27)  \
-   XX(USR5, 1 << 28)  \
-   XX(USR6, 1 << 29)  \
-   XX(USR7, 1 << 30)  \
-   XX(USR8, 1 << 31)  \
+   XX(USR1, 1 << 24) \
+   XX(USR2, 1 << 25) \
+   XX(USR3, 1 << 26) \
+   XX(USR4, 1 << 27) \
+   XX(USR5, 1 << 28) \
+   XX(USR6, 1 << 29) \
+   XX(USR7, 1 << 30) \
+   XX(USR8, 1 << 31) \
 
 #define CAT_MODULE_MAX_COUNT 32
 

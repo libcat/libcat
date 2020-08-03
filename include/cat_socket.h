@@ -195,28 +195,28 @@ CAT_API size_t cat_socket_write_vectors_length(const cat_socket_write_vector_t *
 /* 0 ~ 23 */
 #define CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, SS) \
     /* 0 - 3 (sock) */ \
-    XX(STREAM, 1 << 0)  \
+    XX(STREAM, 1 << 0) \
     XX(DGRAM, 1 << 1) \
     SS(SSL,   1 << 2) \
     /* 4 ~ 9 (af) */ \
-    XX(INET,  1 << 4)  \
-    XX(IPV4,  1 << 5)  \
-    XX(IPV6,  1 << 6)  \
-    XX(LOCAL, 1 << 7)  \
+    XX(INET,  1 << 4) \
+    XX(IPV4,  1 << 5) \
+    XX(IPV6,  1 << 6) \
+    XX(LOCAL, 1 << 7) \
     /* 10 ~ 19 ((tcp|udp)-extra) */ \
     XX(UNSPEC,        1 << 10)  CAT_INTERNAL /* (it is AF_UNSPEC when was created by user) */ \
     XX(TCP_DELAY,     1 << 11)  CAT_INTERNAL /* (disable tcp_nodelay) */ \
     XX(TCP_KEEPALIVE, 1 << 12)  CAT_INTERNAL /* (enable keep-alive) */ \
     XX(UDP_BROADCAST, 1 << 11)  CAT_INTERNAL /* (enable broadcast) TODO: support it or remove */ \
     /* 10 ~ 19 (pipe-extra) */ \
-    XX(IPC,    1 << 10)  \
+    XX(IPC,    1 << 10) \
     /* 10 ~ 19 (tty-extra) */ \
-    XX(STDIN,  1 << 10)  \
-    XX(STDOUT, 1 << 11)  \
-    XX(STDERR, 1 << 12)  \
+    XX(STDIN,  1 << 10) \
+    XX(STDOUT, 1 << 11) \
+    XX(STDERR, 1 << 12) \
     /* 20 ~ 23 (stream (tcp|pipe|tty)) */ \
     XX(SERVER, 1 << 20)         CAT_INTERNAL \
-    XX(CLIENT, 1 << 21)         CAT_INTERNAL  \
+    XX(CLIENT, 1 << 21)         CAT_INTERNAL \
 
 #define CAT_SOCKET_TYPE_FLAG_MAP(XX) CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
@@ -228,25 +228,25 @@ typedef enum
 } cat_socket_type_flag_t;
 
 #define CAT_SOCKET_TYPE_MAP_EX(XX, UN, SS) \
-    XX(ANY,  0)  \
+    XX(ANY,  0) \
     /* stream */ \
-    XX(TCP,  1 << 24 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_INET)  \
-    XX(TCP4,  CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV4)  \
-    XX(TCP6,  CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV6)  \
-    XX(PIPE,  1 << 25 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_LOCAL)  \
-    XX(TTY,   1 << 26 | CAT_SOCKET_TYPE_FLAG_STREAM)  \
+    XX(TCP,  1 << 24 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_INET) \
+    XX(TCP4,  CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV4) \
+    XX(TCP6,  CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV6) \
+    XX(PIPE,  1 << 25 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_LOCAL) \
+    XX(TTY,   1 << 26 | CAT_SOCKET_TYPE_FLAG_STREAM) \
     /* dgram */ \
-    XX(UDP,   1 << 27 | CAT_SOCKET_TYPE_FLAG_DGRAM | CAT_SOCKET_TYPE_FLAG_INET)  \
-    XX(UDP4,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV4)  \
-    XX(UDP6,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV6)  \
-    UN(UNIX,  CAT_SOCKET_TYPE_PIPE)  \
-    UN(UDG,   1 << 28  | CAT_SOCKET_TYPE_FLAG_DGRAM | CAT_SOCKET_TYPE_FLAG_LOCAL)  \
-    SS(TLS,   CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_SSL)  \
-    SS(TLS4,  CAT_SOCKET_TYPE_TCP4 | CAT_SOCKET_TYPE_FLAG_SSL)  \
-    SS(TLS6,  CAT_SOCKET_TYPE_TCP6 | CAT_SOCKET_TYPE_FLAG_SSL)  \
-    SS(DTLS,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_SSL)  \
-    SS(DTLS4, CAT_SOCKET_TYPE_UDP4 | CAT_SOCKET_TYPE_FLAG_SSL)  \
-    SS(DTLS6, CAT_SOCKET_TYPE_UDP6 | CAT_SOCKET_TYPE_FLAG_SSL)  \
+    XX(UDP,   1 << 27 | CAT_SOCKET_TYPE_FLAG_DGRAM | CAT_SOCKET_TYPE_FLAG_INET) \
+    XX(UDP4,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV4) \
+    XX(UDP6,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV6) \
+    UN(UNIX,  CAT_SOCKET_TYPE_PIPE) \
+    UN(UDG,   1 << 28  | CAT_SOCKET_TYPE_FLAG_DGRAM | CAT_SOCKET_TYPE_FLAG_LOCAL) \
+    SS(TLS,   CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_SSL) \
+    SS(TLS4,  CAT_SOCKET_TYPE_TCP4 | CAT_SOCKET_TYPE_FLAG_SSL) \
+    SS(TLS6,  CAT_SOCKET_TYPE_TCP6 | CAT_SOCKET_TYPE_FLAG_SSL) \
+    SS(DTLS,  CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_SSL) \
+    SS(DTLS4, CAT_SOCKET_TYPE_UDP4 | CAT_SOCKET_TYPE_FLAG_SSL) \
+    SS(DTLS6, CAT_SOCKET_TYPE_UDP6 | CAT_SOCKET_TYPE_FLAG_SSL) \
 
 #ifndef CAT_OS_UNIX_LIKE
 #define CAT_SOCKET_UNIX_ENUM_GEN(XX) CAT_ENUM_EMPTY_GEN
@@ -273,14 +273,14 @@ typedef enum
 typedef uint32_t cat_socket_type_t;
 
 #define CAT_SOCKET_IO_FLAG_MAP_EX(XX, SS) \
-    XX(NONE,      0)  \
-    XX(READ,      1 << 0)  \
-    XX(WRITE,     1 << 1)  \
-    XX(RDWR,      CAT_SOCKET_IO_FLAG_READ | CAT_SOCKET_IO_FLAG_WRITE)  \
-    XX(BIND,      1 << 2 | CAT_SOCKET_IO_FLAG_RDWR)  \
-    XX(ACCEPT,    1 << 3 | CAT_SOCKET_IO_FLAG_RDWR)  \
-    XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR)  \
-    SS(HANDSHAKE, 1 << 5 | CAT_SOCKET_IO_FLAG_RDWR)  \
+    XX(NONE,      0) \
+    XX(READ,      1 << 0) \
+    XX(WRITE,     1 << 1) \
+    XX(RDWR,      CAT_SOCKET_IO_FLAG_READ | CAT_SOCKET_IO_FLAG_WRITE) \
+    XX(BIND,      1 << 2 | CAT_SOCKET_IO_FLAG_RDWR) \
+    XX(ACCEPT,    1 << 3 | CAT_SOCKET_IO_FLAG_RDWR) \
+    XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR) \
+    SS(HANDSHAKE, 1 << 5 | CAT_SOCKET_IO_FLAG_RDWR) \
 
 #define CAT_SOCKET_IO_FLAG_MAP(XX) CAT_SOCKET_IO_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
@@ -294,10 +294,10 @@ typedef enum
 typedef uint8_t cat_socket_io_flags_t;
 
 #define CAT_SOCKET_BIND_FLAG_MAP(XX) \
-    XX(NONE, 0)  \
-    XX(IPV6ONLY, 1 << 0)  \
-    XX(REUSEADDR, 1 << 1)  \
-    XX(REUSEPORT, 1 << 2)  \
+    XX(NONE, 0) \
+    XX(IPV6ONLY, 1 << 0) \
+    XX(REUSEADDR, 1 << 1) \
+    XX(REUSEPORT, 1 << 2) \
 
 typedef enum
 {
