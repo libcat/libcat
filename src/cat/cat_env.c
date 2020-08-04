@@ -47,7 +47,7 @@ CAT_API char *cat_env_get_ex(const char *name, char *buffer, size_t *size)
 
     error = uv_os_getenv(name, buffer, size_ptr);
 
-    if (unlikely(error != 0)) {
+    if (error != 0) {
         if (alloc_size != 0) {
             cat_free(buffer);
         }
@@ -91,33 +91,43 @@ CAT_API cat_bool_t cat_env_unset(const char *name)
 
 CAT_API cat_bool_t cat_env_exists(const char *name)
 {
-    char *env;
+    char buffer[1];
+    size_t size = 1;
+    int error;
 
-    env = cat_env_get(name);
+    error = uv_os_getenv(name, buffer, &size);
 
-    if (env == NULL) {
+    if (error != 0 && error != CAT_ENOBUFS) {
         return cat_false;
-    } else {
-        cat_free(env);
-        return cat_true;
     }
+
+    return cat_true;
 }
 
 CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t default_value)
 {
-    char *env;
+    char *env, buffer[CAT_ENV_BUFFER_SIZE];
+    size_t size = strlen(value) + 1;
+    int error;
 
-    env = cat_env_get(name);
-
-    if (env != NULL) {
-        cat_bool_t ret;
-        if (strcmp(env, value) == 0) {
-            ret = cat_true;
-        } else {
-            ret = cat_false;
+    if (likely(size <= sizeof(buffer))) {
+        env = buffer;
+        size = sizeof(buffer);
+    } else {
+        env = (char *) cat_malloc(size);
+        if (unlikely(env == NULL)) {
+            return default_value;
         }
+    }
+
+    error = uv_os_getenv(name, env, &size);
+
+    if (error == 0) {
+        default_value = strcmp(env, value) == 0;
+    }
+
+    if (unlikely(env != buffer)) {
         cat_free(env);
-        return ret;
     }
 
     return default_value;
