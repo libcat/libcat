@@ -614,12 +614,20 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
         if (fd == CAT_SOCKET_INVALID_FD) {
             if (type & CAT_SOCKET_TYPE_FLAG_STDIN) {
-                fd = 0;
+                fd = STDIN_FILENO;
             } else if (type & CAT_SOCKET_TYPE_FLAG_STDOUT) {
-                fd = 1;
+                fd = STDOUT_FILENO;
             } else if (type & CAT_SOCKET_TYPE_FLAG_STDERR) {
-                fd = 2;
+                fd = STDERR_FILENO;
             }
+        }
+        type &= ~(CAT_SOCKET_TYPE_FLAG_STDIN | CAT_SOCKET_TYPE_FLAG_STDOUT | CAT_SOCKET_TYPE_FLAG_STDERR);
+        if (fd == STDIN_FILENO) {
+            type |= CAT_SOCKET_TYPE_FLAG_STDIN;
+        } else if (fd == STDOUT_FILENO) {
+            type |= CAT_SOCKET_TYPE_FLAG_STDOUT;
+        } else if (fd == STDERR_FILENO) {
+            type |= CAT_SOCKET_TYPE_FLAG_STDERR;
         }
         error = uv_tty_init(cat_event_loop, &isocket->u.tty, fd, 0);
     }
