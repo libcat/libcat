@@ -26,7 +26,7 @@
 #define CAT_TO_STR(str)          CAT_TO_STR_NAKED(str)
 
 CAT_API char *cat_vsprintf(const char *format, va_list args); CAT_FREE
-CAT_API char *cat_sprintf(const char *format, ...);           CAT_FREE CAT_ATTRIBUTE_FORMAT(printf, 1, 2)
+CAT_API char *cat_sprintf(const char *format, ...)            CAT_FREE CAT_ATTRIBUTE_FORMAT(printf, 1, 2);
 
 CAT_API char *cat_hexprint(const char *data, size_t length); CAT_FREE
 
