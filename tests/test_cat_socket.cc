@@ -881,8 +881,8 @@ TEST(cat_socket, cross_close_when_dns_resolve)
     SKIP_IF(is_offline());
     bool exited = false;
     DEFER(exited = true);
-    cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-    DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
+    cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
+    DEFER(cat_socket_close(socket));
     coroutine_run([&] {
         cat_time_sleep(0);
         if (!exited) {
@@ -908,8 +908,8 @@ TEST(cat_socket, cross_close_when_connecting)
     SKIP_IF(test_remote_http_server_ip == nullptr);
     bool exited = false;
     DEFER(exited = true);
-    cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-    DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
+    cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
+    DEFER(cat_socket_close(socket));
     coroutine_run([&] {
         cat_time_sleep(0);
         ASSERT_FALSE(exited);
@@ -926,8 +926,8 @@ TEST(cat_socket, cancel_connect)
     bool exited;
     exited = false;
     DEFER(exited = true);
-    cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-    DEFER(if (cat_socket_is_available(socket)) { cat_socket_close(socket); });
+    cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
+    DEFER(cat_socket_close(socket));
     coroutine_run([&] {
         cat_time_sleep(0);
         ASSERT_FALSE(exited);
