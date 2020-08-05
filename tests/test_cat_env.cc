@@ -23,17 +23,22 @@
 TEST(cat_env, base)
 {
     char *env, rand[CAT_ENV_BUFFER_SIZE + 1];
-    ASSERT_NE(cat_srand(CAT_STRS(rand)), nullptr);
-    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, rand));
-    ASSERT_TRUE(cat_env_exists(TEST_ENV_NAME));
+    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, "foo"));
     env = cat_env_get(TEST_ENV_NAME);
     ASSERT_NE(env, nullptr);
     DEFER(cat_free(env));
+    ASSERT_EQ(std::string("foo"), std::string(env));
+    ASSERT_NE(cat_srand(CAT_STRS(rand)), nullptr);
+    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, rand));
+    ASSERT_TRUE(cat_env_exists(TEST_ENV_NAME));
+    cat_free(env);
+    env = cat_env_get(TEST_ENV_NAME);
+    ASSERT_NE(env, nullptr);
     ASSERT_EQ(std::string(rand), std::string(env));
     ASSERT_TRUE(cat_env_is(TEST_ENV_NAME, rand, cat_false));
     ASSERT_TRUE(cat_env_unset(TEST_ENV_NAME));
-    cat_free(env);
     ASSERT_FALSE(cat_env_is(TEST_ENV_NAME, rand, cat_false));
+    cat_free(env);
     env = cat_env_get(TEST_ENV_NAME);
     ASSERT_EQ(env, nullptr);
     ASSERT_FALSE(cat_env_exists(TEST_ENV_NAME));

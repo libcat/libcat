@@ -25,21 +25,26 @@ CAT_API char *cat_env_get(const char *name)
 
 CAT_API char *cat_env_get_ex(const char *name, char *buffer, size_t *size)
 {
+    char _buffer[CAT_ENV_BUFFER_SIZE];
     size_t *size_ptr, alloc_size = 0;
     int error;
 
     if (buffer == NULL) {
         if (size == NULL || *size == 0) {
-            alloc_size = CAT_ENV_BUFFER_SIZE;
+            alloc_size = sizeof(_buffer);
             size_ptr = &alloc_size;
         } else {
             alloc_size = *size;
         }
-        _retry:
-        buffer = (char *) cat_malloc(alloc_size);
-        if (unlikely(buffer == NULL)) {
-            cat_update_last_error_of_syscall("Malloc for env failed");
-            return NULL;
+        if (alloc_size <= sizeof(_buffer)) {
+            buffer = _buffer;
+        } else {
+            _retry:
+            buffer = (char *) cat_malloc(alloc_size);
+            if (unlikely(buffer == NULL)) {
+                cat_update_last_error_of_syscall("Malloc for env failed");
+                return NULL;
+            }
         }
     } else {
         size_ptr = size;
@@ -48,7 +53,7 @@ CAT_API char *cat_env_get_ex(const char *name, char *buffer, size_t *size)
     error = uv_os_getenv(name, buffer, size_ptr);
 
     if (error != 0) {
-        if (alloc_size != 0) {
+        if (alloc_size != 0 && buffer != _buffer) {
             cat_free(buffer);
         }
         if (error == CAT_ENOBUFS && size_ptr == &alloc_size) {
@@ -56,6 +61,14 @@ CAT_API char *cat_env_get_ex(const char *name, char *buffer, size_t *size)
         }
         cat_update_last_error_with_reason(error, "Env get failed");
         return NULL;
+    }
+
+    if (buffer == _buffer) {
+        buffer = cat_strdup(buffer);
+        if (unlikely(buffer == NULL)) {
+            cat_update_last_error_of_syscall("Dup for env failed");
+            return NULL;
+        }
     }
 
     return buffer;
