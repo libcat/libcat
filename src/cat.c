@@ -104,12 +104,16 @@ do {
 } while (0);
 #endif
 
+    CAT_G(runtime) = cat_true;
+
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_runtime_shutdown(void)
 {
     cat_clear_last_error();
+
+    CAT_G(runtime) = cat_false;
 
     return cat_true;
 }

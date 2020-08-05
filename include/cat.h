@@ -65,10 +65,11 @@ extern "C" {
 CAT_GLOBALS_STRUCT_BEGIN(cat)
     cat_log_types_t log_types;
     cat_module_types_t log_module_types;
+    cat_error_t last_error;
+    cat_bool_t runtime;
 #ifdef CAT_SOURCE_POSITION
     cat_bool_t log_source_postion;
 #endif
-    cat_error_t last_error;
 #ifdef CAT_DEBUG
     cat_bool_t show_last_error;
 #endif
