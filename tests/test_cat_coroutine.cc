@@ -366,13 +366,30 @@ TEST(cat_coroutine, get_start_time)
 
 TEST(cat_coroutine, get_elapsed)
 {
-    cat_msec_t time = cat_time_msec();
+    ASSERT_GT(cat_coroutine_get_elapsed(cat_coroutine_get_current()), 0);
+}
 
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_msec_t elapsed = cat_coroutine_get_elapsed(cat_coroutine_get_current());
-        EXPECT_GE(elapsed, 0);
-        return CAT_COROUTINE_DATA_NULL;
-    }, &time);
+TEST(cat_coroutine, get_elapsed_as_string)
+{
+    char *elapsed = cat_coroutine_get_elapsed_as_string(cat_coroutine_get_current());
+
+    ASSERT_NE(elapsed, nullptr);
+
+    cat_free(elapsed);
+}
+
+TEST(cat_coroutine, get_elapsed_zero)
+{
+    cat_coroutine_t coroutine;
+    char *elapsed;
+
+    ASSERT_NE(cat_coroutine_create(&coroutine, [](cat_data_t * data){ return CAT_COROUTINE_DATA_NULL; }), nullptr);
+    DEFER(cat_coroutine_close(&coroutine));
+
+    ASSERT_EQ(cat_coroutine_get_elapsed(&coroutine), 0);
+    elapsed = cat_coroutine_get_elapsed_as_string(&coroutine);
+    ASSERT_EQ(std::string(elapsed), std::string("0ms"));
+    cat_free(elapsed);
 }
 
 TEST(cat_coroutine, get_elapsed_not_init)

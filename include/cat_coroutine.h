@@ -244,6 +244,7 @@ CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *cor
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_start_time(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_elapsed(const cat_coroutine_t *coroutine);
+CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *coroutine);
 
 /* scheduler */
 CAT_API cat_bool_t cat_coroutine_register_scheduler(cat_coroutine_t *coroutine); CAT_INTERNAL
