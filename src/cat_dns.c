@@ -35,12 +35,14 @@ static void cat_dns_getaddrinfo_callback(uv_getaddrinfo_t* request, int status, 
 {
     cat_getaddrinfo_context_t *context = cat_container_of(request, cat_getaddrinfo_context_t, request.getaddrinfo);
 
-    if (context->request.coroutine != NULL) {
+    if (likely(context->request.coroutine != NULL)) {
         context->status = status;
         context->response = response;
         if (unlikely(!cat_coroutine_resume_ez(context->request.coroutine))) {
             cat_core_error_with_last(DNS, "DNS resolver schedule failed");
         }
+    } else if (response != NULL) {
+        uv_freeaddrinfo(response);
     }
 
     cat_free(context);
