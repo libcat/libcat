@@ -234,21 +234,37 @@ TEST(cat_coroutine, get_peak_count_not_in_main)
 
 TEST(cat_coroutine, get_round_in_main)
 {
-    cat_coroutine_round_t round;
-
-    round = cat_coroutine_get_round();
-    ASSERT_EQ(CAT_COROUTINE_G(round), round);
+    ASSERT_EQ(CAT_COROUTINE_G(round), cat_coroutine_get_current_round());
 }
 
 TEST(cat_coroutine, get_round_not_in_main)
 {
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_coroutine_round_t round;
+    coroutine_run([] {
+        EXPECT_EQ(CAT_COROUTINE_G(round),  cat_coroutine_get_current_round());
+    });
+}
 
-        round = cat_coroutine_get_round();
-        EXPECT_EQ(CAT_COROUTINE_G(round), round);
-        return CAT_COROUTINE_DATA_NULL;
-    }, nullptr);
+TEST(cat_coroutine, get_round)
+{
+    cat_coroutine_round_t round = cat_coroutine_get_current_round();
+
+    ASSERT_EQ(round, cat_coroutine_get_round(cat_coroutine_get_current()));
+
+    coroutine_run([=] {
+        ASSERT_EQ(round + 1, cat_coroutine_get_round(cat_coroutine_get_current()));
+    });
+
+    ASSERT_EQ(round + 2, cat_coroutine_get_round(cat_coroutine_get_current()));
+}
+
+TEST(cat_coroutine, get_opcode)
+{
+    cat_coroutine_t *coroutine = cat_coroutine_get_current();
+
+    ASSERT_EQ(cat_coroutine_get_opcodes(coroutine), coroutine->opcodes);
+
+    /* make lcov happy */
+    cat_coroutine_set_opcodes(coroutine, cat_coroutine_get_opcodes(coroutine));
 }
 
 TEST(cat_coroutine, init)

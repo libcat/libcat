@@ -65,7 +65,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
     cat_coroutine_set_default_stack_size(CAT_COROUTINE_RECOMMENDED_STACK_SIZE);
 
     /* init info */
-    CAT_COROUTINE_G(last_id) = CAT_COROUTINE_MAIN_ID;
+    CAT_COROUTINE_G(last_id) = 0;
     CAT_COROUTINE_G(active_count) = 0;
     CAT_COROUTINE_G(peak_count) = 0;
     CAT_COROUTINE_G(round) = 0;
@@ -73,13 +73,14 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
     /* init main coroutine properties */
     do {
         cat_coroutine_t *main_coroutine = &CAT_COROUTINE_G(_main);
-        main_coroutine->id = CAT_COROUTINE_G(last_id)++;
+        main_coroutine->id = CAT_COROUTINE_MAIN_ID;
+        main_coroutine->start_time = cat_time_msec();
         main_coroutine->flags = CAT_COROUTINE_FLAG_ON_STACK;
         main_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
         main_coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
+        main_coroutine->round = ++CAT_COROUTINE_G(round);
         main_coroutine->from = NULL;
         main_coroutine->previous = NULL;
-        main_coroutine->start_time = cat_time_msec();
         main_coroutine->stack = NULL;
         main_coroutine->stack_size = 0;
         memset(&main_coroutine->context, ~0, sizeof(cat_coroutine_context_t));
@@ -93,6 +94,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         CAT_COROUTINE_G(main) = main_coroutine;
         CAT_COROUTINE_G(current) = main_coroutine;
 
+        CAT_COROUTINE_G(last_id) = main_coroutine->id + 1;
         CAT_COROUTINE_G(active_count)++;
         CAT_COROUTINE_G(peak_count)++;
     } while (0);
@@ -182,7 +184,7 @@ CAT_API cat_coroutine_count_t cat_coroutine_get_peak_count(void)
     return CAT_COROUTINE_G(peak_count);
 }
 
-CAT_API cat_coroutine_round_t cat_coroutine_get_round(void)
+CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void)
 {
     return CAT_COROUTINE_G(round);
 }
@@ -277,6 +279,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->id = CAT_COROUTINE_G(last_id)++;
     coroutine->state = CAT_COROUTINE_STATE_READY;
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
+    coroutine->round = 0;
     coroutine->from = NULL;
     coroutine->previous = NULL;
     coroutine->start_time = 0;
@@ -388,7 +391,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* reset the opcode */
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     /* round++ */
-    CAT_COROUTINE_G(round)++;
+    coroutine->round = ++CAT_COROUTINE_G(round);
     /* resume */
     cat_debug(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -529,6 +532,21 @@ CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *cor
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine)
 {
     return cat_coroutine_state_name(coroutine->state);
+}
+
+CAT_API cat_coroutine_opcodes_t cat_coroutine_get_opcodes(const cat_coroutine_t *coroutine)
+{
+    return coroutine->opcodes;
+}
+
+CAT_API void cat_coroutine_set_opcodes(cat_coroutine_t *coroutine, cat_coroutine_opcodes_t opcodes)
+{
+    coroutine->opcodes = opcodes;
+}
+
+CAT_API cat_coroutine_round_t cat_coroutine_get_round(const cat_coroutine_t *coroutine)
+{
+    return coroutine->round;
 }
 
 CAT_API cat_msec_t cat_coroutine_get_start_time(const cat_coroutine_t *coroutine)

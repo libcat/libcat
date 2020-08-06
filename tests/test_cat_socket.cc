@@ -785,10 +785,10 @@ TEST(cat_socket, send_yield)
             buffer_size
         };
         cat_coroutine_run(&write_coroutine, [](cat_data_t *data) {
-            cat_coroutine_round_t round = cat_coroutine_get_round();
+            cat_coroutine_round_t round = cat_coroutine_get_current_round();
             struct write_context_s *context = (struct write_context_s *) data;
             EXPECT_TRUE(cat_socket_send(context->socket, context->buffer, context->length));
-            EXPECT_GT(cat_coroutine_get_round(), round);
+            EXPECT_GT(cat_coroutine_get_current_round(), round);
             return CAT_COROUTINE_DATA_NULL;
         }, &write_context);
     } while (0);

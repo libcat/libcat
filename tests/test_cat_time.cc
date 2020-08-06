@@ -64,7 +64,7 @@ TEST(cat_time, msleep_cancel)
 
 TEST(cat_time, sleep_zero)
 {
-    cat_coroutine_round_t round = cat_coroutine_get_round();
+    cat_coroutine_round_t round = cat_coroutine_get_current_round();
     EXPECT_EQ(cat_time_sleep(0), 0);
-    EXPECT_GT(cat_coroutine_get_round(), round);
+    EXPECT_GT(cat_coroutine_get_current_round(), round);
 }

@@ -119,6 +119,9 @@ typedef enum
 
 typedef uint8_t cat_coroutine_opcodes_t;
 
+#define CAT_COROUTINE_ROUND_FMT "%" PRIu64
+typedef uint64_t cat_coroutine_round_t;
+
 #define CAT_COROUTINE_STACK_SIZE_FMT "%u"
 typedef uint32_t cat_coroutine_stack_size_t;
 
@@ -129,13 +132,14 @@ typedef struct cat_coroutine_s
 {
     /* invariant info (readonly) */
     cat_coroutine_id_t id;
+    cat_msec_t start_time;
     cat_coroutine_flags_t flags;
     /* runtime info (readonly) */
     cat_coroutine_state_t state;
-    cat_coroutine_opcodes_t opcodes; /* will be reset before resume */
+    cat_coroutine_opcodes_t opcodes; /* (writable) will be reset before resume */
+    cat_coroutine_round_t round;
     struct cat_coroutine_s *from CAT_UNSAFE;
     struct cat_coroutine_s *previous;
-    cat_msec_t start_time;
     /* internal properties (readonly) */
     cat_coroutine_stack_t *stack;
     cat_coroutine_stack_size_t stack_size;
@@ -158,9 +162,6 @@ typedef cat_data_t *(*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_da
 
 #define CAT_COROUTINE_COUNT_FMT "%u"
 typedef uint32_t cat_coroutine_count_t;
-
-#define CAT_COROUTINE_ROUND_FMT "%" PRIu64
-typedef uint64_t cat_coroutine_round_t;
 
 CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     /* options */
@@ -213,7 +214,7 @@ CAT_API cat_coroutine_t *cat_coroutine_get_scheduler(void);
 CAT_API cat_coroutine_id_t cat_coroutine_get_last_id(void);
 CAT_API cat_coroutine_count_t cat_coroutine_get_active_count(void);
 CAT_API cat_coroutine_count_t cat_coroutine_get_peak_count(void);
-CAT_API cat_coroutine_round_t cat_coroutine_get_round(void);
+CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void);
 
 /* ctor and dtor */
 CAT_API void cat_coroutine_init(cat_coroutine_t *coroutine);
@@ -242,6 +243,9 @@ CAT_API cat_bool_t cat_coroutine_is_alive(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state);
 CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine);
+CAT_API cat_coroutine_opcodes_t cat_coroutine_get_opcodes(const cat_coroutine_t *coroutine);
+CAT_API void cat_coroutine_set_opcodes(cat_coroutine_t *coroutine, cat_coroutine_opcodes_t opcodes);
+CAT_API cat_coroutine_round_t cat_coroutine_get_round(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_start_time(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_elapsed(const cat_coroutine_t *coroutine);
 CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *coroutine);
