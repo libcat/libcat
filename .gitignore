@@ -19,14 +19,8 @@ CMakeSettings.json
 *.libs
 *.log
 
-# tests
-cat_tests
-
 # coverage
 coverage.info
-
-# config
-config*
 
 # others
 debug
