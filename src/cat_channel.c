@@ -85,12 +85,18 @@ CAT_API cat_bool_t cat_channel_push_ex(cat_channel_t *channel, const cat_data_t 
     } while (0);
     /* notify a possible consumer to consume */
     if (channel->length > 0) {
-        cat_coroutine_t *consumer = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node);
-        if (consumer != NULL) {
+        size_t length;
+        do {
+            cat_coroutine_t *consumer = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node);
+            if (consumer == NULL) {
+                break;
+            }
+            length = channel->length;
             if (unlikely(!cat_coroutine_resume_ez(consumer))) {
                 cat_core_error_with_last(CHANNEL, "Notify consumer failed");
             }
-        }
+            /* continue if consumer did not consume */
+        } while (unlikely(channel->length == length));
     }
 
     return cat_true;
@@ -146,12 +152,18 @@ CAT_API cat_bool_t cat_channel_pop_ex(cat_channel_t *channel, cat_data_t *data, 
     } while (0);
     /* notify a possible producer to continue to produce */
     if (producer == NULL) {
-        producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
-        if (producer != NULL) {
+        size_t length;
+        do {
+            producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
+            if (producer == NULL) {
+                break;
+            }
+            length = channel->length;
             if (unlikely(!cat_coroutine_resume_ez(producer))) {
                 cat_core_error_with_last(CHANNEL, "Notify producer failed");
             }
-        }
+            /* continue if producer did not produce */
+        } while (unlikely(channel->length == length));
     }
 
     return cat_true;
