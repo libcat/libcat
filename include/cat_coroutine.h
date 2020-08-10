@@ -80,13 +80,20 @@ typedef enum
     CAT_COROUTINE_FLAG_MANUAL_CLOSE = 1 << 1,
     CAT_COROUTINE_FLAG_SCHEDULER = 1 << 2,
     /* for user */
-    CAT_COROUTINE_FLAG_USR1 = 1 << 4,
-    CAT_COROUTINE_FLAG_USR2 = 1 << 5,
-    CAT_COROUTINE_FLAG_USR3 = 1 << 6,
-    CAT_COROUTINE_FLAG_USR4 = 1 << 7
+#define CAT_COROUTINE_FLAG_USR_GEN(XX) \
+    CAT_COROUTINE_FLAG_USR##XX = 1 << (XX + (32 - 1 - 8))
+    CAT_COROUTINE_FLAG_USR_GEN(1),
+    CAT_COROUTINE_FLAG_USR_GEN(2),
+    CAT_COROUTINE_FLAG_USR_GEN(3),
+    CAT_COROUTINE_FLAG_USR_GEN(4),
+    CAT_COROUTINE_FLAG_USR_GEN(5),
+    CAT_COROUTINE_FLAG_USR_GEN(6),
+    CAT_COROUTINE_FLAG_USR_GEN(7),
+    CAT_COROUTINE_FLAG_USR_GEN(8),
+#undef CAT_COROUTINE_FLAG_USR_GEN
 } cat_coroutine_flag_t;
 
-typedef uint8_t cat_coroutine_flags_t;
+typedef uint32_t cat_coroutine_flags_t;
 
 #define CAT_COROUTINE_STATE_MAP(XX) \
     XX(INIT,     0) \
