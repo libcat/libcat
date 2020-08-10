@@ -67,6 +67,8 @@ CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel);
+CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t * channel);
+CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t * channel);
 CAT_API cat_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel);
 CAT_API cat_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_data_dtor_t dtor);
 

@@ -239,6 +239,16 @@ CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel)
     return cat_queue_empty(&channel->consumers);
 }
 
+CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t * channel)
+{
+    return channel->length > 0 || !cat_queue_empty(&channel->producers);
+}
+
+CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t * channel)
+{
+    return channel->length < channel->capacity || !cat_queue_empty(&channel->consumers);
+}
+
 CAT_API cat_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel)
 {
     return channel->dtor;
