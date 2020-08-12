@@ -19,9 +19,9 @@
 
 #include "test.h"
 
-/* unbuffered channel test */
+/* unbuffered {{{ */
 
-TEST(cat_unbuffered_channel, push_ex_timeout_and_no_producer)
+TEST(cat_channel_unbuffered, push_ex_timeout_and_no_producer)
 {
     cat_channel_t *channel, _channel;
     char data[] = "a";
@@ -31,7 +31,7 @@ TEST(cat_unbuffered_channel, push_ex_timeout_and_no_producer)
     ASSERT_FALSE(cat_channel_push_ex(channel, &data, 1));
 }
 
-TEST(cat_unbuffered_channel, push_ex_timeout_and_has_producer)
+TEST(cat_channel_unbuffered, push_ex_timeout_and_has_producer)
 {
     cat_channel_t *channel, _channel;
     char data[] = "a";
@@ -53,7 +53,7 @@ TEST(cat_unbuffered_channel, push_ex_timeout_and_has_producer)
     ASSERT_TRUE(cat_channel_push_ex(channel, &data, 1));
 }
 
-TEST(cat_unbuffered_channel, push_cancel_continue)
+TEST(cat_channel_unbuffered, push_cancel_continue)
 {
     cat_channel_t *channel, _channel;
     char data[] = "a";
@@ -76,11 +76,11 @@ TEST(cat_unbuffered_channel, push_cancel_continue)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
-/* unbuffered channel test */
+/* }}} unbuffered */
 
-/* buffered channel test */
+/* buffered {{{ */
 
-TEST(cat_buffered_channel, create)
+TEST(cat_channel_buffered, create)
 {
     cat_channel_t *channel, _channel;
 
@@ -98,7 +98,7 @@ TEST(cat_buffered_channel, create)
     }
 }
 
-TEST(cat_buffered_channel, push)
+TEST(cat_channel_buffered, push)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -113,7 +113,7 @@ TEST(cat_buffered_channel, push)
     ASSERT_TRUE(cat_channel_push(channel, &data));
 }
 
-TEST(cat_buffered_channel, push_eq_data_size)
+TEST(cat_channel_buffered, push_eq_data_size)
 {
     cat_channel_t *channel, _channel;
     char data[] = "ab";
@@ -127,7 +127,7 @@ TEST(cat_buffered_channel, push_eq_data_size)
     ASSERT_STREQ(expect, actual);
 }
 
-TEST(cat_buffered_channel, push_gt_data_size)
+TEST(cat_channel_buffered, push_gt_data_size)
 {
     cat_channel_t *channel, _channel;
     char data[] = "ab";
@@ -142,7 +142,7 @@ TEST(cat_buffered_channel, push_gt_data_size)
     ASSERT_STREQ(expect, actual);
 }
 
-TEST(cat_buffered_channel, get_capacity)
+TEST(cat_channel_buffered, get_capacity)
 {
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 1, sizeof(char), nullptr);
@@ -151,7 +151,7 @@ TEST(cat_buffered_channel, get_capacity)
     ASSERT_EQ(1, cat_channel_get_capacity(channel));
 }
 
-TEST(cat_buffered_channel, get_length)
+TEST(cat_channel_buffered, get_length)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -164,7 +164,7 @@ TEST(cat_buffered_channel, get_length)
     ASSERT_EQ(0, cat_channel_get_length(channel));
 }
 
-TEST(cat_buffered_channel, is_empty)
+TEST(cat_channel_buffered, is_empty)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -176,7 +176,7 @@ TEST(cat_buffered_channel, is_empty)
     ASSERT_FALSE(cat_channel_is_empty(channel));
 }
 
-TEST(cat_buffered_channel, is_full)
+TEST(cat_channel_buffered, is_full)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -188,7 +188,7 @@ TEST(cat_buffered_channel, is_full)
     ASSERT_TRUE(cat_channel_is_full(channel));
 }
 
-TEST(cat_buffered_channel, has_producers)
+TEST(cat_channel_buffered, has_producers)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -199,7 +199,7 @@ TEST(cat_buffered_channel, has_producers)
     ASSERT_TRUE(cat_channel_has_producers(channel));
 }
 
-TEST(cat_buffered_channel, has_consumers)
+TEST(cat_channel_buffered, has_consumers)
 {
     cat_channel_t *channel, _channel;
     size_t data = 1;
@@ -210,7 +210,7 @@ TEST(cat_buffered_channel, has_consumers)
     ASSERT_TRUE(cat_channel_has_consumers(channel));
 }
 
-TEST(cat_buffered_channel, get_dtor)
+TEST(cat_channel_buffered, get_dtor)
 {
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), [](cat_data_t *data) {});
@@ -219,7 +219,7 @@ TEST(cat_buffered_channel, get_dtor)
     ASSERT_NE(nullptr, cat_channel_get_dtor(channel));
 }
 
-TEST(cat_buffered_channel, set_dtor)
+TEST(cat_channel_buffered, set_dtor)
 {
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
@@ -228,7 +228,7 @@ TEST(cat_buffered_channel, set_dtor)
     ASSERT_EQ(nullptr, cat_channel_set_dtor(channel, [](cat_data_t *data) {}));
 }
 
-TEST(cat_buffered_channel, base)
+TEST(cat_channel_buffered, base)
 {
     for (size_t size = 0; size < 100; size++) {
         cat_channel_t *channel, _channel;
@@ -250,7 +250,7 @@ TEST(cat_buffered_channel, base)
     }
 }
 
-TEST(cat_buffered_channel, timeout)
+TEST(cat_channel_buffered, timeout)
 {
     cat_msec_t s = cat_time_msec();
     cat_channel_t *channel, _channel;
@@ -261,7 +261,7 @@ TEST(cat_buffered_channel, timeout)
     ASSERT_GE(s, 5);
 }
 
-TEST(cat_buffered_channel, multi)
+TEST(cat_channel_buffered, multi)
 {
     for (size_t size = 0; size < 10; size++) {
         cat_channel_t *channel, _channel;
@@ -289,7 +289,7 @@ TEST(cat_buffered_channel, multi)
     }
 }
 
-TEST(cat_buffered_channel, close_has_dtor)
+TEST(cat_channel_buffered, close_has_dtor)
 {
     cat_channel_t *channel, _channel;
     size_t n = 1;
@@ -306,7 +306,7 @@ TEST(cat_buffered_channel, close_has_dtor)
     ASSERT_EQ("dtor", output);
 }
 
-TEST(cat_buffered_channel, close_no_dtor)
+TEST(cat_channel_buffered, close_no_dtor)
 {
     cat_channel_t *channel, _channel;
 
@@ -334,4 +334,4 @@ TEST(cat_buffered_channel, close_no_dtor)
     }
 }
 
-/* buffered channel test */
+/* }}} buffered channel test */
