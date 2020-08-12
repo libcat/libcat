@@ -54,7 +54,7 @@ CAT_API cat_bool_t cat_sync_wait_group_add(cat_sync_wait_group_t *wg, ssize_t de
 CAT_API cat_bool_t cat_sync_wait_group_wait(cat_sync_wait_group_t *wg, cat_timeout_t timeout)
 {
     if (unlikely(wg->coroutine != NULL)) {
-        cat_update_last_error(CAT_EMISUSE, "WaitGroup is reused before previous wait has returned");
+        cat_update_last_error(CAT_EMISUSE, "WaitGroup can not be reused before previous wait has returned");
         return cat_false;
     }
 
