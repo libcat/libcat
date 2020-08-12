@@ -368,6 +368,8 @@ CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+
+    cat_debug(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
     /* update from */
     coroutine->from = current_coroutine;
     /* solve origin */
@@ -393,7 +395,6 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
     /* resume */
-    cat_debug(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->data = data;
     cat_coroutine_context_jump(&current_coroutine->context, &coroutine->context);
@@ -413,6 +414,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
         /* update context */
         current_coroutine->from->context = transfer.from_context;
     }
+
     return transfer.data;
 #else
     return current_coroutine->data;
