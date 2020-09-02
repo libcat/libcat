@@ -31,6 +31,8 @@ extern "C" {
 #define CAT_COROUTINE_RECOMMENDED_STACK_SIZE    (256 * 1024)
 #define CAT_COROUTINE_MAX_STACK_SIZE            (16 * 1024 * 1024)
 
+#define CAT_COROUTINE_MIN_ID                    0
+#define CAT_COROUTINE_MAX_ID                    UINT64_MAX
 #define CAT_COROUTINE_MAIN_ID                   1
 
 typedef void cat_coroutine_stack_t;
@@ -137,8 +139,14 @@ typedef void (*cat_coroutine_easy_function_t)(void);
 
 typedef struct cat_coroutine_s
 {
-    /* invariant info (readonly) */
+    /* id is always the first member (readonly, invariant) */
     cat_coroutine_id_t id;
+    /* for queue (internal) */
+    union {
+        struct cat_coroutine_s *coroutine;
+        cat_queue_t node;
+    } waiter;
+    /* invariant info (readonly) */
     cat_msec_t start_time;
     cat_coroutine_flags_t flags;
     /* runtime info (readonly) */
@@ -152,12 +160,8 @@ typedef struct cat_coroutine_s
     cat_coroutine_stack_size_t stack_size;
     cat_coroutine_context_t context;
     cat_coroutine_function_t function;
-    union {
-        struct cat_coroutine_s *coroutine;
-        cat_queue_t node;
-    } waiter;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-    cat_data_t data;
+    cat_data_t *transfer_data;
 #endif
     /* ext info */
 #ifdef HAVE_VALGRIND

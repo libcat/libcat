@@ -86,7 +86,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         memset(&main_coroutine->context, ~0, sizeof(cat_coroutine_context_t));
         main_coroutine->function = NULL;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-        cat_coroutine_main.i.data = NULL;
+        main_coroutine->transfer_data = NULL;
 #endif
 #ifdef HAVE_VALGRIND
         main_coroutine->valgrind_stack_id = UINT32_MAX;
@@ -197,8 +197,8 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     }
     cat_debug(COROUTINE, "Start (active_count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(active_count));
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-    CAT_ASSERT(transfer.data == CAT_COROUTINE_G(null));
-    transfer.data = coroutine->data;
+    CAT_ASSERT(transfer.data == NULL);
+    transfer.data = coroutine->transfer_data;
 #else
     /* update origin's context */
     coroutine->from->context = transfer.from_context;
@@ -265,7 +265,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     context.uc_stack.ss_size = available_size;
     context.uc_stack.ss_flags = 0;
     context.uc_link = NULL;
-    cat_coroutine_context_make(&context, (void (*)(void)) &cat_coroutine_context_function, 1, CAT_COROUTINE_G(null));
+    cat_coroutine_context_make(&context, (void (*)(void)) &cat_coroutine_context_function, 1, NULL);
 #else
     context = cat_coroutine_context_make((void *) stack_end, real_stack_size, cat_coroutine_context_function);
 #endif
@@ -288,7 +288,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->context = context;
     coroutine->function = function;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-    coroutine->data = NULL;
+    coroutine->transfer_data = NULL;
 #endif
 #ifdef HAVE_VALGRIND
     coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_end, stack);
@@ -396,7 +396,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine->round = ++CAT_COROUTINE_G(round);
     /* resume */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-    coroutine->data = data;
+    coroutine->transfer_data = data;
     cat_coroutine_context_jump(&current_coroutine->context, &coroutine->context);
 #else
     cat_coroutine_transfer_t transfer = cat_coroutine_context_jump(coroutine->context, data);
@@ -417,7 +417,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 
     return transfer.data;
 #else
-    return current_coroutine->data;
+    return current_coroutine->transfer_data;
 #endif
 }
 
