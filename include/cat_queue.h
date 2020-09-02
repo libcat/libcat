@@ -73,6 +73,12 @@ typedef void *cat_queue_t[2];
     cat_queue_prev(head) = (queue); \
 } while (0)
 
+#define cat_queue_pop_front(head) \
+        cat_queue_remove(cat_queue_next(head))
+
+#define cat_queue_pop_back(head) \
+        cat_queue_remove(cat_queue_prev(head))
+
 #define cat_queue_remove(queue) do { \
     cat_queue_prev_next(queue) = cat_queue_next(queue); \
     cat_queue_next_prev(queue) = cat_queue_prev(queue); \
