@@ -59,7 +59,6 @@ TEST(cat_signal, wait_multi)
     // TODO: cat_getpid()
     EXPECT_TRUE(cat_kill(getpid(), SIGUSR1));
     EXPECT_TRUE(cat_time_wait(TEST_IO_TIMEOUT));
-    EXPECT_EQ(CAT_ECANCELED, cat_get_last_error_code());
     EXPECT_EQ(TEST_MAX_CONCURRENCY, count);
 }
 

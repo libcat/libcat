@@ -82,11 +82,11 @@ typedef union
     cat_coroutine_t *coroutine;
     uv_handle_t handle;
     uv_timer_t timer;
-} cat_sleep_timer_t;
+} cat_timer_t;
 
 static void cat_sleep_timer_callback(uv_timer_t* handle)
 {
-    cat_sleep_timer_t *timer = (cat_sleep_timer_t *) handle;
+    cat_timer_t *timer = (cat_timer_t *) handle;
     cat_coroutine_t *coroutine = timer->coroutine;
     cat_bool_t ret;
 
@@ -99,29 +99,61 @@ static void cat_sleep_timer_callback(uv_timer_t* handle)
     }
 }
 
+static cat_timer_t *cat_timer_wait(cat_msec_t msec)
+{
+    cat_timer_t *timer;
+    cat_bool_t ret;
+
+    timer = (cat_timer_t *) cat_malloc(sizeof(*timer));;
+
+    if (unlikely(timer == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for timer failed");
+        return NULL;
+    }
+
+    (void) uv_timer_init(cat_event_loop, &timer->timer);
+    (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);
+#ifdef CAT_DEBUG
+    do {
+        char *tmp = NULL;
+        cat_debug(TIME, "Sleep %s", tmp = cat_time_format_msec(msec));
+        if (tmp != NULL) { cat_free(tmp); }
+    } while (0);
+#endif
+
+    timer->coroutine = CAT_COROUTINE_G(current);
+
+    ret = cat_coroutine_yield_ez();
+
+    uv_close(&timer->handle, (uv_close_cb) cat_free_function);
+
+    if (unlikely(!ret)) {
+        cat_update_last_error_with_previous("Time sleep failed");
+        return NULL;
+    }
+
+    return timer;
+}
+
 CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout)
 {
     if (timeout < 0) {
         return cat_coroutine_yield_ez();
-    }
+    } else {
+        cat_timer_t *timer;
 
-    if (timeout > 0) {
-        cat_timeout_t reserved = cat_time_msleep(timeout);
-        if (unlikely(reserved < 0)) {
-            /* sleep failed */
+        timer = cat_timer_wait(timeout);
+
+        if (unlikely(timer == NULL)) {
             return cat_false;
         }
-        if (likely(reserved != 0)) {
-            /* wakeup before timeout */
-            return cat_true;
+        if (unlikely(timer->coroutine == NULL)) {
+            cat_update_last_error(CAT_ETIMEDOUT, "Timed out for " CAT_TIMEOUT_FMT " ms", timeout);
+            return cat_false;
         }
     }
 
-    /* if (timeout == 0) { timeout immediately } */
-
-    cat_update_last_error(CAT_ETIMEDOUT, "Timed out for " CAT_TIMEOUT_FMT " ms", timeout);
-
-    return cat_false;
+    return cat_true;
 }
 
 CAT_API unsigned int cat_time_sleep(unsigned int seconds)
@@ -135,40 +167,27 @@ CAT_API unsigned int cat_time_sleep(unsigned int seconds)
 
 CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
 {
-    cat_sleep_timer_t *timer = (cat_sleep_timer_t *) cat_malloc(sizeof(*timer));
+    cat_timer_t *timer;
+
+    timer = cat_timer_wait(msec);
+
     if (unlikely(timer == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for timer failed");
         return -1;
-    } else {
-        cat_bool_t ret;
-        (void) uv_timer_init(cat_event_loop, &timer->timer);
-        (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);
-#ifdef CAT_DEBUG
-        do {
-            char *tmp = NULL;
-            cat_debug(TIME, "Sleep %s", tmp = cat_time_format_msec(msec));
-            if (tmp != NULL) { cat_free(tmp); }
-        } while (0);
-#endif
-        timer->coroutine = CAT_COROUTINE_G(current);
-        ret = cat_coroutine_yield_ez();
-        uv_close(&timer->handle, (uv_close_cb) cat_free_function);
-        if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Time sleep failed");
-            return -1;
-        }
-        if (unlikely(timer->coroutine != NULL)) {
-            cat_msec_t reserve = timer->timer.timeout - cat_event_loop->time;
-            cat_update_last_error(CAT_ECANCELED, "Time waiter has been canceled");
-            if (unlikely(reserve <= 0)) {
-                /* blocking IO lead it to be negative or 0
-                 * we can not know the real reserve time */
-                return msec;
-            }
-            return reserve;
-        }
-        return 0;
     }
+
+    if (unlikely(timer->coroutine != NULL)) {
+        cat_msec_t reserve;
+        cat_update_last_error(CAT_ECANCELED, "Time waiter has been canceled");
+        reserve = timer->timer.timeout - cat_event_loop->time;
+        if (unlikely(reserve <= 0)) {
+            /* blocking IO lead it to be negative or 0
+             * we can not know the real reserve time */
+            return msec;
+        }
+        return reserve;
+    }
+
+    return 0;
 }
 
 CAT_API int cat_time_usleep(uint64_t microseconds)
