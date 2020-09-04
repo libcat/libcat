@@ -19,180 +19,436 @@
 #include "cat_channel.h"
 #include "cat_coroutine.h"
 
-#define CAT_CHANNEL_IS_CLOSING ((cat_data_dtor_t) -1)
-
-#define CAT_CHANNEL_CHECKER(channel, failure) do { \
-    if (unlikely(channel->dtor == CAT_CHANNEL_IS_CLOSING)) { \
+#define CAT_CHANNEL_CHECK_STATE(channel, failure) do { \
+    if (unlikely(cat_channel__is_closing(channel))) { \
         cat_update_last_error(CAT_EINVAL, "Channel is closing"); \
         failure; \
     } \
 } while (0)
 
-CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_size_t capacity, size_t size, cat_data_dtor_t dtor)
-{
-    channel->capacity = capacity;
-    channel->length = 0;
-    channel->data_size = size;
-    channel->dtor = dtor;
-    cat_queue_init(&channel->storage);
-    cat_queue_init(&channel->producers);
-    cat_queue_init(&channel->consumers);
+/* for select()
+ * head must be consistent with coroutine */
+typedef struct {
+    cat_coroutine_id_t id;
+    union { cat_queue_t node; } waiter;
+    cat_coroutine_t *coroutine;
+} cat_channel_dummy_coroutine_t;
 
-    return channel;
+CAT_STATIC_ASSERT(cat_offsize_of(cat_channel_dummy_coroutine_t, id) == cat_offsize_of(cat_coroutine_t, id));
+CAT_STATIC_ASSERT(cat_offsize_of(cat_channel_dummy_coroutine_t, waiter) == cat_offsize_of(cat_coroutine_t, waiter));
+
+static cat_always_inline cat_bool_t cat_channel__is_unbuffered(const cat_channel_t *channel)
+{
+    return channel->capacity == 0;
 }
 
-CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data)
+static cat_always_inline cat_bool_t cat_channel__has_producers(const cat_channel_t * channel)
 {
-    return cat_channel_push_ex(channel, data, -1);
+    return !cat_queue_empty(&channel->producers);
 }
 
-CAT_API cat_bool_t cat_channel_push_ex(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout)
+static cat_always_inline cat_bool_t cat_channel__has_consumers(const cat_channel_t * channel)
 {
-    CAT_CHANNEL_CHECKER(channel, return cat_false);
-    cat_bool_t unbuffered = channel->capacity == 0;
+    return !cat_queue_empty(&channel->consumers);
+}
 
-    /* if it is full, just wait */
-    if (unbuffered ? cat_queue_empty(&channel->consumers) : (channel->length == channel->capacity)) {
-        cat_bool_t ret;
-        cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
-        cat_queue_push_back(&channel->producers, waiter);
-        ret = cat_time_wait(timeout);
-        cat_queue_remove(waiter);
-        if (unlikely(!ret)) {
-            /* sleep failed or timedout */
-            cat_update_last_error_with_previous("Wait for channel producer failed");
-            return cat_false;
-        }
-        if (unlikely(channel->length == channel->capacity)) {
-            /* still full, must be canceled */
-            cat_update_last_error(CAT_ECANCELED, "Channel push has been canceled");
-            return cat_false;
-        }
-        CAT_ASSERT(!unbuffered || (channel->length == ((cat_channel_size_t ) -1)));
-    } else {
-        CAT_ASSERT(cat_queue_empty(&channel->producers));
+static cat_always_inline cat_bool_t cat_channel__is_empty(const cat_channel_t *channel)
+{
+    return channel->length == 0;
+}
+
+static cat_always_inline cat_bool_t cat_channel__is_full(const cat_channel_t *channel)
+{
+    return channel->length == channel->capacity;
+}
+
+static cat_always_inline cat_bool_t cat_channel__is_readable(const cat_channel_t *channel)
+{
+           /* buffered */
+    return !cat_channel__is_empty(channel) ||
+           /* unbuffered */
+           cat_channel__has_producers(channel);
+}
+
+static cat_always_inline cat_bool_t cat_channel__is_writable(const cat_channel_t *channel)
+{
+           /* buffered */
+    return !cat_channel__is_full(channel) ||
+           /* unbuffered */
+           cat_channel__has_consumers(channel);
+}
+
+static cat_always_inline cat_bool_t cat_channel__is_closing(const cat_channel_t *channel)
+{
+    return channel->closing;
+}
+
+static cat_always_inline cat_bool_t cat_channel_waiter_is_dummy(const cat_coroutine_t *coroutine)
+{
+    return coroutine->id == CAT_COROUTINE_MAX_ID;
+}
+
+static cat_always_inline cat_bool_t cat_channel_resume_waiter(cat_coroutine_t *coroutine)
+{
+    if (unlikely(cat_channel_waiter_is_dummy(coroutine))) {
+        cat_channel_dummy_coroutine_t *dummy_coroutine = (cat_channel_dummy_coroutine_t *) coroutine;
+        coroutine = dummy_coroutine->coroutine;
+        dummy_coroutine->coroutine = NULL;
+        CAT_ASSERT(coroutine != NULL);
     }
-    /* push the bucket to the storage */
-    do {
-        cat_channel_bucket_t *bucket = (cat_channel_bucket_t *) cat_malloc(offsetof(cat_channel_bucket_t, data) + channel->data_size);
-        if (unlikely(bucket == NULL)) {
-            cat_update_last_error_of_syscall("Malloc for channel bucket failed");
-            return cat_false;
-        }
-        memcpy(bucket->data, data, channel->data_size);
-        cat_queue_push_back(&channel->storage, &bucket->node);
-        channel->length++;
-    } while (0);
-    /* notify a possible consumer to consume */
-    if (channel->length > 0) {
-        size_t length;
-        do {
-            cat_coroutine_t *consumer = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node);
-            if (consumer == NULL) {
-                break;
-            }
-            length = channel->length;
-            if (unlikely(!cat_coroutine_resume_ez(consumer))) {
-                cat_core_error_with_last(CHANNEL, "Notify consumer failed");
-            }
-            /* continue if consumer did not consume */
-        } while (unlikely(channel->length == length));
+
+    return cat_coroutine_resume_ez(coroutine);
+}
+
+static cat_always_inline cat_bool_t cat_channel_wait_as_producer(cat_channel_t *channel, cat_timeout_t timeout)
+{
+    cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
+    cat_bool_t ret;
+
+    cat_queue_push_back(&channel->producers, waiter);
+    ret = cat_time_wait(timeout);
+    cat_queue_remove(waiter);
+
+    return ret;
+}
+
+static cat_always_inline cat_bool_t cat_channel_wait_as_consumer(cat_channel_t *channel, cat_timeout_t timeout)
+{
+    cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
+    cat_bool_t ret;
+
+    cat_queue_push_back(&channel->consumers, waiter);
+    ret = cat_time_wait(timeout);
+    cat_queue_remove(waiter);
+
+    return ret;
+}
+
+static cat_always_inline cat_bool_t cat_channel_unbuffered_is_pushable(const cat_channel_t *channel)
+{
+    return channel->u.unbuffered.able.push;
+}
+
+static cat_always_inline cat_bool_t cat_channel_unbuffered_is_popable(const cat_channel_t *channel)
+{
+    return channel->u.unbuffered.able.pop;
+}
+
+static cat_always_inline void cat_channel_unbuffered_push_data(cat_channel_t *channel, const cat_data_t *in)
+{
+    cat_data_t *out = channel->u.unbuffered.data.out;
+    CAT_ASSERT(cat_channel_unbuffered_is_pushable(channel));
+    CAT_ASSERT(in != NULL);
+    /* copy data to the pop side and make it NULL (let it know that we are done) */
+    if (out != NULL) {
+        memcpy(out, in, channel->data_size);
+    } else if (channel->dtor != NULL) {
+        channel->dtor(in);
     }
-
-    return cat_true;
+    channel->u.unbuffered.data.out = NULL;
+    channel->u.unbuffered.able.push = cat_false;
 }
 
-CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data)
+static cat_always_inline void cat_channel_unbuffered_pop_data(cat_channel_t *channel, cat_data_t *out)
 {
-    return cat_channel_pop_ex(channel, data, -1);
+    const cat_data_t *in = channel->u.unbuffered.data.in;
+    CAT_ASSERT(cat_channel_unbuffered_is_popable(channel));
+    CAT_ASSERT(in != NULL);
+    /* copy data to the pop side and make it NULL (let it know that we are done) */
+    if (out != NULL) {
+        memcpy(out, in, channel->data_size);
+    } else if (channel->dtor != NULL) {
+        channel->dtor(in);
+    }
+    channel->u.unbuffered.data.in = NULL;
+    channel->u.unbuffered.able.pop = cat_false;
 }
 
-CAT_API cat_bool_t cat_channel_pop_ex(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout)
+static cat_always_inline void cat_channel_unbuffered_notify_consumer(cat_channel_t *channel, const cat_data_t *data)
 {
-    CAT_CHANNEL_CHECKER(channel, return cat_false);
-    cat_bool_t unbuffered = channel->capacity == 0;
-    cat_coroutine_t *producer = NULL;
+    cat_coroutine_t *consumer = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node);
 
-    /* if it is empty, just wait */
-    if (unbuffered ? cat_queue_empty(&channel->producers) : (channel->length == 0)) {
-        cat_bool_t ret = cat_true;
-        cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
-        cat_queue_push_back(&channel->consumers, waiter);
-        ret = cat_time_wait(timeout);
-        cat_queue_remove(waiter);
-        if (unlikely(!ret)) {
+    CAT_ASSERT(consumer != NULL);
+    CAT_ASSERT(!cat_channel_unbuffered_is_pushable(channel));
+    CAT_ASSERT(!cat_channel_unbuffered_is_popable(channel));
+
+    channel->u.unbuffered.data.in = data;
+    channel->u.unbuffered.able.pop = cat_true;
+
+    if (unlikely(!cat_channel_resume_waiter(consumer))) {
+        cat_core_error_with_last(CHANNEL, "Notify consumer failed");
+    }
+}
+
+static cat_always_inline void cat_channel_unbuffered_notify_producer(cat_channel_t *channel, cat_data_t *data)
+{
+    cat_coroutine_t *producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
+
+    CAT_ASSERT(producer != NULL);
+    CAT_ASSERT(!cat_channel_unbuffered_is_pushable(channel));
+    CAT_ASSERT(!cat_channel_unbuffered_is_popable(channel));
+
+    channel->u.unbuffered.data.out = data;
+    channel->u.unbuffered.able.push = cat_true;
+
+    if (unlikely(!cat_channel_resume_waiter(producer))) {
+        cat_core_error_with_last(CHANNEL, "Notify producer failed");
+    }
+}
+
+static cat_bool_t cat_channel_unbuffered_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout)
+{
+    /* if it is unwritable, just wait */
+    if (!cat_channel__has_consumers(channel)) {
+        if (unlikely(!cat_channel_wait_as_producer(channel, timeout))) {
             /* sleep failed or timedout */
             cat_update_last_error_with_previous("Wait for channel consumer failed");
             return cat_false;
         }
-        if (unlikely(channel->length == 0)) {
-            /* still empty, must be canceled */
-            cat_update_last_error(CAT_ECANCELED, "Channel pop has been canceled");
+        if (unlikely(!cat_channel_unbuffered_is_pushable(channel))) {
+            /* still no consumer, must be canceled */
+            cat_update_last_error(CAT_ECANCELED, "Channel push has been canceled");
             return cat_false;
         }
+        CAT_ASSERT(!cat_channel__has_consumers(channel));
+        /* push data and continue to run */
+        cat_channel_unbuffered_push_data(channel, data);
     } else {
-        CAT_ASSERT(cat_queue_empty(&channel->consumers));
-    }
-    /* pop the bucket from the storage */
-    do {
-        cat_channel_bucket_t *bucket = cat_queue_front_data(&channel->storage, cat_channel_bucket_t, node);
-        channel->length--;
-        if (bucket == NULL) {
-            producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
-            CAT_ASSERT(producer != NULL);
-            if (unlikely(!cat_coroutine_resume_ez(producer))) {
-                cat_core_error_with_last(CHANNEL, "Notify producer failed");
-            }
-            bucket = cat_queue_front_data(&channel->storage, cat_channel_bucket_t, node);
-            CAT_ASSERT(bucket != NULL);
-        }
-        cat_queue_remove(&bucket->node);
-        memcpy(data, bucket->data, channel->data_size);
-        cat_free(bucket);
-    } while (0);
-    /* notify a possible producer to continue to produce */
-    if (producer == NULL) {
-        size_t length;
-        do {
-            producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
-            if (producer == NULL) {
-                break;
-            }
-            length = channel->length;
-            if (unlikely(!cat_coroutine_resume_ez(producer))) {
-                cat_core_error_with_last(CHANNEL, "Notify producer failed");
-            }
-            /* continue if producer did not produce */
-        } while (unlikely(channel->length == length));
+        CAT_ASSERT(!cat_channel__has_producers(channel));
+        /* notify the consumer to consume the data
+         * after it yield and go back to here, data has been consumed */
+        cat_channel_unbuffered_notify_consumer(channel, data);
     }
 
     return cat_true;
 }
 
+static cat_bool_t cat_channel_unbuffered_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout)
+{
+    /* if it is unreadable, just wait */
+    if (!cat_channel__has_producers(channel)) {
+        if (unlikely(!cat_channel_wait_as_consumer(channel, timeout))) {
+            /* sleep failed or timedout */
+            cat_update_last_error_with_previous("Wait for channel producer failed");
+            return cat_false;
+        }
+        if (unlikely(!cat_channel_unbuffered_is_popable(channel))) {
+            /* still no producer, must be canceled */
+            cat_update_last_error(CAT_ECANCELED, "Channel pop has been canceled");
+            return cat_false;
+        }
+        CAT_ASSERT(!cat_channel__has_producers(channel));
+        /* pop data and continue to run */
+        cat_channel_unbuffered_pop_data(channel, data);
+    } else {
+        CAT_ASSERT(!cat_channel__has_consumers(channel));
+        /* notify the producer to produce the data,
+         * when it yield and go back to here, data is ready */
+        cat_channel_unbuffered_notify_producer(channel, data);
+    }
+
+    return cat_true;
+}
+
+static cat_always_inline cat_channel_bucket_t *cat_channel_buffered_bucket_create(const cat_data_t *data, size_t data_size)
+{
+    cat_channel_bucket_t *bucket;
+
+    bucket = (cat_channel_bucket_t *) cat_malloc(offsetof(cat_channel_bucket_t, data) + data_size);
+
+    if (unlikely(bucket == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for channel bucket failed");
+        return NULL;
+    }
+
+    memcpy(bucket->data, data, data_size);
+
+    return bucket;
+}
+
+static cat_always_inline cat_bool_t cat_channel_buffered_push_data(cat_channel_t *channel, const cat_data_t *data)
+{
+    cat_channel_bucket_t *bucket;
+
+    bucket = cat_channel_buffered_bucket_create(data, channel->data_size);
+
+    if (unlikely(bucket == NULL)) {
+        return cat_false;
+    }
+
+    cat_queue_push_back(&channel->u.buffered.storage, &bucket->node);
+    channel->length++;
+
+    return cat_true;
+}
+
+static cat_always_inline void cat_channel_buffered_pop_data(cat_channel_t *channel, cat_data_t *data)
+{
+    cat_channel_bucket_t *bucket;
+
+    bucket = cat_queue_front_data(&channel->u.buffered.storage, cat_channel_bucket_t, node);
+    cat_queue_remove(&bucket->node);
+    if (data != NULL) {
+        memcpy(data, bucket->data, channel->data_size);
+    } else if (channel->dtor != NULL) {
+        channel->dtor(bucket->data);
+    }
+    cat_free(bucket);
+    channel->length--;
+}
+
+static cat_always_inline void cat_channel_notify_possible_consumer(cat_channel_t *channel)
+{
+    cat_coroutine_t *consumer = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node);
+
+    if (consumer != NULL) {
+        /* notify a possible consume to consume */
+        if (unlikely(!cat_channel_resume_waiter(consumer))) {
+            cat_core_error_with_last(CHANNEL, "Notify consumer failed");
+        }
+    }
+}
+
+static cat_always_inline void cat_channel_notify_possible_producer(cat_channel_t *channel)
+{
+    cat_coroutine_t *producer = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node);
+
+    if (producer != NULL) {
+        /* notify a possible producer to produce */
+        if (unlikely(!cat_channel_resume_waiter(producer))) {
+            cat_core_error_with_last(CHANNEL, "Notify producer failed");
+        }
+    }
+}
+
+static cat_bool_t cat_channel_buffered_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout)
+{
+    /* if it is full, just wait */
+    if (cat_channel__is_full(channel)) {
+        if (unlikely(!cat_channel_wait_as_producer(channel, timeout))) {
+            /* sleep failed or timedout */
+            cat_update_last_error_with_previous("Wait for channel consumer failed");
+            return cat_false;
+        }
+        if (unlikely(cat_channel__is_full(channel))) {
+            /* still full, must be canceled */
+            cat_update_last_error(CAT_ECANCELED, "Channel push has been canceled");
+            return cat_false;
+        }
+        CAT_ASSERT(!cat_channel__has_consumers(channel));
+        /* push data to the storage queue and return */
+        return cat_channel_buffered_push_data(channel, data);
+    } else {
+        CAT_ASSERT(!cat_channel__has_producers(channel));
+        /* push data to the storage queue */
+        if (unlikely(!cat_channel_buffered_push_data(channel, data))) {
+            return cat_false;
+        }
+        /* try to notify one for balance */
+        cat_channel_notify_possible_consumer(channel);
+        return cat_true;
+    }
+}
+
+static cat_bool_t cat_channel_buffered_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout)
+{
+    /* if it is empty, just wait */
+    if (cat_channel__is_empty(channel)) {
+        if (unlikely(!cat_channel_wait_as_consumer(channel, timeout))) {
+            /* sleep failed or timedout */
+            cat_update_last_error_with_previous("Wait for channel producer failed");
+            return cat_false;
+        }
+        if (unlikely(cat_channel__is_empty(channel))) {
+            /* still empty, must be canceled */
+            cat_update_last_error(CAT_ECANCELED, "Channel pop has been canceled");
+            return cat_false;
+        }
+        CAT_ASSERT(!cat_channel__has_producers(channel));
+        /* pop data from the storage queue and return */
+        cat_channel_buffered_pop_data(channel, data);
+    } else {
+        CAT_ASSERT(!cat_channel__has_consumers(channel));
+        /* pop data from the storage queue */
+        cat_channel_buffered_pop_data(channel, data);
+        /* try to notify one for balance */
+        cat_channel_notify_possible_producer(channel);
+    }
+
+    return cat_true;
+}
+
+/* common */
+
+CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_size_t capacity, cat_channel_data_size_t data_size, cat_channel_data_dtor_t dtor)
+{
+    channel->capacity = capacity;
+    channel->data_size = data_size;
+    channel->length = 0;
+    channel->closing = cat_false;
+    channel->dtor = dtor;
+    cat_queue_init(&channel->producers);
+    cat_queue_init(&channel->consumers);
+    if (cat_channel__is_unbuffered(channel)) {
+        memset(&channel->u.unbuffered, 0, sizeof(channel->u.unbuffered));
+    } else {
+        cat_queue_init(&channel->u.buffered.storage);
+    }
+
+    return channel;
+}
+
+CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout)
+{
+    CAT_CHANNEL_CHECK_STATE(channel, return cat_false);
+    CAT_ASSERT(data != NULL);
+
+    if (cat_channel__is_unbuffered(channel)) {
+        return cat_channel_unbuffered_push(channel, data, timeout);
+    } else {
+        return cat_channel_buffered_push(channel, data, timeout);
+    }
+}
+
+CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout)
+{
+    CAT_CHANNEL_CHECK_STATE(channel, return cat_false);
+
+    if (cat_channel__is_unbuffered(channel)) {
+        return cat_channel_unbuffered_pop(channel, data, timeout);
+    } else {
+        return cat_channel_buffered_pop(channel, data, timeout);
+    }
+}
+
 CAT_API void cat_channel_close(cat_channel_t *channel)
 {
-    CAT_CHANNEL_CHECKER(channel, return);
+    CAT_CHANNEL_CHECK_STATE(channel, return);
+
+    /* prevent from channel operations during closing */
+    channel->closing = cat_true;
+
     /* notify all waiters */
     cat_coroutine_t *waiter;
     while ((waiter = cat_queue_front_data(&channel->producers, cat_coroutine_t, waiter.node))) {
-        if (unlikely(!cat_coroutine_resume_ez(waiter))) {
+        if (unlikely(!cat_channel_resume_waiter(waiter))) {
             cat_core_error_with_last(CHANNEL, "Close producer failed");
         }
     }
     while ((waiter = cat_queue_front_data(&channel->consumers, cat_coroutine_t, waiter.node))) {
-        if (unlikely(!cat_coroutine_resume_ez(waiter))) {
+        if (unlikely(!cat_channel_resume_waiter(waiter))) {
             cat_core_error_with_last(CHANNEL, "Close consumer failed");
         }
     }
-    CAT_ASSERT(cat_queue_empty(&channel->producers));
-    CAT_ASSERT(cat_queue_empty(&channel->consumers));
+
+    CAT_ASSERT(!cat_channel__has_producers(channel));
+    CAT_ASSERT(!cat_channel__has_consumers(channel));
+
     /* clean up the data bucket (no more consumers) */
-    do {
-        cat_queue_t *storage = &channel->storage;
-        cat_data_dtor_t dtor = channel->dtor;
+    if (!cat_channel__is_unbuffered(channel)) {
+        cat_queue_t *storage = &channel->u.buffered.storage;
+        cat_channel_data_dtor_t dtor = channel->dtor;
         cat_channel_bucket_t *bucket;
-        /* prevent from channel operations in dtor function */
-        channel->dtor = CAT_CHANNEL_IS_CLOSING;
         while ((bucket = cat_queue_front_data(storage, cat_channel_bucket_t, node))) {
             cat_queue_remove(&bucket->node);
             if (dtor != NULL) {
@@ -201,13 +457,117 @@ CAT_API void cat_channel_close(cat_channel_t *channel)
             cat_free(bucket);
             channel->length--;
         }
-        /* revert and we can reuse this channel (if necessary...) */
-        channel->dtor = dtor;
-    } while (0);
+    }
+
     /* everything will be reset after close */
-    CAT_ASSERT(channel->length == 0);
-    CAT_ASSERT(cat_queue_empty(&channel->storage));
+    CAT_ASSERT(cat_channel__is_empty(channel));
+
+    /* revert and we can reuse this channel (if necessary...) */
+    channel->closing = cat_false;
 }
+
+/* select */
+
+static cat_always_inline void cat_channel_queue_dummy_coroutine(cat_queue_t *queue, cat_channel_dummy_coroutine_t *dummy_coroutine)
+{
+    dummy_coroutine->id = CAT_COROUTINE_MAX_ID; /* it shows that it's a dummy coroutine */
+    dummy_coroutine->coroutine = CAT_COROUTINE_G(current); /* real one */
+    cat_queue_push_back(queue, &dummy_coroutine->waiter.node);
+}
+
+CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_request_t *requests, size_t count, cat_timeout_t timeout)
+{
+    cat_channel_dummy_coroutine_t *dummy_coroutines;
+    cat_channel_select_request_t *request;
+    cat_channel_select_response_t *response;
+    cat_channel_t *channel;
+    cat_bool_t ret;
+    size_t i;
+
+    for (i = 0, request = requests; i < count; i++, request++) {
+        channel = request->channel;
+        if (cat_channel__is_closing(channel)) {
+            request->error = cat_true;
+            return request;
+        }
+        if (request->opcode == CAT_CHANNEL_OPCODE_PUSH) {
+            if (cat_channel__is_writable(channel)) {
+                request->error = !cat_channel_push(channel, request->data.in, -1);
+                CAT_ASSERT(!request->error || cat_get_last_error_code() == CAT_ENOMEM);
+                return request;
+            }
+        } else /* if (request->opcode == CAT_CHANNEL_OPCODE_POP) */ {
+            if (cat_channel__is_readable(channel)) {
+                request->error = !cat_channel_pop(channel, request->data.out, -1);
+                CAT_ASSERT(!request->error);
+                return request;
+            }
+        }
+    }
+
+    /* dummy coroutines */
+    dummy_coroutines = (cat_channel_dummy_coroutine_t *) cat_malloc(sizeof(cat_channel_dummy_coroutine_t) * count);
+
+    if (unlikely(dummy_coroutines == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for dummy coroutines failed");
+        return NULL;
+    }
+
+    for (i = 0, request = requests; i < count; i++, request++) {
+        channel = request->channel;
+        if (request->opcode == CAT_CHANNEL_OPCODE_PUSH) {
+            cat_channel_queue_dummy_coroutine(&channel->producers, &dummy_coroutines[i]);
+        } else /* if (request->opcode == CAT_CHANNEL_OPCODE_POP) */ {
+            cat_channel_queue_dummy_coroutine(&channel->consumers, &dummy_coroutines[i]);
+        }
+    }
+
+    ret = cat_time_wait(timeout);
+
+    response = NULL;
+    for (i = 0; i < count; i++) {
+        cat_channel_dummy_coroutine_t *dummy_coroutine = &dummy_coroutines[i];
+        cat_queue_remove(&dummy_coroutine->waiter.node);
+        if (dummy_coroutine->coroutine == NULL) {
+            response = &requests[i];
+            channel = response->channel;
+            response->error = cat_channel__is_closing(channel);
+            if (!response->error) {
+                if (response->opcode == CAT_CHANNEL_OPCODE_PUSH) {
+                    if (cat_channel__is_unbuffered(channel)) {
+                        cat_channel_unbuffered_push_data(channel, response->data.in);
+                    } else {
+                        response->error =
+                        !cat_channel_buffered_push_data(channel, response->data.in);
+                    }
+                } else /* if (request->opcode == CAT_CHANNEL_OPCODE_POP) */ {
+                    if (cat_channel__is_unbuffered(channel)) {
+                        cat_channel_unbuffered_pop_data(channel, response->data.out);
+                    } else {
+                        cat_channel_buffered_pop_data(channel, response->data.out);
+                    }
+                }
+            }
+        }
+    }
+
+    cat_free(dummy_coroutines);
+
+    if (unlikely(!ret)) {
+        /* sleep failed or timedout */
+        cat_update_last_error_with_previous("Wait for channel select failed");
+        return NULL;
+    }
+
+    if (unlikely(response == NULL)) {
+        cat_update_last_error(CAT_ECANCELED, "Channel select has been canceled");
+        return NULL;
+    }
+
+    return response;
+}
+
+/* status */
 
 CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t * channel)
 {
@@ -219,44 +579,49 @@ CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t * channel)
     return channel->length;
 }
 
-CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel)
-{
-    return channel->length == 0;
-}
-
-CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel)
-{
-    return channel->length == channel->capacity;
-}
-
 CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel)
 {
-    return cat_queue_empty(&channel->producers);
+    return cat_channel__has_producers(channel);
 }
 
 CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel)
 {
-    return cat_queue_empty(&channel->consumers);
+    return cat_channel__has_consumers(channel);
+}
+
+CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel)
+{
+    return cat_channel__is_empty(channel);
+}
+
+CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel)
+{
+    return cat_channel__is_full(channel);
 }
 
 CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t * channel)
 {
-    return channel->length > 0 || !cat_queue_empty(&channel->producers);
+    return cat_channel__is_readable(channel);
 }
 
 CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t * channel)
 {
-    return channel->length < channel->capacity || !cat_queue_empty(&channel->consumers);
+    return cat_channel__is_writable(channel);
 }
 
-CAT_API cat_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_closing(const cat_channel_t * channel)
+{
+    return cat_channel__is_closing(channel);
+}
+
+CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel)
 {
     return channel->dtor;
 }
 
-CAT_API cat_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_data_dtor_t dtor)
+CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_channel_data_dtor_t dtor)
 {
-    cat_data_dtor_t old_dtor = channel->dtor;
+    cat_channel_data_dtor_t old_dtor = channel->dtor;
 
     channel->dtor = dtor;
 

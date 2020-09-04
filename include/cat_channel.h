@@ -29,6 +29,12 @@ extern "C" {
 typedef uint32_t cat_channel_size_t;
 #define CAT_CHANNEL_SIZE_FMT "%u"
 
+typedef uint8_t cat_channel_data_size_t;
+#define CAT_CHANNEL_DATA_SIZE_FMT "%u"
+#define CAT_CHANNEL_DATA_SIZE_MAX UINT8_MAX
+
+typedef void (*cat_channel_data_dtor_t)(const cat_data_t *data);
+
 typedef struct
 {
     cat_queue_t node;
@@ -37,40 +43,77 @@ typedef struct
 
 typedef struct
 {
-    /* dynamic */
-    cat_queue_t storage;
+    cat_channel_data_size_t data_size;
+    cat_bool_t closing;
+    cat_channel_data_dtor_t dtor;
+    cat_channel_size_t capacity;
+    cat_channel_size_t length;
     cat_queue_t producers;
     cat_queue_t consumers;
-    cat_channel_size_t length;
-    /* static */
-    cat_channel_size_t capacity;
-    size_t data_size;
-    cat_data_dtor_t dtor;
+    union {
+        struct {
+            union {
+                const cat_data_t *in;
+                cat_data_t *out;
+            } data;
+            union {
+                cat_bool_t push;
+                cat_bool_t pop;
+            } able;
+        } unbuffered;
+        struct {
+            cat_queue_t storage;
+        } buffered;
+    } u;
 } cat_channel_t;
 
-CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_size_t capacity, size_t data_size, cat_data_dtor_t dtor);
+/* common */
 
-CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data);
-CAT_API cat_bool_t cat_channel_push_ex(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout);
+CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_size_t capacity, cat_channel_data_size_t data_size, cat_channel_data_dtor_t dtor);
 
-CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data);
-CAT_API cat_bool_t cat_channel_pop_ex(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout);
 
 /* Notice: close will never break the channel so we can reuse the channel after close done (if necessary) */
 CAT_API void cat_channel_close(cat_channel_t *channel);
+
+/* select */
+
+typedef enum
+{
+    CAT_CHANNEL_OPCODE_PUSH,
+    CAT_CHANNEL_OPCODE_POP,
+} cat_channel_opcode_t;
+
+typedef struct
+{
+    cat_channel_t *channel;
+    union {
+        const cat_data_t *in;
+        cat_data_t *out;
+    } data;
+    cat_channel_opcode_t opcode;
+    cat_bool_t error;
+} cat_channel_select_message_t;
+
+typedef cat_channel_select_message_t cat_channel_select_request_t;
+typedef cat_channel_select_message_t cat_channel_select_response_t;
+
+CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_request_t *requests, size_t count, cat_timeout_t timeout);
 
 /* status */
 
 CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t * channel);
 CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t * channel);
-CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel);
-CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel);
+CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel);
+CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t * channel);
-CAT_API cat_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel);
-CAT_API cat_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_data_dtor_t dtor);
+CAT_API cat_bool_t cat_channel_is_closing(const cat_channel_t * channel);
+CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel);
+CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_channel_data_dtor_t dtor);
 
 #ifdef __cplusplus
 }
