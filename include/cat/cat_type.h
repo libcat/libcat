@@ -30,7 +30,7 @@ typedef enum _cat_bool_t cat_bool_t;
 
 typedef void cat_data_t;
 typedef void (*cat_data_callback_t)(cat_data_t *data);
-typedef cat_data_callback_t cat_data_dtor_t;
+typedef void (*cat_data_dtor_t)(cat_data_t *data);
 
 typedef union {
     char      c;
