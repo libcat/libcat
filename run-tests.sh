@@ -11,4 +11,4 @@ fi
 cd "${__DIR__}" && mkdir -p build && cd build && \
 cmake .. && \
 make -j"${cpu_count}" && \
-./cat_tests
+./cat_tests "$@"
