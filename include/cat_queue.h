@@ -12,7 +12,8 @@
   | See the License for the specific language governing permissions and      |
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
-  | Author: Twosee <twose@qq.com>                                            |
+  | Author: Ben Noordhuis <info@bnoordhuis.nl>                               |
+  |         Twosee <twose@qq.com>                                            |
   +--------------------------------------------------------------------------+
  */
 
@@ -24,13 +25,14 @@
 #include <stddef.h>
 
 typedef void *cat_queue_t[2];
+typedef void *cat_queue_node_t[2];
 
 /* private */
 
-#define cat_queue_next(queue)       (*(cat_queue_t **) &((*(queue))[0]))
-#define cat_queue_prev(queue)       (*(cat_queue_t **) &((*(queue))[1]))
-#define cat_queue_prev_next(queue)  (cat_queue_next(cat_queue_prev(queue)))
-#define cat_queue_next_prev(queue)  (cat_queue_prev(cat_queue_next(queue)))
+#define cat_queue_next(node)       (*(cat_queue_t **) &((*(node))[0]))
+#define cat_queue_prev(node)       (*(cat_queue_t **) &((*(node))[1]))
+#define cat_queue_prev_next(node)  (cat_queue_next(cat_queue_prev(node)))
+#define cat_queue_next_prev(node)  (cat_queue_prev(cat_queue_next(node)))
 
 /* public */
 
@@ -39,62 +41,63 @@ typedef void *cat_queue_t[2];
     cat_queue_prev(queue) = (queue); \
 } while(0)
 
-#define cat_queue_data(ptr, type, field) \
-  ((type *) ((char *) (ptr) - offsetof(type, field)))
+#define cat_queue_data(node, type, field) \
+  ((type *) ((char *) (node) - offsetof(type, field)))
 
 #define cat_queue_empty(queue) \
   ((const cat_queue_t *) (queue) == (const cat_queue_t *) cat_queue_next(queue))
 
-#define cat_queue_is_in(queue) (!cat_queue_empty(queue))
+#define cat_queue_is_in(node) (!cat_queue_empty(node))
 
-#define cat_queue_front(head) \
-    ((!cat_queue_empty(head)) ? cat_queue_next(head) : NULL)
+#define cat_queue_front(queue) \
+    ((!cat_queue_empty(queue)) ? cat_queue_next(queue) : NULL)
 
-#define cat_queue_back(head) \
-    ((!cat_queue_empty(head)) ? cat_queue_prev(head) : NULL)
+#define cat_queue_back(queue) \
+    ((!cat_queue_empty(queue)) ? cat_queue_prev(queue) : NULL)
 
-#define cat_queue_front_data(head, type, queue) \
-    ((!cat_queue_empty(head)) ? cat_queue_data(cat_queue_next(head), type, queue) : NULL)
+#define cat_queue_front_data(queue, type, node) \
+    ((!cat_queue_empty(queue)) ? cat_queue_data(cat_queue_next(queue), type, node) : NULL)
 
-#define cat_queue_back_data(head, type, queue) \
-    ((!cat_queue_empty(head)) ? cat_queue_data(cat_queue_prev(head), type, queue) : NULL)
+#define cat_queue_back_data(queue, type, node) \
+    ((!cat_queue_empty(queue)) ? cat_queue_data(cat_queue_prev(queue), type, node) : NULL)
 
-#define cat_queue_push_front(head, queue) do { \
-    cat_queue_next(queue) = cat_queue_next(head); \
-    cat_queue_prev(queue) = (head); \
-    cat_queue_next_prev(queue) = (queue); \
-    cat_queue_next(head) = (queue); \
+#define cat_queue_push_front(queue, node) do { \
+    cat_queue_next(node) = cat_queue_next(queue); \
+    cat_queue_prev(node) = (queue); \
+    cat_queue_next_prev(node) = (node); \
+    cat_queue_next(queue) = (node); \
 } while(0)
 
-#define cat_queue_push_back(head, queue) do { \
-    cat_queue_next(queue) = (head); \
-    cat_queue_prev(queue) = cat_queue_prev(head); \
-    cat_queue_prev_next(queue) = (queue); \
-    cat_queue_prev(head) = (queue); \
+#define cat_queue_push_back(queue, node) do { \
+    cat_queue_next(node) = (queue); \
+    cat_queue_prev(node) = cat_queue_prev(queue); \
+    cat_queue_prev_next(node) = (node); \
+    cat_queue_prev(queue) = (node); \
 } while (0)
 
-#define cat_queue_pop_front(head) \
-        cat_queue_remove(cat_queue_next(head))
+#define cat_queue_pop_front(queue) cat_queue_remove(cat_queue_next(queue))
 
-#define cat_queue_pop_back(head) \
-        cat_queue_remove(cat_queue_prev(head))
+#define cat_queue_pop_back(queue)  cat_queue_remove(cat_queue_prev(queue))
 
-#define cat_queue_remove(queue) do { \
-    cat_queue_prev_next(queue) = cat_queue_next(queue); \
-    cat_queue_next_prev(queue) = cat_queue_prev(queue); \
+#define cat_queue_remove(node) do { \
+    cat_queue_prev_next(node) = cat_queue_next(node); \
+    cat_queue_next_prev(node) = cat_queue_prev(node); \
 } while(0)
 
-#define CAT_QUEUE_FOREACH(queue, head) \
-  for ((queue) = cat_queue_next(head); (queue) != (head); (queue) = cat_queue_next(queue))
+#define CAT_QUEUE_FOREACH(queue, node) do { \
+  cat_queue_t *_queue = queue, *node; \
+  for ((node) = cat_queue_next(_queue); (node) != (_queue); (node) = cat_queue_next(node))
 
-#define CAT_QUEUE_FOREACH_DATA_START(head, type, queue, name) do { \
-    cat_queue_t *queue; \
+#define CAT_QUEUE_FOREACH_END() \
+} while (0)
+
+#define CAT_QUEUE_FOREACH_DATA_START(queue, type, field, name) do { \
     type *name; \
-    CAT_QUEUE_FOREACH(queue, head) { \
-        name = cat_queue_data(queue, type, queue); \
+    CAT_QUEUE_FOREACH(queue, _node) { \
+        name = cat_queue_data(_node, type, field); \
+    } CAT_QUEUE_FOREACH_END();
 
 #define CAT_QUEUE_FOREACH_DATA_END() \
-    } \
 } while (0)
 
 #endif /* CAT_QUEUE_H_ */

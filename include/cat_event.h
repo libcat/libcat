@@ -27,7 +27,7 @@ extern "C" {
 
 typedef struct
 {
-    cat_queue_t node;
+    cat_queue_node_t node;
     cat_data_callback_t callback;
     cat_data_t *data;
 } cat_event_task_t;

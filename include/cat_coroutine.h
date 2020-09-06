@@ -144,7 +144,7 @@ typedef struct cat_coroutine_s
     /* for queue (internal) */
     union {
         struct cat_coroutine_s *coroutine;
-        cat_queue_t node;
+        cat_queue_node_t node;
     } waiter;
     /* invariant info (readonly) */
     cat_msec_t start_time;

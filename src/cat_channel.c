@@ -30,7 +30,7 @@
  * head must be consistent with coroutine */
 typedef struct {
     cat_coroutine_id_t id;
-    union { cat_queue_t node; } waiter;
+    union { cat_queue_node_t node; } waiter;
     cat_coroutine_t *coroutine;
 } cat_channel_dummy_coroutine_t;
 
@@ -102,7 +102,7 @@ static cat_always_inline cat_bool_t cat_channel_resume_waiter(cat_coroutine_t *c
 
 static cat_always_inline cat_bool_t cat_channel_wait_as_producer(cat_channel_t *channel, cat_timeout_t timeout)
 {
-    cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
+    cat_queue_node_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
     cat_bool_t ret;
 
     cat_queue_push_back(&channel->producers, waiter);
@@ -114,7 +114,7 @@ static cat_always_inline cat_bool_t cat_channel_wait_as_producer(cat_channel_t *
 
 static cat_always_inline cat_bool_t cat_channel_wait_as_consumer(cat_channel_t *channel, cat_timeout_t timeout)
 {
-    cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
+    cat_queue_node_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
     cat_bool_t ret;
 
     cat_queue_push_back(&channel->consumers, waiter);
