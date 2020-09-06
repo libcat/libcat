@@ -105,6 +105,7 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
 
 CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t * channel);
 CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t * channel);
+CAT_API cat_bool_t cat_channel_is_available(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel);
 CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel);

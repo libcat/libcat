@@ -42,6 +42,11 @@ static cat_always_inline cat_bool_t cat_channel__is_unbuffered(const cat_channel
     return channel->capacity == 0;
 }
 
+static cat_always_inline cat_bool_t cat_channel__is_available(const cat_channel_t * channel)
+{
+    return !channel->closing;
+}
+
 static cat_always_inline cat_bool_t cat_channel__has_producers(const cat_channel_t * channel)
 {
     return !cat_queue_empty(&channel->producers);
@@ -64,18 +69,22 @@ static cat_always_inline cat_bool_t cat_channel__is_full(const cat_channel_t *ch
 
 static cat_always_inline cat_bool_t cat_channel__is_readable(const cat_channel_t *channel)
 {
+    return likely(cat_channel__is_available(channel)) && (
            /* buffered */
-    return !cat_channel__is_empty(channel) ||
+           !cat_channel__is_empty(channel) ||
            /* unbuffered */
-           cat_channel__has_producers(channel);
+           cat_channel__has_producers(channel)
+    );
 }
 
 static cat_always_inline cat_bool_t cat_channel__is_writable(const cat_channel_t *channel)
 {
+    return likely(cat_channel__is_available(channel)) && (
            /* buffered */
-    return !cat_channel__is_full(channel) ||
+           !cat_channel__is_full(channel) ||
            /* unbuffered */
-           cat_channel__has_consumers(channel);
+           cat_channel__has_consumers(channel)
+    );
 }
 
 static cat_always_inline cat_bool_t cat_channel__is_closing(const cat_channel_t *channel)
@@ -565,6 +574,11 @@ CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t * channe
 CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t * channel)
 {
     return channel->length;
+}
+
+CAT_API cat_bool_t cat_channel_is_available(const cat_channel_t * channel)
+{
+    return cat_channel__is_available(channel);
 }
 
 CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel)
