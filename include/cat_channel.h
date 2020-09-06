@@ -115,6 +115,10 @@ CAT_API cat_bool_t cat_channel_is_closing(const cat_channel_t * channel);
 CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel);
 CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_channel_data_dtor_t dtor);
 
+/* ext */
+
+CAT_API cat_queue_t *cat_channel_get_storage(cat_channel_t * channel); CAT_INTERNAL
+
 #ifdef __cplusplus
 }
 #endif

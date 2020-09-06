@@ -627,3 +627,13 @@ CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, ca
 
     return old_dtor;
 }
+
+/* ext */
+
+CAT_API cat_queue_t *cat_channel_get_storage(cat_channel_t * channel)
+{
+    if (unlikely(cat_channel__is_unbuffered(channel))) {
+        return NULL;
+    }
+    return &channel->u.buffered.storage;
+}
