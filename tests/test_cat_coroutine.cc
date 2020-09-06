@@ -451,7 +451,7 @@ TEST(cat_coroutine, register_scheduler_double)
     }
 }
 
-TEST(cat_coroutine, wait)
+TEST(cat_coroutine, wait_for)
 {
     cat_coroutine_t *new_coroutine;
 
@@ -469,7 +469,7 @@ TEST(cat_coroutine, wait)
     cat_coroutine_resume(new_coroutine, cat_coroutine_get_current());
 
     /* wait for new_coroutine to resume itself */
-    ASSERT_TRUE(cat_coroutine_wait(new_coroutine));
+    ASSERT_TRUE(cat_coroutine_wait_for(new_coroutine));
 }
 
 TEST(cat_coroutine, unlock_unlocked_coroutine)

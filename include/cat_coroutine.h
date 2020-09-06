@@ -270,8 +270,8 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_stop(void);                    
 /* special */
 CAT_API void cat_coroutine_disable_auto_close(cat_coroutine_t *coroutine);
 CAT_API cat_coroutine_t *cat_coroutine_exchange_with_previous(void); CAT_INTERNAL
-/* take a nap */
-CAT_API cat_bool_t cat_coroutine_wait(cat_coroutine_t *who); CAT_INTERNAL
+/* take a nap, wait for sb to wake it up */
+CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who); CAT_INTERNAL
 /* lock */
 CAT_API cat_bool_t cat_coroutine_is_locked(cat_coroutine_t *coroutine); CAT_INTERNAL
 CAT_API void cat_coroutine_lock(void);                                  CAT_INTERNAL

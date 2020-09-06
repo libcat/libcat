@@ -670,7 +670,7 @@ CAT_API cat_coroutine_t *cat_coroutine_exchange_with_previous(void)
     return previous_coroutine;
 }
 
-CAT_API cat_bool_t cat_coroutine_wait(cat_coroutine_t *who)
+CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
 

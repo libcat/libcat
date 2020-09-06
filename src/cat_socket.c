@@ -1710,7 +1710,7 @@ static cat_bool_t cat_socket_internal_write(
             cat_socket_internal_close(isocket);
 #if 0
             /* event scheduler will wake up the current coroutine on cat_socket_write_callback with ECANCELED */
-            cat_coroutine_wait(CAT_COROUTINE_G(scheduler));
+            cat_coroutine_wait_for(CAT_COROUTINE_G(scheduler));
 #endif
         }
         if (unlikely(!ret)) {
