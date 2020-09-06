@@ -46,7 +46,7 @@ TEST(cat_time, msleep_cancel)
 {
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     bool done = false;
-    coroutine_run([&] {
+    co([&] {
         EXPECT_EQ(cat_time_msleep(5), 0);
         // cancel the sleep of main
         cat_coroutine_resume_ez(waiter);

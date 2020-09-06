@@ -28,7 +28,7 @@ TEST(cat_signal, wait)
     for (int signum : signals) {
         killed = wait_done = false;
 
-        coroutine_run([&, signum] {
+        co([&, signum] {
             cat_time_sleep(0);
             // TODO: cat_getpid()
             EXPECT_TRUE(cat_kill(getpid(), signum));
@@ -48,7 +48,7 @@ TEST(cat_signal, wait_multi)
     size_t count = 0;
 
     for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
-        coroutine_run([&] {
+        co([&] {
             EXPECT_TRUE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
             if (++count == TEST_MAX_CONCURRENCY) {
                 cat_coroutine_resume_ez(coroutine);
@@ -81,7 +81,7 @@ TEST(cat_signal, timeout)
 TEST(cat_signal, cancel)
 {
     cat_coroutine_t *waiter = cat_coroutine_get_current();
-    coroutine_run([&] {
+    co([&] {
         cat_time_sleep(0);
         EXPECT_TRUE(cat_coroutine_resume_ez(waiter));
     });

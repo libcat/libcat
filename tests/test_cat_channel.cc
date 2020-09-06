@@ -28,7 +28,7 @@ TEST(cat_channel, base)
 
         channel = cat_channel_create(&_channel, size, sizeof(size_t), nullptr);
 
-        coroutine_run([=] {
+        co([=] {
             size_t n;
             for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
                 ASSERT_TRUE(cat_channel_pop(channel, &n, -1));
@@ -98,7 +98,7 @@ TEST(cat_channel, has_producers_and_is_readable)
     DEFER(cat_channel_close(channel));
 
     ASSERT_FALSE(cat_channel_is_readable(channel));
-    coroutine_run([&] {
+    co([&] {
         ASSERT_TRUE(cat_channel_push(channel, &data, 0));
     });
     ASSERT_TRUE(cat_channel_is_readable(channel));
@@ -116,7 +116,7 @@ TEST(cat_channel, has_consumers_and_is_writable)
     DEFER(cat_channel_close(channel));
 
     ASSERT_FALSE(cat_channel_is_writable(channel));
-    coroutine_run([=] {
+    co([=] {
         size_t rdata;
         ASSERT_TRUE(cat_channel_pop(channel, &rdata, 0));
         ASSERT_EQ(data, rdata);
@@ -162,7 +162,7 @@ TEST(cat_channel, pop_null)
         });
         DEFER(cat_channel_close(channel));
 
-        coroutine_run([&] {
+        co([&] {
             ASSERT_TRUE(cat_channel_push(channel, &data, 0));
         });
         if (capacity == 0) {
@@ -171,7 +171,7 @@ TEST(cat_channel, pop_null)
         ASSERT_TRUE(cat_channel_pop(channel, NULL, 0));
         ASSERT_TRUE(foo);
 
-        coroutine_run([&] {
+        co([&] {
             ASSERT_TRUE(cat_channel_pop(channel, NULL, 0));
         });
         if (capacity == 0) {
@@ -193,7 +193,7 @@ TEST(cat_channel, cancel)
         channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
         DEFER(cat_channel_close(channel));
 
-        coroutine_run([=] {
+        co([=] {
             for (size_t n = 2; n--;) {
                 /* switch to main coroutine */
                 cat_time_sleep(0);
@@ -232,7 +232,7 @@ TEST(cat_channel, closing)
         if (capacity == 1) {
             ASSERT_TRUE(cat_channel_push(channel, &data, 0));
         }
-        coroutine_run([&] {
+        co([&] {
             ASSERT_FALSE(cat_channel_push(channel, &data, 0));
             ASSERT_TRUE(cat_channel_is_closing(channel));
             push_over = true;
@@ -241,7 +241,7 @@ TEST(cat_channel, closing)
         cat_channel_close(channel);
         ASSERT_TRUE(push_over);
 
-        coroutine_run([&] {
+        co([&] {
             ASSERT_FALSE(cat_channel_pop(channel, NULL, 0));
             ASSERT_TRUE(cat_channel_is_closing(channel));
             pop_over = true;
@@ -261,7 +261,7 @@ TEST(cat_channel_unbuffered, base)
     bool channel_closed = false;
 
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
-    coroutine_run([&]() {
+    co([&]() {
         cat_bool_t data = cat_true;
         ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
         cat_channel_close(&channel);
@@ -301,7 +301,7 @@ TEST(cat_channel_unbuffered, push_with_timeout)
     channel = cat_channel_create(&_channel, 0, sizeof(data), nullptr);
     DEFER(cat_channel_close(channel));
 
-    coroutine_run([=] {
+    co([=] {
         char buffer[sizeof(data)];
         ASSERT_TRUE(cat_channel_pop(channel, buffer, 0));
         ASSERT_STREQ(buffer, data);
@@ -319,7 +319,7 @@ TEST(cat_channel_unbuffered, pop_with_timeout)
     channel = cat_channel_create(&_channel, 0, sizeof(data), nullptr);
     DEFER(cat_channel_close(channel));
 
-    coroutine_run([&] {
+    co([&] {
         ASSERT_TRUE(cat_channel_push(channel, data, 0));
     });
 
@@ -355,7 +355,7 @@ TEST(cat_channel_buffered, push_and_pop)
      */
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
     DEFER(cat_channel_close(channel));
-    coroutine_run([channel] {
+    co([channel] {
         for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
             ASSERT_TRUE(cat_channel_push(channel, &i, -1));
         }
@@ -412,7 +412,7 @@ TEST(cat_channel_buffered, multi)
         channel = cat_channel_create(&_channel, size, sizeof(size_t), nullptr);
 
         for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
-            coroutine_run([=]() {
+            co([=]() {
                 size_t n;
                 ASSERT_TRUE(cat_channel_pop(channel, &n, -1));
                 ASSERT_EQ(n, i);
@@ -449,7 +449,7 @@ TEST(cat_channel_buffered, close_no_dtor)
 
     channel = cat_channel_create(&_channel, 5, sizeof(size_t), nullptr);
 
-    coroutine_run([=] {
+    co([=] {
         size_t n;
         for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
             if (cat_channel_pop(channel, &n, -1) != cat_true) {
@@ -505,13 +505,13 @@ TEST(cat_channel_select, base)
             }
         };
 
-        coroutine_run(push);
+        co(push);
         pop();
 
-        coroutine_run(pop);
+        co(pop);
         push();
 
-        coroutine_run([&]() {
+        co([&]() {
             cat_channel_select_request_t requests[1];
             cat_bool_t data = cat_false;
             if (capacity == 1) {
@@ -546,7 +546,7 @@ TEST(cat_channel_select, unbuffered)
 
         ASSERT_NE(cat_channel_create(&read_channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
         ASSERT_NE(cat_channel_create(&write_channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
-        coroutine_run([&]() {
+        co([&]() {
             cat_bool_t data = cat_true;
             if (!read_channel_first) {
                 cat_time_sleep(0);
@@ -554,7 +554,7 @@ TEST(cat_channel_select, unbuffered)
             ASSERT_TRUE(cat_channel_push(&read_channel, &data, -1));
             push_over = true;
         });
-        coroutine_run([&]() {
+        co([&]() {
             cat_bool_t data = false;
             if (read_channel_first) {
                 cat_time_sleep(0);
@@ -618,7 +618,7 @@ TEST(cat_channel_select, cancel)
 
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
 
-    coroutine_run([=] {
+    co([=] {
         cat_time_sleep(0);
         cat_coroutine_resume_ez(coroutine);
     });
@@ -630,7 +630,7 @@ TEST(cat_channel_select, cancel)
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
     } while (0);
 
-    coroutine_run([=] {
+    co([=] {
         cat_time_sleep(0);
         cat_coroutine_resume_ez(coroutine);
     });

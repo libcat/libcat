@@ -239,7 +239,7 @@ TEST(cat_coroutine, get_round_in_main)
 
 TEST(cat_coroutine, get_round_not_in_main)
 {
-    coroutine_run([] {
+    co([] {
         EXPECT_EQ(CAT_COROUTINE_G(round),  cat_coroutine_get_current_round());
     });
 }
@@ -250,7 +250,7 @@ TEST(cat_coroutine, get_round)
 
     ASSERT_EQ(round, cat_coroutine_get_round(cat_coroutine_get_current()));
 
-    coroutine_run([=] {
+    co([=] {
         ASSERT_EQ(round + 1, cat_coroutine_get_round(cat_coroutine_get_current()));
     });
 
