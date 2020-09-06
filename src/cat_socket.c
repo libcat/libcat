@@ -1804,10 +1804,12 @@ static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_wr
     /* resolve address (DNS query may be triggered) */
     if (name_length != 0) {
         cat_bool_t ret;
-        cat_queue_push_front(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_WRITE;
+        cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
+        isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
         ret  = cat_socket_getaddrbyname(socket, &address_info, name, name_length, port);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
+        if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
+            isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
+        }
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (unlikely(!ret)) {
            cat_update_last_error_with_previous("Socket bind failed");
