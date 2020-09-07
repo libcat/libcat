@@ -514,6 +514,7 @@ TEST(cat_channel_select, base)
         co([&]() {
             cat_channel_select_request_t requests[1];
             cat_bool_t data = cat_false;
+            bool tried = false;
             if (capacity == 1) {
                 ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
             }
@@ -524,7 +525,9 @@ TEST(cat_channel_select, base)
                     ASSERT_EQ(response->channel, &channel);
                     ASSERT_TRUE(response->error);
                     ASSERT_TRUE(cat_channel_is_closing(response->channel));
-                    ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
+                    ASSERT_EQ(!tried ? CAT_ECANCELED : CAT_EINVAL, cat_get_last_error_code());
+                    /* first try it would return ECANCELED, if you still tried to opreate it, it would return EINVAL */
+                    tried = true;
                 }
             }
         });

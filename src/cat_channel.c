@@ -19,12 +19,14 @@
 #include "cat_channel.h"
 #include "cat_coroutine.h"
 
-#define CAT_CHANNEL_CHECK_STATE(channel, failure) do { \
+#define CAT_CHANNEL_CHECK_STATE_EX(channel, code, failure) \
     if (unlikely(cat_channel__is_closing(channel))) { \
-        cat_update_last_error(CAT_EINVAL, "Channel is closing"); \
+        cat_update_last_error(code, "Channel is closing"); \
         failure; \
-    } \
-} while (0)
+    }
+
+#define CAT_CHANNEL_CHECK_STATE(channel, failure) \
+        CAT_CHANNEL_CHECK_STATE_EX(channel, CAT_EINVAL, failure)
 
 /* for select()
  * head must be consistent with coroutine */
@@ -483,10 +485,11 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
 
     for (i = 0, request = requests; i < count; i++, request++) {
         channel = request->channel;
-        if (cat_channel__is_closing(channel)) {
+        CAT_CHANNEL_CHECK_STATE(
+            channel,
             request->error = cat_true;
             return request;
-        }
+        );
         if (request->opcode == CAT_CHANNEL_OPCODE_PUSH) {
             if (cat_channel__is_writable(channel)) {
                 request->error = !cat_channel_push(channel, request->data.in, -1);
@@ -528,21 +531,25 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
         if (dummy_coroutine->coroutine == NULL) {
             response = &requests[i];
             channel = response->channel;
-            response->error = cat_channel__is_closing(channel);
-            if (!response->error) {
-                if (response->opcode == CAT_CHANNEL_OPCODE_PUSH) {
-                    if (cat_channel__is_unbuffered(channel)) {
-                        cat_channel_unbuffered_push_data(channel, response->data.in);
-                    } else {
-                        response->error =
-                        !cat_channel_buffered_push_data(channel, response->data.in);
-                    }
-                } else /* if (request->opcode == CAT_CHANNEL_OPCODE_POP) */ {
-                    if (cat_channel__is_unbuffered(channel)) {
-                        cat_channel_unbuffered_pop_data(channel, response->data.out);
-                    } else {
-                        cat_channel_buffered_pop_data(channel, response->data.out);
-                    }
+            CAT_CHANNEL_CHECK_STATE_EX(
+                channel,
+                CAT_ECANCELED,
+                response->error = cat_true;
+                continue;
+            );
+            response->error = cat_false;
+            if (response->opcode == CAT_CHANNEL_OPCODE_PUSH) {
+                if (cat_channel__is_unbuffered(channel)) {
+                    cat_channel_unbuffered_push_data(channel, response->data.in);
+                } else {
+                    response->error =
+                    !cat_channel_buffered_push_data(channel, response->data.in);
+                }
+            } else /* if (request->opcode == CAT_CHANNEL_OPCODE_POP) */ {
+                if (cat_channel__is_unbuffered(channel)) {
+                    cat_channel_unbuffered_pop_data(channel, response->data.out);
+                } else {
+                    cat_channel_buffered_pop_data(channel, response->data.out);
                 }
             }
         }
