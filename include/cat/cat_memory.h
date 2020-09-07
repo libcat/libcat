@@ -20,7 +20,7 @@
 #define CAT_MEMORY_ALIGNED_SIZE(size)                  CAT_MEMORY_ALIGNED_SIZE_EX(size, CAT_MEMORY_DEFAULT_ALIGNED_SIZE)
 #define CAT_MEMORY_ALIGNED_SIZE_EX(size, alignment)    (((size) + ((alignment) - 1LL)) & ~((alignment) - 1LL))
 
-#define CAT_ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
+#define CAT_ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
 
 /* member offset + member size */
 #define cat_offsize_of(type, member) (offsetof(type, member) + sizeof(((type *) 0)->member))
