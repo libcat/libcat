@@ -89,6 +89,7 @@ typedef struct
 {
     cat_channel_t *channel;
     union {
+        cat_data_t *common;
         const cat_data_t *in;
         cat_data_t *out;
     } data;
