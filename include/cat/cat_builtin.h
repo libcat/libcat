@@ -106,10 +106,18 @@
 #  endif
 #endif /* CAT_DEBUG */
 
-#if defined(__GNUC__) && __GNUC__ >= 4
-#define CAT_API __attribute__ ((visibility("default")))
+#ifndef CAT_OS_WIN
+#  if defined(__GNUC__) && __GNUC__ >= 4
+#    define CAT_API __attribute__ ((visibility("default")))
 #else
-#define CAT_API
+#    define CAT_API
+#  endif
+#else
+#  ifdef CAT_EXPORTS
+#    define CAT_API __declspec(dllexport)
+#else
+#    define CAT_API __declspec(dllimport)
+#  endif
 #endif
 
 #if defined(__GNUC__) && CAT_GCC_VERSION >= 4003
