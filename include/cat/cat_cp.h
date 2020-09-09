@@ -17,11 +17,11 @@
  */
 
 #ifdef CAT_OS_WIN
-# include <io.h>
-# include <malloc.h>
-# include <direct.h>
-# include <sys/types.h>
-# include <process.h>
+#include <io.h>
+#include <malloc.h>
+#include <direct.h>
+#include <sys/types.h>
+#include <process.h>
 
 typedef int uid_t;
 typedef int gid_t;

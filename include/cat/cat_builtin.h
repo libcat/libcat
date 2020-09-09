@@ -18,20 +18,20 @@
 
 /* GCC x.y.z supplies __GNUC__ = x and __GNUC_MINOR__ = y */
 #ifdef __GNUC__
-# define CAT_GCC_VERSION (__GNUC__ * 1000 + __GNUC_MINOR__)
+#define CAT_GCC_VERSION (__GNUC__ * 1000 + __GNUC_MINOR__)
 #else
-# define CAT_GCC_VERSION 0
+#define CAT_GCC_VERSION 0
 #endif
 
 /* compatibility with non-clang compilers */
 #ifndef __has_attribute
-# define __has_attribute(x) 0
+#define __has_attribute(x) 0
 #endif
 #ifndef __has_builtin
-# define __has_builtin(x) 0
+#define __has_builtin(x) 0
 #endif
 #ifndef __has_feature
-# define __has_feature(x) 0
+#define __has_feature(x) 0
 #endif
 
 /* built-in */
@@ -72,71 +72,71 @@
 /* function prefix */
 
 #ifdef CAT_DEBUG
-# define cat_always_inline inline
-# define cat_never_inline
+#  define cat_always_inline inline
+#  define cat_never_inline
 #else
-#ifdef CAT_OS_WIN
-#ifdef inline
-#undef inline
-#endif
-#define inline __inline
-#endif
-# if defined(__GNUC__)
-#  if __GNUC__ >= 3
-#   define cat_always_inline inline __attribute__((always_inline))
-#   define cat_never_inline __attribute__((noinline))
-#  else
-#   define cat_always_inline inline
-#   define cat_never_inline
+#  ifdef CAT_OS_WIN
+#    ifdef inline
+#      undef inline
+#    endif
+#    define inline __inline
 #  endif
-# elif defined(_MSC_VER)
-#  define cat_always_inline __forceinline
-#  define cat_never_inline __declspec(noinline)
-# else
-#  if __has_attribute(always_inline)
-#   define cat_always_inline inline __attribute__((always_inline))
+#  if defined(__GNUC__)
+#    if __GNUC__ >= 3
+#      define cat_always_inline inline __attribute__((always_inline))
+#      define cat_never_inline __attribute__((noinline))
+#    else
+#      define cat_always_inline inline
+#      define cat_never_inline
+#    endif
+#  elif defined(_MSC_VER)
+#    define cat_always_inline __forceinline
+#    define cat_never_inline __declspec(noinline)
 #  else
-#   define cat_always_inline inline
+#    if __has_attribute(always_inline)
+#      define cat_always_inline inline __attribute__((always_inline))
+#    else
+#      define cat_always_inline inline
+#    endif
+#    if __has_attribute(noinline)
+#      define cat_never_inline __attribute__((noinline))
+#    else
+#      define cat_never_inline
+#    endif
 #  endif
-#  if __has_attribute(noinline)
-#   define cat_never_inline __attribute__((noinline))
-#  else
-#   define cat_never_inline
-#  endif
-# endif
 #endif /* CAT_DEBUG */
 
 #if defined(__GNUC__) && __GNUC__ >= 4
-# define CAT_API __attribute__ ((visibility("default")))
+#define CAT_API __attribute__ ((visibility("default")))
 #else
-# define CAT_API
+#define CAT_API
 #endif
 
 #if defined(__GNUC__) && CAT_GCC_VERSION >= 4003
-# define CAT_COLD __attribute__((cold))
-# define CAT_HOT __attribute__((hot))
-# ifdef __OPTIMIZE__
+#define CAT_COLD __attribute__((cold))
+#define CAT_HOT __attribute__((hot))
+#ifdef __OPTIMIZE__
 #  define CAT_OPT_SIZE  __attribute__((optimize("Os")))
 #  define CAT_OPT_SPEED __attribute__((optimize("Ofast")))
-# else
+#else
 #  define CAT_OPT_SIZE
 #  define CAT_OPT_SPEED
-# endif
+#endif
 #else
-# define CAT_COLD
-# define CAT_HOT
-# define CAT_OPT_SIZE
-# define CAT_OPT_SPEED
+#define CAT_COLD
+#define CAT_HOT
+#define CAT_OPT_SIZE
+#define CAT_OPT_SPEED
 #endif
 
 #if (defined(__GNUC__) && __GNUC__ >= 3 && !defined(__INTEL_COMPILER) && !defined(DARWIN) && !defined(__hpux) && !defined(_AIX) && !defined(__osf__)) || __has_attribute(noreturn)
-# define HAVE_NORETURN
-# define CAT_NORETURN __attribute__((noreturn))
+#define HAVE_NORETURN
+#define CAT_NORETURN __attribute__((noreturn))
 #elif defined(CAT_WIN32)
-# define HAVE_NORETURN
-# define CAT_NORETURN __declspec(noreturn)
+#define HAVE_NORETURN
+#define CAT_NORETURN __declspec(noreturn)
 #else
-# define CAT_NORETURN
+#define CAT_NORETURN
 #endif
 
 #ifdef __GNUC__  /* Also covers __clang__ and __INTEL_COMPILER */
@@ -155,15 +155,15 @@
 /* function suffix attributes */
 
 #if CAT_GCC_VERSION >= 2007 || __has_attribute(format)
-# define CAT_ATTRIBUTE_FORMAT(type, idx, first) __attribute__ ((format(type, idx, first)))
+#define CAT_ATTRIBUTE_FORMAT(type, idx, first) __attribute__ ((format(type, idx, first)))
 #else
-# define CAT_ATTRIBUTE_FORMAT(type, idx, first)
+#define CAT_ATTRIBUTE_FORMAT(type, idx, first)
 #endif
 
 #if (CAT_GCC_VERSION >= 3001 && !defined(__INTEL_COMPILER)) || __has_attribute(format)
-# define CAT_ATTRIBUTE_PTR_FORMAT(type, idx, first) __attribute__ ((format(type, idx, first)))
+#define CAT_ATTRIBUTE_PTR_FORMAT(type, idx, first) __attribute__ ((format(type, idx, first)))
 #else
-# define CAT_ATTRIBUTE_PTR_FORMAT(type, idx, first)
+#define CAT_ATTRIBUTE_PTR_FORMAT(type, idx, first)
 #endif
 
 /* source position */
