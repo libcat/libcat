@@ -12,8 +12,8 @@
   | See the License for the specific language governing permissions and      |
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
-  | Author: twosee <twose@qq.com>                                            |
-  | Author: codinghuang <2812240764@qq.com>                                  |
+  | Author: Twosee <twose@qq.com>                                            |
+  |         codinghuang <2812240764@qq.com>                                  |
   +--------------------------------------------------------------------------+
  */
 
