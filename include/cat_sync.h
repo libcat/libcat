@@ -40,4 +40,4 @@ CAT_API cat_bool_t cat_sync_wait_group_done(cat_sync_wait_group_t *wg);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_SYNC_H */
+#endif /* CAT_SYNC_H */

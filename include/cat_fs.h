@@ -39,4 +39,4 @@ CAT_API int cat_fs_unlink(const char *path);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_FS_H */
+#endif /* CAT_FS_H */

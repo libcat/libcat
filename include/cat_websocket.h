@@ -134,4 +134,4 @@ CAT_API void cat_websocket_unmask(char *data, uint64_t length, const char *mask_
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_WEBSOCKET_H */
+#endif /* CAT_WEBSOCKET_H */

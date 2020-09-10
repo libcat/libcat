@@ -158,4 +158,4 @@ CAT_API void cat_ssl_update_last_error(cat_errno_t code, char *format, ...);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_SSL_H */
+#endif /* CAT_SSL_H */

@@ -210,4 +210,4 @@ CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_HTTP_H */
+#endif /* CAT_HTTP_H */

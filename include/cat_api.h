@@ -55,4 +55,4 @@ CAT_API void cat_enable_debug_mode(void);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_API_H */
+#endif /* CAT_API_H */

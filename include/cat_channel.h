@@ -124,4 +124,4 @@ CAT_API cat_queue_t *cat_channel_get_storage(cat_channel_t * channel); CAT_INTER
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_CHANNEL_H */
+#endif /* CAT_CHANNEL_H */

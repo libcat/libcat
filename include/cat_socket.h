@@ -569,4 +569,4 @@ CAT_API int cat_socket_get_local_free_port(void);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_SOCKET_H */
+#endif /* CAT_SOCKET_H */

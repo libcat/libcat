@@ -53,4 +53,4 @@ CAT_API cat_timeout_t cat_time_tv2to(const struct timeval *tv);
 #ifdef __cplusplus
 }
 #endif
-#endif    /* CAT_TIME_H */
+#endif /* CAT_TIME_H */

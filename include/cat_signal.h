@@ -31,4 +31,4 @@ CAT_API cat_bool_t cat_signal_wait(int signum, cat_timeout_t timeout);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_SIGNAL_H */
+#endif /* CAT_SIGNAL_H */

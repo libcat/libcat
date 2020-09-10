@@ -44,4 +44,4 @@ CAT_API cat_bool_t cat_dns_get_ip_ex(char *buffer, size_t buffer_size, const cha
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_DNS_H */
+#endif /* CAT_DNS_H */

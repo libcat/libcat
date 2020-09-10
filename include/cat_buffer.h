@@ -78,4 +78,4 @@ CAT_API void cat_buffer_dump(cat_buffer_t *buffer);
 #ifdef __cplusplus
 }
 #endif
-#endif  /* CAT_BUFFER_H */
+#endif /* CAT_BUFFER_H */
