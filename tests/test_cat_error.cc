@@ -21,7 +21,7 @@
 TEST(cat_error, update_last_error_null)
 {
     testing::internal::CaptureStderr();
-    cat_update_last_error(CAT_EUNKNOWN, NULL);
+    cat_update_last_error(CAT_UNKNOWN, NULL);
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_EQ(output, "Sprintf last error message failed" CAT_EOL);
 }
@@ -30,10 +30,10 @@ TEST(cat_error, strerror)
 {
     std::string output;
 
-    output = cat_strerror(CAT_EUNKNOWN);
+    output = cat_strerror(CAT_UNKNOWN);
     ASSERT_EQ(output, "unknown error");
     output = cat_strerror(CAT_EAGAIN);
     ASSERT_EQ(output, "resource temporarily unavailable");
     output = cat_strerror(INT_MAX);
-    ASSERT_EQ(output, "unknown system error");
+    ASSERT_EQ(output, "unknown error");
 }

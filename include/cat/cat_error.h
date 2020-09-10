@@ -27,23 +27,24 @@ typedef struct
 
 typedef enum
 {
-    UV_EUNKNOWN  = -9764, /* we do not know why (almost impossible) */
-    UV_EABNORMAL = -9765, /* just use as default code */
-    UV_EMISUSE   = -9766, /* must fix your code to prevent from this error */
-    UV_EVALUE    = -9767, /* illegal value (e.g. pass negative value to unsigned interface) */
-    UV_ELOCKED   = -9768, /* it's different from EBUSY, it always caused by misuse */
-    UV_EPREV     = -9769, /* we need to check the previous error */
-    UV_ESSL      = -9770, /* any error about ssl */
+    UV_EXT = -9764,
+    UV_UNCODED,     /* the error has no specific code, we should check the message of error  */
+    UV_EPREV,       /* we should check the previous error */
+    UV_EMISUSE,     /* must fix your code to prevent from this error */
+    UV_EVALUE,      /* illegal value (e.g. pass negative value to unsigned interface) */
+    UV_ELOCKED,     /* it's different from EBUSY, it always caused by misuse */
+    UV_EDEADLK,     /* dead lock */
+    UV_ESSL,        /* any error about ssl */
 } uv_errno_ext_t;
 
 #define CAT_ERRNO_MAP(XX) \
     UV_ERRNO_MAP(XX) \
-    XX(EUNKNOWN, "unknown error") \
-    XX(EABNORMAL, "abnormality occurs") \
+    XX(UNCODED, "please check the error message") \
+    XX(EPREV, "please check the previous error") \
     XX(EMISUSE, "misuse error") \
     XX(EVALUE, "value error") \
     XX(ELOCKED, "resource locked") \
-    XX(EPREV, "check the previous error") \
+    XX(EDEADLK, "dead lock") \
     XX(ESSL, "SSL error") \
 
 typedef enum

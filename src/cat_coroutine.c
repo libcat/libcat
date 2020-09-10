@@ -604,7 +604,7 @@ CAT_API cat_bool_t cat_coroutine_scheduler_run(cat_coroutine_t *scheduler)
         return cat_false;
     }
     if (!cat_coroutine_is_alive(scheduler)) {
-        cat_update_last_error(CAT_EUNKNOWN, "Run scheduler failed by unknwon reason");
+        cat_update_last_error(CAT_UNKNOWN, "Run scheduler failed by unknwon reason");
         return cat_false;
     }
     if (!cat_coroutine_register_scheduler(scheduler)) {

@@ -99,7 +99,7 @@ static cat_never_inline void cat_event_dead_lock(void)
     uv_timer_t *dead_lock = CAT_EVENT_G(dead_lock);
     int error;
 
-    cat_warn(EVENT, "Dead lock: all coroutines are asleep");
+    cat_warn_ex(EVENT, CAT_EDEADLK, "Dead lock: all coroutines are asleep");
 
     error = uv_timer_init(cat_event_loop, dead_lock);
     if (unlikely(error != 0)) {

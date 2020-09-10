@@ -66,22 +66,22 @@ typedef enum
 
 #define cat_info(module_type, format, ...)                            cat_log_helper(INFO, module_type, 0, format, ##__VA_ARGS__)
 
-#define cat_notice(module_type, format, ...)                          cat_notice_ex(module_type, CAT_EABNORMAL, format, ##__VA_ARGS__)
+#define cat_notice(module_type, format, ...)                          cat_notice_ex(module_type, CAT_UNCODED, format, ##__VA_ARGS__)
 #define cat_notice_ex(module_type, code, format, ...)                 cat_log_helper(NOTICE, module_type, code, format, ##__VA_ARGS__)
 #define cat_notice_with_last(module_type, format, ...)                cat_log_helper_with_reason(NOTICE, module_type, cat_get_last_error_code(), cat_get_last_error_message(), format, ##__VA_ARGS__)
 #define cat_notice_with_reason(module_type, code, format, ...)        cat_log_helper_with_reason(NOTICE, module_type, code, cat_strerror(code), format, ##__VA_ARGS__)
 
-#define cat_warn(module_type, format, ...)                            cat_warn_ex(module_type, CAT_EABNORMAL, format, ##__VA_ARGS__)
+#define cat_warn(module_type, format, ...)                            cat_warn_ex(module_type, CAT_UNCODED, format, ##__VA_ARGS__)
 #define cat_warn_ex(module_type, code, format, ...)                   cat_log_helper(WARNING, module_type, code, format, ##__VA_ARGS__)
 #define cat_warn_with_last(module_type, format, ...)                  cat_log_helper_with_reason(WARNING, module_type, cat_get_last_error_code(), cat_get_last_error_message(), format, ##__VA_ARGS__)
 #define cat_warn_with_reason(module_type, code, format, ...)          cat_log_helper_with_reason(WARNING, module_type, code, cat_strerror(code), format, ##__VA_ARGS__)
 
-#define cat_error(module_type, format, ...)                           cat_error_ex(module_type, CAT_EABNORMAL, format, ##__VA_ARGS__)
+#define cat_error(module_type, format, ...)                           cat_error_ex(module_type, CAT_UNCODED, format, ##__VA_ARGS__)
 #define cat_error_ex(module_type, code, format, ...)                  cat_log_helper(ERROR, module_type, code, format, ##__VA_ARGS__)
 #define cat_error_with_last(module_type, format, ...)                 cat_log_helper_with_reason(ERROR, module_type, cat_get_last_error_code(), cat_get_last_error_message(), format, ##__VA_ARGS__)
 #define cat_error_with_reason(module_type, code, format, ...)         cat_log_helper_with_reason(ERROR, module_type, code, cat_strerror(code), format, ##__VA_ARGS__)
 
-#define cat_core_error(module_type, format, ...)                      cat_core_error_ex(module_type, CAT_EABNORMAL, format, ##__VA_ARGS__)
+#define cat_core_error(module_type, format, ...)                      cat_core_error_ex(module_type, CAT_UNCODED, format, ##__VA_ARGS__)
 #define cat_core_error_ex(module_type, code, format, ...)             cat_log_helper(CORE_ERROR, module_type, code, format, ##__VA_ARGS__); abort() /* make IDE happy */
 #define cat_core_error_with_last(module_type, format, ...)            cat_log_helper_with_reason(CORE_ERROR, module_type, cat_get_last_error_code(), cat_get_last_error_message(), format, ##__VA_ARGS__); abort() /* make IDE happy */
 #define cat_core_error_with_reason(module_type, code, format, ...)    cat_log_helper_with_reason(CORE_ERROR, module_type, code, cat_strerror(code), format, ##__VA_ARGS__); abort() /* make IDE happy */
