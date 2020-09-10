@@ -56,7 +56,7 @@ TEST(cat_event, dead_lock)
             sched_yield();
 #endif
             std::this_thread::sleep_for(std::chrono::milliseconds(!is_valgrind() ? 1 : 100));
-            cat_kill(pid, SIGTERM);
+            cat_kill(pid, CAT_SIGTERM);
         }, getpid() /* TODO: cat_getpid() */);
         DEFER(t.join());
         cat_coroutine_yield_ez();

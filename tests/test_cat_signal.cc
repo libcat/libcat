@@ -22,7 +22,7 @@
 
 TEST(cat_signal, wait)
 {
-    const std::array<int, 4> signals{ SIGINT, SIGTERM, SIGUSR1, SIGUSR2 };
+    const std::array<int, 4> signals{ CAT_SIGINT, CAT_SIGTERM, CAT_SIGUSR1, CAT_SIGUSR2 };
     bool killed, wait_done;
 
     for (int signum : signals) {
@@ -49,7 +49,7 @@ TEST(cat_signal, wait_multi)
 
     for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
         co([&] {
-            EXPECT_TRUE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
+            EXPECT_TRUE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
             if (++count == TEST_MAX_CONCURRENCY) {
                 cat_coroutine_resume_ez(coroutine);
             }
@@ -57,14 +57,14 @@ TEST(cat_signal, wait_multi)
     }
 
     // TODO: cat_getpid()
-    EXPECT_TRUE(cat_kill(getpid(), SIGUSR1));
+    EXPECT_TRUE(cat_kill(getpid(), CAT_SIGUSR1));
     EXPECT_TRUE(cat_time_wait(TEST_IO_TIMEOUT));
     EXPECT_EQ(TEST_MAX_CONCURRENCY, count);
 }
 
 TEST(cat_signal, invalid_kill)
 {
-    const std::array<int, 2> invalid_signals{ SIGKILL, SIGSTOP };
+    const std::array<int, 2> invalid_signals{ CAT_SIGKILL, CAT_SIGSTOP };
 
     for (int signum : invalid_signals) {
         EXPECT_FALSE(cat_signal_wait(signum, TEST_IO_TIMEOUT));
@@ -74,7 +74,7 @@ TEST(cat_signal, invalid_kill)
 
 TEST(cat_signal, timeout)
 {
-    ASSERT_FALSE(cat_signal_wait(SIGUSR1, 1));
+    ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, 1));
     ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
 }
 
@@ -85,6 +85,6 @@ TEST(cat_signal, cancel)
         cat_time_sleep(0);
         cat_coroutine_resume_ez(waiter);
     });
-    ASSERT_FALSE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
+    ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
     ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
 }
