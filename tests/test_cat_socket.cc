@@ -940,6 +940,6 @@ TEST(cat_socket, cancel_connect)
 TEST(cat_socket, echo_tcp_server_shutdown)
 {
     SKIP_IF(echo_tcp_server == nullptr);
-    ASSERT_TRUE(cat_coroutine_resume_ez(echo_tcp_server));
+    cat_coroutine_resume_ez(echo_tcp_server);
     ASSERT_EQ(echo_tcp_server, nullptr);
 }

@@ -45,13 +45,10 @@ void cat_signal_callback(uv_signal_t* handle, int signum)
 {
     cat_signal_t *signal = (cat_signal_t *) handle;
     cat_coroutine_t *coroutine = signal->coroutine;
-    cat_bool_t ret;
 
     signal->coroutine = NULL;
 
-    ret = cat_coroutine_resume_ez(coroutine);
-
-    if (unlikely(!ret)) {
+    if (unlikely(!cat_coroutine_resume_ez(coroutine))) {
         cat_core_error_with_last(TIME, "Signal schedule failed");
     }
 }

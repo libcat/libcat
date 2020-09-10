@@ -41,10 +41,14 @@ void cat_work_callback(uv_work_t *request)
 static void cat_work_after_done(uv_work_t *request, int status)
 {
     cat_work_context_t *context = (cat_work_context_t *) request;
+
     if (likely(context->request.coroutine != NULL)) {
         context->status = status;
-        cat_coroutine_resume_ez(context->request.coroutine);
+        if (unlikely(!cat_coroutine_resume_ez(context->request.coroutine))) {
+            cat_core_error_with_last(WORK, "Work schedule failed");
+        }
     }
+
     cat_free(context);
 }
 

@@ -705,7 +705,9 @@ CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine)
     }
     coroutine->state = CAT_COROUTINE_STATE_WAITING;
     CAT_COROUTINE_G(active_count)++;
-    cat_coroutine_resume_ez(coroutine);
+    if (!cat_coroutine_resume_ez(coroutine)) {
+        cat_core_error_with_last(COROUTINE, "Unlock failed");
+    }
     return cat_true;
 }
 

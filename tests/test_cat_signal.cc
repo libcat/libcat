@@ -83,7 +83,7 @@ TEST(cat_signal, cancel)
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     co([&] {
         cat_time_sleep(0);
-        EXPECT_TRUE(cat_coroutine_resume_ez(waiter));
+        cat_coroutine_resume_ez(waiter);
     });
     ASSERT_FALSE(cat_signal_wait(SIGUSR1, TEST_IO_TIMEOUT));
     ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());

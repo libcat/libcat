@@ -88,13 +88,10 @@ static void cat_sleep_timer_callback(uv_timer_t* handle)
 {
     cat_timer_t *timer = (cat_timer_t *) handle;
     cat_coroutine_t *coroutine = timer->coroutine;
-    cat_bool_t ret;
 
     timer->coroutine = NULL;
 
-    ret = cat_coroutine_resume_ez(coroutine);
-
-    if (unlikely(!ret)) {
+    if (unlikely(!cat_coroutine_resume_ez(coroutine))) {
         cat_core_error_with_last(TIME, "Timer schedule failed");
     }
 }
