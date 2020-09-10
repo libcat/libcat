@@ -13,7 +13,7 @@
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
   | Author: Ben Noordhuis <info@bnoordhuis.nl>                               |
-  |         Twosee <twose@qq.com>                                            |
+  |         Twosee <twosee@php.net>                                          |
   +--------------------------------------------------------------------------+
  */
 

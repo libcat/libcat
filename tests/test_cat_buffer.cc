@@ -13,7 +13,7 @@
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
   | Author: codinghuang <2812240764@qq.com>                                  |
-  |         Twosee <twose@qq.com>                                            |
+  |         Twosee <twosee@php.net>                                          |
   +--------------------------------------------------------------------------+
  */
 
