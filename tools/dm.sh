@@ -12,17 +12,19 @@ __exit__() {
 error(){ echo "[ERROR] $1"; __exit__ 1; }
 ok(){ echo "[OK] $1"; __exit__ 0; }
 
-if [ $# -ne 5 ] ; then
+if [ $# -ne 7 ] ; then
   printf "Usage:\n %s\n" \
-  "work_dir[absolute], name, url, src_dir[relative], target_dir[absolute]"
+  "work_dir[absolute], org, name, url, version, src_dir[relative], target_dir[absolute]"
   exit
 fi
 
 work_dir="$1"
-name="$2"
-url="$3"
-src_dir="$4"
-target_dir="$5"
+org="$2"
+name="$3"
+url="$4"
+version="$5"
+src_dir="$6"
+target_dir="$7"
 
 if [ -L "${target_dir}" ]; then
   rm -f "${target_dir}"
@@ -64,6 +66,8 @@ else
     error "Clone source files of ${name} failed"
   fi
 
+  version=$(cd "${tmp_source_dir}" && git rev-parse HEAD);
+
   rm -rf "${tmp_source_dir}/.git"
 fi
 
@@ -78,11 +82,12 @@ if [ -d "${target_dir}" ]; then
     error "Backup failed"
   fi
 fi
+if [ ! -d "${target_dir}/../" ]; then
+  mkdir -p "$(dirname "${target_dir}")"
+fi
 
 if ! mv "${tmp_dir}/${src_dir}" "${target_dir}"; then
   error "Update dir failed"
 fi
 
-git add --ignore-errors -A
-
-ok "${name} updated"
+ok "* ${org}/${name}@${version}"
