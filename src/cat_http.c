@@ -143,8 +143,8 @@ static cat_always_inline void cat_http_parser__init(cat_http_parser_t *parser, u
 CAT_API void cat_http_parser_init(cat_http_parser_t *parser)
 {
     cat_http_parser__init(parser, HTTP_BOTH);
-    parser->events = CAT_HTTP_PARSER_EVENT_NONE;
-    parser->event = CAT_HTTP_PARSER_EVENTS_NONE;
+    parser->events = CAT_HTTP_PARSER_EVENTS_NONE;
+    parser->event = CAT_HTTP_PARSER_EVENT_NONE;
 }
 
 CAT_API void cat_http_parser_reset(cat_http_parser_t *parser)
