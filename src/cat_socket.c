@@ -2116,7 +2116,7 @@ CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
     }
     if (unlikely(error != 0 && error != CAT_EAGAIN && error != CAT_EMSGSIZE)) {
         /* there was an unrecoverable error */
-        cat_update_last_error_of_syscall("Socket connection is unavailable");
+        cat_update_last_error(error, "Socket connection is unavailable");
         return cat_false;
     }
 
