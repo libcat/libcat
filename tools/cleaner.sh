@@ -13,14 +13,21 @@ fi
 
 info "Scanning dir \"${workdir}\" ..."
 
-if [ ! -f "./Makefile" ] && [ ! -f "./CMakeLists.txt" ]; then
+if [ ! -f "./CMakeLists.txt" ] && \
+   [ ! -f "./config.m4" ] && \
+   [ ! -f "./config.w32" ] && \
+   { [ ! -d "./src" ] || [ ! -d "./include" ]; } then
   error "Non-project dir ${workdir}"
 fi
 
-if [ ! -f "./CMakeLists.txt" ]; then
-  USE_AUTOTOOLS=1
-elif [ -z "${USE_AUTOTOOLS}" ]; then
-  USE_AUTOTOOLS=0
+if [ -z "${USE_AUTOTOOLS}" ]; then
+  if [ -f "./CMakeLists.txt" ]; then
+    USE_AUTOTOOLS=0
+  elif [ -f "./config.m4" ] || [ -f "./config.w32" ] ; then
+    USE_AUTOTOOLS=1
+  else
+    error "Unknown project type"
+  fi
 fi
 
 info "USE_AUTOTOOLS=${USE_AUTOTOOLS}"
