@@ -937,6 +937,36 @@ TEST(cat_socket, cancel_connect)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
+TEST(cat_socket, dump_all)
+{
+    // TODO: now all sockets are unavailable
+    cat_socket_t *tcp_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(nullptr, tcp_socket);
+    DEFER(cat_socket_close(tcp_socket));
+
+    cat_socket_t *udp_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_UDP);
+    ASSERT_NE(nullptr, udp_socket);
+    DEFER(cat_socket_close(udp_socket));
+
+    cat_socket_t *pipe_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_PIPE);
+    ASSERT_NE(nullptr, pipe_socket);
+    DEFER(cat_socket_close(pipe_socket));
+
+    cat_socket_t *tty_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_STDOUT);
+    ASSERT_NE(nullptr, tty_socket);
+    DEFER(cat_socket_close(tty_socket));
+
+    testing::internal::CaptureStdout();
+
+    cat_socket_dump_all();
+
+    std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_NE(output.find("TCP"), std::string::npos);
+    ASSERT_NE(output.find("UDP"), std::string::npos);
+    ASSERT_TRUE(output.find("PIPE") != std::string::npos || output.find("UNIX") != std::string::npos);
+    ASSERT_TRUE(output.find("TTY") != std::string::npos || output.find("STDOUT") != std::string::npos);
+}
+
 TEST(cat_socket, echo_tcp_server_shutdown)
 {
     SKIP_IF(echo_tcp_server == nullptr);

@@ -126,6 +126,7 @@ CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen
 
 /* socket fd */
 
+#define CAT_SOCKET_FD_FMT "%d"
 typedef uv_os_fd_t cat_socket_fd_t;
 
 #ifndef CAT_OS_WIN
@@ -565,6 +566,7 @@ CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_b
 /* helper */
 
 CAT_API int cat_socket_get_local_free_port(void);
+CAT_API void cat_socket_dump_all(void);
 
 #ifdef __cplusplus
 }

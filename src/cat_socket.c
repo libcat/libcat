@@ -727,7 +727,15 @@ CAT_API const char *cat_socket_type_name(cat_socket_type_t type)
         return "PIPE";
 #endif
     } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
-        return "TTY";
+        if (type & CAT_SOCKET_TYPE_FLAG_STDIN) {
+            return "STDIN";
+        } else if (type & CAT_SOCKET_TYPE_FLAG_STDOUT) {
+            return "STDOUT";
+        } else if (type & CAT_SOCKET_TYPE_FLAG_STDERR) {
+            return "STDERR";
+        } else {
+            return "TTY";
+        }
     }
 #ifdef CAT_OS_UNIX_LIKE
     else if ((type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) {
@@ -2377,4 +2385,61 @@ CAT_API int cat_socket_get_local_free_port(void)
     }
 
     return port;
+}
+
+static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
+{
+    cat_socket_t *socket;
+    cat_socket_internal_t *isocket;
+    cat_socket_fd_t fd;
+    const char *type_name, *io_state_naming, *role;
+    char sock_addr[CAT_SOCKADDR_MAX_PATH] = "unknown", peer_addr[CAT_SOCKADDR_MAX_PATH] = "unknown";
+    size_t sock_addr_size = sizeof(sock_addr), peer_addr_size = sizeof(peer_addr);
+    int sock_port, peer_port;
+
+    switch (handle->type) {
+        case UV_TCP:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.tcp);
+            type_name = "TCP";
+            break;
+        case UV_NAMED_PIPE:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.pipe);
+            type_name = "PIPE";
+            break;
+        case UV_TTY:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.tty);
+            type_name = "TTY";
+            break;
+        case UV_UDP:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.udp);
+            type_name = "UDP";
+            break;
+        default:
+            return;
+    }
+
+    if (isocket->u.socket == NULL) {
+        fd = CAT_SOCKET_INVALID_FD;
+        io_state_naming = "unavailable";
+        role = "unknown";
+        sock_port = peer_port = -1;
+    } else {
+        socket = isocket->u.socket;
+        fd = cat_socket_internal_get_fd_fast(isocket);
+        type_name = cat_socket_get_type_name(socket);
+        io_state_naming = cat_socket_get_io_state_naming(socket);
+        role = cat_socket_is_server(socket) ? "server" : (cat_socket_is_client(socket) ? "client" : "none");
+        (void) cat_socket_get_sock_address(socket, sock_addr, &sock_addr_size);
+        sock_port = cat_socket_get_sock_port(socket);
+        (void) cat_socket_get_sock_address(socket, peer_addr, &peer_addr_size);
+        peer_port = cat_socket_get_peer_port(socket);
+    }
+
+    cat_info(SOCKET, "%-4s fd: %-6d io: %-12s role: %-7s addr: %s:%d, peer: %s:%d",
+                     type_name, fd, io_state_naming, role, sock_addr, sock_port, peer_addr, peer_port);
+}
+
+CAT_API void cat_socket_dump_all(void)
+{
+    uv_walk(cat_event_loop, cat_socket_dump_callback, NULL);
 }
