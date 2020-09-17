@@ -27,6 +27,9 @@ extern "C" {
 typedef int64_t cat_nsec_t;
 #define CAT_NSEC_FMT "%" PRIu64
 
+typedef int64_t cat_usec_t;
+#define CAT_USEC_FMT "%" PRIu64
+
 typedef int64_t cat_msec_t;
 #define CAT_MSEC_FMT "%" PRIu64
 
