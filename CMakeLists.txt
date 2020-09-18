@@ -145,6 +145,7 @@ set(cat_sources
     src/cat_buffer.c
     src/cat_fs.c
     src/cat_signal.c
+    src/cat_watch_dog.c
     src/cat_http.c
     src/cat_websocket.c
     # [optional]
@@ -606,6 +607,7 @@ if (${LIBCAT_BUILD_TESTS})
         tests/test_cat_work.cc
         tests/test_cat_buffer.cc
         tests/test_cat_signal.cc
+        tests/test_cat_watch_dog.cc
         tests/test_cat_http.cc
         # [optional]
         tests/test_cat_ssl.cc
