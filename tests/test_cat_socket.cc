@@ -667,7 +667,7 @@ TEST(cat_socket, echo_tcp_server)
         ASSERT_GT(echo_tcp_server_port = cat_socket_get_sock_port(&server), 0);
 
         echo_tcp_server = cat_coroutine_get_current();
-        cat_socket_set_timeout(&server, read, -1);
+        cat_socket_set_read_timeout(&server, -1);
 
         while (1) {
             cat_socket_t *client = cat_socket_accept(&server, nullptr);

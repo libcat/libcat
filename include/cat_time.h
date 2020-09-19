@@ -36,6 +36,7 @@ typedef int64_t cat_msec_t;
 typedef cat_msec_t cat_timeout_t;
 #define CAT_TIMEOUT_FMT     CAT_MSEC_FMT
 #define CAT_TIMEOUT_FOREVER -1
+#define CAT_TIMEOUT_INVALID INT64_MIN
 
 CAT_API cat_nsec_t cat_time_nsec(void);
 CAT_API cat_msec_t cat_time_msec(void);

@@ -33,11 +33,11 @@ public:
     {
         ASSERT_TRUE(cat_init_all());
 
-        cat_socket_set_global_timeout(dns, TEST_IO_TIMEOUT);
-        cat_socket_set_global_timeout(accept, -1);
-        cat_socket_set_global_timeout(connect, TEST_IO_TIMEOUT);
-        cat_socket_set_global_timeout(read, TEST_IO_TIMEOUT);
-        cat_socket_set_global_timeout(write, TEST_IO_TIMEOUT);
+        cat_socket_set_global_dns_timeout(TEST_IO_TIMEOUT);
+        cat_socket_set_global_accept_timeout(-1);
+        cat_socket_set_global_connect_timeout(TEST_IO_TIMEOUT);
+        cat_socket_set_global_read_timeout(TEST_IO_TIMEOUT);
+        cat_socket_set_global_write_timeout(TEST_IO_TIMEOUT);
 
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
 
