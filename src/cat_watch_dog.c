@@ -18,15 +18,58 @@
 
 #include "cat_watch_dog.h"
 
-#ifndef CAT_THREAD_SAFE
-#define CAT_WATCH_DOG_ROLE_NAME "process"
-#else
-#define CAT_WATCH_DOG_ROLE_NAME "thread"
-#endif
-
 CAT_API CAT_GLOBALS_DECLARE(cat_watch_dog)
 
 CAT_GLOBALS_CTOR_DECLARE_SZ(cat_watch_dog)
+
+static cat_nsec_t cat_watch_dog_align_quantum(cat_nsec_t quantum)
+{
+    if (quantum <= 0) {
+        quantum = CAT_WATCH_DOG_DEFAULT_QUANTUM;
+    }
+
+    return quantum;
+}
+
+static cat_nsec_t cat_watch_dog_align_threshold(cat_nsec_t threshold)
+{
+    if (threshold == 0) {
+        threshold = CAT_WATCH_DOG_DEFAULT_THRESHOLD;
+    } else if (threshold < 0) {
+        threshold = CAT_WATCH_DOG_THRESHOLD_DISABLED;
+    }
+
+    return threshold;
+}
+
+static void cat_watch_dog_loop(void* arg)
+{
+    cat_watch_dog_t *watch_dog = (cat_watch_dog_t *) arg;
+
+    uv_sem_post(watch_dog->sem);
+
+    while (1) {
+        watch_dog->last_round = watch_dog->globals->round;
+        uv_mutex_lock(&watch_dog->mutex);
+        uv_cond_timedwait(&watch_dog->cond, &watch_dog->mutex, watch_dog->quantum);
+        uv_mutex_unlock(&watch_dog->mutex);
+        if (watch_dog->stop) {
+            return;
+        }
+        /* Notice: globals info maybe changed during check,
+         * but it is usually acceptable to us.
+         * In other words, there is a certain probability of false alert. */
+        if (watch_dog->globals->round == watch_dog->last_round &&
+            watch_dog->globals->current != watch_dog->globals->scheduler &&
+            watch_dog->globals->active_count > 2 // FIXME: scheduler + main ?
+        ) {
+            watch_dog->alert_count++;
+            watch_dog->alerter(watch_dog);
+        } else {
+            watch_dog->alert_count = 0;
+        }
+    }
+}
 
 CAT_API cat_bool_t cat_watch_dog_module_init(void)
 {
@@ -37,6 +80,7 @@ CAT_API cat_bool_t cat_watch_dog_module_init(void)
 CAT_API cat_bool_t cat_watch_dog_runtime_init(void)
 {
     CAT_WATCH_DOG_G(watch_dog) = NULL;
+
     return cat_true;
 }
 
@@ -49,58 +93,20 @@ CAT_API cat_bool_t cat_watch_dog_runtime_shutdown(void)
     return cat_true;
 }
 
-static void cat_watch_dog_loop(void* arg)
+CAT_API void cat_watch_dog_alert_standard(cat_watch_dog_t *watch_dog)
 {
-    cat_watch_dog_t *watch_dog = (cat_watch_dog_t *) arg;
-
-    uv_sem_post(watch_dog->sem);
-
-    while (1) {
-        watch_dog->last_round = *watch_dog->round_ptr;
-        uv_mutex_lock(&watch_dog->mutex);
-        uv_cond_timedwait(&watch_dog->cond, &watch_dog->mutex, watch_dog->quantum / 2);
-        uv_mutex_unlock(&watch_dog->mutex);
-        if (watch_dog->stop) {
-            return;
-        }
-        /* Notice: Here we should have enough time slices to check.
-         * Things might not always go the way we want,
-         * but it is usually acceptable to us. */
-        // FIXME: scheduler + main ?
-        // if (!(*watch_dog->count_ptr > 1)) {
-        //     continue;
-        // }
-        if (*watch_dog->current_ptr == *watch_dog->scheduler_ptr) {
-            continue;
-        }
-        if (*watch_dog->round_ptr == watch_dog->last_round) {
-            watch_dog->alert_count++;
-            watch_dog->alerter(watch_dog);
-        } else {
-            watch_dog->alert_count = 0;
-        }
-    }
+    fprintf(stderr, "Warning: <Watch-Dog> Syscall blocking or CPU starvation may occur in " CAT_WATCH_DOG_ROLE_NAME " %d, "
+                    "it has been blocked for more than " CAT_NSEC_FMT  " ns" CAT_EOL,
+                    watch_dog->pid, watch_dog->quantum * watch_dog->alert_count);
 }
 
-static cat_usec_t cat_watch_dog_align_quantum(cat_usec_t quantum)
+CAT_API cat_bool_t cat_watch_dog_run(cat_watch_dog_t *watch_dog, cat_nsec_t quantum, cat_nsec_t threshold, cat_watch_dog_alerter_t alerter)
 {
-    if (quantum == 0) {
-        quantum = CAT_WATCH_DOG_DEFAULT_QUANTUM;
-    } else {
-        quantum = CAT_MEMORY_ALIGNED_SIZE_EX(quantum, 2);
-    }
-
-    return quantum;
-}
-
-CAT_API cat_bool_t cat_watch_dog_run(cat_usec_t quantum, cat_watch_dog_alerter_t alerter)
-{
-    cat_watch_dog_t *watch_dog = CAT_WATCH_DOG_G(watch_dog);
     uv_thread_options_t options;
     uv_sem_t sem;
     int error;
 
-    if (watch_dog != NULL) {
+    if (CAT_WATCH_DOG_G(watch_dog) != NULL) {
         cat_update_last_error(CAT_EMISUSE, "Only one watch-dog is allowed to run per " CAT_WATCH_DOG_ROLE_NAME);
         return cat_false;
     }
@@ -115,14 +121,13 @@ CAT_API cat_bool_t cat_watch_dog_run(cat_usec_t quantum, cat_watch_dog_alerter_t
     }
 
     watch_dog->quantum = cat_watch_dog_align_quantum(quantum);
+    watch_dog->threshold = cat_watch_dog_align_threshold(threshold);
+    watch_dog->alerter = alerter != NULL ? alerter : cat_watch_dog_alert_standard;
     watch_dog->alert_count = 0;
     watch_dog->stop = cat_false;
     watch_dog->pid = uv_os_getpid();
-    watch_dog->current_ptr = &CAT_COROUTINE_G(current);
-    watch_dog->scheduler_ptr = &CAT_COROUTINE_G(scheduler);
-    watch_dog->count_ptr = &CAT_COROUTINE_G(active_count);
-    watch_dog->round_ptr = &CAT_COROUTINE_G(round);
-    watch_dog->alerter = alerter != NULL ? alerter : cat_watch_dog_alert_standard;
+    watch_dog->globals = CAT_GLOBALS_BULK(cat_coroutine);
+    watch_dog->last_round = 0;
 
     error = uv_sem_init(&sem, 0);
     if (error != 0) {
@@ -142,7 +147,7 @@ CAT_API cat_bool_t cat_watch_dog_run(cat_usec_t quantum, cat_watch_dog_alerter_t
 
     watch_dog->sem = &sem;
     options.flags = UV_THREAD_HAS_STACK_SIZE;
-    options.stack_size = 1024 * 1024;
+    options.stack_size = CAT_COROUTINE_RECOMMENDED_STACK_SIZE;
 
     error = uv_thread_create_ex(&watch_dog->thread, &options, cat_watch_dog_loop, watch_dog);
 
@@ -207,20 +212,6 @@ CAT_API cat_bool_t cat_watch_dog_stop(void)
     return cat_true;
 }
 
-CAT_API void cat_watch_dog_alert_standard(cat_watch_dog_t *watch_dog)
-{
-    /*  // For example:
-    if (watch_dog->alert_count == 1) {
-        // CPU famine (and we should try to schedule the coroutine)
-    } else {
-        // Syscall blocking
-    }
-    */
-    fprintf(stderr, "Warning: <Watch-Dog> Syscall blocking or CPU starvation may occur in " CAT_WATCH_DOG_ROLE_NAME " %d, "
-                    "it has been blocked for more than " CAT_NSEC_FMT  " ns" CAT_EOL,
-                    watch_dog->pid, watch_dog->quantum * watch_dog->alert_count);
-}
-
 CAT_API cat_bool_t cat_watch_dog_is_running(void)
 {
     return CAT_WATCH_DOG_G(watch_dog) != NULL;
@@ -235,11 +226,11 @@ CAT_API cat_nsec_t cat_watch_dog_get_quantum(void)
             -1;
 }
 
-CAT_API cat_alert_count_t cat_watch_dog_get_alert_count(void)
+CAT_API cat_nsec_t cat_watch_dog_get_threshold(void)
 {
     cat_watch_dog_t *watch_dog = CAT_WATCH_DOG_G(watch_dog);
 
     return watch_dog != NULL ?
-            watch_dog->alert_count :
-            0;
+            watch_dog->threshold :
+            -1;
 }
