@@ -115,18 +115,26 @@ typedef enum
 
 typedef enum
 {
+    /* built-in (0 ~ 7) */
     CAT_COROUTINE_OPCODE_NONE     = 0,
     CAT_COROUTINE_OPCODE_NO_DATA  = 1 << 0, /* transfer data should be CAT_COROUTINE_NULL */
     CAT_COROUTINE_OPCODE_CHECKED  = 1 << 1, /* checked if it is resumable */
     CAT_COROUTINE_OPCODE_WAIT     = 1 << 2, /* wait for a specified coroutine to wake it up */
-    /* for user */
-    CAT_COROUTINE_OPCODE_USR1 = 1 << 4,
-    CAT_COROUTINE_OPCODE_USR2 = 1 << 5,
-    CAT_COROUTINE_OPCODE_USR3 = 1 << 6,
-    CAT_COROUTINE_OPCODE_USR4 = 1 << 7
+    /* for user (8 ~ 15) */
+#define CAT_COROUTINE_OPCODE_USR_GEN(XX) \
+    CAT_COROUTINE_OPCODE_USR##XX = 1 << (XX + (16 - 1 - 8))
+    CAT_COROUTINE_OPCODE_USR_GEN(1),
+    CAT_COROUTINE_OPCODE_USR_GEN(2),
+    CAT_COROUTINE_OPCODE_USR_GEN(3),
+    CAT_COROUTINE_OPCODE_USR_GEN(4),
+    CAT_COROUTINE_OPCODE_USR_GEN(5),
+    CAT_COROUTINE_OPCODE_USR_GEN(6),
+    CAT_COROUTINE_OPCODE_USR_GEN(7),
+    CAT_COROUTINE_OPCODE_USR_GEN(8),
+#undef CAT_COROUTINE_OPCODE_USR_GEN
 } cat_coroutine_opcode_t;
 
-typedef uint8_t cat_coroutine_opcodes_t;
+typedef uint16_t cat_coroutine_opcodes_t;
 
 #define CAT_COROUTINE_ROUND_FMT "%" PRIu64
 typedef uint64_t cat_coroutine_round_t;
