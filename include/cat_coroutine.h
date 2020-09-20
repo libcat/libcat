@@ -190,7 +190,7 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     cat_coroutine_resume_t resume;
     /* info */
     cat_coroutine_id_t last_id;
-    cat_coroutine_count_t active_count;
+    cat_coroutine_count_t count;
     cat_coroutine_count_t peak_count;
     /* watch-dog */
     cat_coroutine_round_t round;
@@ -223,7 +223,8 @@ CAT_API cat_coroutine_id_t cat_coroutine_get_current_id(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_main(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_scheduler(void);
 CAT_API cat_coroutine_id_t cat_coroutine_get_last_id(void);
-CAT_API cat_coroutine_count_t cat_coroutine_get_active_count(void);
+CAT_API cat_coroutine_count_t cat_coroutine_get_count(void);
+CAT_API cat_coroutine_count_t cat_coroutine_get_real_count(void);
 CAT_API cat_coroutine_count_t cat_coroutine_get_peak_count(void);
 CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void);
 

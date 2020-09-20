@@ -66,7 +66,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 
     /* init info */
     CAT_COROUTINE_G(last_id) = 0;
-    CAT_COROUTINE_G(active_count) = 0;
+    CAT_COROUTINE_G(count) = 0;
     CAT_COROUTINE_G(peak_count) = 0;
     CAT_COROUTINE_G(round) = 0;
 
@@ -95,7 +95,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         CAT_COROUTINE_G(current) = main_coroutine;
 
         CAT_COROUTINE_G(last_id) = main_coroutine->id + 1;
-        CAT_COROUTINE_G(active_count)++;
+        CAT_COROUTINE_G(count)++;
         CAT_COROUTINE_G(peak_count)++;
     } while (0);
 
@@ -174,9 +174,20 @@ CAT_API cat_coroutine_id_t cat_coroutine_get_last_id(void)
     return CAT_COROUTINE_G(last_id);
 }
 
-CAT_API cat_coroutine_count_t cat_coroutine_get_active_count(void)
+CAT_API cat_coroutine_count_t cat_coroutine_get_count(void)
 {
-    return CAT_COROUTINE_G(active_count);
+    return CAT_COROUTINE_G(count);
+}
+
+CAT_API cat_coroutine_count_t cat_coroutine_get_real_count(void)
+{
+    cat_coroutine_count_t count = CAT_COROUTINE_G(count);
+
+    if (CAT_COROUTINE_G(scheduler) != NULL) {
+        count++;
+    }
+
+    return count;
 }
 
 CAT_API cat_coroutine_count_t cat_coroutine_get_peak_count(void)
@@ -192,10 +203,10 @@ CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void)
 static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
-    if (unlikely(++CAT_COROUTINE_G(active_count) > CAT_COROUTINE_G(peak_count))) {
-        CAT_COROUTINE_G(peak_count) = CAT_COROUTINE_G(active_count);
+    if (unlikely(++CAT_COROUTINE_G(count) > CAT_COROUTINE_G(peak_count))) {
+        CAT_COROUTINE_G(peak_count) = CAT_COROUTINE_G(count);
     }
-    cat_debug(COROUTINE, "Start (active_count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(active_count));
+    cat_debug(COROUTINE, "Start (count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(count));
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     CAT_ASSERT(transfer.data == NULL);
     transfer.data = coroutine->transfer_data;
@@ -210,8 +221,8 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     /* is finished */
     coroutine->state = CAT_COROUTINE_STATE_FINISHED;
     /* finished */
-    CAT_COROUTINE_G(active_count)--;
-    cat_debug(COROUTINE, "Finished (active_count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(active_count));
+    CAT_COROUTINE_G(count)--;
+    cat_debug(COROUTINE, "Finished (count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(count));
     /* yield to previous */
     cat_coroutine_t *previous_coroutine = coroutine->previous;
     CAT_ASSERT(previous_coroutine != NULL);
@@ -579,6 +590,7 @@ CAT_API cat_bool_t cat_coroutine_register_scheduler(cat_coroutine_t *coroutine)
     }
     coroutine->flags |= CAT_COROUTINE_FLAG_SCHEDULER;
     CAT_COROUTINE_G(scheduler) = coroutine;
+    CAT_COROUTINE_G(count)--;
 
     return cat_true;
 }
@@ -591,6 +603,7 @@ CAT_API cat_coroutine_t *cat_coroutine_unregister_scheduler(void)
         cat_update_last_error(CAT_EMISUSE, "No scheduler is available");
         return NULL;
     }
+    CAT_COROUTINE_G(count)++;
     CAT_COROUTINE_G(scheduler) = NULL;
     scheduler->flags ^= CAT_COROUTINE_FLAG_SCHEDULER;
 
@@ -693,7 +706,7 @@ CAT_API void cat_coroutine_lock(void)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
     coroutine->state = CAT_COROUTINE_STATE_LOCKED;
-    CAT_COROUTINE_G(active_count)--;
+    CAT_COROUTINE_G(count)--;
     cat_coroutine_yield_ez();
 }
 
@@ -704,7 +717,7 @@ CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine)
         return cat_false;
     }
     coroutine->state = CAT_COROUTINE_STATE_WAITING;
-    CAT_COROUTINE_G(active_count)++;
+    CAT_COROUTINE_G(count)++;
     if (!cat_coroutine_resume_ez(coroutine)) {
         cat_core_error_with_last(COROUTINE, "Unlock failed");
     }

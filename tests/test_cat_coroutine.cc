@@ -194,21 +194,21 @@ TEST(cat_coroutine, get_last_id_not_in_main)
     }, nullptr);
 }
 
-TEST(cat_coroutine, get_active_count_in_main)
+TEST(cat_coroutine, get_count_in_main)
 {
-    cat_coroutine_count_t active_count;
+    cat_coroutine_count_t count;
 
-    active_count = cat_coroutine_get_active_count();
-    ASSERT_EQ(CAT_COROUTINE_G(active_count), active_count);
+    count = cat_coroutine_get_count();
+    ASSERT_EQ(CAT_COROUTINE_G(count), count);
 }
 
-TEST(cat_coroutine, get_active_count_not_in_main)
+TEST(cat_coroutine, get_count_not_in_main)
 {
     cat_coroutine_run(nullptr, [](cat_data_t *data) {
-        cat_coroutine_count_t active_count;
+        cat_coroutine_count_t count;
 
-        active_count = cat_coroutine_get_active_count();
-        EXPECT_EQ(CAT_COROUTINE_G(active_count), active_count);
+        count = cat_coroutine_get_count();
+        EXPECT_EQ(CAT_COROUTINE_G(count), count);
         return CAT_COROUTINE_DATA_NULL;
     }, nullptr);
 }

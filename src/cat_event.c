@@ -199,7 +199,7 @@ CAT_API void cat_event_wait(void)
      * but there are still coroutines that have not finished
      * so we try to trigger the dead lock
     */
-    while (unlikely(CAT_COROUTINE_G(active_count) != 2 /* scheduler + main */)) {
+    while (unlikely(CAT_COROUTINE_G(count) > 1)) {
         cat_coroutine_lock();
     }
     /* dead lock was broken by some magic ways (we use while loop to fix it now, but we do not know if it is right) */
