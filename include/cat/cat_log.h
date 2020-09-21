@@ -36,20 +36,22 @@ typedef enum
     CAT_LOG_TYPES_UNFILTERABLE    = CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR,
 } cat_log_union_types_t;
 
-#define cat_log_helper(type, module_type, code, format, ...) do { \
-    if ( \
-        ((CAT_LOG_TYPE_##type & CAT_LOG_TYPES_UNFILTERABLE) == CAT_LOG_TYPE_##type) || \
-        ( \
-            ((CAT_LOG_TYPE_##type & CAT_G(log_types)) == CAT_LOG_TYPE_##type) && \
+#define cat_log_with_type(type, module_type, code, format, ...) do { \
+    if (( \
+            (((type) & CAT_G(log_types)) == (type)) && \
             ((CAT_MODULE_TYPE_##module_type & CAT_G(log_module_types)) == CAT_MODULE_TYPE_##module_type) \
-        ) \
+        ) || \
+        unlikely(((type) & CAT_LOG_TYPES_UNFILTERABLE) == (type)) \
     ) { \
         cat_log( \
-            CAT_LOG_TYPE_##type, CAT_MODULE_TYPE_##module_type, #module_type \
+            (type), CAT_MODULE_TYPE_##module_type, #module_type \
             CAT_SOURCE_POSITION_CC, code, format, ##__VA_ARGS__ \
         ); \
     } \
 } while (0)
+
+#define cat_log_helper(type, module_type, code, format, ...) \
+        cat_log_with_type(CAT_LOG_TYPE_##type, module_type, code, format, ##__VA_ARGS__)
 
 /* make MSVC happy */
 #define cat_log_helper_with_reason(type, module_type, code, reason, format, ...) \
