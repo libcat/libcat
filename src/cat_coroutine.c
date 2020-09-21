@@ -357,12 +357,12 @@ CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const
         return cat_false;
     }
     if (unlikely(coroutine == current_coroutine)) {
-        cat_update_last_error(UV_EBUSY, "Coroutine is running");
+        cat_update_last_error(CAT_EBUSY, "Coroutine is running");
         return cat_false;
     }
     if (coroutine != current_coroutine->previous) {
         if (unlikely(coroutine->previous != NULL)) {
-            cat_update_last_error(UV_EBUSY, "Coroutine is in progress");
+            cat_update_last_error(CAT_EBUSY, "Coroutine is in progress");
             return cat_false;
         }
         if (unlikely(coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER)) {
