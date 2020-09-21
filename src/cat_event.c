@@ -97,9 +97,10 @@ static void cat_event_forever_timer_callback(uv_timer_t *forever_timer)
 static cat_never_inline void cat_event_dead_lock(void)
 {
     uv_timer_t *dead_lock = CAT_EVENT_G(dead_lock);
+    cat_log_type_t type = CAT_COROUTINE_G(dead_lock_log_type);
     int error;
 
-    cat_warn_ex(EVENT, CAT_EDEADLK, "Dead lock: all coroutines are asleep");
+    cat_log_with_type(type, COROUTINE, CAT_EDEADLK, "Dead lock: all coroutines are asleep");
 
     error = uv_timer_init(cat_event_loop, dead_lock);
     if (unlikely(error != 0)) {
@@ -192,17 +193,20 @@ CAT_API cat_bool_t cat_event_scheduler_stop(void)
 
 CAT_API void cat_event_wait(void)
 {
-    /* usually, it will be unlocked by event scheduler */
-    cat_coroutine_lock();
-
-    /* we expect everything is over,
-     * but there are still coroutines that have not finished
-     * so we try to trigger the dead lock
-    */
-    while (unlikely(CAT_COROUTINE_G(count) > 1)) {
+    while (1) {
+        /* usually, it will be unlocked by event scheduler */
         cat_coroutine_lock();
+
+        if (unlikely(CAT_COROUTINE_G(count) > 1)) {
+            /* we expect everything is over,
+             * but there are still coroutines that have not finished
+             * so we try to trigger the dead lock */
+            cat_coroutine_yield_ez();
+            /* dead lock was broken by some magic ways */
+            continue;
+        }
+        break;
     }
-    /* dead lock was broken by some magic ways (we use while loop to fix it now, but we do not know if it is right) */
 }
 
 static cat_bool_t cat_event_do_defer_tasks(void)

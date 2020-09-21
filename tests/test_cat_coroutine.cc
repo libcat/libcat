@@ -596,3 +596,13 @@ TEST(cat_coroutine, resume_dead)
     EXPECT_EQ(coroutine.state, CAT_COROUTINE_STATE_DEAD);
     EXPECT_EQ(cat_coroutine_resume(&coroutine, nullptr), CAT_COROUTINE_DATA_ERROR);
 }
+
+TEST(cat_coroutine, dead_lock)
+{
+    cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();
+    cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_ERROR);
+
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield_ez(), "Dead lock");
+
+    cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type);
+}

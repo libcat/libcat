@@ -61,8 +61,9 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
     /* register coroutine wrapper */
     cat_coroutine_register_common_wrappers(cat_coroutine_resume_standard, NULL, (cat_data_t *) ~0);
 
-    /* init configurations */
+    /* init options */
     cat_coroutine_set_default_stack_size(CAT_COROUTINE_RECOMMENDED_STACK_SIZE);
+    cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_WARNING);
 
     /* init info */
     CAT_COROUTINE_G(last_id) = 0;
@@ -112,6 +113,12 @@ CAT_API cat_coroutine_stack_size_t cat_coroutine_set_default_stack_size(size_t s
     return original_size;
 }
 
+CAT_API cat_bool_t cat_coroutine_set_dead_lock_log_type(cat_log_type_t type)
+{
+    CAT_COROUTINE_G(dead_lock_log_type) = type;
+    return cat_true;
+}
+
 CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume)
 {
     cat_coroutine_resume_t origin_resume = cat_coroutine_resume;
@@ -147,6 +154,11 @@ CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine)
 CAT_API cat_coroutine_stack_size_t cat_coroutine_get_default_stack_size(void)
 {
     return CAT_COROUTINE_G(default_stack_size);
+}
+
+CAT_API cat_log_type_t cat_coroutine_get_dead_lock_log_type(void)
+{
+    return CAT_COROUTINE_G(dead_lock_log_type);
 }
 
 CAT_API cat_coroutine_t *cat_coroutine_get_current(void)

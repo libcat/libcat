@@ -185,6 +185,7 @@ typedef uint32_t cat_coroutine_count_t;
 CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     /* options */
     cat_coroutine_stack_size_t default_stack_size;
+    cat_log_type_t dead_lock_log_type;
     /* data */
     cat_data_t *null;
     cat_data_t *error;
@@ -200,7 +201,7 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     cat_coroutine_id_t last_id;
     cat_coroutine_count_t count;
     cat_coroutine_count_t peak_count;
-    /* watch-dog */
+    /* for watch-dog */
     cat_coroutine_round_t round;
 CAT_GLOBALS_STRUCT_END(cat_coroutine)
 
@@ -223,9 +224,12 @@ CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resum
 CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine);
 /* return the original stack size */
 CAT_API cat_coroutine_stack_size_t cat_coroutine_set_default_stack_size(size_t size);
+/* It is recommended to set to error or warning */
+CAT_API cat_bool_t cat_coroutine_set_dead_lock_log_type(cat_log_type_t type);
 
 /* globals */
 CAT_API cat_coroutine_stack_size_t cat_coroutine_get_default_stack_size(void);
+CAT_API cat_log_type_t cat_coroutine_get_dead_lock_log_type(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_current(void);
 CAT_API cat_coroutine_id_t cat_coroutine_get_current_id(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_main(void);
