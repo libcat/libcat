@@ -21,7 +21,7 @@
 TEST(cat_error, update_last_error_null)
 {
     testing::internal::CaptureStderr();
-    cat_update_last_error(CAT_UNKNOWN, NULL);
+    cat_update_last_error(CAT_UNKNOWN, nullptr);
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_EQ(output, "Sprintf last error message failed" CAT_EOL);
 }

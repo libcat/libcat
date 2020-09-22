@@ -22,11 +22,11 @@
 
 TEST(cat_ssl, socket_connect)
 {
-//    cat_socket_t *socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_TCP);
+//    cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
 //    DEFER(cat_socket_close(socket));
 //    ASSERT_TRUE(cat_socket_connect(socket, TEST_REMOTE_HTTPS_SERVER));
 //
-//    cat_ssl_t *ssl = cat_ssl_alloc(NULL);
+//    cat_ssl_t *ssl = cat_ssl_alloc(nullptr);
 //    ASSERT_NE(ssl, nullptr);
 //    DEFER(cat_ssl_free(ssl));
 //
@@ -35,7 +35,7 @@ TEST(cat_ssl, socket_connect)
 //
 //    ASSERT_TRUE(cat_ssl_set_host_name(ssl, TEST_REMOTE_HTTPS_SERVER_HOST));
 //
-//    const char *buffer = NULL;
+//    const char *buffer = nullptr;
 //    size_t length = 0;
 //    ssize_t n;
 

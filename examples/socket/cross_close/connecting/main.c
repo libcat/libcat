@@ -26,7 +26,7 @@ static cat_data_t *closer(cat_data_t *data)
     cat_info(TEST, "close the socket");
     cat_socket_close(socket);
 
-    return CAT_COROUTINE_DATA_NULL;
+    return NULL;
 }
 
 static void socket_connector(void)

@@ -117,9 +117,8 @@ typedef enum
 {
     /* built-in (0 ~ 7) */
     CAT_COROUTINE_OPCODE_NONE     = 0,
-    CAT_COROUTINE_OPCODE_NO_DATA  = 1 << 0, /* transfer data should be CAT_COROUTINE_NULL */
-    CAT_COROUTINE_OPCODE_CHECKED  = 1 << 1, /* checked if it is resumable */
-    CAT_COROUTINE_OPCODE_WAIT     = 1 << 2, /* wait for a specified coroutine to wake it up */
+    CAT_COROUTINE_OPCODE_CHECKED  = 1 << 0, /* checked if it is resumable */
+    CAT_COROUTINE_OPCODE_WAIT     = 1 << 1, /* wait for a specified coroutine to wake it up */
     /* for user (8 ~ 15) */
 #define CAT_COROUTINE_OPCODE_USR_GEN(XX) \
     CAT_COROUTINE_OPCODE_USR##XX = 1 << (XX + (16 - 1 - 8))
@@ -143,7 +142,6 @@ typedef uint64_t cat_coroutine_round_t;
 typedef uint32_t cat_coroutine_stack_size_t;
 
 typedef cat_data_t *(*cat_coroutine_function_t)(cat_data_t *data);
-typedef void (*cat_coroutine_easy_function_t)(void);
 
 typedef struct cat_coroutine_s
 {
@@ -177,7 +175,7 @@ typedef struct cat_coroutine_s
 #endif
 } cat_coroutine_t;
 
-typedef cat_data_t *(*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_data_t *data);
+typedef cat_bool_t (*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 
 #define CAT_COROUTINE_COUNT_FMT "%u"
 typedef uint32_t cat_coroutine_count_t;
@@ -186,9 +184,6 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     /* options */
     cat_coroutine_stack_size_t default_stack_size;
     cat_log_type_t dead_lock_log_type;
-    /* data */
-    cat_data_t *null;
-    cat_data_t *error;
     /* coroutines */
     cat_coroutine_t *current;
     cat_coroutine_t *main;
@@ -208,16 +203,12 @@ CAT_GLOBALS_STRUCT_END(cat_coroutine)
 extern CAT_API CAT_GLOBALS_DECLARE(cat_coroutine)
 
 #define CAT_COROUTINE_G(x)                   CAT_GLOBALS_GET(cat_coroutine, x)
-/* Notice: type conversion make it rval */
-#define CAT_COROUTINE_DATA_NULL              ((cat_data_t *) CAT_COROUTINE_G(null))
-#define CAT_COROUTINE_DATA_ERROR             ((cat_data_t *) CAT_COROUTINE_G(error))
 
 /* module initializers */
 CAT_API cat_bool_t cat_coroutine_module_init(void);
 CAT_API cat_bool_t cat_coroutine_runtime_init(void);
 
 /* register/options */
-CAT_API void cat_coroutine_register_common_wrappers(cat_coroutine_resume_t resume, cat_data_t *null, cat_data_t *error);
 /* return the original resume function ptr */
 CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume);
 /* return the original main coroutine ptr */
@@ -246,14 +237,13 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size);
 /* Notice: unless you set FLAG_MANUAL_CLOSE, or you need not close coroutine by yourself */
 CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine);
-/* switch */
+/* switch (internal) */
 CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const cat_data_t *data);
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data);
-CAT_API cat_data_t *cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data);
+/* switch (external) */
+CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 #define cat_coroutine_resume CAT_COROUTINE_G(resume)
-CAT_API cat_data_t *cat_coroutine_yield(cat_data_t *data);
-CAT_API cat_bool_t cat_coroutine_resume_ez(cat_coroutine_t *coroutine);
-CAT_API cat_bool_t cat_coroutine_yield_ez(void);
+CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval);
 
 /* properties */
 CAT_API cat_coroutine_id_t cat_coroutine_get_id(const cat_coroutine_t *coroutine);
@@ -288,11 +278,10 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who); CAT_INTERNAL
 /* lock */
 CAT_API cat_bool_t cat_coroutine_is_locked(cat_coroutine_t *coroutine); CAT_INTERNAL
 CAT_API void cat_coroutine_lock(void);                                  CAT_INTERNAL
-CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine);    CAT_INTERNAL
+CAT_API void cat_coroutine_unlock(cat_coroutine_t *coroutine);          CAT_INTERNAL
 
 /* helper */
 CAT_API cat_coroutine_t *cat_coroutine_run(cat_coroutine_t *coroutine, cat_coroutine_function_t function, cat_data_t *data);
-CAT_API cat_coroutine_t *cat_coroutine_run_ez(cat_coroutine_t *coroutine, cat_coroutine_easy_function_t function);
 
 #ifdef __cplusplus
 }

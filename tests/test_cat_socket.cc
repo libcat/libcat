@@ -657,7 +657,7 @@ int echo_tcp_server_port;
 
 TEST(cat_socket, echo_tcp_server)
 {
-    cat_coroutine_run_ez(nullptr, []() {
+    co([] {
         cat_socket_t server;
 
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
@@ -676,7 +676,7 @@ TEST(cat_socket, echo_tcp_server)
                 EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
                 break;
             }
-            cat_coroutine_run(nullptr, [](cat_data_t *data) {
+            cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
                 cat_socket_t *client = (cat_socket_t *) data;
 
                 while (true) {
@@ -696,9 +696,10 @@ TEST(cat_socket, echo_tcp_server)
 
                 cat_socket_close(client);
 
-                return CAT_COROUTINE_DATA_NULL;
+                return nullptr;
             }, client);
         }
+
         cat_socket_close(&server);
         echo_tcp_server = nullptr;
     });
@@ -784,12 +785,12 @@ TEST(cat_socket, send_yield)
             write_buffer,
             buffer_size
         };
-        cat_coroutine_run(&write_coroutine, [](cat_data_t *data) {
+        cat_coroutine_run(&write_coroutine, [](cat_data_t *data)->cat_data_t* {
             cat_coroutine_round_t round = cat_coroutine_get_current_round();
             struct write_context_s *context = (struct write_context_s *) data;
             EXPECT_TRUE(cat_socket_send(context->socket, context->buffer, context->length));
             EXPECT_GT(cat_coroutine_get_current_round(), round);
-            return CAT_COROUTINE_DATA_NULL;
+            return nullptr;
         }, &write_context);
     } while (0);
     char *read_buffer = (char *) cat_malloc(buffer_size);
@@ -811,12 +812,12 @@ TEST(cat_socket, query_remote_http_server)
     DEFER(cat_socket_close(&socket));
 
     /* invaild connect */
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
+    cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
         cat_time_sleep(0);
         EXPECT_FALSE(cat_socket_connect(socket, CAT_STRL("8.8.8.8"), 12345));
         EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
-        return CAT_COROUTINE_DATA_NULL;
+        return nullptr;
     }, &socket);
 
     ASSERT_TRUE(cat_socket_connect(&socket, TEST_REMOTE_HTTP_SERVER));
@@ -829,13 +830,13 @@ TEST(cat_socket, query_remote_http_server)
     )));
 
     /* invaild read */
-    cat_coroutine_run(nullptr, [](cat_data_t *data) {
+    cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
         char read_buffer[1];
         cat_time_sleep(0);
         EXPECT_EQ(cat_socket_recv(socket, CAT_STRS(read_buffer)), -1);
         EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
-        return CAT_COROUTINE_DATA_NULL;
+        return nullptr;
     }, &socket);
 
     do {
@@ -931,7 +932,7 @@ TEST(cat_socket, cancel_connect)
     co([&] {
         cat_time_sleep(0);
         ASSERT_FALSE(exited);
-        cat_coroutine_resume_ez(waiter);
+        cat_coroutine_resume(waiter, nullptr, nullptr);
     });
     ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
@@ -940,19 +941,19 @@ TEST(cat_socket, cancel_connect)
 TEST(cat_socket, dump_all)
 {
     // TODO: now all sockets are unavailable
-    cat_socket_t *tcp_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_TCP);
+    cat_socket_t *tcp_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     ASSERT_NE(nullptr, tcp_socket);
     DEFER(cat_socket_close(tcp_socket));
 
-    cat_socket_t *udp_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_UDP);
+    cat_socket_t *udp_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_UDP);
     ASSERT_NE(nullptr, udp_socket);
     DEFER(cat_socket_close(udp_socket));
 
-    cat_socket_t *pipe_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_PIPE);
+    cat_socket_t *pipe_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE);
     ASSERT_NE(nullptr, pipe_socket);
     DEFER(cat_socket_close(pipe_socket));
 
-    cat_socket_t *tty_socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_STDOUT);
+    cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
     ASSERT_NE(nullptr, tty_socket);
     DEFER(cat_socket_close(tty_socket));
 
@@ -970,6 +971,6 @@ TEST(cat_socket, dump_all)
 TEST(cat_socket, echo_tcp_server_shutdown)
 {
     SKIP_IF(echo_tcp_server == nullptr);
-    cat_coroutine_resume_ez(echo_tcp_server);
+    cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
     ASSERT_EQ(echo_tcp_server, nullptr);
 }

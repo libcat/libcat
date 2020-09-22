@@ -49,7 +49,7 @@ TEST(cat_time, msleep_cancel)
     co([&] {
         EXPECT_EQ(cat_time_msleep(5), 0);
         // cancel the sleep of main
-        cat_coroutine_resume_ez(waiter);
+        cat_coroutine_resume(waiter, nullptr, nullptr);
         done = true;
     });
     cat_msec_t s = cat_time_msec();

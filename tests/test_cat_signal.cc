@@ -51,7 +51,7 @@ TEST(cat_signal, wait_multi)
         co([&] {
             EXPECT_TRUE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
             if (++count == TEST_MAX_CONCURRENCY) {
-                cat_coroutine_resume_ez(coroutine);
+                cat_coroutine_resume(coroutine, nullptr, nullptr);
             }
         });
     }
@@ -83,7 +83,7 @@ TEST(cat_signal, cancel)
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     co([&] {
         cat_time_sleep(0);
-        cat_coroutine_resume_ez(waiter);
+        cat_coroutine_resume(waiter, nullptr, nullptr);
     });
     ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
     ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());

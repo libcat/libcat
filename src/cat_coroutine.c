@@ -58,8 +58,8 @@ CAT_API cat_bool_t cat_coroutine_module_init(void)
 
 CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 {
-    /* register coroutine wrapper */
-    cat_coroutine_register_common_wrappers(cat_coroutine_resume_standard, NULL, (cat_data_t *) ~0);
+    /* register coroutine resume */
+    cat_coroutine_register_resume(cat_coroutine_resume_standard);
 
     /* init options */
     cat_coroutine_set_default_stack_size(CAT_COROUTINE_RECOMMENDED_STACK_SIZE);
@@ -124,13 +124,6 @@ CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resum
     cat_coroutine_resume_t origin_resume = cat_coroutine_resume;
     cat_coroutine_resume = resume;
     return origin_resume;
-}
-
-CAT_API void cat_coroutine_register_common_wrappers(cat_coroutine_resume_t resume, cat_data_t *null, cat_data_t *error)
-{
-    cat_coroutine_register_resume(resume);
-    CAT_COROUTINE_G(null) = null;
-    CAT_COROUTINE_G(error) = error;
 }
 
 CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine)
@@ -377,13 +370,6 @@ CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const
         cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
         return cat_false;
     }
-    if (unlikely(
-        data != CAT_COROUTINE_DATA_NULL &&
-        (coroutine->opcodes & CAT_COROUTINE_OPCODE_NO_DATA)
-    )) {
-        cat_update_last_error(CAT_EMISUSE, "Unexpected non-empty coroutine data");
-        return cat_false;
-    }
 
     return cat_true;
 }
@@ -444,54 +430,35 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 #endif
 }
 
-CAT_API cat_data_t *cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data)
+CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
-    if (likely(!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED))) {
+    if (!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED)) {
         if (unlikely(!cat_coroutine_jump_precheck(coroutine, data))) {
-            return CAT_COROUTINE_DATA_ERROR;
+            return cat_false;
         }
     }
 
-    return cat_coroutine_jump(coroutine, data);
+    data = cat_coroutine_jump(coroutine, data);
+
+    if (retval != NULL) {
+        *retval = data;
+    } else {
+        CAT_ASSERT(data == NULL && "Unexpected non-empty data, resource may leak");
+    }
+
+    return cat_true;
 }
 
-CAT_API cat_data_t *cat_coroutine_yield(cat_data_t *data)
+CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current)->previous;
 
     if (unlikely(coroutine == NULL)) {
         cat_update_last_error(CAT_EMISUSE, "Coroutine has nowhere to go");
-        return CAT_COROUTINE_DATA_ERROR;
-    }
-
-    return cat_coroutine_resume(coroutine, data);
-}
-
-/* Notice: we must delete the opcode by (&=~) but not (=^)
- * because ERROR maybe returned by user after resumed (opcode has been reset) */
-
-CAT_API cat_bool_t cat_coroutine_resume_ez(cat_coroutine_t *coroutine)
-{
-    CAT_COROUTINE_G(current)->opcodes |= CAT_COROUTINE_OPCODE_NO_DATA;
-    cat_data_t *data = cat_coroutine_resume(coroutine, CAT_COROUTINE_DATA_NULL);
-    if (unlikely(data == CAT_COROUTINE_DATA_ERROR)) {
-        CAT_COROUTINE_G(current)->opcodes &= ~CAT_COROUTINE_OPCODE_NO_DATA;
         return cat_false;
     }
-    CAT_ASSERT(data == CAT_COROUTINE_DATA_NULL);
-    return cat_true;
-}
 
-CAT_API cat_bool_t cat_coroutine_yield_ez(void)
-{
-    CAT_COROUTINE_G(current)->opcodes |= CAT_COROUTINE_OPCODE_NO_DATA;
-    cat_data_t *data = cat_coroutine_yield(CAT_COROUTINE_DATA_NULL);
-    if (unlikely(data == CAT_COROUTINE_DATA_ERROR)) {
-        CAT_COROUTINE_G(current)->opcodes &= ~CAT_COROUTINE_OPCODE_NO_DATA;
-        return cat_false;
-    }
-    CAT_ASSERT(data == CAT_COROUTINE_DATA_NULL);
-    return cat_true;
+    return cat_coroutine_resume(coroutine, data, retval);
 }
 
 /* properties */
@@ -624,7 +591,7 @@ CAT_API cat_coroutine_t *cat_coroutine_unregister_scheduler(void)
 
 CAT_API cat_bool_t cat_coroutine_scheduler_run(cat_coroutine_t *scheduler)
 {
-    if (!cat_coroutine_resume_ez(scheduler)) {
+    if (!cat_coroutine_resume(scheduler, NULL, NULL)) {
         cat_update_last_error_with_previous("Resume schedule failed");
         return cat_false;
     }
@@ -687,7 +654,7 @@ CAT_API cat_coroutine_t *cat_coroutine_exchange_with_previous(void)
     /* make previous dangly  */
     previous_coroutine->previous = NULL;
     /* resume to previous (to be the root) */
-    if (!cat_coroutine_resume_ez(previous_coroutine)) {
+    if (!cat_coroutine_resume(previous_coroutine, NULL, NULL)) {
         cat_update_last_error_with_previous("Exchange failed: resume failed");
         return NULL;
     }
@@ -701,8 +668,8 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
 
     current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_WAIT;
     current_coroutine->waiter.coroutine = who;
-    if (unlikely(!cat_coroutine_yield_ez())) {
-        current_coroutine->opcodes &= ~CAT_COROUTINE_OPCODE_WAIT;
+    if (unlikely(!cat_coroutine_yield(NULL, NULL))) {
+        current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAIT;
         return cat_false;
     }
 
@@ -719,48 +686,41 @@ CAT_API void cat_coroutine_lock(void)
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
     coroutine->state = CAT_COROUTINE_STATE_LOCKED;
     CAT_COROUTINE_G(count)--;
-    cat_coroutine_yield_ez();
+    if (!cat_coroutine_yield(NULL, NULL)) {
+        cat_core_error_with_last(COROUTINE, "Lock coroutine failed");
+    }
+    CAT_COROUTINE_G(count)++;
 }
 
-CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine)
+CAT_API void cat_coroutine_unlock(cat_coroutine_t *coroutine)
 {
     if (coroutine->state != CAT_COROUTINE_STATE_LOCKED) {
-        cat_update_last_error(CAT_EINVAL, "Unlock an unlocked coroutine");
-        return cat_false;
+        cat_core_error(COROUTINE, "Unlock an unlocked coroutine");
     }
     coroutine->state = CAT_COROUTINE_STATE_WAITING;
-    CAT_COROUTINE_G(count)++;
-    if (!cat_coroutine_resume_ez(coroutine)) {
-        cat_core_error_with_last(COROUTINE, "Unlock failed");
+    if (!cat_coroutine_resume(coroutine, NULL, NULL)) {
+        cat_core_error_with_last(COROUTINE, "Unlock coroutine failed");
     }
-    return cat_true;
 }
 
 /* helper */
 
 CAT_API cat_coroutine_t *cat_coroutine_run(cat_coroutine_t *coroutine, cat_coroutine_function_t function, cat_data_t *data)
 {
+    cat_bool_t ret;
+
     coroutine = cat_coroutine_create(NULL, function);
-    if (likely(coroutine != NULL)) {
-        CAT_COROUTINE_G(current)->opcodes |= CAT_COROUTINE_OPCODE_NO_DATA;
-        if (unlikely(cat_coroutine_resume(coroutine, data) == CAT_COROUTINE_DATA_ERROR)) {
-            CAT_COROUTINE_G(current)->opcodes &= ~CAT_COROUTINE_OPCODE_NO_DATA;
-            cat_coroutine_close(coroutine);
-            return NULL;
-        }
+
+    if (unlikely(coroutine == NULL)) {
+        return NULL;
+    }
+
+    ret = cat_coroutine_resume(coroutine, data, NULL);
+
+    if (unlikely(!ret)) {
+        cat_coroutine_close(coroutine);
+        return NULL;
     }
 
     return coroutine;
-}
-
-static cat_data_t *cat_coroutine_easy_function_wrapper(cat_data_t *data)
-{
-    cat_coroutine_easy_function_t function = (cat_coroutine_easy_function_t) data;
-    function();
-    return CAT_COROUTINE_DATA_NULL;
-}
-
-CAT_API cat_coroutine_t *cat_coroutine_run_ez(cat_coroutine_t *coroutine, cat_coroutine_easy_function_t function)
-{
-    return cat_coroutine_run(coroutine, cat_coroutine_easy_function_wrapper, function);
 }

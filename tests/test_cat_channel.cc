@@ -168,11 +168,11 @@ TEST(cat_channel, pop_null)
         if (capacity == 0) {
             ASSERT_TRUE(cat_channel_has_producers(channel));
         }
-        ASSERT_TRUE(cat_channel_pop(channel, NULL, 0));
+        ASSERT_TRUE(cat_channel_pop(channel, nullptr, 0));
         ASSERT_TRUE(foo);
 
         co([&] {
-            ASSERT_TRUE(cat_channel_pop(channel, NULL, 0));
+            ASSERT_TRUE(cat_channel_pop(channel, nullptr, 0));
         });
         if (capacity == 0) {
             ASSERT_TRUE(cat_channel_has_consumers(channel));
@@ -198,7 +198,7 @@ TEST(cat_channel, cancel)
                 /* switch to main coroutine */
                 cat_time_sleep(0);
                 /* cancel the timeout of the main coroutine with resume instead of pop channnel */
-                cat_coroutine_resume_ez(coroutine);
+                cat_coroutine_resume(coroutine, nullptr, nullptr);
             }
         });
 
@@ -242,7 +242,7 @@ TEST(cat_channel, closing)
         ASSERT_TRUE(push_over);
 
         co([&] {
-            ASSERT_FALSE(cat_channel_pop(channel, NULL, 0));
+            ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
             ASSERT_TRUE(cat_channel_is_closing(channel));
             pop_over = true;
         });
@@ -289,7 +289,7 @@ TEST(cat_channel_unbuffered, pop_timeout)
 
     channel = cat_channel_create(&_channel, 0, 0, nullptr);
     DEFER(cat_channel_close(channel));
-    ASSERT_FALSE(cat_channel_pop(channel, NULL, 0));
+    ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
     ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
 }
 
@@ -623,7 +623,7 @@ TEST(cat_channel_select, cancel)
 
     co([=] {
         cat_time_sleep(0);
-        cat_coroutine_resume_ez(coroutine);
+        cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
 
     do {
@@ -635,7 +635,7 @@ TEST(cat_channel_select, cancel)
 
     co([=] {
         cat_time_sleep(0);
-        cat_coroutine_resume_ez(coroutine);
+        cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
 
     do {

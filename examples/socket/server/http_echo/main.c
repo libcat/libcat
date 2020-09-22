@@ -110,7 +110,7 @@ static cat_data_t *echo_server_accept_callback(cat_data_t *data)
     }
     _close:
     cat_socket_close(client);
-    return CAT_COROUTINE_DATA_NULL;
+    return NULL;
 }
 
 static void echo_server_run()

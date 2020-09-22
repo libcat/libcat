@@ -46,13 +46,13 @@ TEST(cat_env, base)
 
 TEST(cat_env, error)
 {
-    ASSERT_EQ(cat_env_get(NULL), nullptr);
+    ASSERT_EQ(cat_env_get(nullptr), nullptr);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    ASSERT_FALSE(cat_env_set("foo", NULL));
+    ASSERT_FALSE(cat_env_set("foo", nullptr));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    ASSERT_FALSE(cat_env_set(NULL, "foo"));
+    ASSERT_FALSE(cat_env_set(nullptr, "foo"));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    ASSERT_FALSE(cat_env_unset(NULL));
+    ASSERT_FALSE(cat_env_unset(nullptr));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 

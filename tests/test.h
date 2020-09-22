@@ -84,11 +84,11 @@ namespace testing
 
     static inline cat_coroutine_t *co(std::function<void(void)> function)
     {
-        return cat_coroutine_run(NULL, [](cat_data_t *data) {
+        return cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
             auto function = *((std::function<void(void)> *) data);
             function();
-            return CAT_COROUTINE_DATA_NULL;
-        }, (cat_data_t *) &function);
+            return nullptr;
+        }, &function);
     }
 
     static inline bool work(std::function<void(void)> function, cat_timeout_t timeout)
@@ -96,7 +96,7 @@ namespace testing
         return cat_work([](cat_data_t *data) {
             auto function = (std::function<void(void)> *) data;
             (*function)();
-        }, (cat_data_t *) &function, timeout);
+        }, &function, timeout);
     }
 
     /* common vars */

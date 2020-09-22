@@ -33,9 +33,7 @@ TEST(cat_event, is_running)
 
 TEST(cat_event, scheduler_function)
 {
-    ASSERT_EQ(CAT_COROUTINE_DATA_ERROR, cat_event_scheduler_function(nullptr));
-    ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
-    ASSERT_STREQ("Event loop is running", cat_get_last_error_message());
+    ASSERT_DEATH_IF_SUPPORTED(cat_event_scheduler_function(nullptr), "Event loop is running");
 }
 
 TEST(cat_event, defer)

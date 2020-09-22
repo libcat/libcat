@@ -137,8 +137,7 @@ CAT_API cat_data_t *cat_event_scheduler_function(cat_data_t *data)
     cat_coroutine_t *coroutine = NULL;
 
     if (CAT_EVENT_G(running)) {
-        cat_update_last_error(CAT_EMISUSE, "Event loop is running");
-        return CAT_COROUTINE_DATA_ERROR;
+        cat_error(EVENT, "Event loop is running");
     }
     if (loop == NULL) {
         cat_core_error(EVENT, "Event loop is not available");
@@ -154,15 +153,13 @@ CAT_API cat_data_t *cat_event_scheduler_function(cat_data_t *data)
         if (unlikely(!cat_coroutine_is_locked(coroutine))) {
             cat_event_dead_lock();
         } else {
-            if (unlikely(!cat_coroutine_unlock(coroutine))) {
-                cat_core_error_with_last(EVENT, "Unlock previous coroutine failed");
-            }
+            cat_coroutine_unlock(coroutine);
         }
     } while (CAT_COROUTINE_G(current)->previous == NULL); /* is_root */
 
     CAT_EVENT_G(running) = cat_false;
 
-    return CAT_COROUTINE_DATA_NULL;
+    return NULL;
 }
 
 CAT_API cat_bool_t cat_event_scheduler_run(void)
@@ -201,7 +198,7 @@ CAT_API void cat_event_wait(void)
             /* we expect everything is over,
              * but there are still coroutines that have not finished
              * so we try to trigger the dead lock */
-            cat_coroutine_yield_ez();
+            cat_coroutine_yield(NULL, NULL);
             /* dead lock was broken by some magic ways */
             continue;
         }
