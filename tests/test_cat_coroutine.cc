@@ -599,6 +599,44 @@ TEST(cat_coroutine, resume_dead)
     EXPECT_FALSE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
 }
 
+TEST(cat_coroutine, resume_process)
+{
+    co([] {
+        co([] {
+            cat_coroutine_t *coroutine = cat_coroutine_get_current();
+            ASSERT_FALSE(cat_coroutine_resume(
+                cat_coroutine_get_previous(
+                    cat_coroutine_get_previous(coroutine)
+                ), nullptr, nullptr
+            ));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+        });
+    });
+}
+
+TEST(cat_coroutine, resume_scheduler)
+{
+    ASSERT_FALSE(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+}
+
+
+TEST(cat_coroutine, wait)
+{
+    cat_coroutine_t *coroutine = cat_coroutine_get_current(), *waiter;
+
+    waiter = co([=] {
+        ASSERT_TRUE(cat_coroutine_wait_for(coroutine));
+    });
+
+    co([=] {
+        ASSERT_FALSE(cat_coroutine_resume(waiter, nullptr, nullptr));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+    });
+
+    ASSERT_TRUE(cat_coroutine_resume(waiter, nullptr, nullptr));
+}
+
 TEST(cat_coroutine, dead_lock)
 {
     cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();

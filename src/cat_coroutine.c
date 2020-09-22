@@ -321,11 +321,9 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
 
     if (stack == NULL) {
         cat_core_error(COROUTINE, "Unready coroutine or double close");
-        return;
     }
     if (unlikely(cat_coroutine_is_alive(coroutine))) {
-        cat_core_error(COROUTINE, "Unable to close a unfinished coroutine");
-        return;
+        cat_core_error(COROUTINE, "Unable to close an active coroutine");
     }
 #ifdef HAVE_VALGRIND
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
