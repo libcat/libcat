@@ -98,17 +98,17 @@ typedef enum
 typedef uint32_t cat_coroutine_flags_t;
 
 #define CAT_COROUTINE_STATE_MAP(XX) \
-    XX(INIT,     0) \
-    XX(READY,    1) \
-    XX(RUNNING,  2) \
-    XX(WAITING,  3) \
-    XX(FINISHED, 4) \
-    XX(LOCKED,   5) \
-    XX(DEAD,     6) \
+    XX(INIT,     0, "init") \
+    XX(READY,    1, "ready") \
+    XX(RUNNING,  2, "running") \
+    XX(WAITING,  3, "waiting") \
+    XX(FINISHED, 4, "finished") \
+    XX(LOCKED,   5, "locked") \
+    XX(DEAD,     6, "dead") \
 
 typedef enum
 {
-#define CAT_COROUTINE_STATE_GEN(name, value) CAT_ENUM_GEN(CAT_COROUTINE_STATE_, name, value)
+#define CAT_COROUTINE_STATE_GEN(name, value, unused) CAT_ENUM_GEN(CAT_COROUTINE_STATE_, name, value)
     CAT_COROUTINE_STATE_MAP(CAT_COROUTINE_STATE_GEN)
 #undef CAT_COROUTINE_STATE_GEN
 } cat_coroutine_state_t;

@@ -501,22 +501,10 @@ CAT_API cat_bool_t cat_coroutine_is_alive(const cat_coroutine_t *coroutine)
 
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state)
 {
-    switch (state)
-    {
-        case CAT_COROUTINE_STATE_INIT:
-            return "init";
-        case CAT_COROUTINE_STATE_READY:
-            return "ready";
-        case CAT_COROUTINE_STATE_RUNNING:
-            return "running";
-        case CAT_COROUTINE_STATE_WAITING:
-            return "waiting";
-        case CAT_COROUTINE_STATE_FINISHED:
-            return "finished";
-        case CAT_COROUTINE_STATE_LOCKED:
-            return "locked";
-        case CAT_COROUTINE_STATE_DEAD:
-            return "dead";
+    switch (state) {
+#define CAT_COROUTINE_STATE_NAME_GEN(name, unused, value) case CAT_COROUTINE_STATE_##name: return value;
+    CAT_COROUTINE_STATE_MAP(CAT_COROUTINE_STATE_NAME_GEN)
+#undef CAT_COROUTINE_STATE_NAME_GEN
     }
     CAT_NEVER_HERE(COROUTINE, "Unknown state %d", state);
 }
