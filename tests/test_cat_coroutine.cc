@@ -620,7 +620,6 @@ TEST(cat_coroutine, resume_scheduler)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
 }
 
-
 TEST(cat_coroutine, wait)
 {
     cat_coroutine_t *coroutine = cat_coroutine_get_current(), *waiter;

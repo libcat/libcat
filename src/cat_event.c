@@ -147,6 +147,7 @@ CAT_API cat_data_t *cat_event_scheduler_function(cat_data_t *data)
 
     /* exchange */
     coroutine = cat_coroutine_exchange_with_previous();
+
     /* run event loop */
     do {
         cat_event_run(loop);
