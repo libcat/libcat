@@ -238,7 +238,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 /* Notice: unless you set FLAG_MANUAL_CLOSE, or you need not close coroutine by yourself */
 CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine);
 /* switch (internal) */
-CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const cat_data_t *data);
+CAT_API cat_bool_t cat_coroutine_jump_precheck(const cat_coroutine_t *coroutine);
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data);
 /* switch (external) */
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);

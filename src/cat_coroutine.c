@@ -339,9 +339,13 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
     cat_sys_free(stack);
 }
 
-CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const cat_data_t *data)
+CAT_API cat_bool_t cat_coroutine_jump_precheck(const cat_coroutine_t *coroutine)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+
+    if (coroutine == current_coroutine->previous) {
+        return cat_true;
+    }
 
     if (unlikely(!cat_coroutine_is_available(coroutine))) {
         cat_update_last_error(CAT_ESRCH, "Coroutine is not available");
@@ -351,15 +355,13 @@ CAT_API cat_bool_t cat_coroutine_jump_precheck(cat_coroutine_t *coroutine, const
         cat_update_last_error(CAT_EBUSY, "Coroutine is running");
         return cat_false;
     }
-    if (coroutine != current_coroutine->previous) {
-        if (unlikely(coroutine->previous != NULL)) {
-            cat_update_last_error(CAT_EBUSY, "Coroutine is in progress");
-            return cat_false;
-        }
-        if (unlikely(coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER)) {
-            cat_update_last_error(CAT_EMISUSE, "Resume scheduler coroutine is not allowed");
-            return cat_false;
-        }
+    if (unlikely(coroutine->previous != NULL)) {
+        cat_update_last_error(CAT_EBUSY, "Coroutine is in progress");
+        return cat_false;
+    }
+    if (unlikely(coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER)) {
+        cat_update_last_error(CAT_EMISUSE, "Resume scheduler coroutine is not allowed");
+        return cat_false;
     }
     if (unlikely(
         (coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) &&
@@ -430,8 +432,8 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
-    if (!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED)) {
-        if (unlikely(!cat_coroutine_jump_precheck(coroutine, data))) {
+    if (likely(!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED))) {
+        if (unlikely(!cat_coroutine_jump_precheck(coroutine))) {
             return cat_false;
         }
     }
@@ -450,13 +452,18 @@ CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat
 CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current)->previous;
+    cat_bool_t ret;
 
     if (unlikely(coroutine == NULL)) {
         cat_update_last_error(CAT_EMISUSE, "Coroutine has nowhere to go");
         return cat_false;
     }
 
-    return cat_coroutine_resume(coroutine, data, retval);
+    ret = cat_coroutine_resume(coroutine, data, retval);
+
+    CAT_ASSERT(ret);
+
+    return ret;
 }
 
 /* properties */
