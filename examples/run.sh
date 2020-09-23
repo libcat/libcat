@@ -11,6 +11,7 @@ work_dir="${__DIR__}/$1"
 
 gcc \
 -g \
+-DHAVE_LIBCAT=1 \
 -DCAT_MAGIC_BACKLOG=8192 \
 -DCAT_MAGIC_PORT=9764 \
 -I "${__PROJECT__}/include" \
