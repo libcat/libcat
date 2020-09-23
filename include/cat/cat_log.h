@@ -88,9 +88,6 @@ typedef enum
 #define cat_core_error_with_last(module_type, format, ...)            cat_log_helper_with_reason(CORE_ERROR, module_type, cat_get_last_error_code(), cat_get_last_error_message(), format, ##__VA_ARGS__); abort() /* make IDE happy */
 #define cat_core_error_with_reason(module_type, code, format, ...)    cat_log_helper_with_reason(CORE_ERROR, module_type, code, cat_strerror(code), format, ##__VA_ARGS__); abort() /* make IDE happy */
 
-#define CAT_NEVER_HERE(module_type, reason, ...) \
-    cat_core_error(module_type, reason, ##__VA_ARGS__)
-
 #define cat_syscall_failure(type, module_type, format, ...) do { \
     cat_errno_t _error = cat_translate_sys_error(cat_sys_errno); \
     cat_log_helper(type, module_type, _error, format " (syscall failure " CAT_ERRNO_FMT ": %s)", ##__VA_ARGS__, _error, cat_strerror(_error)); \

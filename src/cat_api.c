@@ -62,7 +62,7 @@ CAT_API cat_bool_t cat_run(cat_run_mode run_mode)
             return cat_event_scheduler_run();
         }
     }
-    CAT_NEVER_HERE(CORE, "Unknown run mode");
+    CAT_NEVER_HERE("Unknown run mode");
 }
 
 CAT_API void cat_stop(void)

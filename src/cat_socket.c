@@ -492,7 +492,7 @@ static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_in
                     address_info->length = sizeof(cat_sockaddr_in6_t);
                     break;
                 default:
-                    CAT_NEVER_HERE(SOCKET, "Must be INET");
+                    CAT_NEVER_HERE("Must be INET");
             }
         }
         switch (address->common.sa_family) {
@@ -503,7 +503,7 @@ static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_in
                 socket->type |= CAT_SOCKET_TYPE_FLAG_IPV6;
                 break;
             default:
-                CAT_NEVER_HERE(SOCKET, "Unknown destination family");
+                CAT_NEVER_HERE("Unknown destination family");
         }
 
         return cat_true;
@@ -2280,7 +2280,7 @@ CAT_API const char *cat_socket_io_state_name(cat_socket_io_flags_t io_state)
         case CAT_SOCKET_IO_FLAG_NONE:
             return "idle";
     }
-    CAT_NEVER_HERE(SOCKET, "Unknown IO flags");
+    CAT_NEVER_HERE("Unknown IO flags");
 }
 
 CAT_API const char *cat_socket_io_state_naming(cat_socket_io_flags_t io_state)
@@ -2305,7 +2305,7 @@ CAT_API const char *cat_socket_io_state_naming(cat_socket_io_flags_t io_state)
         case CAT_SOCKET_IO_FLAG_NONE:
             return "idle";
     }
-    CAT_NEVER_HERE(SOCKET, "Unknown IO flags");
+    CAT_NEVER_HERE("Unknown IO flags");
 }
 
 CAT_API cat_socket_io_flags_t cat_socket_get_io_state(const cat_socket_t *socket)

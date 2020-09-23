@@ -233,7 +233,7 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     CAT_ASSERT(previous_coroutine != NULL);
     cat_coroutine_jump(previous_coroutine, transfer.data);
     /* never here */
-    CAT_NEVER_HERE(COROUTINE, "Coroutine is dead");
+    CAT_NEVER_HERE("Coroutine is dead");
 }
 
 CAT_API void cat_coroutine_init(cat_coroutine_t *coroutine)
@@ -506,7 +506,7 @@ CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state)
     CAT_COROUTINE_STATE_MAP(CAT_COROUTINE_STATE_NAME_GEN)
 #undef CAT_COROUTINE_STATE_NAME_GEN
     }
-    CAT_NEVER_HERE(COROUTINE, "Unknown state %d", state);
+    CAT_NEVER_HERE("Unknown state");
 }
 
 CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *coroutine)
