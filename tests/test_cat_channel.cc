@@ -484,7 +484,7 @@ TEST(cat_channel_select, base)
         auto push = [&]() {
             cat_bool_t data;
             for (int n = 2; n--;) {
-                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH }};
+                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
                 data = cat_true;
                 response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                 ASSERT_NE(response, nullptr);
@@ -495,7 +495,7 @@ TEST(cat_channel_select, base)
         auto pop = [&]() {
             cat_bool_t data;
             for (int n = 2; n--;) {
-                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP }};
+                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
                 data = cat_false;
                 response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                 ASSERT_NE(response, nullptr);
@@ -519,7 +519,7 @@ TEST(cat_channel_select, base)
                 ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
             }
             for (auto opcode : std::array<cat_channel_opcode_t, 2>{ CAT_CHANNEL_OPCODE_PUSH, CAT_CHANNEL_OPCODE_POP }) {
-                *requests = { &channel, &data, opcode };
+                *requests = { &channel, &data, opcode, cat_false };
                 for (int n = 2; n--;) {
                     response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                     ASSERT_EQ(response->channel, &channel);
@@ -541,8 +541,8 @@ TEST(cat_channel_select, unbuffered)
         cat_channel_t *channel, read_channel, write_channel;
         cat_bool_t read_data = cat_false, write_data = cat_true;
         cat_channel_select_request_t requests[] = {
-            { &read_channel, &read_data, CAT_CHANNEL_OPCODE_POP },
-            { &write_channel, &write_data, CAT_CHANNEL_OPCODE_PUSH }
+            { &read_channel, &read_data, CAT_CHANNEL_OPCODE_POP, cat_false },
+            { &write_channel, &write_data, CAT_CHANNEL_OPCODE_PUSH, cat_false }
         };
         cat_channel_select_response_t *response;
         bool push_over = false, pop_over = false;
@@ -598,14 +598,14 @@ TEST(cat_channel_select, timeout)
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH }};
+        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
     } while (0);
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP }};
+        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
@@ -627,7 +627,7 @@ TEST(cat_channel_select, cancel)
     });
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH }};
+        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
@@ -639,7 +639,7 @@ TEST(cat_channel_select, cancel)
     });
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP }};
+        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
