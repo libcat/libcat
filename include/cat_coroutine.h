@@ -143,13 +143,15 @@ typedef uint32_t cat_coroutine_stack_size_t;
 
 typedef cat_data_t *(*cat_coroutine_function_t)(cat_data_t *data);
 
-typedef struct cat_coroutine_s
+typedef struct cat_coroutine_s cat_coroutine_t;
+
+struct cat_coroutine_s
 {
     /* id is always the first member (readonly, invariant) */
     cat_coroutine_id_t id;
     /* for queue (internal) */
     union {
-        struct cat_coroutine_s *coroutine;
+        cat_coroutine_t *coroutine;
         cat_queue_node_t node;
     } waiter;
     /* invariant info (readonly) */
@@ -159,8 +161,8 @@ typedef struct cat_coroutine_s
     cat_coroutine_state_t state;
     cat_coroutine_opcodes_t opcodes; /* (writable) will be reset before resume */
     cat_coroutine_round_t round;
-    struct cat_coroutine_s *from CAT_UNSAFE;
-    struct cat_coroutine_s *previous;
+    cat_coroutine_t *from CAT_UNSAFE;
+    cat_coroutine_t *previous;
     /* internal properties (readonly) */
     cat_coroutine_stack_t *stack;
     cat_coroutine_stack_size_t stack_size;
@@ -173,7 +175,7 @@ typedef struct cat_coroutine_s
 #ifdef HAVE_VALGRIND
     uint32_t valgrind_stack_id;
 #endif
-} cat_coroutine_t;
+};
 
 typedef cat_bool_t (*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 
