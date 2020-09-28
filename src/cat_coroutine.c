@@ -102,6 +102,14 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 
     /* scheduler */
     CAT_COROUTINE_G(scheduler) = NULL;
+    cat_queue_init(&CAT_COROUTINE_G(waiters));
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void)
+{
+    CAT_ASSERT(cat_queue_empty(&CAT_COROUTINE_G(waiters)));
 
     return cat_true;
 }
@@ -162,6 +170,37 @@ CAT_API cat_coroutine_t *cat_coroutine_get_current(void)
 CAT_API cat_coroutine_id_t cat_coroutine_get_current_id(void)
 {
     return CAT_COROUTINE_G(current)->id;
+}
+
+CAT_API cat_coroutine_t *cat_coroutine_get_by_index(cat_coroutine_count_t index)
+{
+    cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
+    cat_coroutine_count_t count = 0;
+
+    while (coroutine->previous != NULL) {
+        count++;
+        coroutine = coroutine->previous;
+    }
+
+    if (index != 0) {
+        /* overflow */
+        if (index > count) {
+            return NULL;
+        }
+        /* re-loop */
+        coroutine = CAT_COROUTINE_G(current);
+        count -= index;
+        while (count--) {
+            coroutine = coroutine->previous;
+        }
+    }
+
+    return coroutine;
+}
+
+CAT_API cat_coroutine_t *cat_coroutine_get_root(void)
+{
+    return cat_coroutine_get_by_index(0);
 }
 
 CAT_API cat_coroutine_t *cat_coroutine_get_main(void)
@@ -461,7 +500,7 @@ CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 
     ret = cat_coroutine_resume(coroutine, data, retval);
 
-    CAT_ASSERT(ret);
+    CAT_ASSERT(ret && "Yield never fail");
 
     return ret;
 }
@@ -554,76 +593,151 @@ CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *corouti
 
 /* scheduler */
 
-CAT_API cat_bool_t cat_coroutine_register_scheduler(cat_coroutine_t *coroutine)
+CAT_API cat_bool_t cat_coroutine_is_scheduler(const cat_coroutine_t *coroutine)
 {
-    if (CAT_COROUTINE_G(scheduler) != NULL) {
-        cat_update_last_error(CAT_EMISUSE, "Only one scheduler coroutine is allowed in the same thread");
-        return cat_false;
-    }
-    coroutine->flags |= CAT_COROUTINE_FLAG_SCHEDULER;
+    return coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER;
+}
+
+static void cat_coroutine_dead_lock(cat_coroutine_dead_lock_function_t dead_lock)
+{
+    cat_log_type_t type = CAT_COROUTINE_G(dead_lock_log_type);
+
+    cat_log_with_type(type, COROUTINE, CAT_EDEADLK, "Dead lock: all coroutines are asleep");
+
+    if (dead_lock != NULL) {
+        dead_lock();
+    } else while (usleep(60 * 1000 * 1000) == 0);
+}
+
+static cat_data_t *cat_coroutine_scheduler_function(cat_data_t *data)
+{
+    cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
+    cat_coroutine_scheduler_t scheduler = *((cat_coroutine_scheduler_t *) data);
+
     CAT_COROUTINE_G(scheduler) = coroutine;
     CAT_COROUTINE_G(count)--;
 
-    return cat_true;
+    cat_coroutine_yield(NULL, NULL);
+
+    while (cat_coroutine_is_scheduler(coroutine)) {
+
+        scheduler.schedule();
+
+        if (CAT_COROUTINE_G(count) > 0) {
+            /* we expect everything is done,
+             * but there are still coroutines that have not finished
+             * so we try to trigger the dead lock */
+            cat_coroutine_dead_lock(scheduler.dead_lock);
+            /* dead lock failed or it was broken by some magic ways */
+            continue;
+        }
+
+        /* notify waiters */
+        cat_coroutine_notify_all();
+    }
+
+    CAT_COROUTINE_G(count)++;
+    CAT_COROUTINE_G(scheduler) = NULL;
+
+    return NULL;
 }
 
-CAT_API cat_coroutine_t *cat_coroutine_unregister_scheduler(void)
+CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine, const cat_coroutine_scheduler_t *scheduler)
 {
-    cat_coroutine_t *scheduler = CAT_COROUTINE_G(scheduler);
+    if (CAT_COROUTINE_G(scheduler) != NULL) {
+        cat_update_last_error(CAT_EMISUSE, "Only one scheduler coroutine is allowed in the same thread");
+        return NULL;
+    }
 
-    if (scheduler == NULL) {
+    /* let scheduler id be 0 */
+    do {
+        cat_coroutine_id_t last_id = CAT_COROUTINE_G(last_id);
+        CAT_COROUTINE_G(last_id) = 0;
+        coroutine = cat_coroutine_create(coroutine, (cat_data_t *) scheduler);
+        CAT_COROUTINE_G(last_id) = last_id;
+    } while (0);
+
+    if (coroutine == NULL) {
+        cat_update_last_error_with_previous("Create event scheduler failed");
+        return NULL;
+    }
+
+    /* hook scheduler function */
+    do {
+        cat_coroutine_function_t function = coroutine->function;
+        coroutine->function = cat_coroutine_scheduler_function;
+        (void) cat_coroutine_resume(coroutine, function, NULL);
+        CAT_ASSERT(cat_coroutine_is_alive(coroutine));
+    } while (0);
+
+    CAT_ASSERT(CAT_COROUTINE_G(scheduler) != NULL);
+
+    /* mark it as scheduler */
+    coroutine->flags |= CAT_COROUTINE_FLAG_SCHEDULER;
+
+    /* let it be the new root */
+    cat_coroutine_get_root()->previous = coroutine;
+
+    return coroutine;
+}
+
+CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void)
+{
+    cat_coroutine_t *coroutine = CAT_COROUTINE_G(scheduler);
+
+    if (coroutine == NULL) {
         cat_update_last_error(CAT_EMISUSE, "No scheduler is available");
         return NULL;
     }
-    CAT_COROUTINE_G(count)++;
-    CAT_COROUTINE_G(scheduler) = NULL;
-    scheduler->flags ^= CAT_COROUTINE_FLAG_SCHEDULER;
 
-    return scheduler;
+    cat_coroutine_wait();
+
+    /* remove it from the root */
+    cat_coroutine_get_by_index(1)->previous = NULL;
+
+    /* to stop it from the loop */
+    coroutine->flags ^= CAT_COROUTINE_FLAG_SCHEDULER;
+
+    (void) cat_coroutine_resume(coroutine, NULL, NULL);
+
+    CAT_ASSERT(CAT_COROUTINE_G(scheduler) == NULL);
+
+    return coroutine;
 }
 
-CAT_API cat_bool_t cat_coroutine_scheduler_run(cat_coroutine_t *scheduler)
+CAT_API cat_bool_t cat_coroutine_wait(void)
 {
-    if (!cat_coroutine_resume(scheduler, NULL, NULL)) {
-        cat_update_last_error_with_previous("Resume schedule failed");
-        return cat_false;
-    }
-    if (!cat_coroutine_is_alive(scheduler)) {
-        cat_update_last_error(CAT_UNKNOWN, "Run scheduler failed by unknwon reason");
-        return cat_false;
-    }
-    if (!cat_coroutine_register_scheduler(scheduler)) {
-        cat_update_last_error_with_previous("Register scheduler failed");
+    cat_bool_t ret;
+
+    cat_queue_push_back(&CAT_COROUTINE_G(waiters), &CAT_COROUTINE_G(current)->waiter.node);
+
+    /* usually, it will be unlocked by event scheduler */
+    ret = cat_coroutine_lock();
+
+    cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
+
+    if (!ret) {
+        cat_update_last_error_with_previous("Wait lock failed");
         return cat_false;
     }
 
     return cat_true;
 }
 
-CAT_API cat_coroutine_t *cat_coroutine_scheduler_stop(void)
+CAT_API void cat_coroutine_notify_all(void)
 {
-    cat_coroutine_t *scheduler = cat_coroutine_unregister_scheduler();
-    cat_bool_t manual_close; /* if not, scheduler will be inaccessible after exchange */
+    cat_queue_t *waiters = &CAT_COROUTINE_G(waiters);
+    cat_coroutine_t *coroutine;
 
-    if (scheduler == NULL) {
-        cat_update_last_error_with_previous("Unregister scheduler failed");
-        return NULL;
-    }
-    if (!cat_coroutine_is_alive(scheduler)) {
-        cat_update_last_error(CAT_EMISUSE, "Scheduler is not running");
-        return NULL;
-    }
-    manual_close = !!(scheduler->flags & CAT_COROUTINE_FLAG_MANUAL_CLOSE);
-    if (cat_coroutine_exchange_with_previous() != scheduler) {
-        cat_update_last_error_with_previous("Exchange scheduler failed");
-        return NULL;
-    }
-    if (manual_close && cat_coroutine_is_available(scheduler)) {
-        cat_update_last_error(CAT_UNKNOWN, "Unexpected status of scheduler (still avilable)");
-        return NULL;
-    }
+    while ((coroutine = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node))) {
+        cat_bool_t ret;
 
-    return scheduler;
+        ret = cat_coroutine_unlock(coroutine);
+
+        if (!ret) {
+            cat_core_error_with_last(COROUTINE, "Notify failed");
+        }
+    }
 }
 
 /* special */
@@ -633,35 +747,17 @@ CAT_API void cat_coroutine_disable_auto_close(cat_coroutine_t *coroutine)
     coroutine->flags |= CAT_COROUTINE_FLAG_MANUAL_CLOSE;
 }
 
-CAT_API cat_coroutine_t *cat_coroutine_exchange_with_previous(void)
-{
-    cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
-    cat_coroutine_t *previous_coroutine = current_coroutine->previous;
-
-    if (previous_coroutine == NULL) {
-        cat_update_last_error(CAT_EMISUSE, "Exchange failed: no coroutine to exchange");
-        return NULL;
-    }
-    /* exchange scheduling order */
-    current_coroutine->previous = previous_coroutine->previous;
-    /* make previous dangly  */
-    previous_coroutine->previous = NULL;
-    /* resume to previous (to be the root) */
-    if (!cat_coroutine_resume(previous_coroutine, NULL, NULL)) {
-        cat_update_last_error_with_previous("Exchange failed: resume failed");
-        return NULL;
-    }
-
-    return previous_coroutine;
-}
-
 CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+    cat_bool_t ret;
 
     current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_WAIT;
     current_coroutine->waiter.coroutine = who;
-    if (unlikely(!cat_coroutine_yield(NULL, NULL))) {
+
+    ret = cat_coroutine_yield(NULL, NULL);
+
+    if (unlikely(!ret)) {
         current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAIT;
         return cat_false;
     }
@@ -669,31 +765,43 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_coroutine_is_locked(cat_coroutine_t *coroutine)
-{
-    return coroutine->state == CAT_COROUTINE_STATE_LOCKED;
-}
-
-CAT_API void cat_coroutine_lock(void)
+CAT_API cat_bool_t cat_coroutine_lock(void)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
+    cat_bool_t ret;
+
     coroutine->state = CAT_COROUTINE_STATE_LOCKED;
     CAT_COROUTINE_G(count)--;
-    if (!cat_coroutine_yield(NULL, NULL)) {
-        cat_core_error_with_last(COROUTINE, "Lock coroutine failed");
-    }
+
+    ret = cat_coroutine_yield(NULL, NULL);
+
     CAT_COROUTINE_G(count)++;
+    coroutine->state = CAT_COROUTINE_STATE_WAITING;
+
+    if (!ret) {
+        cat_update_last_error_with_previous("Lock coroutine failed");
+        return cat_false;
+    }
+
+    return cat_true;
 }
 
-CAT_API void cat_coroutine_unlock(cat_coroutine_t *coroutine)
+CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine)
 {
+    cat_bool_t ret;
+
     if (coroutine->state != CAT_COROUTINE_STATE_LOCKED) {
-        cat_core_error(COROUTINE, "Unlock an unlocked coroutine");
+        cat_update_last_error(CAT_EINVAL, "Unlock an unlocked coroutine");
+        return cat_false;
     }
-    coroutine->state = CAT_COROUTINE_STATE_WAITING;
-    if (!cat_coroutine_resume(coroutine, NULL, NULL)) {
-        cat_core_error_with_last(COROUTINE, "Unlock coroutine failed");
-    }
+
+    coroutine->opcodes |= CAT_COROUTINE_OPCODE_CHECKED;
+
+    ret = cat_coroutine_resume(coroutine, NULL, NULL);
+
+    CAT_ASSERT(ret && "Unlock never fail");
+
+    return cat_true;
 }
 
 /* helper */

@@ -19,23 +19,6 @@
 
 #include "test.h"
 
-#include <thread>
-#include <chrono>
-
-#ifdef CAT_OS_UNIX_LIKE
-#include <sched.h>
-#endif
-
-TEST(cat_event, is_running)
-{
-    ASSERT_TRUE(cat_event_is_running());
-}
-
-TEST(cat_event, scheduler_function)
-{
-    ASSERT_DEATH_IF_SUPPORTED(cat_event_scheduler_function(nullptr), "Event loop is running");
-}
-
 TEST(cat_event, defer)
 {
     bool done = false;

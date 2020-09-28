@@ -413,37 +413,22 @@ TEST(cat_coroutine, get_elapsed_not_init)
     ASSERT_EQ(0, cat_coroutine_get_elapsed(coroutine));
 }
 
-TEST(cat_coroutine, unregister_scheduler)
+TEST(cat_coroutine, scheduler_run_duplicated)
 {
-    cat_coroutine_t *origin_scheduler;
-
-    origin_scheduler = cat_coroutine_unregister_scheduler();
-    ASSERT_EQ(nullptr, cat_coroutine_get_scheduler());
-
-    /* register origin scheduler */
-    ASSERT_TRUE(cat_coroutine_register_scheduler(origin_scheduler));
+    SKIP_IF(cat_coroutine_get_scheduler() == NULL);
+    ASSERT_EQ(cat_coroutine_scheduler_run(nullptr, nullptr), nullptr);
+    ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
 }
 
-TEST(cat_coroutine, unregister_scheduler_double)
+TEST(cat_coroutine, scheduler_stop_duplicated)
 {
-    cat_coroutine_t *origin_scheduler;
+    cat_coroutine_t *origin_scheduler = CAT_COROUTINE_G(scheduler);
+    CAT_COROUTINE_G(scheduler) = NULL;
+    DEFER(CAT_COROUTINE_G(scheduler) = origin_scheduler);
 
-    origin_scheduler = cat_coroutine_unregister_scheduler();
-    ASSERT_EQ(nullptr, cat_coroutine_unregister_scheduler());;
+    ASSERT_EQ(cat_coroutine_scheduler_close(), nullptr);
     ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
     ASSERT_STREQ("No scheduler is available", cat_get_last_error_message());
-
-    /* register origin scheduler */
-    ASSERT_TRUE(cat_coroutine_register_scheduler(origin_scheduler));
-}
-
-TEST(cat_coroutine, register_scheduler_double)
-{
-    if (cat_coroutine_get_scheduler()) {
-        ASSERT_FALSE(cat_coroutine_register_scheduler(nullptr));
-        ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
-        ASSERT_STREQ("Only one scheduler coroutine is allowed in the same thread", cat_get_last_error_message());
-    }
 }
 
 TEST(cat_coroutine, wait_for)
@@ -476,7 +461,8 @@ TEST(cat_coroutine, unlock_unlocked_coroutine)
     });
     DEFER(cat_coroutine_close(new_coroutine));
 
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_unlock(new_coroutine), "Unlock an unlocked coroutine");
+    ASSERT_FALSE(cat_coroutine_unlock(new_coroutine));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
 TEST(cat_coroutine, register_resume)

@@ -192,6 +192,7 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     cat_coroutine_t _main;
     /* scheduler */
     cat_coroutine_t *scheduler;
+    cat_queue_t waiters;
     /* functions */
     cat_coroutine_resume_t resume;
     /* info */
@@ -209,6 +210,7 @@ extern CAT_API CAT_GLOBALS_DECLARE(cat_coroutine)
 /* module initializers */
 CAT_API cat_bool_t cat_coroutine_module_init(void);
 CAT_API cat_bool_t cat_coroutine_runtime_init(void);
+CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void);
 
 /* register/options */
 /* return the original resume function ptr */
@@ -225,6 +227,8 @@ CAT_API cat_coroutine_stack_size_t cat_coroutine_get_default_stack_size(void);
 CAT_API cat_log_type_t cat_coroutine_get_dead_lock_log_type(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_current(void);
 CAT_API cat_coroutine_id_t cat_coroutine_get_current_id(void);
+CAT_API cat_coroutine_t *cat_coroutine_get_by_index(cat_coroutine_count_t index);
+CAT_API cat_coroutine_t *cat_coroutine_get_root(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_main(void);
 CAT_API cat_coroutine_t *cat_coroutine_get_scheduler(void);
 CAT_API cat_coroutine_id_t cat_coroutine_get_last_id(void);
@@ -267,20 +271,27 @@ CAT_API cat_msec_t cat_coroutine_get_elapsed(const cat_coroutine_t *coroutine);
 CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *coroutine);
 
 /* scheduler */
-CAT_API cat_bool_t cat_coroutine_register_scheduler(cat_coroutine_t *coroutine); CAT_INTERNAL
-CAT_API cat_coroutine_t *cat_coroutine_unregister_scheduler(void);               CAT_INTERNAL
-CAT_API cat_bool_t cat_coroutine_scheduler_run(cat_coroutine_t *scheduler);      CAT_INTERNAL
-CAT_API cat_coroutine_t *cat_coroutine_scheduler_stop(void);                     CAT_INTERNAL
+typedef void (*cat_coroutine_schedule_function_t)(void);
+typedef void (*cat_coroutine_dead_lock_function_t)(void);
+typedef struct {
+    cat_coroutine_schedule_function_t schedule;
+    cat_coroutine_dead_lock_function_t dead_lock;
+} cat_coroutine_scheduler_t;
+CAT_API cat_bool_t cat_coroutine_is_scheduler(const cat_coroutine_t *coroutine);
+CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine, const cat_coroutine_scheduler_t *scheduler); CAT_INTERNAL
+CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void); CAT_INTERNAL
+
+/* sync */
+CAT_API cat_bool_t cat_coroutine_wait(void);
+CAT_API void cat_coroutine_notify_all(void); CAT_INTERNAL
 
 /* special */
 CAT_API void cat_coroutine_disable_auto_close(cat_coroutine_t *coroutine);
-CAT_API cat_coroutine_t *cat_coroutine_exchange_with_previous(void); CAT_INTERNAL
 /* take a nap, wait for sb to wake it up */
 CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who); CAT_INTERNAL
 /* lock */
-CAT_API cat_bool_t cat_coroutine_is_locked(cat_coroutine_t *coroutine); CAT_INTERNAL
-CAT_API void cat_coroutine_lock(void);                                  CAT_INTERNAL
-CAT_API void cat_coroutine_unlock(cat_coroutine_t *coroutine);          CAT_INTERNAL
+CAT_API cat_bool_t cat_coroutine_lock(void);                         CAT_INTERNAL
+CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine); CAT_INTERNAL
 
 /* helper */
 CAT_API cat_coroutine_t *cat_coroutine_run(cat_coroutine_t *coroutine, cat_coroutine_function_t function, cat_data_t *data);

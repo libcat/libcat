@@ -42,7 +42,6 @@ public:
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
 
         ASSERT_NE(cat_coroutine_get_current(), nullptr);
-        ASSERT_TRUE(cat_event_is_running());
     }
 
     virtual void TearDown()
