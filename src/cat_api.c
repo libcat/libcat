@@ -44,13 +44,11 @@ CAT_API cat_bool_t cat_shutdown_all(void)
 {
     cat_bool_t ret = cat_true;
 
-    ret = ret &&
-          cat_watch_dog_runtime_shutdown() &&
-          cat_event_runtime_shutdown() &&
-          cat_runtime_shutdown();
+    ret = cat_watch_dog_runtime_shutdown() && ret;
+    ret = cat_event_runtime_shutdown() && ret;
+    ret = cat_runtime_shutdown() && ret;
 
-    ret = ret &&
-          cat_module_shutdown();
+    ret = cat_module_shutdown();
 
     return ret;
 }
