@@ -268,9 +268,7 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     CAT_COROUTINE_G(count)--;
     cat_debug(COROUTINE, "Finished (count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(count));
     /* yield to previous */
-    cat_coroutine_t *previous_coroutine = coroutine->previous;
-    CAT_ASSERT(previous_coroutine != NULL);
-    cat_coroutine_jump(previous_coroutine, transfer.data);
+    cat_coroutine_yield(transfer.data, NULL);
     /* never here */
     CAT_NEVER_HERE("Coroutine is dead");
 }
