@@ -102,8 +102,8 @@ typedef uint32_t cat_coroutine_flags_t;
     XX(READY,    1, "ready") \
     XX(RUNNING,  2, "running") \
     XX(WAITING,  3, "waiting") \
-    XX(FINISHED, 4, "finished") \
-    XX(LOCKED,   5, "locked") \
+    XX(LOCKED,   4, "locked") \
+    XX(FINISHED, 5, "finished") \
     XX(DEAD,     6, "dead") \
 
 typedef enum

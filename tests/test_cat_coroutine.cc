@@ -333,8 +333,8 @@ TEST(cat_coroutine, state_name)
     ASSERT_STREQ("ready", cat_coroutine_state_name(CAT_COROUTINE_STATE_READY));
     ASSERT_STREQ("running", cat_coroutine_state_name(CAT_COROUTINE_STATE_RUNNING));
     ASSERT_STREQ("waiting", cat_coroutine_state_name(CAT_COROUTINE_STATE_WAITING));
-    ASSERT_STREQ("finished", cat_coroutine_state_name(CAT_COROUTINE_STATE_FINISHED));
     ASSERT_STREQ("locked", cat_coroutine_state_name(CAT_COROUTINE_STATE_LOCKED));
+    ASSERT_STREQ("finished", cat_coroutine_state_name(CAT_COROUTINE_STATE_FINISHED));
     ASSERT_STREQ("dead", cat_coroutine_state_name(CAT_COROUTINE_STATE_DEAD));
 }
 

@@ -434,7 +434,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     CAT_COROUTINE_G(current) = coroutine;
     /* update state */
     if (current_coroutine->state == CAT_COROUTINE_STATE_RUNNING) {
-        /* maybe finished or locked */
+        /* maybe locked or finished */
         current_coroutine->state = CAT_COROUTINE_STATE_WAITING;
     }
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
@@ -530,12 +530,12 @@ CAT_API cat_coroutine_stack_size_t cat_coroutine_get_stack_size(const cat_corout
 
 CAT_API cat_bool_t cat_coroutine_is_available(const cat_coroutine_t *coroutine)
 {
-    return coroutine->state < CAT_COROUTINE_STATE_FINISHED && coroutine->state > CAT_COROUTINE_STATE_INIT;
+    return coroutine->state < CAT_COROUTINE_STATE_LOCKED && coroutine->state > CAT_COROUTINE_STATE_INIT;
 }
 
 CAT_API cat_bool_t cat_coroutine_is_alive(const cat_coroutine_t *coroutine)
 {
-    return coroutine->state < CAT_COROUTINE_STATE_FINISHED && coroutine->state > CAT_COROUTINE_STATE_READY;
+    return coroutine->state < CAT_COROUTINE_STATE_LOCKED && coroutine->state > CAT_COROUTINE_STATE_READY;
 }
 
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state)
