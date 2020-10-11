@@ -76,7 +76,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         cat_coroutine_t *main_coroutine = &CAT_COROUTINE_G(_main);
         main_coroutine->id = CAT_COROUTINE_MAIN_ID;
         main_coroutine->start_time = cat_time_msec();
-        main_coroutine->flags = CAT_COROUTINE_FLAG_ON_STACK;
+        main_coroutine->flags = CAT_COROUTINE_FLAG_NONE;
         main_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
         main_coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
         main_coroutine->round = ++CAT_COROUTINE_G(round);
@@ -301,11 +301,8 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     real_stack_size = coroutine ? stack_size : (stack_size - sizeof(cat_coroutine_t));
     stack_end = (cat_coroutine_stack_t *) (((char *) stack) + real_stack_size);
     /* determine the position of the coroutine */
-    if (!coroutine) {
+    if (coroutine == NULL) {
         coroutine = (cat_coroutine_t *) stack_end;
-        coroutine->flags = CAT_COROUTINE_FLAG_NONE;
-    } else {
-        coroutine->flags = CAT_COROUTINE_FLAG_ON_STACK;
     }
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -330,6 +327,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #endif
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
+    coroutine->flags = CAT_COROUTINE_FLAG_NONE;
     coroutine->state = CAT_COROUTINE_STATE_READY;
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     coroutine->round = 0;
@@ -396,10 +394,6 @@ CAT_API cat_bool_t cat_coroutine_jump_precheck(const cat_coroutine_t *coroutine)
         cat_update_last_error(CAT_EBUSY, "Coroutine is in progress");
         return cat_false;
     }
-    if (unlikely(coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER)) {
-        cat_update_last_error(CAT_EMISUSE, "Resume scheduler coroutine is not allowed");
-        return cat_false;
-    }
     if (unlikely(
         (coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) &&
         (current_coroutine != coroutine->waiter.coroutine)
@@ -440,27 +434,23 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
-    /* resume */
+    /* jump */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = data;
     cat_coroutine_context_jump(&current_coroutine->context, &coroutine->context);
 #else
     cat_coroutine_transfer_t transfer = cat_coroutine_context_jump(coroutine->context, data);
 #endif
+    /* get from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
+    /* close the coroutine if it is finished */
     if (unlikely(coroutine->state == CAT_COROUTINE_STATE_FINISHED)) {
-        if (!(coroutine->flags & CAT_COROUTINE_FLAG_MANUAL_CLOSE)) {
-            cat_coroutine_close(coroutine);
-        }
-        /* we can not set `from` to NULL here, because third-party wrapper may use it later */
+        cat_coroutine_close(coroutine);
     }
+    /* update the context and return transfer data */
 #ifndef CAT_COROUTINE_USE_UCONTEXT
-    else {
-        /* update context */
-        current_coroutine->from->context = transfer.from_context;
-    }
-
+    current_coroutine->from->context = transfer.from_context;
     return transfer.data;
 #else
     return current_coroutine->transfer_data;
@@ -591,11 +581,6 @@ CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *corouti
 
 /* scheduler */
 
-CAT_API cat_bool_t cat_coroutine_is_scheduler(const cat_coroutine_t *coroutine)
-{
-    return coroutine->flags & CAT_COROUTINE_FLAG_SCHEDULER;
-}
-
 static void cat_coroutine_dead_lock(cat_coroutine_dead_lock_function_t dead_lock)
 {
     cat_log_type_t type = CAT_COROUTINE_G(dead_lock_log_type);
@@ -617,7 +602,7 @@ static cat_data_t *cat_coroutine_scheduler_function(cat_data_t *data)
 
     cat_coroutine_yield(NULL, NULL);
 
-    while (cat_coroutine_is_scheduler(coroutine)) {
+    while (coroutine == cat_coroutine_get_root()) {
 
         scheduler.schedule();
 
@@ -670,9 +655,6 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine,
 
     CAT_ASSERT(CAT_COROUTINE_G(scheduler) != NULL);
 
-    /* mark it as scheduler */
-    coroutine->flags |= CAT_COROUTINE_FLAG_SCHEDULER;
-
     /* let it be the new root */
     cat_coroutine_get_root()->previous = coroutine;
 
@@ -692,9 +674,6 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void)
 
     /* remove it from the root */
     cat_coroutine_get_by_index(1)->previous = NULL;
-
-    /* to stop it from the loop */
-    coroutine->flags ^= CAT_COROUTINE_FLAG_SCHEDULER;
 
     (void) cat_coroutine_resume(coroutine, NULL, NULL);
 
@@ -739,11 +718,6 @@ CAT_API void cat_coroutine_notify_all(void)
 }
 
 /* special */
-
-CAT_API void cat_coroutine_disable_auto_close(cat_coroutine_t *coroutine)
-{
-    coroutine->flags |= CAT_COROUTINE_FLAG_MANUAL_CLOSE;
-}
 
 CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
 {

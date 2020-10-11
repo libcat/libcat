@@ -509,26 +509,6 @@ TEST(cat_coroutine, data)
         for (; n < 10; n++) {
             EXPECT_TRUE(cat_coroutine_yield((cat_data_t *) (intptr_t) n, nullptr));
         }
-        return (cat_data_t *) (intptr_t) n;
-    });
-    ASSERT_NE(coroutine, nullptr);
-    cat_coroutine_disable_auto_close(coroutine);
-    DEFER(cat_coroutine_close(coroutine););
-    int n = 0;
-    do {
-        cat_data_t *data;
-        EXPECT_TRUE(cat_coroutine_resume(coroutine, nullptr, &data));
-        EXPECT_EQ((int) (intptr_t) data, n++);
-    } while (cat_coroutine_is_available(coroutine));
-}
-
-TEST(cat_coroutine, data_with_auto_close)
-{
-    cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        int n = 0;
-        for (; n < 10; n++) {
-            EXPECT_TRUE(cat_coroutine_yield((cat_data_t *) (intptr_t) n, nullptr));
-        }
         return (cat_data_t *) (intptr_t) -1;
     });
     int n = 0;
@@ -542,24 +522,7 @@ TEST(cat_coroutine, data_with_auto_close)
     }
 }
 
-TEST(cat_coroutine, stack)
-{
-    cat_coroutine_t coroutine;
-    cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* {
-        return (cat_data_t *) "OK";
-    });
-    cat_coroutine_disable_auto_close(&coroutine);
-    DEFER(
-        cat_coroutine_close(&coroutine);
-        ASSERT_EQ(coroutine.state, CAT_COROUTINE_STATE_DEAD);
-    );
-    cat_data_t *data;
-    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, &data));
-    ASSERT_STREQ("OK", (const char *) data);
-    ASSERT_EQ(coroutine.state, CAT_COROUTINE_STATE_FINISHED);
-}
-
-TEST(cat_coroutine, stack_with_auto_close)
+TEST(cat_coroutine, stacked)
 {
     cat_coroutine_t coroutine;
     cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* {

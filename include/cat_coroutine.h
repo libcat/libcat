@@ -78,9 +78,6 @@ typedef uint64_t cat_coroutine_id_t;
 typedef enum
 {
     CAT_COROUTINE_FLAG_NONE = 0,
-    CAT_COROUTINE_FLAG_ON_STACK = 1 << 0,
-    CAT_COROUTINE_FLAG_MANUAL_CLOSE = 1 << 1,
-    CAT_COROUTINE_FLAG_SCHEDULER = 1 << 2,
     /* for user */
 #define CAT_COROUTINE_FLAG_USR_GEN(XX) \
     CAT_COROUTINE_FLAG_USR##XX = 1 << (XX + (32 - 1 - 8))
@@ -277,7 +274,6 @@ typedef struct {
     cat_coroutine_schedule_function_t schedule;
     cat_coroutine_dead_lock_function_t dead_lock;
 } cat_coroutine_scheduler_t;
-CAT_API cat_bool_t cat_coroutine_is_scheduler(const cat_coroutine_t *coroutine);
 CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine, const cat_coroutine_scheduler_t *scheduler); CAT_INTERNAL
 CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void); CAT_INTERNAL
 
@@ -286,7 +282,6 @@ CAT_API cat_bool_t cat_coroutine_wait(void);
 CAT_API void cat_coroutine_notify_all(void); CAT_INTERNAL
 
 /* special */
-CAT_API void cat_coroutine_disable_auto_close(cat_coroutine_t *coroutine);
 /* take a nap, wait for sb to wake it up */
 CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who); CAT_INTERNAL
 /* lock */
