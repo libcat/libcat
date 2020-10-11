@@ -526,6 +526,11 @@ CAT_API cat_bool_t cat_coroutine_is_alive(const cat_coroutine_t *coroutine)
     return coroutine->state < CAT_COROUTINE_STATE_LOCKED && coroutine->state > CAT_COROUTINE_STATE_READY;
 }
 
+CAT_API cat_bool_t cat_coroutine_is_over(const cat_coroutine_t *coroutine)
+{
+    return coroutine->state >= CAT_COROUTINE_STATE_FINISHED;
+}
+
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state)
 {
     switch (state) {

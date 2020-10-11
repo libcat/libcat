@@ -257,6 +257,7 @@ CAT_API cat_coroutine_stack_size_t cat_coroutine_get_stack_size(const cat_corout
 /* status */
 CAT_API cat_bool_t cat_coroutine_is_available(const cat_coroutine_t *coroutine);
 CAT_API cat_bool_t cat_coroutine_is_alive(const cat_coroutine_t *coroutine);
+CAT_API cat_bool_t cat_coroutine_is_over(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state);
 CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine);
