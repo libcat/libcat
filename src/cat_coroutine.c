@@ -371,37 +371,6 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
     cat_sys_free(stack);
 }
 
-CAT_API cat_bool_t cat_coroutine_jump_precheck(const cat_coroutine_t *coroutine)
-{
-    cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
-
-    if (coroutine == current_coroutine->previous) {
-        return cat_true;
-    }
-
-    if (unlikely(!cat_coroutine_is_available(coroutine))) {
-        cat_update_last_error(CAT_ESRCH, "Coroutine is not available");
-        return cat_false;
-    }
-    if (unlikely(coroutine == current_coroutine)) {
-        cat_update_last_error(CAT_EBUSY, "Coroutine is running");
-        return cat_false;
-    }
-    if (unlikely(coroutine->previous != NULL)) {
-        cat_update_last_error(CAT_EBUSY, "Coroutine is in progress");
-        return cat_false;
-    }
-    if (unlikely(
-        (coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) &&
-        (current_coroutine != coroutine->waiter.coroutine)
-    )) {
-        cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
@@ -411,7 +380,12 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine->from = current_coroutine;
     /* solve origin */
     if (current_coroutine->previous == coroutine) {
-        /* if it is yield, break the origin */
+        /* if it is yield, update current state to waiting */
+        if (current_coroutine->state == CAT_COROUTINE_STATE_RUNNING) {
+            /* maybe locked or finished */
+            current_coroutine->state = CAT_COROUTINE_STATE_WAITING;
+        }
+        /* break the origin */
         current_coroutine->previous = NULL;
     } else {
         /* it is not yield */
@@ -422,10 +396,6 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* swap ptr */
     CAT_COROUTINE_G(current) = coroutine;
     /* update state */
-    if (current_coroutine->state == CAT_COROUTINE_STATE_RUNNING) {
-        /* maybe locked or finished */
-        current_coroutine->state = CAT_COROUTINE_STATE_WAITING;
-    }
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
     /* reset the opcode */
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
@@ -435,29 +405,62 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = data;
     cat_coroutine_context_jump(&current_coroutine->context, &coroutine->context);
+    data = current_coroutine->transfer_data;
 #else
     cat_coroutine_transfer_t transfer = cat_coroutine_context_jump(coroutine->context, data);
+    data = transfer.data;
 #endif
-    /* get from */
+    /* handle from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
+#ifndef CAT_COROUTINE_USE_UCONTEXT
+    /* update the from context */
+    coroutine->context = transfer.from_context;
+#endif
     /* close the coroutine if it is finished */
     if (unlikely(coroutine->state == CAT_COROUTINE_STATE_FINISHED)) {
         cat_coroutine_close(coroutine);
     }
-    /* update the context and return transfer data */
-#ifndef CAT_COROUTINE_USE_UCONTEXT
-    current_coroutine->from->context = transfer.from_context;
-    return transfer.data;
-#else
-    return current_coroutine->transfer_data;
-#endif
+
+    return data;
+}
+
+CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
+{
+    cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+
+    if (coroutine == current_coroutine->previous) {
+        return cat_true;
+    }
+
+    switch (coroutine->state) {
+        case CAT_COROUTINE_STATE_WAITING:
+        case CAT_COROUTINE_STATE_READY:
+            break;
+        case CAT_COROUTINE_STATE_RUNNING:
+            cat_update_last_error(CAT_EBUSY, "Coroutine is running");
+            return cat_false;
+        case CAT_COROUTINE_STATE_LOCKED:
+            cat_update_last_error(CAT_ELOCKED, "Coroutine is locked");
+            return cat_false;
+        default:
+            cat_update_last_error(CAT_ESRCH, "Coroutine is not available");
+            return cat_false;
+    }
+
+    if (unlikely((coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) &&
+                 (current_coroutine != coroutine->waiter.coroutine))) {
+        cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
+        return cat_false;
+    }
+
+    return cat_true;
 }
 
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
     if (likely(!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED))) {
-        if (unlikely(!cat_coroutine_jump_precheck(coroutine))) {
+        if (unlikely(!cat_coroutine_is_resumable(coroutine))) {
             return cat_false;
         }
     }
@@ -657,6 +660,8 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine,
 
     CAT_ASSERT(CAT_COROUTINE_G(scheduler) != NULL);
 
+    /* let it be in running state */
+    coroutine->state = CAT_COROUTINE_STATE_RUNNING;
     /* let it be the new root */
     cat_coroutine_get_root()->previous = coroutine;
 
@@ -676,6 +681,9 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void)
 
     /* remove it from the root */
     cat_coroutine_get_by_index(1)->previous = NULL;
+    /* let it be in waiting state
+     * (TODO: remove this line if we do not do check before internal resume ?) */
+    coroutine->state = CAT_COROUTINE_STATE_WAITING;
 
     (void) cat_coroutine_resume(coroutine, NULL, NULL);
 

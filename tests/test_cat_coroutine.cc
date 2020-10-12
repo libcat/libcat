@@ -566,7 +566,7 @@ TEST(cat_coroutine, resume_process)
 TEST(cat_coroutine, resume_scheduler)
 {
     ASSERT_FALSE(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
 }
 
 TEST(cat_coroutine, wait)

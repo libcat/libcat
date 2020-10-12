@@ -114,7 +114,7 @@ typedef enum
 {
     /* built-in (0 ~ 7) */
     CAT_COROUTINE_OPCODE_NONE     = 0,
-    CAT_COROUTINE_OPCODE_CHECKED  = 1 << 0, /* checked if it is resumable */
+    CAT_COROUTINE_OPCODE_CHECKED  = 1 << 0, /* we have already checked if it is resumable */
     CAT_COROUTINE_OPCODE_WAIT     = 1 << 1, /* wait for a specified coroutine to wake it up */
     /* for user (8 ~ 15) */
 #define CAT_COROUTINE_OPCODE_USR_GEN(XX) \
@@ -241,9 +241,9 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 /* Notice: unless you set FLAG_MANUAL_CLOSE, or you need not close coroutine by yourself */
 CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine);
 /* switch (internal) */
-CAT_API cat_bool_t cat_coroutine_jump_precheck(const cat_coroutine_t *coroutine);
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data);
 /* switch (external) */
+CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine);
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 #define cat_coroutine_resume CAT_COROUTINE_G(resume)
 CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval);
