@@ -534,21 +534,55 @@ TEST(cat_coroutine, stacked)
     ASSERT_EQ(coroutine.state, CAT_COROUTINE_STATE_DEAD);
 }
 
+TEST(cat_coroutine, is_x)
+{
+    cat_coroutine_t coroutine;
+    cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* {
+        EXPECT_TRUE(cat_coroutine_yield(nullptr, nullptr));
+        return nullptr;
+    });
+
+    ASSERT_TRUE(cat_coroutine_is_available(&coroutine));
+    ASSERT_FALSE(cat_coroutine_is_alive(&coroutine));
+    ASSERT_FALSE(cat_coroutine_is_over(&coroutine));
+
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_TRUE(cat_coroutine_is_available(&coroutine));
+    ASSERT_TRUE(cat_coroutine_is_alive(&coroutine));
+    ASSERT_FALSE(cat_coroutine_is_over(&coroutine));
+
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_FALSE(cat_coroutine_is_available(&coroutine));
+    ASSERT_TRUE(cat_coroutine_is_over(&coroutine));
+}
+
 TEST(cat_coroutine, resume_current)
 {
     ASSERT_FALSE(cat_coroutine_resume(cat_coroutine_get_current(), nullptr, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+}
+
+TEST(cat_coroutine, resume_locked)
+{
+    cat_coroutine_t *coroutine = co([] {
+        cat_coroutine_lock();
+    });
+
+    ASSERT_FALSE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+    ASSERT_TRUE(cat_coroutine_unlock(coroutine));
 }
 
 TEST(cat_coroutine, resume_dead)
 {
     cat_coroutine_t coroutine;
     cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* { return nullptr; });
-    EXPECT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
-    EXPECT_EQ(coroutine.state, CAT_COROUTINE_STATE_DEAD);
-    EXPECT_FALSE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_EQ(coroutine.state, CAT_COROUTINE_STATE_DEAD);
+    ASSERT_FALSE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
 }
 
-TEST(cat_coroutine, resume_process)
+TEST(cat_coroutine, resume_running)
 {
     co([] {
         co([] {
