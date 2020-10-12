@@ -118,6 +118,8 @@ CAT_API cat_bool_t cat_watch_dog_run(cat_watch_dog_t *watch_dog, cat_nsec_t quan
             return cat_false;
         }
         watch_dog->allocated = cat_true;
+    } else {
+        watch_dog->allocated = cat_false;
     }
 
     watch_dog->quantum = cat_watch_dog_align_quantum(quantum);
