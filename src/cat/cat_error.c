@@ -56,6 +56,11 @@ CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...)
     cat_set_last_error(code, message);
 }
 
+CAT_API void cat_set_last_error_code(cat_errno_t code)
+{
+    CAT_G(last_error).code = code;
+}
+
 CAT_API void cat_set_last_error(cat_errno_t code, char *message)
 {
     cat_error_t *last_error = &CAT_G(last_error);
