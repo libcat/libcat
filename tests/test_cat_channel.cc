@@ -227,6 +227,7 @@ TEST(cat_channel, closing)
         bool push_over = false, pop_over = false;
 
         channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
+        cat_channel_enable_reuse(channel); /* why we need it here? */
         DEFER(cat_channel_close(channel));
 
         if (capacity == 1) {
@@ -234,7 +235,8 @@ TEST(cat_channel, closing)
         }
         co([&] {
             ASSERT_FALSE(cat_channel_push(channel, &data, 0));
-            ASSERT_TRUE(cat_channel_is_closing(channel));
+            ASSERT_FALSE(cat_channel_is_available(channel));
+            ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
             push_over = true;
         });
         ASSERT_TRUE(cat_channel_has_producers(channel));
@@ -243,13 +245,34 @@ TEST(cat_channel, closing)
 
         co([&] {
             ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
-            ASSERT_TRUE(cat_channel_is_closing(channel));
+            ASSERT_FALSE(cat_channel_is_available(channel));
+            ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
             pop_over = true;
         });
         ASSERT_TRUE(cat_channel_has_consumers(channel));
         cat_channel_close(channel);
         ASSERT_TRUE(pop_over);
     }();
+}
+
+TEST(cat_channel, reuse)
+{
+    cat_channel_t *channel, _channel;
+    size_t data;
+
+    channel = cat_channel_create(&_channel, 1, sizeof(data), nullptr);
+    ASSERT_FALSE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_REUSE);
+    cat_channel_close(channel);
+    ASSERT_FALSE(cat_channel_push(channel, &data, -1));
+    ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
+    ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSED);
+
+    channel = cat_channel_create(&_channel, 1, sizeof(data), nullptr);
+    cat_channel_enable_reuse(channel);
+    DEFER(cat_channel_close(channel));
+    ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_REUSE);
+    cat_channel_close(channel);
+    ASSERT_TRUE(cat_channel_push(channel, &data, -1));
 }
 
 /* unbuffered {{{ */
@@ -524,8 +547,8 @@ TEST(cat_channel_select, base)
                     response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                     ASSERT_EQ(response->channel, &channel);
                     ASSERT_TRUE(response->error);
-                    ASSERT_TRUE(cat_channel_is_closing(response->channel));
-                    ASSERT_EQ(!tried ? CAT_ECANCELED : CAT_EINVAL, cat_get_last_error_code());
+                    ASSERT_FALSE(cat_channel_is_available(response->channel));
+                    ASSERT_EQ(!tried ? CAT_ECANCELED : CAT_ECLOSING, cat_get_last_error_code());
                     /* first try it would return ECANCELED, if you still tried to opreate it, it would return EINVAL */
                     tried = true;
                 }
