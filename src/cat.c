@@ -46,9 +46,6 @@ CAT_API cat_bool_t cat_module_init(void)
 
 CAT_API cat_bool_t cat_module_shutdown(void)
 {
-    /* errors may occurred outside of runtime */
-    cat_clear_last_error();
-
     return cat_true;
 }
 
@@ -64,8 +61,6 @@ CAT_API cat_bool_t cat_runtime_init(void)
 #ifdef CAT_DEBUG
     CAT_G(show_last_error) = cat_false;
 #endif
-    /* errors may occured outside of runtime */
-    cat_clear_last_error();
     memset(&CAT_G(last_error), 0, sizeof(CAT_G(last_error)));
 
 #ifdef CAT_DEBUG
