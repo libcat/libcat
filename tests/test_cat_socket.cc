@@ -201,7 +201,7 @@ TEST(cat_socket, cat_sockaddr_set_port_ip4)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
     expect_port = cat_socket_get_local_free_port();
-    ASSERT_TRUE(cat_sockaddr_set_port((cat_sockaddr_t * ) &info->address.common, expect_port));
+    ASSERT_TRUE(cat_sockaddr_set_port((cat_sockaddr_t *) &info->address.common, expect_port));
     actual_port = cat_sockaddr_get_port(&info->address.common);
     ASSERT_EQ(expect_port, actual_port);
 }
@@ -220,7 +220,7 @@ TEST(cat_socket, cat_sockaddr_set_port_ip6)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
     expect_port = cat_socket_get_local_free_port();
-    ASSERT_TRUE(cat_sockaddr_set_port((cat_sockaddr_t * ) &info->address.common, expect_port));
+    ASSERT_TRUE(cat_sockaddr_set_port((cat_sockaddr_t *) &info->address.common, expect_port));
     actual_port = cat_sockaddr_get_port(&info->address.common);
     ASSERT_EQ(expect_port, actual_port);
 }

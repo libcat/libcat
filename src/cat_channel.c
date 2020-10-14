@@ -44,7 +44,7 @@ typedef struct {
 CAT_STATIC_ASSERT(cat_offsize_of(cat_channel_dummy_coroutine_t, id) == cat_offsize_of(cat_coroutine_t, id));
 CAT_STATIC_ASSERT(cat_offsize_of(cat_channel_dummy_coroutine_t, waiter) == cat_offsize_of(cat_coroutine_t, waiter));
 
-static cat_always_inline cat_bool_t cat_channel__is_available(const cat_channel_t * channel)
+static cat_always_inline cat_bool_t cat_channel__is_available(const cat_channel_t *channel)
 {
     return !(channel->flags & (CAT_CHANNEL_FLAG_CLOSING | CAT_CHANNEL_FLAG_CLOSED));
 }
@@ -65,12 +65,12 @@ static cat_always_inline cat_bool_t cat_channel__is_unbuffered(const cat_channel
     return channel->capacity == 0;
 }
 
-static cat_always_inline cat_bool_t cat_channel__has_producers(const cat_channel_t * channel)
+static cat_always_inline cat_bool_t cat_channel__has_producers(const cat_channel_t *channel)
 {
     return !cat_queue_empty(&channel->producers);
 }
 
-static cat_always_inline cat_bool_t cat_channel__has_consumers(const cat_channel_t * channel)
+static cat_always_inline cat_bool_t cat_channel__has_consumers(const cat_channel_t *channel)
 {
     return !cat_queue_empty(&channel->consumers);
 }
@@ -587,69 +587,69 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
 
 /* status */
 
-CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t * channel)
+CAT_API cat_channel_size_t cat_channel_get_capacity(const cat_channel_t *channel)
 {
     return channel->capacity;
 }
 
-CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t * channel)
+CAT_API cat_channel_size_t cat_channel_get_length(const cat_channel_t *channel)
 {
     return channel->length;
 }
 
-CAT_API cat_bool_t cat_channel_is_available(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_available(const cat_channel_t *channel)
 {
     return cat_channel__is_available(channel);
 }
 
-CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_has_producers(const cat_channel_t *channel)
 {
     return cat_channel__has_producers(channel);
 }
 
-CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_has_consumers(const cat_channel_t *channel)
 {
     return cat_channel__has_consumers(channel);
 }
 
-CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_empty(const cat_channel_t *channel)
 {
     return cat_channel__is_empty(channel);
 }
 
-CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_full(const cat_channel_t *channel)
 {
     return cat_channel__is_full(channel);
 }
 
-CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_readable(const cat_channel_t *channel)
 {
     return cat_channel__is_readable(channel);
 }
 
-CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t * channel)
+CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t *channel)
 {
     return cat_channel__is_writable(channel);
 }
 
 /* special */
 
-CAT_API cat_channel_flags_t cat_channel_get_flags(const cat_channel_t * channel)
+CAT_API cat_channel_flags_t cat_channel_get_flags(const cat_channel_t *channel)
 {
     return channel->flags;
 }
 
-CAT_API void cat_channel_enable_reuse(cat_channel_t * channel)
+CAT_API void cat_channel_enable_reuse(cat_channel_t *channel)
 {
     channel->flags |= CAT_CHANNEL_FLAG_REUSE;
 }
 
-CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t * channel)
+CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t *channel)
 {
     return channel->dtor;
 }
 
-CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, cat_channel_data_dtor_t dtor)
+CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t *channel, cat_channel_data_dtor_t dtor)
 {
     cat_channel_data_dtor_t old_dtor = channel->dtor;
 
@@ -660,7 +660,7 @@ CAT_API cat_channel_data_dtor_t cat_channel_set_dtor(cat_channel_t * channel, ca
 
 /* ext */
 
-CAT_API cat_queue_t *cat_channel_get_storage(cat_channel_t * channel)
+CAT_API cat_queue_t *cat_channel_get_storage(cat_channel_t *channel)
 {
     if (unlikely(cat_channel__is_unbuffered(channel))) {
         return NULL;
