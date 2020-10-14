@@ -41,22 +41,6 @@ CAT_API cat_bool_t cat_module_init(void)
 
     CAT_GLOBALS_REGISTER(cat, CAT_GLOBALS_CTOR(cat), NULL);
 
-    do {
-        char *env;
-        env = cat_env_get("CAT_TPS");
-        if (env == NULL) {
-             env = cat_env_get("UV_THREADPOOL_SIZE");
-             if (env == NULL) {
-                 // TODO: default to cpu_num * 2
-                 // cat_env_set("UV_THREADPOOL_SIZE", "4");
-                 break;
-             }
-        } else {
-            cat_env_set("UV_THREADPOOL_SIZE", env);
-        }
-        cat_free(env);
-    } while (0);
-
     return cat_true;
 }
 
