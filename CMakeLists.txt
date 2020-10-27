@@ -23,6 +23,13 @@ if(QEMU)
     add_definitions(-D__QEMU__=1)
 endif()
 
+option(ASAN "Enable AddressSanitizer (ASan)" OFF)
+if(ASAN AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+  add_definitions(-D__ASAN__=1)
+  set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+  set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+endif()
+
 # Compiler check
 message(STATUS "C Compiler is ${CMAKE_C_COMPILER_ID}")
 string(CONCAT is-msvc $<OR:
@@ -50,6 +57,8 @@ check_c_compiler_flag(-Wno-unused-parameter CAT_LINT_NO_UNUSED_PARAMETER)
 check_c_compiler_flag(-Wstrict-prototypes CAT_LINT_STRICT_PROTOTYPES)
 check_c_compiler_flag(-Wextra CAT_LINT_EXTRA)
 
+check_c_compiler_flag(/utf-8 CAT_LINT_UTF8_MSVC)
+
 set(lint-no-unused-parameter $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER}>:-Wno-unused-parameter>)
 set(lint-strict-prototypes $<$<BOOL:${CAT_LINT_STRICT_PROTOTYPES}>:-Wstrict-prototypes>)
 set(lint-extra $<$<BOOL:${CAT_LINT_EXTRA}>:-Wextra>)
@@ -70,6 +79,7 @@ set(lint-no-unsafe-msvc $<$<BOOL:${CAT_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
 string(CONCAT lint-default $<
   $<AND:$<BOOL:${CAT_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
 >)
+set(lint-utf8-msvc $<$<BOOL:${CAT_LINT_UTF8_MSVC}>:/utf-8>)
 
 list(APPEND cat_cflags ${lint-strict-prototypes} ${lint-extra} ${lint-default} ${lint-w4})
 list(APPEND cat_cflags ${lint-no-unused-parameter})
@@ -84,6 +94,7 @@ list(APPEND cat_cflags ${lint-no-hides-param-msvc})
 list(APPEND cat_cflags ${lint-no-hides-global-msvc})
 list(APPEND cat_cflags ${lint-no-conditional-assignment-msvc})
 list(APPEND cat_cflags ${lint-no-unsafe-msvc})
+list(APPEND cat_cflags ${lint-utf8-msvc} )
 
 # ========== ASM ===========
 if (NOT MSVC)
@@ -263,7 +274,7 @@ if (1)
     list(APPEND cat_sources ${cat_context_sources})
 endif()
 
-# libuv dep /* $Id: 1c22b443802fdf3fcf3cfababcc62d13385242f2 $ */
+# libuv dep /* $Id: 97a903309f79d79496a2a1f95cbcce21bfc2f76e $ */
 if (1)
     set(uv_dir "deps/libuv")
 
@@ -283,6 +294,8 @@ if (1)
       list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0600)
       list(APPEND uv_libraries
            psapi
+           user32
+           advapi32
            iphlpapi
            userenv
            ws2_32)
@@ -314,7 +327,7 @@ if (1)
            ${uv_dir}/src/win/winsock.c)
     else()
       list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE)
-      if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|OS390")
+      if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|OS390|QNX")
         # TODO: This should be replaced with find_package(Threads) if possible
         # Android has pthread as part of its c library, not as a separate
         # libpthread.so.
@@ -355,6 +368,7 @@ if (1)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+      list(APPEND uv_defines _GNU_SOURCE)
       list(APPEND uv_libraries dl)
       list(APPEND uv_sources
            ${uv_dir}/src/unix/android-ifaddrs.c
@@ -413,12 +427,12 @@ if (1)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
-      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/netbsd.c)
+      list(APPEND uv_sources ${uv_dir}/src/unix/netbsd.c)
       list(APPEND uv_libraries kvm)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
-      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/openbsd.c)
+      list(APPEND uv_sources ${uv_dir}/src/unix/openbsd.c)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
@@ -454,14 +468,25 @@ if (1)
         ${uv_dir}/src/unix/aix-common.c
         ${uv_dir}/src/unix/ibmi.c
         ${uv_dir}/src/unix/no-fsevents.c
-        ${uv_dir}/src/unix/no-proctitle.c
         ${uv_dir}/src/unix/posix-poll.c)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-      list(APPEND ${uv_dir}/uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500)
-      list(APPEND ${uv_dir}/uv_libraries kstat nsl sendfile socket)
-      list(APPEND ${uv_dir}/uv_sources ${uv_dir}/src/unix/no-proctitle.c ${uv_dir}/src/unix/sunos.c)
+      list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500)
+      list(APPEND uv_libraries kstat nsl sendfile socket)
+      list(APPEND uv_sources ${uv_dir}/src/unix/no-proctitle.c ${uv_dir}/src/unix/sunos.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+      list(APPEND uv_defines _BSD_SOURCE)
+      list(APPEND uv_libraries bsd network)
+      list(APPEND uv_sources
+          ${uv_dir}/src/unix/haiku.c
+          ${uv_dir}/src/unix/bsd-ifaddrs.c
+          ${uv_dir}/src/unix/no-fsevents.c
+          ${uv_dir}/src/unix/no-proctitle.c
+          ${uv_dir}/src/unix/posix-hrtime.c
+          ${uv_dir}/src/unix/posix-poll.c)
     endif()
 
     # TODO: include => public, src => private
