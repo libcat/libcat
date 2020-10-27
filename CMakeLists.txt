@@ -123,16 +123,18 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 	list(APPEND cat_defines CAT_DEBUG=1)
 endif()
 
-set(cat_includes include include/cat)
+set(cat_includes include)
 
 set(cat_sources
-    src/cat/cat_cp.c
-    src/cat/cat_memory.c
-    src/cat/cat_string.c
-    src/cat/cat_error.c
-    src/cat/cat_module.c
-    src/cat/cat_log.c
-    src/cat/cat_env.c
+    # [internal]
+    src/cat_cp.c
+    src/cat_memory.c
+    src/cat_string.c
+    src/cat_error.c
+    src/cat_module.c
+    src/cat_log.c
+    src/cat_env.c
+    # [public]
     src/cat.c
     src/cat_api.c
     src/cat_coroutine.c
