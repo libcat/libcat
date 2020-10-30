@@ -226,8 +226,9 @@ CAT_API size_t cat_socket_write_vectors_length(const cat_socket_write_vector_t *
     XX(STDOUT, 1 << 11) \
     XX(STDERR, 1 << 12) \
     /* 20 ~ 23 (stream (tcp|pipe|tty)) */ \
-    XX(SERVER, 1 << 20)         CAT_INTERNAL \
-    XX(CLIENT, 1 << 21)         CAT_INTERNAL \
+    XX(SERVER,      1 << 20) CAT_INTERNAL \
+    XX(CLIENT,      1 << 21) CAT_INTERNAL \
+    XX(SESSION,     1 << 22) CAT_INTERNAL \
 
 #define CAT_SOCKET_TYPE_FLAG_MAP(XX) CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
@@ -280,8 +281,9 @@ typedef enum
 typedef enum
 {
     CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS =
-        /* CAT_SOCKET_TYPE_FLAG_SERVER | (server will be solved in create) */
-        CAT_SOCKET_TYPE_FLAG_CLIENT,
+        CAT_SOCKET_TYPE_FLAG_SERVER |
+        CAT_SOCKET_TYPE_FLAG_CLIENT |
+        CAT_SOCKET_TYPE_FLAG_SESSION,
 } cat_socket_union_type_flas_t;
 
 typedef uint32_t cat_socket_type_t;
@@ -531,6 +533,8 @@ CAT_API cat_bool_t cat_socket_is_open(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_established(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket);
+CAT_API cat_bool_t cat_socket_is_session(const cat_socket_t *socket);
+CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_eof_error(cat_errno_t error);
 

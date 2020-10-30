@@ -579,12 +579,12 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     }
 
     /* solve type and get af */
-    type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
     if (type & CAT_SOCKET_TYPE_FLAG_SERVER) {
         type ^= CAT_SOCKET_TYPE_FLAG_SERVER;
-        type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
+        type |= CAT_SOCKET_TYPE_FLAG_SESSION;
         af = AF_UNSPEC;
     }
+    type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
     if (type & CAT_SOCKET_TYPE_FLAG_UNSPEC) {
         af = AF_UNSPEC;
     } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
@@ -2128,7 +2128,7 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
     }
     socket->internal = NULL;
     isocket->u.socket = NULL;
-    if (socket->type & CAT_SOCKET_TYPE_FLAG_SERVER) {
+    if (unlikely(cat_socket_is_server(socket))) {
         uv_ref(&isocket->u.handle); /* unref in listen (references are idempotent) */
     }
     uv_close(&isocket->u.handle, cat_socket_close_callback);
@@ -2176,6 +2176,24 @@ CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket)
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket)
 {
     return !!(socket->type & CAT_SOCKET_TYPE_FLAG_CLIENT);
+}
+
+CAT_API cat_bool_t cat_socket_is_session(const cat_socket_t *socket)
+{
+    return !!(socket->type & CAT_SOCKET_TYPE_FLAG_SESSION);
+}
+
+CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket)
+{
+    if (cat_socket_is_session(socket)) {
+        return "session";
+    } else if (cat_socket_is_client(socket)) {
+        return "client";
+    } else if (cat_socket_is_server(socket)) {
+        return "server";
+    }
+
+    return "none";
 }
 
 CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
@@ -2507,7 +2525,7 @@ static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
         fd = cat_socket_internal_get_fd_fast(isocket);
         type_name = cat_socket_get_type_name(socket);
         io_state_naming = cat_socket_get_io_state_naming(socket);
-        role = cat_socket_is_server(socket) ? "server" : (cat_socket_is_client(socket) ? "client" : "none");
+        role = cat_socket_get_role_name(socket);
         (void) cat_socket_get_sock_address(socket, sock_addr, &sock_addr_size);
         sock_port = cat_socket_get_sock_port(socket);
         (void) cat_socket_get_sock_address(socket, peer_addr, &peer_addr_size);
