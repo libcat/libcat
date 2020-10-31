@@ -30,7 +30,7 @@ CAT_API cat_bool_t cat_sync_wait_group_add(cat_sync_wait_group_t *wg, ssize_t de
 {
     ssize_t count;
 
-    if (unlikely(wg->coroutine)) {
+    if (unlikely(wg->coroutine != NULL)) {
         cat_update_last_error(CAT_EMISUSE, "WaitGroup add called concurrently with wait");
         return cat_false;
     }
@@ -79,7 +79,7 @@ CAT_API cat_bool_t cat_sync_wait_group_done(cat_sync_wait_group_t *wg)
         return cat_false;
     }
     wg->count = count;
-    if (count == 0 && wg->coroutine) {
+    if (count == 0 && wg->coroutine != NULL) {
         if (unlikely(!cat_coroutine_resume(wg->coroutine, NULL, NULL))) {
             cat_core_error_with_last(SYNC, "WaitGroup resume waiter failed");
         }
