@@ -556,9 +556,6 @@ TEST(cat_socket, io_state_name)
 {
     ASSERT_STREQ("read", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_READ));
     ASSERT_STREQ("connect", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_CONNECT));
-#ifdef CAT_SSL
-    ASSERT_STREQ("handshake", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_HANDSHAKE));
-#endif
     ASSERT_STREQ("accept", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_ACCEPT));
     ASSERT_STREQ("write", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_WRITE));
     ASSERT_STREQ("read or write", cat_socket_io_state_name(CAT_SOCKET_IO_FLAG_RDWR));
@@ -570,9 +567,6 @@ TEST(cat_socket, io_state_naming)
 {
     ASSERT_STREQ("reading", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_READ));
     ASSERT_STREQ("connecting", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_CONNECT));
-#ifdef CAT_SSL
-    ASSERT_STREQ("handshaking", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_HANDSHAKE));
-#endif
     ASSERT_STREQ("accepting", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_ACCEPT));
     ASSERT_STREQ("writing", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_WRITE));
     ASSERT_STREQ("reading and writing", cat_socket_io_state_naming(CAT_SOCKET_IO_FLAG_RDWR));

@@ -170,10 +170,8 @@ typedef struct
     cat_socket_vector_length_t length;
 } cat_socket_write_vector_t;
 #else
-/**
- * It should be possible to cast uv_buf_t[] to WSABUF[]
- * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx
- */
+/* Note: May be cast to WSABUF[]
+ * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx */
 typedef struct {
     cat_socket_vector_length_t length;
     const char* base;
@@ -207,7 +205,6 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
     /* 0 - 3 (sock) */ \
     XX(STREAM, 1 << 0) \
     XX(DGRAM, 1 << 1) \
-    SS(SSL,   1 << 2) \
     /* 4 ~ 9 (af) */ \
     XX(INET,  1 << 4) \
     XX(IPV4,  1 << 5) \
@@ -238,7 +235,7 @@ typedef enum
 #undef CAT_SOCKET_TYPE_FLAG_GEN
 } cat_socket_type_flag_t;
 
-#define CAT_SOCKET_TYPE_MAP_EX(XX, UN, SS) \
+#define CAT_SOCKET_TYPE_MAP_EX(XX, UN) \
     XX(ANY,    0) \
     /* stream */ \
     XX(TCP,    1 << 24 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_INET) \
@@ -255,19 +252,13 @@ typedef enum
     XX(UDP6,   CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV6) \
     UN(UNIX,   CAT_SOCKET_TYPE_PIPE) \
     UN(UDG,    1 << 28  | CAT_SOCKET_TYPE_FLAG_DGRAM | CAT_SOCKET_TYPE_FLAG_LOCAL) \
-    SS(TLS,    CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_SSL) \
-    SS(TLS4,   CAT_SOCKET_TYPE_TCP4 | CAT_SOCKET_TYPE_FLAG_SSL) \
-    SS(TLS6,   CAT_SOCKET_TYPE_TCP6 | CAT_SOCKET_TYPE_FLAG_SSL) \
-    SS(DTLS,   CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_SSL) \
-    SS(DTLS4,  CAT_SOCKET_TYPE_UDP4 | CAT_SOCKET_TYPE_FLAG_SSL) \
-    SS(DTLS6,  CAT_SOCKET_TYPE_UDP6 | CAT_SOCKET_TYPE_FLAG_SSL) \
 
 #ifndef CAT_OS_UNIX_LIKE
 #define CAT_SOCKET_UNIX_ENUM_GEN(XX) CAT_ENUM_EMPTY_GEN
 #else
 #define CAT_SOCKET_UNIX_ENUM_GEN(XX) XX
 #endif
-#define CAT_SOCKET_TYPE_MAP(XX) CAT_SOCKET_TYPE_MAP_EX(XX, CAT_SOCKET_UNIX_ENUM_GEN(XX), CAT_SSL_ENUM_GEN(XX))
+#define CAT_SOCKET_TYPE_MAP(XX) CAT_SOCKET_TYPE_MAP_EX(XX, CAT_SOCKET_UNIX_ENUM_GEN(XX))
 
 /* 24 ~ 31 */
 typedef enum
@@ -287,7 +278,7 @@ typedef enum
 
 typedef uint32_t cat_socket_type_t;
 
-#define CAT_SOCKET_IO_FLAG_MAP_EX(XX, SS) \
+#define CAT_SOCKET_IO_FLAG_MAP(XX) \
     XX(NONE,      0) \
     XX(READ,      1 << 0) \
     XX(WRITE,     1 << 1) \
@@ -295,9 +286,6 @@ typedef uint32_t cat_socket_type_t;
     XX(BIND,      1 << 2 | CAT_SOCKET_IO_FLAG_RDWR) \
     XX(ACCEPT,    1 << 3 | CAT_SOCKET_IO_FLAG_RDWR) \
     XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR) \
-    SS(HANDSHAKE, 1 << 5 | CAT_SOCKET_IO_FLAG_RDWR) \
-
-#define CAT_SOCKET_IO_FLAG_MAP(XX) CAT_SOCKET_IO_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
 typedef enum
 {
@@ -371,17 +359,14 @@ struct cat_socket_internal_s
         cat_socket_timeout_options_t timeout;
     } options;
     /* === private === */
-    /* internal bits */
-    cat_bool_t connected:1;
+    /* internal bits (TODO: internal_flags) */
+    cat_bool_t connected;
     /* io context */
     cat_socket_io_flags_t io_flags;
     union {
         cat_socket_context_t bind;
         cat_socket_context_t accept;
         cat_socket_context_t connect;
-#ifdef CAT_SSL
-        cat_socket_context_t handshake;
-#endif
         struct {
             cat_socket_context_t read;
             cat_socket_write_context_t write;
@@ -493,6 +478,15 @@ CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, si
 CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
 CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout);
+
+#ifdef CAT_SSL
+typedef cat_ssl_context_t cat_socket_crypto_context_t;
+#else
+typedef void *cat_socket_crypto_context_t;
+#endif
+
+CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context);
+CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *length, cat_bool_t is_peer);
 CAT_API cat_bool_t cat_socket_getsockname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *length);
