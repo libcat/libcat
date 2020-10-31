@@ -20,13 +20,6 @@
 
 CAT_API cat_sync_wait_group_t *cat_sync_wait_group_create(cat_sync_wait_group_t *wg)
 {
-    if (wg == NULL) {
-        wg = (cat_sync_wait_group_t *) cat_malloc(sizeof(*wg));
-        if (unlikely(wg == NULL)) {
-            cat_update_last_error_of_syscall("Malloc for wait group failed");
-            return NULL;
-        }
-    }
     wg->coroutine = NULL;
     wg->count = 0;
 
