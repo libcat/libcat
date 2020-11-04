@@ -341,6 +341,28 @@ CAT_API CAT_GLOBALS_DECLARE(cat_socket)
 
 CAT_GLOBALS_CTOR_DECLARE_SZ(cat_socket)
 
+static const cat_socket_timeout_options_t cat_socket_default_global_timeout_options = {
+    CAT_TIMEOUT_FOREVER,
+    CAT_TIMEOUT_FOREVER,
+    CAT_TIMEOUT_FOREVER,
+    CAT_TIMEOUT_FOREVER,
+    CAT_TIMEOUT_FOREVER,
+    CAT_TIMEOUT_FOREVER,
+};
+
+CAT_STATIC_ASSERT(6 == CAT_SOCKET_TIMEOUT_OPTIONS_COUNT);
+
+static const cat_socket_timeout_options_t cat_socket_default_timeout_options = {
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+    CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
+};
+
+CAT_STATIC_ASSERT(6 == CAT_SOCKET_TIMEOUT_OPTIONS_COUNT);
+
 CAT_API cat_bool_t cat_socket_module_init(void)
 {
     CAT_GLOBALS_REGISTER(cat_socket, CAT_GLOBALS_CTOR(cat_socket), NULL);
@@ -349,15 +371,7 @@ CAT_API cat_bool_t cat_socket_module_init(void)
 
 CAT_API cat_bool_t cat_socket_runtime_init(void)
 {
-    static const cat_socket_timeout_options_t default_timeout = {
-        CAT_TIMEOUT_FOREVER,
-        CAT_TIMEOUT_FOREVER,
-        CAT_TIMEOUT_FOREVER,
-        CAT_TIMEOUT_FOREVER,
-        CAT_TIMEOUT_FOREVER
-    };
-    CAT_STATIC_ASSERT(sizeof(cat_socket_timeout_options_t) == (sizeof(cat_socket_timeout_storage_t) * 5));
-    CAT_SOCKET_G(options.timeout) = default_timeout;
+    CAT_SOCKET_G(options.timeout) = cat_socket_default_global_timeout_options;
     CAT_SOCKET_G(options.tcp_keepalive_delay) = 60;
 
     return cat_true;
@@ -674,15 +688,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
     /* options */
-    static const cat_socket_timeout_options_t default_timeout = {
-        CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
-        CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
-        CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
-        CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
-        CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT,
-    };
-    CAT_STATIC_ASSERT(sizeof(cat_socket_timeout_options_t) == (sizeof(cat_socket_timeout_storage_t) * 5));
-    isocket->options.timeout = default_timeout;
+    isocket->options.timeout = cat_socket_default_timeout_options;
 #ifdef CAT_SSL
     isocket->ssl = NULL;
 #endif
@@ -833,6 +839,33 @@ static cat_always_inline cat_timeout_t cat_socket_align_timeout(cat_timeout_t ti
     return timeout;
 }
 
+static void cat_socket_set_timeout_to_options(cat_socket_timeout_options_t *options, cat_timeout_t timeout)
+{
+    timeout = cat_socket_align_timeout(timeout);
+
+    options->dns = timeout;
+    /* do not set accept timeout, we usually expect it is -1 */
+    /* options->accept = timeout; */
+    options->connect = timeout;
+    options->handshake = timeout;
+    options->read = timeout;
+    options->write = timeout;
+}
+
+CAT_API void cat_socket_set_global_timeout(cat_timeout_t timeout)
+{
+    cat_socket_set_timeout_to_options(&CAT_SOCKET_G(options.timeout), timeout);
+}
+
+CAT_API cat_bool_t cat_socket_set_timeout(cat_socket_t *socket, cat_timeout_t timeout)
+{
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
+
+    cat_socket_set_timeout_to_options(&isocket->options.timeout, timeout);
+
+    return cat_true;
+}
+
 #define CAT_SOCKET_TIMEOUT_API_GEN(type) \
 \
 CAT_API cat_timeout_t cat_socket_get_global_##type##_timeout(void) \
@@ -880,6 +913,7 @@ CAT_API cat_bool_t cat_socket_set_##type##_timeout(cat_socket_t *socket, cat_tim
 CAT_SOCKET_TIMEOUT_API_GEN(dns)
 CAT_SOCKET_TIMEOUT_API_GEN(accept)
 CAT_SOCKET_TIMEOUT_API_GEN(connect)
+CAT_SOCKET_TIMEOUT_API_GEN(handshake)
 CAT_SOCKET_TIMEOUT_API_GEN(read)
 CAT_SOCKET_TIMEOUT_API_GEN(write)
 

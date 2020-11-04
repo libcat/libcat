@@ -340,9 +340,12 @@ typedef struct
     cat_socket_timeout_storage_t dns;
     cat_socket_timeout_storage_t accept;
     cat_socket_timeout_storage_t connect;
+    cat_socket_timeout_storage_t handshake;
     cat_socket_timeout_storage_t read;
     cat_socket_timeout_storage_t write;
 } cat_socket_timeout_options_t;
+
+#define CAT_SOCKET_TIMEOUT_OPTIONS_COUNT (sizeof(cat_socket_timeout_options_t) / sizeof(cat_socket_timeout_storage_t))
 
 typedef struct
 {
@@ -450,24 +453,30 @@ CAT_API cat_socket_fd_t cat_socket_get_fd(const cat_socket_t *socket);
 CAT_API cat_timeout_t cat_socket_get_global_dns_timeout(void);
 CAT_API cat_timeout_t cat_socket_get_global_accept_timeout(void);
 CAT_API cat_timeout_t cat_socket_get_global_connect_timeout(void);
+CAT_API cat_timeout_t cat_socket_get_global_handshake_timeout(void);
 CAT_API cat_timeout_t cat_socket_get_global_read_timeout(void);
 CAT_API cat_timeout_t cat_socket_get_global_write_timeout(void);
 
+CAT_API void cat_socket_set_global_timeout(cat_timeout_t timeout);
 CAT_API void cat_socket_set_global_dns_timeout(cat_timeout_t timeout);
 CAT_API void cat_socket_set_global_accept_timeout(cat_timeout_t timeout);
 CAT_API void cat_socket_set_global_connect_timeout(cat_timeout_t timeout);
+CAT_API void cat_socket_set_global_handshake_timeout(cat_timeout_t timeout);
 CAT_API void cat_socket_set_global_read_timeout(cat_timeout_t timeout);
 CAT_API void cat_socket_set_global_write_timeout(cat_timeout_t timeout);
 
 CAT_API cat_timeout_t cat_socket_get_dns_timeout(const cat_socket_t *socket);
 CAT_API cat_timeout_t cat_socket_get_accept_timeout(const cat_socket_t *socket);
 CAT_API cat_timeout_t cat_socket_get_connect_timeout(const cat_socket_t *socket);
+CAT_API cat_timeout_t cat_socket_get_handshake_timeout(const cat_socket_t *socket);
 CAT_API cat_timeout_t cat_socket_get_read_timeout(const cat_socket_t *socket);
 CAT_API cat_timeout_t cat_socket_get_write_timeout(const cat_socket_t *socket);
 
+CAT_API cat_bool_t cat_socket_set_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_set_dns_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_set_accept_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_set_connect_timeout(cat_socket_t *socket, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_socket_set_handshake_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_set_read_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_set_write_timeout(cat_socket_t *socket, cat_timeout_t timeout);
 
