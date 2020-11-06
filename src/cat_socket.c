@@ -2193,7 +2193,7 @@ CAT_API cat_bool_t cat_socket_is_available(const cat_socket_t *socket)
 
 CAT_API cat_bool_t cat_socket_is_open(const cat_socket_t *socket)
 {
-    return cat_socket_get_fd_fast(socket) != -CAT_SOCKET_INVALID_FD;
+    return cat_socket_get_fd_fast(socket) != CAT_SOCKET_INVALID_FD;
 }
 
 CAT_API cat_bool_t cat_socket_is_established(const cat_socket_t *socket)
