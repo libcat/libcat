@@ -621,7 +621,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         if ((type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) {
             fd = socket_create(AF_UNIX, SOCK_DGRAM, IPPROTO_IP);
             if (unlikely(fd < 0)) {
-                error = errno;
+                error = cat_translate_sys_error(errno);
                 goto _failed;
             }
             type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
