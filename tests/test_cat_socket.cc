@@ -607,22 +607,28 @@ TEST(cat_socket, get_io_state_naming)
     ASSERT_STREQ("idle", cat_socket_get_io_state_naming(&socket));
 }
 
-TEST(cat_socket, get_send_buffer_size)
+TEST(cat_socket, buffer_size)
 {
     cat_socket_t socket;
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_EQ(-1, cat_socket_get_send_buffer_size(&socket));
-}
 
-TEST(cat_socket, get_recv_buffer_size)
-{
-    cat_socket_t socket;
+    ASSERT_EQ(cat_socket_get_recv_buffer_size(&socket), -1);
+    ASSERT_EQ(cat_socket_get_send_buffer_size(&socket), -1);
 
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_EQ(-1, cat_socket_get_recv_buffer_size(&socket));
+    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+
+    /* get/set/align-memory/clear-cache/get/get-cache */
+    ASSERT_GT(cat_socket_get_recv_buffer_size(&socket), 0);
+    ASSERT_TRUE(cat_socket_set_recv_buffer_size(&socket, 0));
+    ASSERT_GE(cat_socket_get_recv_buffer_size(&socket), cat_getpagesize());
+    ASSERT_LE(cat_socket_get_recv_buffer_size(&socket), cat_getpagesize() * 2);
+    /* send buffer again */
+    ASSERT_GT(cat_socket_get_send_buffer_size(&socket), 0);
+    ASSERT_TRUE(cat_socket_set_send_buffer_size(&socket, 0));
+    ASSERT_GE(cat_socket_get_send_buffer_size(&socket), cat_getpagesize());
+    ASSERT_LE(cat_socket_get_send_buffer_size(&socket), cat_getpagesize() * 2);
 }
 
 TEST(cat_socket, set_tcp_nodelay)

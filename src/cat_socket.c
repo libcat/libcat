@@ -687,6 +687,8 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     /* part of cache */
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
+    isocket->cache.recv_buffer_size = -1;
+    isocket->cache.send_buffer_size = -1;
     /* options */
     isocket->options.timeout = cat_socket_default_timeout_options;
 #ifdef CAT_SSL
@@ -2382,19 +2384,62 @@ CAT_API const char *cat_socket_get_io_state_naming(const cat_socket_t *socket)
 
 /* setter / options */
 
+static cat_always_inline int cat_socket_align_buffer_size(int size)
+{
+    int pagesize = cat_getpagesize();
+
+    if (unlikely(size < pagesize)) {
+        return pagesize;
+    }
+
+    return size;
+}
+
 static int cat_socket_buffer_size(const cat_socket_t *socket, cat_bool_t is_send, size_t size)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return -1);
     int value = size, error;
+
+    if (size == 0) {
+        /* try to get cache */
+        int cache_size;
+        if (!is_send) {
+            cache_size = isocket->cache.recv_buffer_size;
+        } else {
+            cache_size = isocket->cache.send_buffer_size;
+        }
+        if (cache_size > 0) {
+            return cache_size;
+        }
+    }
 
     if (!is_send) {
         error = uv_recv_buffer_size(&isocket->u.handle, &value);
     } else {
         error = uv_send_buffer_size(&isocket->u.handle, &value);
     }
+
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Socket get recv buffer size failed");
         return -1;
+    }
+
+    /* update cache */
+    if (size == 0) {
+        value = cat_socket_align_buffer_size(value);
+        /* get */
+        if (!is_send) {
+            isocket->cache.recv_buffer_size = value;
+        } else {
+            isocket->cache.send_buffer_size = value;
+        }
+    } else {
+        /* set */
+        if (!is_send) {
+            isocket->cache.recv_buffer_size = -1;
+        } else {
+            isocket->cache.send_buffer_size = -1;
+        }
     }
 
     return value;
@@ -2410,25 +2455,14 @@ CAT_API int cat_socket_get_send_buffer_size(const cat_socket_t *socket)
     return cat_socket_buffer_size(socket, cat_true, 0);
 }
 
-static cat_always_inline int cat_socket_check_buffer_size(int size)
-{
-    int pagesize = cat_getpagesize();
-
-    if (unlikely(size < pagesize)) {
-        return pagesize;
-    }
-
-    return size;
-}
-
 CAT_API int cat_socket_set_recv_buffer_size(cat_socket_t *socket, int size)
 {
-    return cat_socket_buffer_size(socket, cat_false, cat_socket_check_buffer_size(size));
+    return cat_socket_buffer_size(socket, cat_false, cat_socket_align_buffer_size(size));
 }
 
 CAT_API int cat_socket_set_send_buffer_size(cat_socket_t *socket, int size)
 {
-    return cat_socket_buffer_size(socket, cat_true, cat_socket_check_buffer_size(size));
+    return cat_socket_buffer_size(socket, cat_true, cat_socket_align_buffer_size(size));
 }
 
 /* we always set the flag for extending (whether it works or not) */

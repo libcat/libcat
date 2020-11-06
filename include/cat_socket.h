@@ -392,6 +392,8 @@ struct cat_socket_internal_s
     struct {
         cat_sockaddr_info_t *sockname;
         cat_sockaddr_info_t *peername;
+        int recv_buffer_size;
+        int send_buffer_size;
     } cache;
     /* ext */
 #ifdef CAT_SSL
