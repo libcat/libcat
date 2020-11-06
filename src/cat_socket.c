@@ -1728,10 +1728,14 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
     cat_timeout_t timeout
 )
 {
+    cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
+    cat_bool_t ret = cat_false;
     ssize_t error;
 
+    isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
+    cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
+
     while (1) {
-        cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
         struct msghdr msg = { };
         msg.msg_name = (struct sockaddr *) address;
         msg.msg_namelen = address_length;
@@ -1742,21 +1746,26 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
             error = cat_translate_sys_error(cat_sys_errno);
             if (error == CAT_EAGAIN) {
                 // FIXME: wait write and queued (we should support multi write)
-                cat_bool_t ret = cat_time_wait(5);
-                if (unlikely(ret)) {
-                    cat_update_last_error_with_previous("Wait for socket write completion failed");
-                    return cat_false;
+                // FIXME: support timeout
+                if (likely(cat_time_msleep(1) == 0)) {
+                    continue;
                 }
-                continue;
+                cat_update_last_error_with_previous("Wait for socket write completion failed");
+            } else {
+                cat_update_last_error_with_reason(error, "Socket write failed");
             }
         } else {
-            return cat_true;
+            ret = cat_true;
         }
         break;
     }
 
-    cat_update_last_error_with_reason(error, "Socket write failed");
-    return cat_false;
+    cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
+    if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
+        isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
+    }
+
+    return ret;
 }
 #endif
 
