@@ -85,15 +85,9 @@ CAT_API cat_bool_t cat_run(cat_run_mode run_mode)
     CAT_NEVER_HERE("Unknown run mode");
 }
 
-CAT_API void cat_stop(void)
+CAT_API cat_bool_t cat_stop(void)
 {
-    cat_bool_t ret;
-
-    ret = cat_event_scheduler_close() != NULL;
-
-    if (unlikely(!ret)) {
-        cat_core_error_with_last(CORE, "Runtime Stop failed");
-    }
+    return cat_event_scheduler_close() != NULL;
 }
 
 #ifdef CAT_DEBUG

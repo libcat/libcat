@@ -39,9 +39,9 @@ public:
 
     virtual void TearDown()
     {
-        cat_stop();
+        ASSERT_TRUE(cat_stop());
         ASSERT_EQ(cat_coroutine_get_count() , 1);
-        cat_shutdown_all();
+        ASSERT_TRUE(cat_shutdown_all());
     }
 };
 
