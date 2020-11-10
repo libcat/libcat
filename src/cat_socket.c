@@ -1538,8 +1538,8 @@ static ssize_t cat_socket_internal_read(
     ssize_t error;
 
     if (unlikely(size == 0)) {
-        cat_update_last_error_with_reason(CAT_ENOBUFS, "Socket read failed");
-        return -1;
+        error = CAT_ENOBUFS;
+        goto _error;
     }
 
     if (is_dgram) {
@@ -1549,6 +1549,7 @@ static ssize_t cat_socket_internal_read(
             *address_length = 0;
         }
     }
+
 #ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
     do {
         /* Notice: when IO is low/slow, this is deoptimization,
@@ -1565,15 +1566,13 @@ static ssize_t cat_socket_internal_read(
                 }
                 if (error < 0) {
                     error = cat_translate_sys_error(cat_sys_errno);
-                    if (error == CAT_EAGAIN) {
+                    if (likely(error == CAT_EAGAIN)) {
                         break;
                     }
                     if (unlikely(error == CAT_EINTR)) {
                         continue;
                     }
-                    cat_update_last_error_with_reason(error, "Socket read failed");
-                    /* for possible data */
-                    return nread == 0 ? -1 : (ssize_t) nread;
+                    goto _error;
                 }
                 if (once) {
                     return error;
@@ -1583,23 +1582,21 @@ static ssize_t cat_socket_internal_read(
                     return (ssize_t) nread;
                 }
                 if (error == 0) {
-                    cat_update_last_error_with_reason(CAT_ECONNRESET, "Socket read incomplete");
-                    return 0;
+                    error = CAT_ECONNRESET;
+                    goto _error;
                 }
                 break; /* next call must be EAGAIN */
             }
         }
     } while (0);
 #endif
+
     if (!is_udp) {
         error = uv_read_start(&isocket->u.stream, cat_socket_read_alloc_callback, cat_socket_read_callback);
     } else {
         error = uv_udp_recv_start(&isocket->u.udp, cat_socket_read_alloc_callback, cat_socket_udp_recv_callback);
     }
-    if (unlikely(error != 0)) {
-        cat_update_last_error_with_reason(error, "Socket read start failed");
-        return -1;
-    } else {
+    if (likely(error == 0)) {
         cat_socket_read_context_t context;
         cat_bool_t ret;
         /* construct context */
@@ -1640,23 +1637,38 @@ static ssize_t cat_socket_internal_read(
         /* handle error */
         if (unlikely(!ret)) {
             cat_update_last_error_with_previous("Wait for read completion failed");
-            return -1;
+            goto _wait_error;
         }
-        if (context.error == CAT_ECANCELED) {
-            cat_update_last_error(CAT_ECANCELED, "Socket read has been canceled");
-            return -1;
-        }
-        if (context.error != 0) {
-            cat_update_last_error_with_reason(context.error, "Socket read incomplete");
-            /* for possible data */
-            return context.nread == 0 ? -1 : (ssize_t) context.nread;
-        }
+        nread = context.nread;
+        error = context.error;
+    }
+
+    if (unlikely(error != 0)) {
+        goto _error;
+    }
 #ifdef CAT_OS_UNIX_LIKE
-        if (is_udg) {
-            goto _recv;
-        }
+    if (is_udg) {
+        goto _recv;
+    }
 #endif
-        return (ssize_t) context.nread;
+
+    return (ssize_t) nread;
+
+    _error:
+    if (error == CAT_ECANCELED) {
+        cat_update_last_error(CAT_ECANCELED, "Socket read has been canceled");
+    } else {
+        cat_update_last_error_with_reason(error, "Socket read %s", nread != 0 ? "incompleted" : "failed");
+    }
+    _wait_error:
+    if (nread != 0) {
+        /* for possible data */
+        return (ssize_t) nread;
+    } else {
+        if (is_dgram && address_length != NULL) {
+            *address_length = 0;
+        }
+        return -1;
     }
 }
 
