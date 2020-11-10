@@ -1113,7 +1113,7 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
         iserver->context.accept.coroutine = NULL;
         uv_unref(&iserver->u.handle);
         if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Wait for new connection of socket failed");
+            cat_update_last_error_with_previous("Socket accept wait failed");
             break;
         }
         if (unlikely(iserver->context.accept.data.status == CAT_ECANCELED)) {
@@ -1195,8 +1195,8 @@ static cat_bool_t cat_socket__connect(
         isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
         isocket->context.connect.coroutine = NULL;
         if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Wait for connection failed");
-            /* intterupt can not recover */
+            cat_update_last_error_with_previous("Socket connect wait failed");
+            /* interrupt can not recover */
             cat_socket_internal_close(isocket);
             return cat_false;
         }
@@ -1636,7 +1636,7 @@ static ssize_t cat_socket_internal_read(
         }
         /* handle error */
         if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Wait for read completion failed");
+            cat_update_last_error_with_previous("Socket read wait failed");
             goto _wait_error;
         }
         nread = context.nread;
@@ -1762,7 +1762,7 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
                 if (likely(cat_time_msleep(1) == 0)) {
                     continue;
                 }
-                cat_update_last_error_with_previous("Wait for socket write completion failed");
+                cat_update_last_error_with_previous("Socket UDG write wait failed");
             } else {
                 cat_update_last_error_with_reason(error, "Socket write failed");
             }
@@ -1855,7 +1855,7 @@ static cat_bool_t cat_socket_internal_write(
 #endif
         }
         if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Wait for socket write completion failed");
+            cat_update_last_error_with_previous("Socket write wait failed");
             return cat_false;
         }
         error = request->error;

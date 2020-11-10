@@ -59,7 +59,7 @@ typedef union
     done = context->coroutine == NULL; \
     context->coroutine = NULL; \
     if (unlikely(!ret)) { \
-        cat_update_last_error_with_previous("Wait for file-system " #operation " completion failed"); \
+        cat_update_last_error_with_previous("File-System " #operation " wait failed"); \
         (void) uv_cancel(&context->req); \
         return -1; \
     } \

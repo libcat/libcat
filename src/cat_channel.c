@@ -212,7 +212,7 @@ static cat_bool_t cat_channel_unbuffered_push(cat_channel_t *channel, const cat_
     if (!cat_channel__has_consumers(channel)) {
         if (unlikely(!cat_channel_wait(&channel->producers, timeout))) {
             /* sleep failed or timedout */
-            cat_update_last_error_with_previous("Wait for channel consumer failed");
+            cat_update_last_error_with_previous("Channel wait consumer failed");
             return cat_false;
         }
         if (unlikely(!cat_channel_unbuffered_is_pushable(channel))) {
@@ -239,7 +239,7 @@ static cat_bool_t cat_channel_unbuffered_pop(cat_channel_t *channel, cat_data_t 
     if (!cat_channel__has_producers(channel)) {
         if (unlikely(!cat_channel_wait(&channel->consumers, timeout))) {
             /* sleep failed or timedout */
-            cat_update_last_error_with_previous("Wait for channel producer failed");
+            cat_update_last_error_with_previous("Channel wait producer failed");
             return cat_false;
         }
         if (unlikely(!cat_channel_unbuffered_is_popable(channel))) {
@@ -337,7 +337,7 @@ static cat_bool_t cat_channel_buffered_push(cat_channel_t *channel, const cat_da
     if (cat_channel__is_full(channel)) {
         if (unlikely(!cat_channel_wait(&channel->producers, timeout))) {
             /* sleep failed or timedout */
-            cat_update_last_error_with_previous("Wait for channel consumer failed");
+            cat_update_last_error_with_previous("Channel wait consumer failed");
             return cat_false;
         }
         if (unlikely(cat_channel__is_full(channel))) {
@@ -366,7 +366,7 @@ static cat_bool_t cat_channel_buffered_pop(cat_channel_t *channel, cat_data_t *d
     if (cat_channel__is_empty(channel)) {
         if (unlikely(!cat_channel_wait(&channel->consumers, timeout))) {
             /* sleep failed or timedout */
-            cat_update_last_error_with_previous("Wait for channel producer failed");
+            cat_update_last_error_with_previous("Channel wait producer failed");
             return cat_false;
         }
         if (unlikely(cat_channel__is_empty(channel))) {
@@ -573,7 +573,7 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
 
     if (unlikely(!ret)) {
         /* sleep failed or timedout */
-        cat_update_last_error_with_previous("Wait for channel select failed");
+        cat_update_last_error_with_previous("Channel select wait failed");
         return NULL;
     }
 
