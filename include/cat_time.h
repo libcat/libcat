@@ -40,6 +40,7 @@ typedef cat_msec_t cat_timeout_t;
 
 CAT_API cat_nsec_t cat_time_nsec(void);
 CAT_API cat_msec_t cat_time_msec(void);
+CAT_API cat_msec_t cat_time_msec_cached(void);
 
 CAT_API char *cat_time_format_msec(cat_msec_t msec);
 
