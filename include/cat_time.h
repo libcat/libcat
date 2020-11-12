@@ -46,6 +46,17 @@ CAT_API char *cat_time_format_msec(cat_msec_t msec);
 
 /* cat_false: yield failed or sleep failed or timeout, cat_true: cancelled */
 CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout);
+
+#define CAT_TIME_WAIT_START() do { \
+    cat_msec_t __time_cached = cat_time_msec_cached(); \
+
+#define CAT_TIME_WAIT_END(timeout) \
+    timeout -= (cat_time_msec_cached() - __time_cached); \
+    if (unlikely(timeout < 0)) { \
+        timeout = 0; \
+    } \
+} while (0)
+
 CAT_API unsigned int cat_time_sleep(unsigned int seconds);
 /* -1: failed, 0: success, >0: left time (cancelled) */
 CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec);
