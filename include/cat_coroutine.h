@@ -24,7 +24,6 @@ extern "C" {
 
 #include "cat.h"
 #include "cat_queue.h"
-#include "cat_time.h"
 
 #define CAT_COROUTINE_STACK_ALIGNED_SIZE        (4 * 1024)
 #define CAT_COROUTINE_MIN_STACK_SIZE            (128 * 1024)

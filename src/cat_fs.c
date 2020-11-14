@@ -19,6 +19,7 @@
 #include "cat_fs.h"
 #include "cat_coroutine.h"
 #include "cat_event.h"
+#include "cat_time.h"
 
 #include <fcntl.h>
 

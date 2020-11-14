@@ -17,6 +17,7 @@
  */
 
 #include "cat_coroutine.h"
+#include "cat_time.h"
 
 #if defined(CAT_OS_UNIX_LIKE) && defined(CAT_DEBUG)
 #include <sys/mman.h>

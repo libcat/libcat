@@ -18,6 +18,7 @@
 
 #include "cat_socket.h"
 #include "cat_event.h"
+#include "cat_time.h"
 
 #include "uv-common.h"
 

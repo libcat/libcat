@@ -18,6 +18,7 @@
 
 #include "cat_channel.h"
 #include "cat_coroutine.h"
+#include "cat_time.h"
 
 #define CAT_CHANNEL_CHECK_STATE_EX(channel, update_last_error, failure) \
     if (unlikely(!cat_channel__is_available(channel))) { \

@@ -24,7 +24,6 @@ extern "C" {
 
 #include "cat.h"
 #include "cat_coroutine.h"
-#include "cat_time.h"
 #include "cat_dns.h"
 #include "cat_ssl.h"
 

@@ -19,6 +19,7 @@
 #include "cat_signal.h"
 #include "cat_coroutine.h"
 #include "cat_event.h"
+#include "cat_time.h"
 
 CAT_API cat_bool_t cat_kill(int pid, int signum)
 {
