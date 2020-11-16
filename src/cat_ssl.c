@@ -90,6 +90,50 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
     return cat_true;
 }
 
+static cat_always_inline cat_ssl_t *cat_ssl_get_from_connection(const cat_ssl_connection_t *connection)
+{
+    return (cat_ssl_t *) SSL_get_ex_data(connection, cat_ssl_index);
+}
+
+static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int where, int ret)
+{
+
+#ifndef SSL_OP_NO_RENEGOTIATION
+    if ((where & SSL_CB_HANDSHAKE_START) && SSL_is_server(connection)) {
+        cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
+        if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
+            ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION;
+            cat_debug(SSL, "SSL renegotiation");
+        }
+    }
+#endif
+
+    if ((where & SSL_CB_ACCEPT_LOOP) == SSL_CB_ACCEPT_LOOP) {
+        cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
+        if (!(ssl->flags & CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET)) {
+            /*
+             * By default OpenSSL uses 4k buffer during a handshake,
+             * which is too low for long certificate chains and might
+             * result in extra round-trips.
+             *
+             * To adjust a buffer size we detect that buffering was added
+             * to write side of the connection by comparing rbio and wbio.
+             * If they are different, we assume that it's due to buffering
+             * added to wbio, and set buffer size.
+             */
+            BIO *rbio, *wbio;
+
+            rbio = SSL_get_rbio(connection);
+            wbio = SSL_get_wbio(connection);
+
+            if (rbio != wbio) {
+                (void) BIO_set_write_buffer_size(wbio, CAT_SSL_BUFFER_SIZE);
+                ssl->flags |= CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET;
+            }
+        }
+    }
+}
+
 CAT_API cat_ssl_context_t *cat_ssl_context_create(void)
 {
     cat_ssl_context_t *context;
@@ -160,7 +204,7 @@ CAT_API cat_ssl_context_t *cat_ssl_context_create(void)
     SSL_CTX_set_mode(context, SSL_MODE_NO_AUTO_CHAIN);
 #endif
     SSL_CTX_set_read_ahead(context, 1);
-//    SSL_CTX_set_info_callback(context, ngx_ssl_info_callback);
+    SSL_CTX_set_info_callback(context, cat_ssl_info_callback);
 
     return context;
 }

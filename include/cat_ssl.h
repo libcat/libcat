@@ -74,6 +74,8 @@ typedef enum
     CAT_SSL_FLAG_CONNECT_STATE = 1 << 2,
     CAT_SSL_FLAG_HOST_NAME  = 1 << 3,
     CAT_SSL_FLAG_HANDSHAKED  = 1 << 4,
+    CAT_SSL_FLAG_RENEGOTIATION  = 1 << 5,
+    CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET  = 1 << 6,
 } cat_ssl_flag_t;
 
 typedef enum
