@@ -57,7 +57,6 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
     if (OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, NULL) == 0) {
         ERR_print_errors_fp(stderr);
         cat_core_error(SSL, "OPENSSL_init_ssl() failed");
-        return cat_false;
     }
 #else
     OPENSSL_config(NULL);
@@ -71,7 +70,7 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
 #ifndef SSL_OP_NO_COMPRESSION
     do {
         /* Disable gzip compression in OpenSSL prior to 1.0.0 version, this saves about 522K per connection */
-        int                  n;
+        int n;
         STACK_OF(SSL_COMP)  *ssl_comp_methods;
         ssl_comp_methods = SSL_COMP_get_compression_methods();
         n = sk_SSL_COMP_num(ssl_comp_methods);
@@ -442,8 +441,8 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS
         /* initial handshake done, disable renegotiation (CVE-2009-3555) */
-        if (ssl->connection->s3 && SSL_is_server(ssl->connection)) {
-            ssl->connection->s3->flags |= SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS;
+        if (connection->s3 && SSL_is_server(connection)) {
+            connection->s3->flags |= SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS;
         }
 #endif
 #endif
