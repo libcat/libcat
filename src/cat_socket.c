@@ -410,7 +410,7 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
 
 static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socket_internal_t *isocket)
 {
-    if (!isocket->connected) {
+    if (!(isocket->flags & CAT_SOCKET_INTERNAL_FLAG_CONNECTED)) {
         return cat_false;
     }
 #ifdef CAT_SSL
@@ -716,7 +716,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 
     /* init properties of socket internal */
     isocket->u.socket = socket;
-    isocket->connected = cat_false;
+    isocket->flags = CAT_SOCKET_INTERNAL_FLAG_NONE;
     isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
     memset(&isocket->context.io.read, 0, sizeof(isocket->context.io.read));
     cat_queue_init(&isocket->context.io.write.coroutines);
@@ -736,7 +736,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) ||
             cat_socket_getpeername_fast(socket) != NULL
         ) {
-            isocket->connected = cat_true;
+            isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
         }
         if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
             cat_socket_tcp_on_open(socket);
@@ -1130,7 +1130,7 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
         if (error == 0) {
             cat_socket_internal_t *iclient = client->internal;
             /* init client properties */
-            iclient->connected = cat_true;
+            iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
             /* TODO: cat_socket_extends ? */
             memcpy(&iclient->options, &iserver->options, sizeof(iclient->options));
             if ((client->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -1252,7 +1252,7 @@ static cat_bool_t cat_socket__connect(
     }
     /* connect done successfully, we can do something here before transfer data */
     socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
-    isocket->connected = cat_true;
+    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP){
         cat_socket_tcp_on_open(socket);
     }

@@ -278,6 +278,14 @@ typedef enum
 
 typedef uint32_t cat_socket_type_t;
 
+typedef enum
+{
+    CAT_SOCKET_INTERNAL_FLAG_NONE = 0,
+    CAT_SOCKET_INTERNAL_FLAG_CONNECTED = 1 << 0,
+} cat_socket_internal_flag_t;
+
+typedef uint32_t cat_socket_internal_flags_t;
+
 #define CAT_SOCKET_IO_FLAG_MAP(XX) \
     XX(NONE,      0) \
     XX(READ,      1 << 0) \
@@ -359,8 +367,8 @@ struct cat_socket_internal_s
         cat_socket_timeout_options_t timeout;
     } options;
     /* === private === */
-    /* internal bits (TODO: internal_flags) */
-    cat_bool_t connected;
+    /* internal bits */
+    cat_socket_internal_flags_t flags;
     /* io context */
     cat_socket_io_flags_t io_flags;
     union {
