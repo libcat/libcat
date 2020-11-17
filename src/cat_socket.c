@@ -1498,15 +1498,16 @@ CAT_API cat_bool_t cat_socket_getpeername(const cat_socket_t *socket, cat_sockad
 
 CAT_API const cat_sockaddr_info_t *cat_socket_getname_fast(cat_socket_t *socket, cat_bool_t is_peer)
 {
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return NULL);
     cat_sockaddr_info_t *cache, **cache_ptr;
     cat_sockaddr_info_t tmp;
     size_t size;
     cat_bool_t ret;
 
     if (!is_peer) {
-        cache_ptr = &socket->internal->cache.sockname;
+        cache_ptr = &isocket->cache.sockname;
     } else {
-        cache_ptr = &socket->internal->cache.peername;
+        cache_ptr = &isocket->cache.peername;
     }
     cache = *cache_ptr;
     if (cache != NULL) {
