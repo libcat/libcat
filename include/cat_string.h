@@ -23,6 +23,8 @@
 #define CAT_TO_STR_NAKED(str)    #str
 #define CAT_TO_STR(str)          CAT_TO_STR_NAKED(str)
 
+CAT_API const unsigned char *cat_strlchr(const unsigned char *p, const unsigned char *last, unsigned char c);
+
 CAT_API char *cat_vsprintf(const char *format, va_list args); CAT_FREE
 CAT_API char *cat_sprintf(const char *format, ...)            CAT_FREE CAT_ATTRIBUTE_FORMAT(printf, 1, 2);
 
