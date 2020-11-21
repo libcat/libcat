@@ -48,6 +48,10 @@ typedef struct
     XX(EDEADLK, "dead lock") \
     /* generic error about ssl */ \
     XX(ESSL, "SSL error") \
+    /* no certificate */ \
+    XX(ENOCERT, "Certificate not found") \
+    /* certificate verify error */ \
+    XX(ECERT, "Certificate verify error") \
 
 typedef enum
 {

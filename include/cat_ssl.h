@@ -68,14 +68,13 @@ extern "C" {
 
 typedef enum
 {
-    CAT_SSL_FLAG_NONE = 0,
-    CAT_SSL_FLAG_ALLOC  = 1 << 0,
-    CAT_SSL_FLAG_ACCEPT_STATE = 1 << 1,
-    CAT_SSL_FLAG_CONNECT_STATE = 1 << 2,
-    CAT_SSL_FLAG_HOST_NAME  = 1 << 3,
-    CAT_SSL_FLAG_HANDSHAKED  = 1 << 4,
-    CAT_SSL_FLAG_RENEGOTIATION  = 1 << 5,
-    CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET  = 1 << 6,
+    CAT_SSL_FLAG_NONE                  = 0,
+    CAT_SSL_FLAG_ALLOC                 = 1 << 0,
+    CAT_SSL_FLAG_ACCEPT_STATE          = 1 << 1,
+    CAT_SSL_FLAG_CONNECT_STATE         = 1 << 2,
+    CAT_SSL_FLAG_HANDSHAKED            = 1 << 3,
+    CAT_SSL_FLAG_RENEGOTIATION         = 1 << 4,
+    CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET  = 1 << 5,
 } cat_ssl_flag_t;
 
 typedef enum
@@ -84,6 +83,12 @@ typedef enum
 } cat_ssl_union_flags_t;
 
 typedef uint32_t cat_ssl_flags_t;
+
+typedef enum
+{
+    CAT_SSL_METHOD_TLS  = 1 << 0,
+    CAT_SSL_METHOD_DTLS = 1 << 1,
+} cat_ssl_method_t;
 
 typedef enum
 {
@@ -128,10 +133,14 @@ typedef struct
 CAT_API cat_bool_t cat_ssl_module_init(void);
 
 /* context */
-CAT_API cat_ssl_context_t *cat_ssl_context_create(void);
+CAT_API cat_ssl_context_t *cat_ssl_context_create(cat_ssl_method_t method);
 CAT_API void cat_ssl_context_close(cat_ssl_context_t *context);
 
 CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_protocols_t protocols);
+CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *context);
+CAT_API cat_bool_t cat_ssl_context_set_ca_file(cat_ssl_context_t *context, const char *ca_file);
+CAT_API cat_bool_t cat_ssl_context_set_ca_path(cat_ssl_context_t *context, const char *ca_path);
+CAT_API void cat_ssl_context_set_verify_depth(cat_ssl_context_t *context, int depth);
 
 /* connection */
 CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context);
@@ -142,7 +151,7 @@ CAT_API cat_buffer_t *cat_ssl_get_read_buffer(cat_ssl_t *ssl, size_t size);
 CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl);
 CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl);
 
-CAT_API cat_bool_t cat_ssl_set_tlsext_host_name(cat_ssl_t *ssl, const char *name);
+CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name);
 
 typedef enum {
     CAT_SSL_RET_OK         = 0,
@@ -155,6 +164,9 @@ typedef enum {
 CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl);
 
 CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl);
+
+CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_signed);
+CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t name_length);
 
 CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t size);
 CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, size_t length);
