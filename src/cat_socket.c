@@ -631,21 +631,25 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 
     /* solve type and get af */
     if (type & CAT_SOCKET_TYPE_FLAG_SERVER) {
-        type ^= CAT_SOCKET_TYPE_FLAG_SERVER;
+        type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
         type |= CAT_SOCKET_TYPE_FLAG_SESSION;
+        /* Notice: use AF_UNSPEC to make sure that
+         * socket will not be created for now
+         * (it should be created when accept) */
         af = AF_UNSPEC;
-    }
-    type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
-    if (type & CAT_SOCKET_TYPE_FLAG_UNSPEC) {
-        af = AF_UNSPEC;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
-        af = AF_INET;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
-        af = AF_INET6;
     } else {
-        af = AF_UNSPEC;
-        if (type & CAT_SOCKET_TYPE_FLAG_INET) {
-            type |= CAT_SOCKET_TYPE_FLAG_UNSPEC;
+        type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
+        if (type & CAT_SOCKET_TYPE_FLAG_UNSPEC) {
+            af = AF_UNSPEC;
+        } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
+            af = AF_INET;
+        } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
+            af = AF_INET6;
+        } else {
+            af = AF_UNSPEC;
+            if (type & CAT_SOCKET_TYPE_FLAG_INET) {
+                type |= CAT_SOCKET_TYPE_FLAG_UNSPEC;
+            }
         }
     }
     /* init handler */
