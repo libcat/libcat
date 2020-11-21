@@ -478,11 +478,16 @@ static int socket_create(int domain, int type, int protocol)
 
 static cat_timeout_t cat_socket_get_dns_timeout_fast(const cat_socket_t *socket);
 
-static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port)
+static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port, cat_bool_t *is_host_name)
 {
     cat_sockaddr_union_t *address = &address_info->address;
     cat_sa_family_t af = cat_socket_get_af(socket);;
     int error;
+
+    /* for failure */
+    if (is_host_name != NULL) {
+        *is_host_name = cat_false;
+    }
 
     address->common.sa_family = af;
     address_info->length = sizeof(address_info->address);
@@ -515,6 +520,9 @@ static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_in
             if (unlikely(response == NULL)) {
                 return cat_false;
             }
+            if (is_host_name != NULL) {
+                *is_host_name = cat_true;
+            }
             memcpy(&address->common, response->ai_addr, response->ai_addrlen);
             cat_dns_freeaddrinfo(response);
             ret = cat_sockaddr_set_port(&address->common, port);
@@ -543,19 +551,6 @@ static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_in
             default:
                 CAT_NEVER_HERE("Unknown destination family");
         }
-#ifdef CAT_SSL
-        do {
-            cat_ssl_t *ssl = socket->internal->ssl;
-            if (ssl != NULL && !(ssl->flags & CAT_SSL_FLAG_HOST_NAME)) {
-                char *_name = cat_strndup(name, name_length);
-                /* it maybe a non-zero-termination string, we must strndup it */
-                if (_name != NULL) {
-                    (void) cat_ssl_set_tlsext_host_name(ssl, _name);
-                    cat_free(_name);
-                }
-            }
-        } while (0);
-#endif
 
         return cat_true;
     }
@@ -566,6 +561,11 @@ static cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_in
     }
 
     return cat_true;
+}
+
+static cat_always_inline cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port)
+{
+    return cat_socket_getaddrbyname_ex(socket, address_info, name, name_length, port, NULL);
 }
 
 static void cat_socket_tcp_on_open(cat_socket_t *socket)
@@ -729,6 +729,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     isocket->options.timeout = cat_socket_default_timeout_options;
 #ifdef CAT_SSL
     isocket->ssl = NULL;
+    isocket->ssl_peer_name = NULL;
 #endif
 
     if (fd != CAT_SOCKET_INVALID_FD) {
@@ -1131,8 +1132,9 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
             cat_socket_internal_t *iclient = client->internal;
             /* init client properties */
             iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
-            /* TODO: cat_socket_extends ? */
+            /* TODO: socket_extends() ? */
             memcpy(&iclient->options, &iserver->options, sizeof(iclient->options));
+            /* TODO: socket_on_open() ? */
             if ((client->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
                 cat_socket_tcp_on_open(client);
             }
@@ -1277,6 +1279,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
     cat_sockaddr_info_t address_info;
     cat_sockaddr_t *address;
     cat_socklen_t address_length;
+    cat_bool_t ret;
 
     /* resolve address (DNS query may be triggered) */
     /* Notice: address can not be NULL if it's not UDP */
@@ -1298,7 +1301,15 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
         address_length = 0;
     }
 
-    return cat_socket__connect(socket, isocket, address, address_length, timeout);
+    ret = cat_socket__connect(socket, isocket, address, address_length, timeout);
+
+#ifdef CAT_SSL
+    if (ret) {
+        isocket->ssl_peer_name = cat_strndup(name, name_length);
+    }
+#endif
+
+    return ret;
 }
 
 CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
@@ -1314,18 +1325,26 @@ CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sock
     return cat_socket__connect(socket, isocket, address, address_length, timeout);
 }
 
-CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context)
+#ifdef CAT_SSL
+CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options)
 {
-    return cat_socket_enable_crypto_ex(socket, context, cat_socket_get_handshake_timeout_fast(socket));
+    options->peer_name = NULL;
+    options->peer_name_length = 0;
+    options->verify_peer = cat_true;
+    options->verify_peer_name = cat_true;
+    options->allow_self_signed = cat_false;
 }
 
-CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, cat_timeout_t timeout)
+CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options)
 {
-#ifdef CAT_SSL
+    return cat_socket_enable_crypto_ex(socket, context, options, cat_socket_get_handshake_timeout_fast(socket));
+}
+
+CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options, cat_timeout_t timeout)
+{
     /* TODO: DTLS support */
     CAT_SOCKET_INET_STREAM_ONLY(socket, return cat_false);
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_RDWR, return cat_false);
-
     if (unlikely(isocket->ssl != NULL)) {
         CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
     } else {
@@ -1333,18 +1352,44 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
     }
     cat_ssl_t *ssl;
     cat_buffer_t *buffer;
+    cat_socket_crypto_options_t ioptions;
+    cat_bool_t is_client = cat_socket_is_client(socket);
     cat_bool_t use_tmp_context;
     cat_bool_t ret = cat_false;
 
     CAT_ASSERT(isocket->ssl == NULL);
 
+    /* check options */
+    if (options == NULL) {
+        cat_socket_crypto_options_init(&ioptions);
+    } else {
+        ioptions = *options;
+    }
+
+    /* check context */
     use_tmp_context = context == NULL;
     if (use_tmp_context) {
-        context = cat_ssl_context_create();
+        cat_ssl_method_t method;
+        if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
+            method = CAT_SSL_METHOD_TLS;
+        } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM)  {
+            method = CAT_SSL_METHOD_DTLS;
+        } else {
+            cat_update_last_error(CAT_ESSL, "Socket type is not supported by SSL");
+            goto _create_error;
+        }
+        context = cat_ssl_context_create(method);
         if (unlikely(context == NULL)) {
             goto _create_error;
         }
     }
+
+    /* check context related options */
+    if (is_client && ioptions.verify_peer) {
+        (void) cat_ssl_context_set_default_verify_paths(context);
+    }
+
+    /* create ssl connection */
     ssl = cat_ssl_create(NULL, context);
     if (use_tmp_context) {
         /* deref/free context */
@@ -1354,12 +1399,21 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         goto _create_error;
     }
 
-    if (cat_socket_is_session(socket)) {
+    /* set state */
+    if (!is_client) {
         cat_ssl_set_accept_state(ssl);
-    } else if (cat_socket_is_client(socket)) {
-        cat_ssl_set_connect_state(ssl);
     } else {
-        CAT_NEVER_HERE("Unknown role");
+        cat_ssl_set_connect_state(ssl);
+    }
+
+    /* connection related options */
+    if (ioptions.peer_name_length == 0 && isocket->ssl_peer_name != NULL) {
+        ioptions.peer_name = isocket->ssl_peer_name;
+        ioptions.peer_name_length = strlen(isocket->ssl_peer_name);
+    }
+    if (is_client && ioptions.peer_name_length > 0) {
+        CAT_ASSERT(ioptions.peer_name[ioptions.peer_name_length] == '\0');
+        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
     }
 
     buffer = &ssl->read_buffer;
@@ -1412,22 +1466,35 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         goto _io_error;
     }
 
+    if (ioptions.verify_peer) {
+        if (!cat_ssl_verify_peer(ssl, ioptions.allow_self_signed)) {
+            goto _verify_error;
+        }
+    }
+    if (ioptions.verify_peer_name) {
+        if (ioptions.peer_name_length == 0) {
+            cat_update_last_error(CAT_EINVAL, "SSL verify peer is enabled but peer name is empty");
+            goto _verify_error;
+        }
+        if (!cat_ssl_check_host(ssl, ioptions.peer_name, ioptions.peer_name_length)) {
+            goto _verify_error;
+        }
+    }
+
     isocket->ssl = ssl;
 
     return cat_true;
 
+    _verify_error:
     _io_error:
     cat_socket_internal_close(isocket);
     cat_ssl_close(ssl);
     _create_error:
-    cat_free(buffer);
     cat_update_last_error_with_previous("Socket enable crypto failed");
-#else
-    cat_update_last_error(CAT_ENODEV, "Socket enable crypto require SSL support");
-#endif
 
     return cat_false;
 }
+#endif
 
 CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_bool_t is_peer)
 {
@@ -2426,6 +2493,9 @@ static void cat_socket_close_callback(uv_handle_t *handle)
     }
 
 #ifdef CAT_SSL
+    if (isocket->ssl_peer_name != NULL) {
+        cat_free(isocket->ssl_peer_name);
+    }
     if (isocket->ssl != NULL) {
         cat_ssl_close(isocket->ssl);
     }

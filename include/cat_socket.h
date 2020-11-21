@@ -390,6 +390,7 @@ struct cat_socket_internal_s
     /* ext */
 #ifdef CAT_SSL
     cat_ssl_t *ssl;
+    char *ssl_peer_name;
 #endif
     /* u must be the last one (due to dynamic alloc) */
     union {
@@ -489,12 +490,21 @@ CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sock
 
 #ifdef CAT_SSL
 typedef cat_ssl_context_t cat_socket_crypto_context_t;
-#else
-typedef void *cat_socket_crypto_context_t;
-#endif
 
-CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context);
-CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, cat_timeout_t timeout);
+typedef struct
+{
+    const char *peer_name;
+    size_t peer_name_length;
+    cat_bool_t verify_peer;
+    cat_bool_t verify_peer_name;
+    cat_bool_t allow_self_signed;
+} cat_socket_crypto_options_t;
+
+CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options);
+
+CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options);
+CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options, cat_timeout_t timeout);
+#endif
 
 CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *length, cat_bool_t is_peer);
 CAT_API cat_bool_t cat_socket_getsockname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *length);
