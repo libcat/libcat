@@ -604,7 +604,7 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
                 }
                 str = altname->d.dNSName;
                 cat_debug(SSL, "Subject alt name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
-                if (cat_ssl_check_name(name, str)) {
+                if (cat_ssl_check_name(name, name_length, str)) {
                     cat_debug(SSL, "Subject alt name: match");
                     GENERAL_NAMES_free(altnames);
                     ret = cat_true;
@@ -633,7 +633,7 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
             entry = X509_NAME_get_entry(sname, i);
             str = X509_NAME_ENTRY_get_data(entry);
             cat_debug(SSL, "Common name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
-            if (cat_ssl_check_name(name, str)) {
+            if (cat_ssl_check_name(name, name_length, str)) {
                 cat_debug(SSL, "Common name: match");
                 ret = cat_true;
                 goto _out;
