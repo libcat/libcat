@@ -1332,11 +1332,11 @@ CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sock
 #ifdef CAT_SSL
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options)
 {
-    options->peer_name = NULL;
-    options->peer_name_length = 0;
+    cat_const_string_init(&options->peer_name);
     options->verify_peer = cat_true;
     options->verify_peer_name = cat_true;
     options->allow_self_signed = cat_false;
+    cat_const_string_init(&options->passphrase);
 }
 
 CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options)
@@ -1411,13 +1411,18 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
     }
 
     /* connection related options */
-    if (ioptions.peer_name_length == 0 && isocket->ssl_peer_name != NULL) {
-        ioptions.peer_name = isocket->ssl_peer_name;
-        ioptions.peer_name_length = strlen(isocket->ssl_peer_name);
+    if (ioptions.peer_name.length == 0 && isocket->ssl_peer_name != NULL) {
+        ioptions.peer_name.data = isocket->ssl_peer_name;
+        ioptions.peer_name.length = strlen(isocket->ssl_peer_name);
     }
-    if (is_client && ioptions.peer_name_length > 0) {
-        CAT_ASSERT(ioptions.peer_name[ioptions.peer_name_length] == '\0');
-        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
+    if (is_client && ioptions.peer_name.length > 0) {
+        CAT_ASSERT(ioptions.peer_name.data[ioptions.peer_name.length] == '\0');
+        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name.data);
+    }
+    if (ioptions.passphrase.length > 0) {
+        if (unlikely(!cat_ssl_set_passphrase(ssl, ioptions.passphrase.data, ioptions.passphrase.length))) {
+            goto _set_options_error;
+        }
     }
 
     buffer = &ssl->read_buffer;
@@ -1476,11 +1481,11 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         }
     }
     if (ioptions.verify_peer_name) {
-        if (ioptions.peer_name_length == 0) {
+        if (ioptions.peer_name.length == 0) {
             cat_update_last_error(CAT_EINVAL, "SSL verify peer is enabled but peer name is empty");
             goto _verify_error;
         }
-        if (!cat_ssl_check_host(ssl, ioptions.peer_name, ioptions.peer_name_length)) {
+        if (!cat_ssl_check_host(ssl, ioptions.peer_name.data, ioptions.peer_name.length)) {
             goto _verify_error;
         }
     }
@@ -1492,6 +1497,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
     _verify_error:
     _io_error:
     cat_socket_internal_close(isocket);
+    _set_options_error:
     cat_ssl_close(ssl);
     _create_error:
     cat_update_last_error_with_previous("Socket enable crypto failed");

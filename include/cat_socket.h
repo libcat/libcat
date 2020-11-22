@@ -493,11 +493,11 @@ typedef cat_ssl_context_t cat_socket_crypto_context_t;
 
 typedef struct
 {
-    const char *peer_name;
-    size_t peer_name_length;
+    cat_const_string_t peer_name;
     cat_bool_t verify_peer;
     cat_bool_t verify_peer_name;
     cat_bool_t allow_self_signed;
+    cat_const_string_t passphrase;
 } cat_socket_crypto_options_t;
 
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options);

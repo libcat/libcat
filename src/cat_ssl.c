@@ -188,25 +188,6 @@ CAT_API void cat_ssl_context_close(cat_ssl_context_t *context)
     SSL_CTX_free(context);
 }
 
-CAT_API void *cat_ssl_context_get_data(cat_ssl_context_t *context)
-{
-    return SSL_CTX_get_ex_data(context, cat_ssl_context_index);
-}
-
-CAT_API cat_bool_t cat_ssl_context_set_data(cat_ssl_context_t *context, void *data)
-{
-    cat_bool_t ret;
-
-    ret = SSL_CTX_set_ex_data(context, cat_ssl_context_index, data) == 1;
-
-    if (unlikely(!ret)) {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL Context set data failed");
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
 CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_protocols_t protocols)
 {
     if (!(protocols & CAT_SSL_PROTOCOL_SSLv2)) {
@@ -309,7 +290,6 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
     /* new BIO */
     do {
         cat_ssl_bio_t *ibio;
-
         if (unlikely(!BIO_new_bio_pair(&ibio, 0, &ssl->nbio, 0))) {
             cat_ssl_update_last_error(CAT_ESSL, "BIO_new_bio_pair() failed");
             goto _new_bio_pair_failed;
@@ -323,38 +303,34 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
         goto _alloc_buffer_failed;
     }
 
+    cat_string_init(&ssl->passphrase);
+
     return ssl;
 
     _alloc_buffer_failed:
     /* ibio will be free'd by SSL_free */
     BIO_free(ssl->nbio);
-    ssl->nbio = NULL;
-
     _set_ex_data_failed:
     _new_bio_pair_failed:
     SSL_free(ssl->connection);
     ssl->connection = NULL;
-
     _new_failed:
     if (ssl->flags & CAT_SSL_FLAG_ALLOC) {
         cat_free(ssl);
     }
-
     _malloc_failed:
-
     return NULL;
 }
 
 CAT_API void cat_ssl_close(cat_ssl_t *ssl)
 {
+    cat_string_close(&ssl->passphrase);
     cat_buffer_close(&ssl->write_buffer);
     cat_buffer_close(&ssl->read_buffer);
     /* ibio will be free'd by SSL_free */
     BIO_free(ssl->nbio);
-    ssl->nbio = NULL;
     /* implicitly frees internal_bio */
     SSL_free(ssl->connection);
-    ssl->connection = NULL;
     /* free */
     if (ssl->flags & CAT_SSL_FLAG_ALLOC) {
         cat_free(ssl);
@@ -431,6 +407,35 @@ CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name)
 #else
 #warning "SSL library version is too low to support sni server name"
 #endif
+
+    return cat_true;
+}
+
+static int cat_ssl_password_callback(char *buf, int length, int verify, void *data)
+{
+    cat_ssl_t *ssl = (cat_ssl_t *) data;
+
+    if (ssl->passphrase.length < (size_t) length - 1) {
+        memcpy(buf, ssl->passphrase.value, ssl->passphrase.length);
+        return (int) ssl->passphrase.length;
+    }
+
+    return 0;
+}
+
+CAT_API cat_bool_t cat_ssl_set_passphrase(cat_ssl_t *ssl, const char *passphrase, size_t passphrase_length)
+{
+    cat_ssl_connection_t *connection = ssl->connection;
+    cat_bool_t ret;
+
+    cat_string_close(&ssl->passphrase);
+    ret = cat_string_create(&ssl->passphrase, passphrase, passphrase_length);
+    if (unlikely(!ret)) {
+        cat_update_last_error_of_syscall("Malloc for SSL passphrase failed");
+        return cat_false;
+    }
+    SSL_set_default_passwd_cb_userdata(connection, ssl);
+    SSL_set_default_passwd_cb(connection, cat_ssl_password_callback);
 
     return cat_true;
 }
@@ -528,7 +533,7 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
 }
 
 #ifndef X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT
-static cat_bool_t cat_ssl_check_name(ASN1_STRING *pattern, const char *name, size_t name_length)
+static cat_bool_t cat_ssl_check_name(const char *name, size_t name_length, ASN1_STRING *pattern)
 {
     const unsigned char *s, *p, *end;
     size_t slen, plen;

@@ -124,6 +124,8 @@ typedef struct
     cat_ssl_bio_t *nbio;
     cat_buffer_t read_buffer;
     cat_buffer_t write_buffer;
+    /* options */
+    cat_string_t passphrase;
 } cat_ssl_t;
 
 #define CAT_SSL_MAX_BLOCK_LENGTH  EVP_MAX_BLOCK_LENGTH
@@ -152,6 +154,7 @@ CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl);
 CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl);
 
 CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name);
+CAT_API cat_bool_t cat_ssl_set_passphrase(cat_ssl_t *ssl, const char *passphrase, size_t passphrase_length);
 
 typedef enum {
     CAT_SSL_RET_OK         = 0,
