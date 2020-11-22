@@ -84,31 +84,37 @@ typedef enum
 
 typedef uint32_t cat_ssl_flags_t;
 
-typedef enum
-{
-    CAT_SSL_METHOD_TLS  = 1 << 0,
-    CAT_SSL_METHOD_DTLS = 1 << 1,
-} cat_ssl_method_t;
+#define CAT_SSL_METHOD_MAP(XX) \
+    XX(TLS,  1 << 0) \
+    XX(DTLS, 1 << 1) \
 
 typedef enum
 {
-    CAT_SSL_PROTOCOL_SSLv2   = 1 << 0,
-    CAT_SSL_PROTOCOL_SSLv3   = 1 << 1,
-    CAT_SSL_PROTOCOL_TLSv1   = 1 << 2,
-    CAT_SSL_PROTOCOL_TLSv1_1 = 1 << 3,
-    CAT_SSL_PROTOCOL_TLSv1_2 = 1 << 4,
-    CAT_SSL_PROTOCOL_TLSv1_3 = 1 << 5,
+#define CAT_SSL_METHOD_GEN(name, value) CAT_ENUM_GEN(CAT_SSL_METHOD_, name, value)
+    CAT_SSL_METHOD_MAP(CAT_SSL_METHOD_GEN)
+#undef CAT_SSL_METHOD_GEN
+} cat_ssl_method_t;
+
+#define CAT_SSL_PROTOCOL_MAP(XX) \
+    XX(SSLv2,   1 << 0) \
+    XX(SSLv3,   1 << 1) \
+    XX(TLSv1,   1 << 2) \
+    XX(TLSv1_1, 1 << 3) \
+    XX(TLSv1_2, 1 << 4) \
+    XX(TLSv1_3, 1 << 5) \
+
+typedef enum
+{
+#define CAT_SSL_PROTOCOL_GEN(name, value) CAT_ENUM_GEN(CAT_SSL_PROTOCOL_, name, value)
+    CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCOL_GEN)
+#undef CAT_SSL_PROTOCOL_GEN
 } cat_ssl_protocol_t;
 
 typedef enum
 {
-    CAT_SSL_PROTOCOLS_ALL =
-        CAT_SSL_PROTOCOL_SSLv2 |
-        CAT_SSL_PROTOCOL_SSLv3 |
-        CAT_SSL_PROTOCOL_TLSv1 |
-        CAT_SSL_PROTOCOL_TLSv1_1 |
-        CAT_SSL_PROTOCOL_TLSv1_2 |
-        CAT_SSL_PROTOCOL_TLSv1_3,
+#define CAT_SSL_PROTOCO_ALLL_GEN(name, value) CAT_SSL_PROTOCOL_##name |
+    CAT_SSL_PROTOCOLS_ALL = CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCO_ALLL_GEN) 0,
+#undef CAT_SSL_PROTOCO_ALLL_GEN
 } cat_ssl_union_protocols_t;
 
 typedef unsigned int cat_ssl_protocols_t;
