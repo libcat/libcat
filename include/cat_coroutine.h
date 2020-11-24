@@ -160,8 +160,8 @@ struct cat_coroutine_s
     /* internal properties (readonly) */
     cat_coroutine_stack_t *stack;
     cat_coroutine_stack_size_t stack_size;
-    cat_coroutine_context_t context;
     cat_coroutine_function_t function;
+    cat_coroutine_context_t context;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     cat_data_t *transfer_data;
 #endif
