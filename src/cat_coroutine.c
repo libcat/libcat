@@ -30,6 +30,37 @@
 #include <valgrind/valgrind.h>
 #endif
 
+/* context */
+
+#ifdef CAT_COROUTINE_USE_UCONTEXT
+typedef struct
+{
+    cat_data_t *data;
+} cat_coroutine_transfer_t;
+
+#define cat_coroutine_context_make(ucontext, function, argc, ...) \
+        makecontext(ucontext, function, argc, ##__VA_ARGS__)
+
+#define cat_coroutine_context_jump(current_ucontext, ucontext)    do { \
+    if (unlikely(swapcontext(current_ucontext, ucontext) != 0)) { \
+        cat_core_error(COROUTINE, "Ucontext swapcontext failed"); \
+    } \
+} while (0)
+
+#else
+
+typedef struct
+{
+    cat_coroutine_context_t from_context;
+    cat_data_t *data;
+} cat_coroutine_transfer_t;
+
+typedef void (*cat_coroutine_context_function_t)(cat_coroutine_transfer_t transfer);
+
+cat_coroutine_context_t cat_coroutine_context_make(cat_coroutine_stack_t *stack, size_t stack_size, cat_coroutine_context_function_t function);
+cat_coroutine_transfer_t cat_coroutine_context_jump(cat_coroutine_context_t const target_context, cat_data_t *transfer_data);
+#endif
+
 /* coroutine */
 
 static cat_coroutine_stack_size_t cat_coroutine_align_stack_size(size_t size)
