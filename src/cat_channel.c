@@ -37,8 +37,8 @@
 /* for select()
  * head must be consistent with coroutine */
 typedef struct {
-    cat_coroutine_id_t id;
     union { cat_queue_node_t node; } waiter;
+    cat_coroutine_id_t id;
     cat_coroutine_t *coroutine;
 } cat_channel_dummy_coroutine_t;
 

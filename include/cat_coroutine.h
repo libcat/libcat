@@ -143,14 +143,12 @@ typedef struct cat_coroutine_s cat_coroutine_t;
 
 struct cat_coroutine_s
 {
-    /* id is always the first member (readonly, invariant) */
-    cat_coroutine_id_t id;
-    /* for queue (internal) */
     union {
         cat_coroutine_t *coroutine;
         cat_queue_node_t node;
     } waiter;
     /* invariant info (readonly) */
+    cat_coroutine_id_t id;
     cat_msec_t start_time;
     cat_coroutine_flags_t flags;
     /* runtime info (readonly) */
