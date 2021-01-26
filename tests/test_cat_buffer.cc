@@ -24,7 +24,7 @@
 
 bool operator==(const cat_buffer_allocator_t& lhs, const cat_buffer_allocator_t& rhs)
 {
-    return lhs.alloc == rhs.alloc && lhs.free == rhs.free && lhs.realloc == rhs.realloc && lhs.update == rhs.update;
+    return lhs.alloc_function == rhs.alloc_function && lhs.free_function == rhs.free_function && lhs.realloc_function == rhs.realloc_function && lhs.update_function == rhs.update_function;
 }
 
 bool operator==(const cat_buffer_t& lhs, const cat_buffer_t& rhs)
@@ -39,9 +39,9 @@ TEST(cat_buffer, alloc_standard)
 {
     char *prt;
 
-    prt = cat_buffer_allocator.alloc(CAT_TEST_DEFAULT_BUFFER_SIZE);
+    prt = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_NE(nullptr, prt);
-    cat_buffer_allocator.free(prt);
+    cat_buffer_allocator.free_function(prt);
 }
 
 TEST(cat_buffer, realloc_standard)
@@ -49,11 +49,11 @@ TEST(cat_buffer, realloc_standard)
     char *src;
     char *dst;
 
-    src = cat_buffer_allocator.alloc(CAT_TEST_DEFAULT_BUFFER_SIZE);
+    src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_NE(nullptr, src);
 
-    dst = cat_buffer_allocator.realloc(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE * 2);
-    DEFER(cat_buffer_allocator.free(dst));
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE * 2);
+    DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);
 }
@@ -65,7 +65,7 @@ TEST(cat_buffer, realloc_standard_data)
     /* src will be free, so we need src_tmp */
     char src_tmp[CAT_TEST_DEFAULT_BUFFER_SIZE + 1];
 
-    src = cat_buffer_allocator.alloc(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
+    src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     ASSERT_NE(nullptr, src);
 
     for (size_t i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
@@ -73,8 +73,8 @@ TEST(cat_buffer, realloc_standard_data)
         src_tmp[i] = src[i];
     }
 
-    dst = cat_buffer_allocator.realloc(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
-    DEFER(cat_buffer_allocator.free(dst));
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
+    DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);
 
@@ -90,7 +90,7 @@ TEST(cat_buffer, realloc_standard_less_data)
     /* src will be free, so we need src_tmp */
     char src_tmp[CAT_TEST_DEFAULT_BUFFER_SIZE + 1];
 
-    src = cat_buffer_allocator.alloc(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
+    src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     ASSERT_NE(nullptr, src);
 
     for (size_t i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
@@ -98,8 +98,8 @@ TEST(cat_buffer, realloc_standard_less_data)
         src_tmp[i] = src[i];
     }
 
-    dst = cat_buffer_allocator.realloc(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE / 2 + 1);
-    DEFER(cat_buffer_allocator.free(dst));
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE / 2 + 1);
+    DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);
 
@@ -112,9 +112,9 @@ TEST(cat_buffer, free_standard)
 {
     char *prt;
 
-    prt = cat_buffer_allocator.alloc(CAT_TEST_DEFAULT_BUFFER_SIZE);
+    prt = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_NE(nullptr, prt);
-    cat_buffer_allocator.free(prt);
+    cat_buffer_allocator.free_function(prt);
 }
 
 TEST(cat_buffer, module_init)
@@ -466,7 +466,7 @@ TEST(cat_buffer, fetch)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
     prt = cat_buffer_fetch(&buffer);
-    DEFER(cat_buffer_allocator.free(prt));
+    DEFER(cat_buffer_allocator.free_function(prt));
     ASSERT_STREQ(prt, data);
     ASSERT_EQ(empty_buffer, buffer);
 }
