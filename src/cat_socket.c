@@ -923,7 +923,7 @@ CAT_API void cat_socket_set_global_##type##_timeout(cat_timeout_t timeout) \
     CAT_SOCKET_G(options.timeout.type) = cat_socket_align_global_timeout(timeout); \
 } \
 \
-static cat_always_inline cat_timeout_t cat_socket_internal_get_##type##_timeout(const cat_socket_internal_t *isocket) \
+static cat_always_inline CAT_ATTRIBUTE_UNUSED cat_timeout_t cat_socket_internal_get_##type##_timeout(const cat_socket_internal_t *isocket) \
 { \
     if (isocket->options.timeout.type == CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT) { \
         return cat_socket_get_global_##type##_timeout(); \
@@ -932,7 +932,7 @@ static cat_always_inline cat_timeout_t cat_socket_internal_get_##type##_timeout(
     return isocket->options.timeout.type; \
 } \
 \
-static cat_always_inline cat_timeout_t cat_socket_get_##type##_timeout_fast(const cat_socket_t *socket) \
+static cat_always_inline CAT_ATTRIBUTE_UNUSED cat_timeout_t cat_socket_get_##type##_timeout_fast(const cat_socket_t *socket) \
 { \
     CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(socket, isocket, return CAT_TIMEOUT_INVALID); \
     \
