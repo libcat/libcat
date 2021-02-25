@@ -42,6 +42,19 @@
 #define cat_sockaddr_is_linux_abstract_name(path) 0
 #endif
 
+#if defined(__APPLE__)
+/* Due to a possible kernel bug at least in OS X 10.10 "Yosemite",
+ * EPROTOTYPE can be returned while trying to write to a socket that is
+ * shutting down. If we retry the write, we should get the expected EPIPE
+ * instead. */
+#define CAT_SOCKET_RETRY_ON_WRITE_ERROR(errno) (errno == EINTR || errno == EPROTOTYPE)
+#else
+#define CAT_SOCKET_RETRY_ON_WRITE_ERROR(errno) (errno == EINTR)
+#endif /* defined(__APPLE__) */
+
+#define CAT_SOCKET_IS_TRANSIENT_WRITE_ERROR(errno) \
+    (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
+
 #ifdef AF_UNIX
 CAT_STATIC_ASSERT(AF_LOCAL == AF_UNIX);
 #endif
@@ -2041,10 +2054,11 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
         msg.msg_namelen = address_length;
         msg.msg_iov = (struct iovec *) vector;
         msg.msg_iovlen = vector_count;
-        error = sendmsg(fd, &msg, 0);
+        do {
+            error = sendmsg(fd, &msg, 0);
+        } while (error < 0 && CAT_SOCKET_RETRY_ON_WRITE_ERROR(cat_sys_errno));
         if (unlikely(error < 0)) {
-            error = cat_translate_sys_error(cat_sys_errno);
-            if (error == CAT_EAGAIN) {
+            if (CAT_SOCKET_IS_TRANSIENT_WRITE_ERROR(cat_sys_errno)) {
                 // FIXME: wait write and queued (we should support multi write)
                 // FIXME: support timeout
                 if (likely(cat_time_msleep(1) == 0)) {
