@@ -98,14 +98,14 @@ TEST(cat_socket, cat_sockaddr_get_address_ip6)
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV6), buffer_size);
 }
 
-TEST(cat_socket, cat_sockaddr_get_address_unix)
+TEST(cat_socket, cat_sockaddr_get_address_pipe)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
     char buffer[CAT_SOCKADDR_MAX_PATH];
     size_t buffer_size = CAT_SOCKADDR_MAX_PATH;
 
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_UNIX));
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
@@ -169,13 +169,13 @@ TEST(cat_socket, cat_sockaddr_get_port_ip6)
     ASSERT_GT(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_get_port_unix)
+TEST(cat_socket, cat_sockaddr_get_port_pipe)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
     int port;
 
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_UNIX));
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
@@ -322,12 +322,12 @@ TEST(cat_socket, cat_sockaddr_check_ip6)
     ASSERT_TRUE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in6_t)));
 }
 
-TEST(cat_socket, cat_sockaddr_check_unix_error)
+TEST(cat_socket, cat_sockaddr_check_pipe_error)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
 
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_UNIX));
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
@@ -737,8 +737,10 @@ TEST(cat_socket, echo_tcp_client)
 
     /* pipeline */
     do {
-        char *read_buffers[TEST_MAX_REQUESTS];
-        char *write_buffers[TEST_MAX_REQUESTS];
+        char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
+        char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
+        ASSERT_NE(read_buffers, nullptr);
+        ASSERT_NE(write_buffers, nullptr);
         /* send requests */
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
@@ -758,6 +760,8 @@ TEST(cat_socket, echo_tcp_client)
             cat_free(read_buffers[n]);
             cat_free(write_buffers[n]);
         }
+        cat_free(write_buffers);
+        cat_free(read_buffers);
     } while (0);
 }
 
