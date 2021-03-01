@@ -126,22 +126,26 @@ typedef enum
 typedef enum
 {
     CAT_HTTP_PARSER_EVENT_FLAG_NONE = 0,
-    CAT_HTTP_PARSER_EVENT_FLAG_LINE = 1 << 1,
-    CAT_HTTP_PARSER_EVENT_FLAG_DATA = 1 << 2,
+    CAT_HTTP_PARSER_EVENT_FLAG_LINE = 1 << 1, /* first line */
+    CAT_HTTP_PARSER_EVENT_FLAG_DATA = 1 << 2, /* have data */
 } cat_http_parser_event_flag_t; /* 1 ~ 15 */
 
 #define CAT_HTTP_PARSER_EVENT_MAP(XX) \
-    XX(NONE,             (0)) \
-    XX(MESSAGE_BEGIN,    (1 << 16)) \
-    XX(URL,              (1 << 17) | CAT_HTTP_PARSER_EVENT_FLAG_LINE | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
-    XX(STATUS,           (1 << 18) | CAT_HTTP_PARSER_EVENT_FLAG_LINE | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
-    XX(HEADER_FIELD,     (1 << 19) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
-    XX(HEADER_VALUE,     (1 << 20) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
-    XX(HEADERS_COMPLETE, (1 << 21)) \
-    XX(BODY,             (1 << 22) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
-    XX(MESSAGE_COMPLETE, (1 << 23)) \
-    XX(CHUNK_HEADER,     (1 << 24)) \
-    XX(CHUNK_COMPLETE,   (1 << 25))
+    XX(NONE,                  (0)) \
+    XX(MESSAGE_BEGIN,         (1 << 16)) \
+    XX(URL,                   (1 << 17) | CAT_HTTP_PARSER_EVENT_FLAG_LINE | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
+    XX(URL_COMPLETE,          (1 << 18)) \
+    XX(STATUS,                (1 << 19) | CAT_HTTP_PARSER_EVENT_FLAG_LINE | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
+    XX(STATUS_COMPLETE,       (1 << 20)) \
+    XX(HEADER_FIELD,          (1 << 21) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
+    XX(HEADER_VALUE,          (1 << 22) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
+    XX(HEADER_FIELD_COMPLETE, (1 << 23)) \
+    XX(HEADER_VALUE_COMPLETE, (1 << 24)) \
+    XX(HEADERS_COMPLETE,      (1 << 25)) \
+    XX(BODY,                  (1 << 26) | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
+    XX(MESSAGE_COMPLETE,      (1 << 27)) \
+    XX(CHUNK_HEADER,          (1 << 28)) \
+    XX(CHUNK_COMPLETE,        (1 << 29))
 
 typedef enum
 {
