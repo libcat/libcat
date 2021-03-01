@@ -739,15 +739,22 @@ TEST(cat_socket, echo_tcp_client)
     do {
         char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
         char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
+        bool done = false;
         ASSERT_NE(read_buffers, nullptr);
         ASSERT_NE(write_buffers, nullptr);
-        /* send requests */
+        /* generate write data */
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(write_buffers[n], nullptr);
             cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
-            ASSERT_TRUE(cat_socket_send(&echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
         }
+        /* send requests */
+        co([&] {
+            for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
+                ASSERT_TRUE(cat_socket_send(&echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+            }
+            done = true;
+        });
         /* recv responses */
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
@@ -760,8 +767,9 @@ TEST(cat_socket, echo_tcp_client)
             cat_free(read_buffers[n]);
             cat_free(write_buffers[n]);
         }
-        cat_free(write_buffers);
         cat_free(read_buffers);
+        cat_free(write_buffers);
+        ASSERT_TRUE(done);
     } while (0);
 }
 
