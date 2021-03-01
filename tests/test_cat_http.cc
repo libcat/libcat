@@ -83,7 +83,7 @@ TEST(cat_http_parser, reset)
     cat_http_parser_reset(parser);
     ASSERT_EQ(CAT_HTTP_METHOD_UNKNOWN, parser->llhttp.method);
     ASSERT_EQ(nullptr, parser->data);
-    ASSERT_EQ(0, parser->data_length);
+    ASSERT_EQ(0UL, parser->data_length);
     ASSERT_EQ(cat_false, parser->keep_alive);
 }
 
@@ -258,7 +258,7 @@ TEST(cat_http_parser, get_parsed_length_zero)
     ASSERT_TRUE(cat_http_parser_is_completed(parser));
 
     parsed_length = cat_http_parser_get_parsed_length(parser, request_get.data);
-    ASSERT_EQ(0, parsed_length);
+    ASSERT_EQ(0UL, parsed_length);
 }
 
 TEST(cat_http_parser, get_protocol_version)
@@ -362,7 +362,7 @@ TEST(cat_http_parser, get_content_length)
         ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
         event = cat_http_parser_get_event(parser);
         if (event == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE) {
-            ASSERT_EQ(7, cat_http_parser_get_content_length(parser));
+            ASSERT_EQ(7ULL, cat_http_parser_get_content_length(parser));
         } else if (event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
             size_t parsed_length = cat_http_parser_get_parsed_length(parser, request_post.data);
             ASSERT_EQ(request_post.length, parsed_length);

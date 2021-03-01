@@ -121,7 +121,7 @@ TEST(cat_coroutine, get_current_id_in_main)
     cat_coroutine_id_t cid;
 
     cid = cat_coroutine_get_current_id();
-    ASSERT_EQ(1, cid);
+    ASSERT_EQ(1ULL, cid);
 }
 
 TEST(cat_coroutine, get_current_id_not_in_main)
@@ -129,7 +129,7 @@ TEST(cat_coroutine, get_current_id_not_in_main)
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_coroutine_id_t cid;
         cid = cat_coroutine_get_current_id();
-        EXPECT_GE(cid, 2);
+        EXPECT_GE(cid, 2ULL);
         return nullptr;
     }, nullptr);
 }
@@ -290,7 +290,7 @@ TEST(cat_coroutine, get_id_main)
     cat_coroutine_id_t id;
 
     id = cat_coroutine_get_id(cat_coroutine_get_main());
-    ASSERT_EQ(1, id);
+    ASSERT_EQ(1ULL, id);
 }
 
 TEST(cat_coroutine, get_id_not_main)
@@ -298,7 +298,7 @@ TEST(cat_coroutine, get_id_not_main)
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_coroutine_id_t id;
         id = cat_coroutine_get_id(cat_coroutine_get_current());
-        EXPECT_GE(id, 2);
+        EXPECT_GE(id, 2ULL);
         return nullptr;
     }, nullptr);
 }

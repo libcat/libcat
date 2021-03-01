@@ -42,8 +42,8 @@ TEST(cat_watch_dog, base)
          count++;
          pos += keyword.length();
     }
-    ASSERT_GT(count, 0);
-    ASSERT_LT(count, 10);
+    ASSERT_GT(count, 0UL);
+    ASSERT_LT(count, 10UL);
 }
 
 TEST(cat_watch_dog, single)

@@ -259,7 +259,7 @@ TEST(cat_socket, cat_sockaddr_to_name_address_length_eq_zero)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_TRUE(cat_sockaddr_to_name(&info->address.common, 0, name, &name_length, &port));
     ASSERT_STREQ("", name);
-    ASSERT_EQ(0, name_length);
+    ASSERT_EQ(0ULL, name_length);
     ASSERT_EQ(port, 0);
 }
 
@@ -616,13 +616,13 @@ TEST(cat_socket, buffer_size)
     /* get/set/align-memory/clear-cache/get/get-cache */
     ASSERT_GT(cat_socket_get_recv_buffer_size(&socket), 0);
     ASSERT_TRUE(cat_socket_set_recv_buffer_size(&socket, 0));
-    ASSERT_GE(cat_socket_get_recv_buffer_size(&socket), cat_getpagesize());
-    ASSERT_LE(cat_socket_get_recv_buffer_size(&socket), cat_getpagesize() * 2);
+    ASSERT_GE(cat_socket_get_recv_buffer_size(&socket), (int) cat_getpagesize());
+    ASSERT_LE(cat_socket_get_recv_buffer_size(&socket), (int) (cat_getpagesize() * 2));
     /* send buffer again */
     ASSERT_GT(cat_socket_get_send_buffer_size(&socket), 0);
     ASSERT_TRUE(cat_socket_set_send_buffer_size(&socket, 0));
-    ASSERT_GE(cat_socket_get_send_buffer_size(&socket), cat_getpagesize());
-    ASSERT_LE(cat_socket_get_send_buffer_size(&socket), cat_getpagesize() * 2);
+    ASSERT_GE(cat_socket_get_send_buffer_size(&socket), (int) cat_getpagesize());
+    ASSERT_LE(cat_socket_get_send_buffer_size(&socket), (int) (cat_getpagesize() * 2));
 }
 
 TEST(cat_socket, set_tcp_nodelay)
@@ -729,7 +729,7 @@ TEST(cat_socket, echo_tcp_client)
         ASSERT_TRUE(cat_socket_send(&echo_client, CAT_STRS(write_buffer)));
         /* recv response */
         ret = cat_socket_read(&echo_client, CAT_STRS(read_buffer));
-        ASSERT_EQ(ret, sizeof(read_buffer));
+        ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
         read_buffer[sizeof(read_buffer) - 1] = '\0';
         write_buffer[sizeof(write_buffer) - 1] = '\0';
         ASSERT_STREQ(read_buffer, write_buffer);
@@ -801,7 +801,7 @@ TEST(cat_socket, send_yield)
     } while (0);
     char *read_buffer = (char *) cat_malloc(buffer_size);
     ASSERT_NE(read_buffer, nullptr);
-    ASSERT_EQ(cat_socket_read(&client, read_buffer, buffer_size), buffer_size);
+    ASSERT_EQ(cat_socket_read(&client, read_buffer, buffer_size), (ssize_t) buffer_size);
     read_buffer[buffer_size - 1] = '\0';
     write_buffer[buffer_size - 1] = '\0';
     ASSERT_STREQ(read_buffer, write_buffer);

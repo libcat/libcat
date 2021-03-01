@@ -48,7 +48,7 @@ TEST(cat_channel, get_capacity)
     channel = cat_channel_create(&_channel, 1, sizeof(char), nullptr);
     DEFER(cat_channel_close(channel));
 
-    ASSERT_EQ(1, cat_channel_get_capacity(channel));
+    ASSERT_EQ(1UL, cat_channel_get_capacity(channel));
 }
 
 TEST(cat_channel, get_length)
@@ -59,9 +59,9 @@ TEST(cat_channel, get_length)
     DEFER(cat_channel_close(channel));
 
     ASSERT_TRUE(cat_channel_push(channel, &data, -1));
-    ASSERT_EQ(1, cat_channel_get_length(channel));
+    ASSERT_EQ(1UL, cat_channel_get_length(channel));
     ASSERT_TRUE(cat_channel_pop(channel, &data, -1));
-    ASSERT_EQ(0, cat_channel_get_length(channel));
+    ASSERT_EQ(0UL, cat_channel_get_length(channel));
 }
 
 TEST(cat_channel, is_empty)
@@ -360,8 +360,8 @@ TEST(cat_channel_buffered, create)
 
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
     DEFER(cat_channel_close(channel));
-    ASSERT_EQ(1, channel->capacity);
-    ASSERT_EQ(0, channel->length);
+    ASSERT_EQ(1UL, channel->capacity);
+    ASSERT_EQ(0UL, channel->length);
     ASSERT_EQ(sizeof(size_t), channel->data_size);
     ASSERT_EQ(nullptr, channel->dtor);
 }
@@ -446,7 +446,7 @@ TEST(cat_channel_buffered, multi)
             ASSERT_TRUE(cat_channel_push(channel, &i, -1));
         }
 
-        ASSERT_EQ(channel->length, 0);
+        ASSERT_EQ(channel->length, 0UL);
     }
 }
 
@@ -507,7 +507,7 @@ TEST(cat_channel_select, base)
         auto push = [&]() {
             cat_bool_t data;
             for (int n = 2; n--;) {
-                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
+                cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
                 data = cat_true;
                 response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                 ASSERT_NE(response, nullptr);
@@ -518,7 +518,7 @@ TEST(cat_channel_select, base)
         auto pop = [&]() {
             cat_bool_t data;
             for (int n = 2; n--;) {
-                cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
+                cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_POP, cat_false }};
                 data = cat_false;
                 response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                 ASSERT_NE(response, nullptr);
@@ -542,7 +542,7 @@ TEST(cat_channel_select, base)
                 ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
             }
             for (auto opcode : std::array<cat_channel_opcode_t, 2>{ CAT_CHANNEL_OPCODE_PUSH, CAT_CHANNEL_OPCODE_POP }) {
-                *requests = { &channel, &data, opcode, cat_false };
+                *requests = { &channel, { &data }, opcode, cat_false };
                 for (int n = 2; n--;) {
                     response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                     ASSERT_EQ(response->channel, &channel);
@@ -564,8 +564,8 @@ TEST(cat_channel_select, unbuffered)
         cat_channel_t *channel, read_channel, write_channel;
         cat_bool_t read_data = cat_false, write_data = cat_true;
         cat_channel_select_request_t requests[] = {
-            { &read_channel, &read_data, CAT_CHANNEL_OPCODE_POP, cat_false },
-            { &write_channel, &write_data, CAT_CHANNEL_OPCODE_PUSH, cat_false }
+            { &read_channel, { &read_data }, CAT_CHANNEL_OPCODE_POP, cat_false },
+            { &write_channel, { &write_data }, CAT_CHANNEL_OPCODE_PUSH, cat_false }
         };
         cat_channel_select_response_t *response;
         bool push_over = false, pop_over = false;
@@ -589,7 +589,7 @@ TEST(cat_channel_select, unbuffered)
             ASSERT_TRUE(data);
             pop_over = true;
         });
-        for (size_t n = 0; n < 2; n++) {
+        for (int n = 0; n < 2; n++) {
             response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
             ASSERT_NE(response, nullptr);
             ASSERT_FALSE(response->error);
@@ -621,14 +621,14 @@ TEST(cat_channel_select, timeout)
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
     } while (0);
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_POP, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
@@ -650,7 +650,7 @@ TEST(cat_channel_select, cancel)
     });
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_PUSH, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
@@ -662,7 +662,7 @@ TEST(cat_channel_select, cancel)
     });
 
     do {
-        cat_channel_select_request_t requests[] = {{ &channel, &data, CAT_CHANNEL_OPCODE_POP, cat_false }};
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_OPCODE_POP, cat_false }};
         response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), 0);
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());

@@ -105,9 +105,9 @@ TEST(cat_memory, getpagesize_function)
     size_t size2;
 
     size1 = cat_getpagesize();
-    ASSERT_GT(size1, 0);
+    ASSERT_GT(size1, 0UL);
     size2 = cat_getpagesize();
-    ASSERT_GT(size2, 0);
+    ASSERT_GT(size2, 0UL);
     ASSERT_EQ(size1, size2);
 }
 
@@ -116,13 +116,13 @@ TEST(cat_memory, bit_count)
     unsigned int count;
 
     count = cat_bit_count(0B10100101);
-    ASSERT_EQ(4, count);
+    ASSERT_EQ(4UL, count);
 
     count = cat_bit_count(0B11111111);
-    ASSERT_EQ(8, count);
+    ASSERT_EQ(8UL, count);
 
     count = cat_bit_count(0B00000000);
-    ASSERT_EQ(0, count);
+    ASSERT_EQ(0UL, count);
 }
 
 TEST(cat_memory, bit_pos)
@@ -144,7 +144,7 @@ TEST(cat_memory, hton64)
     uint64_t num;
 
     num = cat_hton64(1024);
-    ASSERT_EQ(1125899906842624, num);
+    ASSERT_EQ(1125899906842624ULL, num);
 }
 
 TEST(cat_memory, ntoh64)
@@ -152,5 +152,5 @@ TEST(cat_memory, ntoh64)
     uint64_t num;
 
     num = cat_ntoh64(1125899906842624);
-    ASSERT_EQ(1024, num);
+    ASSERT_EQ(1024ULL, num);
 }
