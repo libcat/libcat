@@ -19,8 +19,8 @@
 
 #include "test.h"
 
-#define CAT_TEST_DEFAULT_BUFFER_SIZE    16
-#define CAT_TEST_MEMORY_DEFAULT_ALIGNED_SIZE    4
+#define CAT_TEST_DEFAULT_BUFFER_SIZE         16
+#define CAT_TEST_MEMORY_DEFAULT_ALIGNED_SIZE (CAT_MEMORY_DEFAULT_ALIGNED_SIZE / 2)
 
 bool operator==(const cat_buffer_allocator_t& lhs, const cat_buffer_allocator_t& rhs)
 {
