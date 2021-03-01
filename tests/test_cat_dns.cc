@@ -56,3 +56,18 @@ TEST(cat_dns, get_ip)
         }
     }
 }
+
+TEST(cat_dns, cancel)
+{
+    cat_coroutine_t *current = cat_coroutine_get_current();
+    char ip[CAT_SOCKET_IP_BUFFER_SIZE] = { 0 };
+    bool ret;
+
+    co([&] {
+        cat_time_sleep(0);
+        cat_coroutine_resume(current, nullptr, nullptr);
+    });
+    ret = cat_dns_get_ip(CAT_STRS(ip), TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC);
+    ASSERT_EQ(ret, cat_false);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+}
