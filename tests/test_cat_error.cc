@@ -18,6 +18,7 @@
 
 #include "test.h"
 
+#ifndef CAT_OS_WIN
 TEST(cat_error, update_last_error_null)
 {
     testing::internal::CaptureStderr();
@@ -25,6 +26,7 @@ TEST(cat_error, update_last_error_null)
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_EQ(output, "Sprintf last error message failed" CAT_EOL);
 }
+#endif
 
 TEST(cat_error, strerror)
 {
