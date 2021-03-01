@@ -45,10 +45,10 @@ static const cat_const_string_t request_post = cat_const_string(
 
 TEST(cat_http_parser, method_get_name)
 {
-#define CAT_HTTP_METHOD_VARS_GEN(id, name, string) char name[] = #string;
+#define CAT_HTTP_METHOD_VARS_GEN(id, name, string) char str_##name[] = #string;
       CAT_HTTP_METHOD_MAP(CAT_HTTP_METHOD_VARS_GEN)
 #undef CAT_HTTP_METHOD_VARS_GEN
-#define CAT_HTTP_METHOD_ASSERTIONS_GEN(id, name, string) ASSERT_STREQ(name, cat_http_method_get_name(CAT_HTTP_METHOD_##name));
+#define CAT_HTTP_METHOD_ASSERTIONS_GEN(id, name, string) ASSERT_STREQ(str_##name, cat_http_method_get_name(CAT_HTTP_METHOD_##name));
       CAT_HTTP_METHOD_MAP(CAT_HTTP_METHOD_ASSERTIONS_GEN)
 #undef CAT_HTTP_METHOD_ASSERTIONS_GEN
     ASSERT_STREQ("UNKNOWN", cat_http_method_get_name(~0));
