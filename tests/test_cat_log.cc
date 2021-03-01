@@ -44,6 +44,7 @@ TEST(cat_log, warn)
     ASSERT_EQ(output, "Warning: <TEST> warn log in R1" CAT_EOL);
 }
 
+#ifdef CAT_OS_LINUX
 TEST(cat_log, null)
 {
     testing::internal::CaptureStderr();
@@ -51,6 +52,7 @@ TEST(cat_log, null)
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_EQ(output, "Sprintf log message failed" CAT_EOL);
 }
+#endif
 
 TEST(cat_log, error)
 {

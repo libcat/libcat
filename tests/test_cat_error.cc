@@ -18,7 +18,7 @@
 
 #include "test.h"
 
-#ifndef CAT_OS_WIN
+#ifdef CAT_OS_LINUX
 TEST(cat_error, update_last_error_null)
 {
     testing::internal::CaptureStderr();
