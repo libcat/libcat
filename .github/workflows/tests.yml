@@ -1,0 +1,83 @@
+name: tests
+
+on: [push, pull_request]
+
+env:
+  CODECOV_TOKEN: "b55625e6-4e26-46d9-9941-e986b008586d" # from: https://codecov.io/gh/libcat/libcat
+
+jobs:
+  tests:
+    name: Test on ${{matrix.os}} ${{matrix.build-type}}
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+            build-type: "Debug"
+          - os: windows-latest
+            build-type: "Release"
+      max-parallel: 4
+      fail-fast: false
+    steps:
+      - name: Install GTest
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]
+          then
+            vcpkg install gtest:x64-windows
+          else
+            git clone --depth 1 --single-branch https://github.com/google/googletest googletest &&
+            cd googletest &&
+            cmake -E make_directory build && cd build && 
+            cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DBUILD_SHARED_LIBS=ON -DBUILD_GMOCK=OFF && 
+            sudo cmake --build . --target install
+          fi
+
+      - name: Checkout sources
+        uses: actions/checkout@v1
+
+      - name: Build Libcat and Run tests
+        shell: bash
+        run: |
+          mkdir -p build && cd build &&
+          if [ "${{ runner.os }}" = "Windows" ]
+          then
+            cmake .. \
+              -DCMAKE_CXX_FLAGS="/std:c++latest" \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake || exit $?
+          else
+            cmake .. \
+              -DCMAKE_CXX_FLAGS="-std=c++11" \
+              -DCODE_COVERAGE=ON \
+              -DCMAKE_C_FLAGS_DEBUG="-Werror" \
+              -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit $?
+          fi &&
+          cmake --build . -j &&
+          if [ "${{ runner.os }}" = "windows" ]
+          then
+            exec ${{ matrix.build-type }}\cat_tests.exe
+          else
+            exec ./cat_tests
+          fi
+
+      - name: Run Coverage
+        if: runner.os != 'windows'
+        shell: bash
+        run:
+          sudo apt install lcov &&
+          lcov
+            --capture
+            --directory "${{runner.workspace}}/libcat/build"
+            --output-file coverage.info &&
+          lcov
+            --extract coverage.info
+              "${{runner.workspace}}/libcat/include/*"
+              "${{runner.workspace}}/libcat/src/*"
+            --output-file coverage.info &&
+          lcov --list coverage.info &&
+          curl -s https://codecov.io/bash -o codecov.sh &&
+          chmod +x codecov.sh &&
+          ./codecov.sh -f coverage.info -t ${CODECOV_TOKEN}

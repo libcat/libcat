@@ -587,22 +587,25 @@ target_compile_options(cat PRIVATE ${cat_cflags})
 target_include_directories(cat PRIVATE ${cat_includes})
 target_link_libraries(cat ${cat_libraries})
 
-# Code Coverage Configuration
-add_library(coverage_config INTERFACE)
-option(CODE_COVERAGE "Enable coverage reporting" OFF)
-if(${CODE_COVERAGE})
-    target_compile_options(coverage_config INTERFACE
-        -O0
-        -g
-        --coverage
-    )
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
-        target_link_options(coverage_config INTERFACE --coverage)
-    else()
-        target_link_libraries(coverage_config INTERFACE --coverage)
+# Code Coverage Configuration (unix-like)
+# TODO: support windows
+if(NOT MSVC)
+    add_library(coverage_config INTERFACE)
+    option(CODE_COVERAGE "Enable coverage reporting" OFF)
+    if(${CODE_COVERAGE})
+        target_compile_options(coverage_config INTERFACE
+            -O0
+            -g
+            --coverage
+        )
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
+            target_link_options(coverage_config INTERFACE --coverage)
+        else()
+            target_link_libraries(coverage_config INTERFACE --coverage)
+        endif()
     endif()
+    target_link_libraries(cat coverage_config)
 endif()
-target_link_libraries(cat coverage_config)
 
 # tests
 find_package(GTest QUIET)
