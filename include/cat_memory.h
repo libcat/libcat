@@ -16,7 +16,7 @@
   +--------------------------------------------------------------------------+
  */
 
-#define CAT_MEMORY_DEFAULT_ALIGNED_SIZE                sizeof(long)
+#define CAT_MEMORY_DEFAULT_ALIGNED_SIZE                sizeof(void *)
 #define CAT_MEMORY_ALIGNED_SIZE(size)                  CAT_MEMORY_ALIGNED_SIZE_EX(size, CAT_MEMORY_DEFAULT_ALIGNED_SIZE)
 #define CAT_MEMORY_ALIGNED_SIZE_EX(size, alignment)    (((size) + ((alignment) - 1LL)) & ~((alignment) - 1LL))
 
