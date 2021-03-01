@@ -66,6 +66,7 @@ TEST(cat_signal, wait_multi)
     EXPECT_EQ(TEST_MAX_CONCURRENCY, count);
 }
 
+#ifndef CAT_OS_WIN
 TEST(cat_signal, invalid_kill)
 {
     const std::array<int, 2> invalid_signals{ CAT_SIGKILL, CAT_SIGSTOP };
@@ -75,6 +76,7 @@ TEST(cat_signal, invalid_kill)
         EXPECT_EQ(CAT_EINVAL, cat_get_last_error_code());
     }
 }
+#endif
 
 TEST(cat_signal, timeout)
 {
