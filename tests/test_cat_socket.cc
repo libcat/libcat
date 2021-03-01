@@ -333,9 +333,9 @@ TEST(cat_socket, cat_sockaddr_check_pipe_error)
     DEFER(unlink(TEST_PIPE_PATH));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
-    ASSERT_FALSE(cat_sockaddr_check(&info->address.common, offsetof(cat_sockaddr_local_t, sl_path) - 1));
+    ASSERT_FALSE(cat_sockaddr_check(&info->address.common, info->length - 1));
     ASSERT_EQ(CAT_EINVAL, cat_get_last_error_code());
-    ASSERT_TRUE(cat_sockaddr_check(&info->address.common, offsetof(cat_sockaddr_local_t, sl_path)));
+    ASSERT_TRUE(cat_sockaddr_check(&info->address.common, info->length));
 }
 
 TEST(cat_socket, init)
