@@ -41,7 +41,13 @@ TEST(cat_dns, getaddrinfo)
 TEST(cat_dns, get_ip)
 {
     char ip[CAT_SOCKET_IP_BUFFER_SIZE];
-    const int af_list[] = { AF_UNSPEC, AF_INET, AF_INET6 };
+    const int af_list[] = { AF_UNSPEC, AF_INET
+    // FIXME: Windows may return WSANO_DATA when query IPV6 address by unknown reason,
+    // possible a bug (feature?)
+#ifndef CAT_OS_WIN
+    , AF_INET6
+#endif
+    };
 
     for (auto n = 10; n--;) {
         for (int af : af_list) {
