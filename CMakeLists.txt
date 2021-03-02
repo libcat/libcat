@@ -37,64 +37,66 @@ string(CONCAT is-msvc $<OR:
     $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
 >)
 
-check_c_compiler_flag(/W4 CAT_LINT_W4)
-check_c_compiler_flag(/wd4100 CAT_LINT_NO_UNUSED_PARAMETER_MSVC)
-check_c_compiler_flag(/wd4127 CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC)
-check_c_compiler_flag(/wd4201 CAT_LINT_NO_NONSTANDARD_MSVC)
-check_c_compiler_flag(/wd4206 CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC)
-check_c_compiler_flag(/wd4210 CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC)
-check_c_compiler_flag(/wd4232 CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC)
-check_c_compiler_flag(/wd4456 CAT_LINT_NO_HIDES_LOCAL)
-check_c_compiler_flag(/wd4457 CAT_LINT_NO_HIDES_PARAM)
-check_c_compiler_flag(/wd4459 CAT_LINT_NO_HIDES_GLOBAL)
-check_c_compiler_flag(/wd4706 CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC)
-check_c_compiler_flag(/wd4996 CAT_LINT_NO_UNSAFE_MSVC)
-
-check_c_compiler_flag(-Wall CAT_LINT_WALL) # DO NOT use this under MSVC
-
-# TODO: Place these into its own function
-check_c_compiler_flag(-Wno-unused-parameter CAT_LINT_NO_UNUSED_PARAMETER)
-check_c_compiler_flag(-Wstrict-prototypes CAT_LINT_STRICT_PROTOTYPES)
-check_c_compiler_flag(-Wextra CAT_LINT_EXTRA)
-
-check_c_compiler_flag(/utf-8 CAT_LINT_UTF8_MSVC)
-
 set(lint-no-unused-parameter $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER}>:-Wno-unused-parameter>)
 set(lint-strict-prototypes $<$<BOOL:${CAT_LINT_STRICT_PROTOTYPES}>:-Wstrict-prototypes>)
 set(lint-extra $<$<BOOL:${CAT_LINT_EXTRA}>:-Wextra>)
-set(lint-w4 $<$<BOOL:${CAT_LINT_W4}>:/W4>)
-set(lint-no-unused-parameter-msvc $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER_MSVC}>:/wd4100>)
-set(lint-no-conditional-constant-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC}>:/wd4127>)
-set(lint-no-nonstandard-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_MSVC}>:/wd4201>)
-set(lint-no-nonstandard-empty-tu-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC}>:/wd4206>)
-set(lint-no-nonstandard-file-scope-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC}>:/wd4210>)
-set(lint-no-nonstandard-nonstatic-dlimport-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC}>:/wd4232>)
-set(lint-no-hides-local-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_LOCAL}>:/wd4456>)
-set(lint-no-hides-param-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_PARAM}>:/wd4457>)
-set(lint-no-hides-global-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_GLOBAL}>:/wd4459>)
-set(lint-no-conditional-assignment-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC}>:/wd4706>)
-set(lint-no-unsafe-msvc $<$<BOOL:${CAT_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
-# Unfortunately, this one is complicated because MSVC and clang-cl support -Wall
-# but using it is like calling -Weverything
-string(CONCAT lint-default $<
-  $<AND:$<BOOL:${CAT_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
->)
-set(lint-utf8-msvc $<$<BOOL:${CAT_LINT_UTF8_MSVC}>:/utf-8>)
-
 list(APPEND cat_cflags ${lint-strict-prototypes} ${lint-extra} ${lint-default} ${lint-w4})
 list(APPEND cat_cflags ${lint-no-unused-parameter})
-list(APPEND cat_cflags ${lint-no-unused-parameter-msvc})
-list(APPEND cat_cflags ${lint-no-conditional-constant-msvc})
-list(APPEND cat_cflags ${lint-no-nonstandard-msvc})
-list(APPEND cat_cflags ${lint-no-nonstandard-empty-tu-msvc})
-list(APPEND cat_cflags ${lint-no-nonstandard-file-scope-msvc})
-list(APPEND cat_cflags ${lint-no-nonstandard-nonstatic-dlimport-msvc})
-list(APPEND cat_cflags ${lint-no-hides-local-msvc})
-list(APPEND cat_cflags ${lint-no-hides-param-msvc})
-list(APPEND cat_cflags ${lint-no-hides-global-msvc})
-list(APPEND cat_cflags ${lint-no-conditional-assignment-msvc})
-list(APPEND cat_cflags ${lint-no-unsafe-msvc})
-list(APPEND cat_cflags ${lint-utf8-msvc} )
+if(MSVC)
+    check_c_compiler_flag(/W4 CAT_LINT_W4)
+    check_c_compiler_flag(/wd4100 CAT_LINT_NO_UNUSED_PARAMETER_MSVC)
+    check_c_compiler_flag(/wd4127 CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC)
+    check_c_compiler_flag(/wd4201 CAT_LINT_NO_NONSTANDARD_MSVC)
+    check_c_compiler_flag(/wd4206 CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC)
+    check_c_compiler_flag(/wd4210 CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC)
+    check_c_compiler_flag(/wd4232 CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC)
+    check_c_compiler_flag(/wd4456 CAT_LINT_NO_HIDES_LOCAL)
+    check_c_compiler_flag(/wd4457 CAT_LINT_NO_HIDES_PARAM)
+    check_c_compiler_flag(/wd4459 CAT_LINT_NO_HIDES_GLOBAL)
+    check_c_compiler_flag(/wd4706 CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC)
+    check_c_compiler_flag(/wd4996 CAT_LINT_NO_UNSAFE_MSVC)
+
+    check_c_compiler_flag(-Wall CAT_LINT_WALL) # DO NOT use this under MSVC
+
+    # TODO: Place these into its own function
+    check_c_compiler_flag(-Wno-unused-parameter CAT_LINT_NO_UNUSED_PARAMETER)
+    check_c_compiler_flag(-Wstrict-prototypes CAT_LINT_STRICT_PROTOTYPES)
+    check_c_compiler_flag(-Wextra CAT_LINT_EXTRA)
+
+    check_c_compiler_flag(/utf-8 CAT_LINT_UTF8_MSVC)
+
+    set(lint-w4 $<$<BOOL:${CAT_LINT_W4}>:/W4>)
+    set(lint-no-unused-parameter-msvc $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER_MSVC}>:/wd4100>)
+    set(lint-no-conditional-constant-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC}>:/wd4127>)
+    set(lint-no-nonstandard-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_MSVC}>:/wd4201>)
+    set(lint-no-nonstandard-empty-tu-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC}>:/wd4206>)
+    set(lint-no-nonstandard-file-scope-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC}>:/wd4210>)
+    set(lint-no-nonstandard-nonstatic-dlimport-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC}>:/wd4232>)
+    set(lint-no-hides-local-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_LOCAL}>:/wd4456>)
+    set(lint-no-hides-param-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_PARAM}>:/wd4457>)
+    set(lint-no-hides-global-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_GLOBAL}>:/wd4459>)
+    set(lint-no-conditional-assignment-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC}>:/wd4706>)
+    set(lint-no-unsafe-msvc $<$<BOOL:${CAT_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
+    # Unfortunately, this one is complicated because MSVC and clang-cl support -Wall
+    # but using it is like calling -Weverything
+    string(CONCAT lint-default $<
+    $<AND:$<BOOL:${CAT_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
+    >)
+    set(lint-utf8-msvc $<$<BOOL:${CAT_LINT_UTF8_MSVC}>:/utf-8>)
+    set(cat_msvc_cflags ${lint-utf8-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-unused-parameter-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-conditional-constant-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-empty-tu-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-file-scope-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-nonstatic-dlimport-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-hides-local-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-hides-param-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-hides-global-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-conditional-assignment-msvc})
+    list(APPEND cat_msvc_cflags ${lint-no-unsafe-msvc})
+    list(APPEND cat_cflags ${cat_msvc_cflags})
+endif()
 
 # ========== ASM ===========
 if (NOT MSVC)
@@ -130,8 +132,12 @@ set(cat_defines HAVE_LIBCAT=1)
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_BUILD_TYPE Debug)
 	set(CAT_DEBUG 1)
-    list(APPEND cat_cflags -g3 -O0)
-	list(APPEND cat_defines CAT_DEBUG=1)
+    list(APPEND cat_defines CAT_DEBUG=1)
+    if(NOT MSVC)
+        list(APPEND cat_cflags -g3 -O0)
+    else()
+        list(APPEND cat_cflags /Od)
+    endif()
 endif()
 
 set(cat_includes include)
@@ -165,6 +171,11 @@ set(cat_sources
     # [optional]
     src/cat_ssl.c
 )
+
+add_library(cat STATIC $<TARGET_OBJECTS:cat_bcontext> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
+if(MSVC)
+    set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
 
 set(cat_libraries)
 
@@ -271,7 +282,7 @@ if (1)
         ${cat_coroutine_context_dir}/make_${cat_coroutine_context_name}
         ${cat_coroutine_context_dir}/jump_${cat_coroutine_context_name}
     )
-    list(APPEND cat_sources ${cat_context_sources})
+    add_library(cat_bcontext OBJECT ${cat_context_sources})
 endif()
 
 # libuv dep /* $Id: 97a903309f79d79496a2a1f95cbcce21bfc2f76e $ */
@@ -491,12 +502,21 @@ if (1)
 
     # TODO: include => public, src => private
     set(uv_includes ${uv_dir}/include ${uv_dir}/src)
-
-    list(APPEND cat_cflags ${uv_cflags})
+    if(MSVC)
+        list(APPEND uv_cflags ${cat_msvc_cflags})
+        # things that dump warnings in libuv
+        # thus we donot maintaince libuv here, we disable them.
+        list(APPEND uv_cflags /wd4090 /wd4244 /wd4245 /wd4267 /wd4701 /wd4702)
+    endif()
+    
+    add_library(cat_uv OBJECT ${uv_sources})
     list(APPEND cat_defines ${uv_defines})
+    target_compile_definitions(cat_uv PRIVATE ${cat_defines})
+    target_compile_options(cat_uv PRIVATE ${uv_cflags})
     list(APPEND cat_includes ${uv_includes})
+    target_include_directories(cat_uv PRIVATE ${uv_includes})
     list(APPEND cat_libraries ${uv_libraries})
-    list(APPEND cat_sources ${uv_sources})
+    target_link_libraries(cat_uv ${uv_libraries})
 endif()
 
 # Valgrind headers and libraries finder (UNIX-like only)
@@ -557,12 +577,13 @@ endif()
 # llhttp dep
 if (1)
     set(llhttp_dir "deps/llhttp")
-    list(APPEND cat_includes ${llhttp_dir}/include)
-    list(APPEND cat_sources
+    add_library(cat_llhttp OBJECT 
         ${llhttp_dir}/src/api.c
         ${llhttp_dir}/src/http.c
         ${llhttp_dir}/src/llhttp.c
     )
+    list(APPEND cat_includes ${llhttp_dir}/include)
+    target_include_directories(cat_llhttp PRIVATE ${llhttp_dir}/include)
 endif()
 
 # OpenSSL dep
@@ -580,7 +601,6 @@ else()
     message(STATUS "OpenSSL is not enabled")
 endif()
 
-add_library(cat STATIC ${cat_sources})
 target_compile_definitions(cat PRIVATE ${cat_defines})
 target_compile_options(cat PRIVATE ${cat_cflags})
 # TODO: Separate public and private
@@ -619,9 +639,11 @@ if (${LIBCAT_BUILD_TESTS})
     message(STATUS "Enable testing (GTest-based)")
     enable_testing()
     enable_language(CXX)
-    set(CMAKE_CXX_STANDARD 11)
-    set(cat_cxxflags ${cat_cflags})
-    list(APPEND cat_cxxflags -Wall)
+    if(NOT MSVC)
+        set(cat_cxxflags ${cat_cflags} -std=c++11 -Wall)
+    else()
+        set(cat_cxxflags ${cat_cflags} /std:c++latest /W4 /EHsc)
+    endif()
     list(REMOVE_ITEM cat_cxxflags ${lint-strict-prototypes})
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
 	set(cat_test_sources
@@ -651,8 +673,14 @@ if (${LIBCAT_BUILD_TESTS})
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
-    target_link_libraries(cat_tests cat ${GTEST_BOTH_LIBRARIES})
+    # NOTE: gtest may needs gtest_main before its linking
+    target_link_libraries(cat_tests PRIVATE cat GTest::gtest_main GTest::gtest)
     add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    
+    add_custom_target(libcat_test ALL
+        COMMAND $<TARGET_FILE:cat_tests> --gtest_color=yes
+        DEPENDS cat_tests
+    )
 else()
     message(STATUS "Tests will not be built")
 endif()

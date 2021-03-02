@@ -6,76 +6,154 @@ env:
   CODECOV_TOKEN: "b55625e6-4e26-46d9-9941-e986b008586d" # from: https://codecov.io/gh/libcat/libcat
 
 jobs:
-  tests:
-    name: Test on ${{matrix.os}} ${{matrix.build-type}}
+  win-tests:
+    name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
     runs-on: ${{matrix.os}}
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-          - os: macos-latest
-          - os: windows-latest
-            build-type: "Debug"
-          - os: windows-latest
-            build-type: "Release"
-      max-parallel: 4
+        os: [ "windows-latest" ]
+        build-type: [ "Debug", "Release"]
+        #build-type: [ "Debug" ]
+      max-parallel: 2
       fail-fast: false
     steps:
+      - name: Cache GTest
+        uses: actions/cache@v2
+        id: cache-gtest
+        with:
+          path: |
+            C:\vcpkg\packages\gtest_x64-windows
+            C:\vcpkg\installed\*
+            C:\vcpkg\buildtrees\gtest
+            C:\vcpkg\buildtrees\detect_compiler
+            C:\vcpkg\downloads\*
+            C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: vcpkgdata-${{ hashFiles('.vcpkg_status') }}
+
       - name: Install GTest
-        shell: bash
+        shell: cmd
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]
-          then
-            vcpkg install gtest:x64-windows
-          else
-            git clone --depth 1 --single-branch https://github.com/google/googletest googletest &&
-            cd googletest &&
-            cmake -E make_directory build && cd build && 
-            cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DBUILD_SHARED_LIBS=ON -DBUILD_GMOCK=OFF && 
-            sudo cmake --build . --target install
-          fi
+          vcpkg install gtest:x64-windows
 
       - name: Checkout sources
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
+
+      - name: Build and test libcat
+        shell: cmd
+        run: |
+          @ECHO OFF
+          ECHO ::group::Create build dir
+          MKDIR build && CD build || goto error
+          ECHO ::endgroup::
+          REM ECHO ::group::Prepare vcvars
+          REM FOR /F "TOKENS=* USEBACKQ" %%I IN (`vswhere -property installationPath -latest`) DO CALL "%%I\VC\Auxiliary\Build\vcvars64.bat"  || goto error
+          REM ECHO ::endgroup::
+          ECHO ::group::Make cmake cache
+          cmake .. ^
+            -DCMAKE_CXX_FLAGS=/std:c++latest ^
+            -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
+            -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
+          ECHO ::endgroup::
+          ECHO ::group::Build and test libcat
+          cmake --build . -j -- -nologo || goto error
+          ECHO ::endgroup::
+          :error
+          EXIT /b %errorlevel%
+
+      # TODO: windows version converage
+
+  unix-tests:
+    name: Test on ${{matrix.os}}
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest", "macos-latest" ]
+      max-parallel: 2
+      fail-fast: false
+    steps:
+      - name: Cache GTest
+        uses: actions/cache@v2
+        id: cache-gtest
+        with:
+          path: |
+            ${{github.workspace}}/googletest
+          key: ${{matrix.os}}-gtestb-${{ hashFiles('googletest/.git/refs/heads/master') }}
+
+      - name: Install GTest
+        run: |
+          GTEST_DIR=${{github.workspace}}/googletest
+          updategit()
+          {
+            oldref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
+            git --git-dir=${GTEST_DIR}/.git --work-tree=${GTEST_DIR} pull --ff-only || return 1
+            newref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
+          }
+          creategit()
+          {
+            rm -rf ${GTEST_DIR} 2>&- >&-
+            oldref=""
+            git clone --depth 1 --single-branch https://github.com/google/googletest ${GTEST_DIR} || return 1
+            newref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
+          }
+          # prepare cmake source
+          if [ -d ${GTEST_DIR} ]
+          then
+            updategit || creategit
+          else
+            creategit
+          fi || {
+            echo "Failed fetching gtest codes"
+            exit 1
+          }
+          cd googletest &&
+          if [ x"${oldref}" != x"${newref}" ]
+          then
+            echo "Building gtest"
+            cmake -E make_directory build && cd build && 
+            cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DBUILD_SHARED_LIBS=ON -DBUILD_GMOCK=OFF &&
+            cmake --build . -j
+          fi || {
+            echo "Failed building gtest"
+            exit 1
+          }
+          echo "Installing gtest"
+          sudo cmake --build . --target install
+
+      - name: Checkout sources
+        uses: actions/checkout@v2
 
       - name: Build Libcat and Run tests
         shell: bash
+        id: build
         run: |
-          mkdir -p build && cd build &&
-          if [ "${{ runner.os }}" = "Windows" ]
-          then
-            cmake .. \
-              -DCMAKE_CXX_FLAGS="/std:c++latest" \
-              -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
-              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake || exit $?
-          else
-            cmake .. \
-              -DCMAKE_CXX_FLAGS="-std=c++11" \
-              -DCODE_COVERAGE=ON \
-              -DCMAKE_C_FLAGS_DEBUG="-Werror" \
-              -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit $?
-          fi &&
-          cmake --build . -j &&
-          if [ "${{ runner.os }}" = "windows" ]
-          then
-            exec ${{ matrix.build-type }}\cat_tests.exe
-          else
-            exec ./cat_tests
-          fi
+          echo "::set-output name=wd::$PWD"
+          echo "::endgroup::"
+          echo "::group::Create build dir"
+          mkdir -p build && cd build || exit 1
+          echo "::endgroup::"
+          echo "::group::Make cmake cache"
+          cmake .. \
+            -DCMAKE_CXX_FLAGS="-std=c++11" \
+            -DCODE_COVERAGE=ON \
+            -DCMAKE_C_FLAGS_DEBUG="-Werror" \
+            -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
+          echo "::endgroup::"
+          echo "::group::Build and test libcat"
+          cmake --build . -j || exit 1
+          echo "::endgroup::"
 
       - name: Run Coverage
-        if: runner.os != 'windows'
         shell: bash
         run:
           sudo apt install lcov &&
           lcov
             --capture
-            --directory "${{runner.workspace}}/libcat/build"
+            --directory "${{steps.build.outputs.wd}}"
             --output-file coverage.info &&
           lcov
             --extract coverage.info
-              "${{runner.workspace}}/libcat/include/*"
-              "${{runner.workspace}}/libcat/src/*"
+              "${{steps.build.outputs.wd}}/include/*"
+              "${{steps.build.outputs.wd}}/src/*"
             --output-file coverage.info &&
           lcov --list coverage.info &&
           curl -s https://codecov.io/bash -o codecov.sh &&

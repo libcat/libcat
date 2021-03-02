@@ -40,16 +40,19 @@ public:
     virtual void TearDown()
     {
         ASSERT_TRUE(cat_stop());
-        ASSERT_EQ(cat_coroutine_get_count() , 1UL);
+        ASSERT_EQ(cat_coroutine_get_count() , 1);
         ASSERT_TRUE(cat_shutdown_all());
     }
 };
 
 int main(int argc, char *argv[])
 {
-    ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
-    ::testing::AddGlobalTestEnvironment(new BootstrapEnvironment);
     ::testing::InitGoogleTest(&argc, argv);
+#if GTEST_HAS_DEATH_TEST
+    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+#endif
+    ::testing::AddGlobalTestEnvironment(new BootstrapEnvironment);
+
     return RUN_ALL_TESTS();
 }
 
