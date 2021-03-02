@@ -32,7 +32,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        usleep((cat_watch_dog_get_quantum() / 1000) * 3);
+        usleep((cat_watch_dog_get_quantum() / 1000) * 10);
     });
 
     std::string output = testing::internal::GetCapturedStderr();
@@ -43,7 +43,7 @@ TEST(cat_watch_dog, base)
          pos += keyword.length();
     }
     ASSERT_GT(count, 0UL);
-    ASSERT_LT(count, 10UL);
+    ASSERT_LT(count, 50UL);
 }
 
 TEST(cat_watch_dog, single)
