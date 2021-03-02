@@ -716,7 +716,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         } else if ((type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) {
             error = uv_udp_open(&isocket->u.udp, fd);
         } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
-            error = uv_pipe_open(&isocket->u.pipe, fd);
+            error = uv_pipe_open(&isocket->u.pipe, (uv_file) fd);
         } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
             error = 0;
         } else {
@@ -843,11 +843,11 @@ CAT_API cat_sa_family_t cat_socket_get_af(const cat_socket_t *socket)
 
 static cat_socket_fd_t cat_socket_internal_get_fd_fast(const cat_socket_internal_t *isocket)
 {
-    uv_os_fd_t fd = CAT_SOCKET_INVALID_FD;
+    uv_os_fd_t fd = (uv_os_fd_t) CAT_SOCKET_INVALID_FD;
 
     (void) uv_fileno(&isocket->u.handle, &fd);
 
-    return fd;
+    return (cat_socket_fd_t) fd;
 }
 
 CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket)
@@ -859,7 +859,7 @@ CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket)
 
 static cat_socket_fd_t cat_socket_internal_get_fd(const cat_socket_internal_t *isocket)
 {
-    uv_os_fd_t fd = CAT_SOCKET_INVALID_FD;
+    uv_os_fd_t fd = (uv_os_fd_t) CAT_SOCKET_INVALID_FD;
     int error;
 
     error = uv_fileno(&isocket->u.handle, &fd);
@@ -867,7 +867,7 @@ static cat_socket_fd_t cat_socket_internal_get_fd(const cat_socket_internal_t *i
         cat_update_last_error_with_reason(error, "Socket get fd failed");
     }
 
-    return fd;
+    return (cat_socket_fd_t) fd;
 }
 
 CAT_API cat_socket_fd_t cat_socket_get_fd(const cat_socket_t *socket)
@@ -2974,7 +2974,7 @@ static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
     }
 
     cat_info(SOCKET, "%-4s fd: %-6d io: %-12s role: %-7s addr: %s:%d, peer: %s:%d",
-                     type_name, fd, io_state_naming, role, sock_addr, sock_port, peer_addr, peer_port);
+                     type_name, (int) fd, io_state_naming, role, sock_addr, sock_port, peer_addr, peer_port);
 }
 
 CAT_API void cat_socket_dump_all(void)
