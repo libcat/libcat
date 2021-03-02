@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
 #if GTEST_HAS_DEATH_TEST
-    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+    ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
 #endif
     ::testing::AddGlobalTestEnvironment(new BootstrapEnvironment);
 
