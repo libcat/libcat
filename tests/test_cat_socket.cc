@@ -968,8 +968,12 @@ TEST(cat_socket, dump_all)
     DEFER(cat_socket_close(pipe_socket));
 
     cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
-    ASSERT_NE(nullptr, tty_socket);
-    DEFER(cat_socket_close(tty_socket));
+    if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
+        ASSERT_NE(nullptr, tty_socket);
+        DEFER(cat_socket_close(tty_socket));
+    } else {
+        ASSERT_EQ(nullptr, tty_socket);
+    }
 
     testing::internal::CaptureStdout();
 
@@ -979,7 +983,10 @@ TEST(cat_socket, dump_all)
     ASSERT_NE(output.find("TCP"), std::string::npos);
     ASSERT_NE(output.find("UDP"), std::string::npos);
     ASSERT_TRUE(output.find("PIPE") != std::string::npos || output.find("UNIX") != std::string::npos);
-    ASSERT_TRUE(output.find("TTY") != std::string::npos || output.find("STDOUT") != std::string::npos);
+    ASSERT_EQ(
+        output.find("TTY") != std::string::npos || output.find("STDOUT") != std::string::npos,
+        uv_guess_handle(STDOUT_FILENO) == UV_TTY
+    );
 }
 
 TEST(cat_socket, echo_tcp_server_shutdown)
