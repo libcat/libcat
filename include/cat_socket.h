@@ -144,6 +144,14 @@ typedef uv_os_sock_t cat_socket_fd_t;
 #define STDERR_FILENO ((cat_socket_fd_t) 2) /* standard error file descriptor */
 #endif
 
+/* socket length */
+
+#ifndef CAT_OS_WIN
+typedef size_t cat_socket_recv_length_t;
+#else
+typedef int cat_socket_recv_length_t;
+#endif
+
 /* socket vector */
 
 #ifndef CAT_OS_WIN

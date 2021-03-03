@@ -23,14 +23,14 @@ TEST(cat_time, msleep)
     cat_msec_t s = cat_time_msec();
     ASSERT_EQ(cat_time_msleep(10), 0);
     s = cat_time_msec() - s;
-    ASSERT_GE(s, 10);
+    ASSERT_GE(s, 5);
 }
 
 TEST(cat_time, usleep)
 {
     cat_msec_t s = cat_time_msec();
     ASSERT_EQ(cat_time_usleep(10 * 1000), 0);
-    ASSERT_GE(s, 10);
+    ASSERT_GE(s, 5);
 }
 
 TEST(cat_time, nanosleep)
@@ -39,7 +39,7 @@ TEST(cat_time, nanosleep)
     timespec time = { 0, 10 * 1000 * 1000 };
     ASSERT_EQ(cat_time_nanosleep(&time, nullptr), 0);
     s = cat_time_msec() - s;
-    ASSERT_GE(s, 10);
+    ASSERT_GE(s, 5);
 }
 
 TEST(cat_time, msleep_cancel)

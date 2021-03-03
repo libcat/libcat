@@ -74,7 +74,7 @@ typedef union
 #define CAT_FS_HANDLE_RESULT(operation) \
     CAT_FS_HANDLE_ERROR(operation); \
     if (unlikely(context->fs.result < 0)) { \
-        cat_update_last_error_with_reason(context->fs.result, "File-System open failed"); \
+        cat_update_last_error_with_reason((cat_errno_t) context->fs.result, "File-System open failed"); \
         return -1; \
     } \
     return context->fs.result; \

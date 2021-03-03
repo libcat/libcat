@@ -41,7 +41,7 @@ TEST(cat_dns, getaddrinfo)
 TEST(cat_dns, get_ip)
 {
     char ip[CAT_SOCKET_IP_BUFFER_SIZE];
-    const int af_list[] = { AF_UNSPEC, AF_INET
+    const cat_sa_family_t af_list[] = { AF_UNSPEC, AF_INET
     // FIXME: Windows may return WSANO_DATA when query IPV6 address by unknown reason,
     // possible a bug (feature?)
 #ifndef CAT_OS_WIN
@@ -50,7 +50,7 @@ TEST(cat_dns, get_ip)
     };
 
     for (auto n = 10; n--;) {
-        for (int af : af_list) {
+        for (cat_sa_family_t af : af_list) {
             bool ret;
             memset(ip, 0, sizeof(ip));
             ret = cat_dns_get_ip(CAT_STRS(ip), TEST_REMOTE_IPV6_HTTP_SERVER_HOST, af);

@@ -23,7 +23,7 @@
 
 TEST(cat_channel, base)
 {
-    for (size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
+    for (cat_channel_size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
         cat_channel_t *channel, _channel;
 
         channel = cat_channel_create(&_channel, size, sizeof(size_t), nullptr);
@@ -421,16 +421,16 @@ TEST(cat_channel_buffered, timeout)
 {
     cat_msec_t s = cat_time_msec();
     cat_channel_t *channel, _channel;
-    channel = cat_channel_create(&_channel, 5, sizeof(size_t), nullptr);
+    channel = cat_channel_create(&_channel, 10, sizeof(size_t), nullptr);
     size_t n;
-    ASSERT_FALSE(cat_channel_pop(channel, &n, 5));
+    ASSERT_FALSE(cat_channel_pop(channel, &n, 10));
     s = cat_time_msec() - s;
     ASSERT_GE(s, 5);
 }
 
 TEST(cat_channel_buffered, multi)
 {
-    for (size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
+    for (cat_channel_size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
         cat_channel_t *channel, _channel;
         channel = cat_channel_create(&_channel, size, sizeof(size_t), nullptr);
 
