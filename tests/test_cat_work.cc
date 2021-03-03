@@ -21,6 +21,7 @@
 TEST(cat_work, base)
 {
     SKIP_IF(is_valgrind());
+    bool done = false;
 
     int buckets[10] = { };
     cat_msec_t s = cat_time_msec();
@@ -28,16 +29,27 @@ TEST(cat_work, base)
     for (int n = 0; n < 10; n++) {
         co([&, n] {
             EXPECT_TRUE(work([&] {
-                usleep((n + 1) * 1000); /* 1ms ~ 10ms */
+                usleep((n + 1) * 5000); /* 5ms ~ 50ms */
                 buckets[n] = n;
-            }, 50)); /* wait max 50ms */
+            }, 500)); /* wait max 500ms */
         });
     }
 
     s = cat_time_msec() - s;
-    EXPECT_LE(s, 5); /* <= 5ms := no-blocking */
-    cat_time_msleep(50);
-    for (int n = 0; n < 10; n++) {
-        ASSERT_EQ(buckets[n], n); /* work done */
+    EXPECT_LE(s, 10); /* <= 10ms := no-blocking */
+    for (int c = 0; c < 5; c++) {
+        cat_time_msleep(100);
+        done = ([&] {
+            for (int n = 0; n < 10; n++) {
+                if(buckets[n] != n) {
+                    return false;
+                }
+            }
+            return true;
+        })();
+        if (done) {
+            break;
+        }
     }
+    ASSERT_TRUE(done);
 }
