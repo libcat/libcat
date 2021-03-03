@@ -676,7 +676,7 @@ if (${LIBCAT_BUILD_TESTS})
     target_link_libraries(cat_tests PRIVATE cat ${GTEST_MAIN_LIBRARIES} ${GTEST_LIBRARIES})
     add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     
-    add_custom_target(libcat_test ALL
+    add_custom_target(libcat_test
         COMMAND $<TARGET_FILE:cat_tests> --gtest_color=yes
         DEPENDS cat_tests
     )
