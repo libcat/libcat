@@ -54,7 +54,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
-          ECHO ::group::Build and test libcat
+          ECHO ::group::Build libcat
+          cmake --build . -j --target cat_tests -- -nologo || goto error
+          ECHO ::endgroup::
+          ECHO ::group::Test libcat
           cmake --build . -j --target libcat_test -- -nologo || goto error
           ECHO ::endgroup::
           :error
@@ -138,14 +141,17 @@ jobs:
             -DCMAKE_C_FLAGS_DEBUG="-Werror" \
             -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
           echo "::endgroup::"
-          echo "::group::Build and test libcat"
+          echo "::group::Build libcat"
+          cmake --build . -j --target cat_tests || exit 1
+          echo "::endgroup::"
+          echo "::group::Test libcat"
           cmake --build . -j --target libcat_test || exit 1
           echo "::endgroup::"
 
       - name: Run Coverage
         shell: bash
         run:
-          sudo apt install lcov &&
+          sudo ${{ ruuner.os == 'macOS' && 'brew' || apt-get }} install lcov &&
           lcov
             --capture
             --directory "${{steps.build.outputs.wd}}"
