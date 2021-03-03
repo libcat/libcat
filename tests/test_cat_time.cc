@@ -47,7 +47,7 @@ TEST(cat_time, msleep_cancel)
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     bool done = false;
     co([&] {
-        EXPECT_EQ(cat_time_msleep(5), 0);
+        EXPECT_EQ(cat_time_msleep(10), 0);
         // cancel the sleep of main
         cat_coroutine_resume(waiter, nullptr, nullptr);
         done = true;
@@ -65,6 +65,6 @@ TEST(cat_time, msleep_cancel)
 TEST(cat_time, sleep_zero)
 {
     cat_coroutine_round_t round = cat_coroutine_get_current_round();
-    EXPECT_EQ(cat_time_sleep(0), 0UL);
+    EXPECT_EQ(cat_time_sleep(0), 0);
     EXPECT_GT(cat_coroutine_get_current_round(), round);
 }

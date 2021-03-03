@@ -259,7 +259,7 @@ TEST(cat_socket, cat_sockaddr_to_name_address_length_eq_zero)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_TRUE(cat_sockaddr_to_name(&info->address.common, 0, name, &name_length, &port));
     ASSERT_STREQ("", name);
-    ASSERT_EQ(0ULL, name_length);
+    ASSERT_EQ(0, name_length);
     ASSERT_EQ(port, 0);
 }
 
