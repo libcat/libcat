@@ -971,8 +971,6 @@ TEST(cat_socket, dump_all)
     if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
         ASSERT_NE(nullptr, tty_socket);
         DEFER(cat_socket_close(tty_socket));
-    } else {
-        ASSERT_EQ(nullptr, tty_socket);
     }
 
     testing::internal::CaptureStdout();
