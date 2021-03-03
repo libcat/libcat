@@ -47,9 +47,6 @@ jobs:
           ECHO ::group::Create build dir
           MKDIR build && CD build || goto error
           ECHO ::endgroup::
-          REM ECHO ::group::Prepare vcvars
-          REM FOR /F "TOKENS=* USEBACKQ" %%I IN (`vswhere -property installationPath -latest`) DO CALL "%%I\VC\Auxiliary\Build\vcvars64.bat"  || goto error
-          REM ECHO ::endgroup::
           ECHO ::group::Make cmake cache
           cmake .. ^
             -DCMAKE_CXX_FLAGS=/std:c++latest ^
@@ -60,8 +57,12 @@ jobs:
           cmake --build . -j --target cat_tests -- -nologo -v:d || goto error
           ECHO ::endgroup::
           ECHO ::group::Test libcat
-          cmake --build . -j --target libcat_test -- -nologo || goto error
+          REM TODO: make sure this path
+          # note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
+          Debug\cat_tests.exe --gtest_color=yes || goto error
           ECHO ::endgroup::
+          EXIT /b 0
+          
           :error
           EXIT /b %errorlevel%
 
@@ -138,7 +139,7 @@ jobs:
           cmake --build . -j --target cat_tests || exit 1
           echo "::endgroup::"
           echo "::group::Test libcat"
-          cmake --build . -j --target libcat_test || exit 1
+          ./cat_tests --gtest_color=yes || exit 1
           echo "::endgroup::"
 
       - name: Coverage tests

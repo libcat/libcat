@@ -641,7 +641,7 @@ if (${LIBCAT_BUILD_TESTS})
     if(NOT MSVC)
         set(cat_cxxflags ${cat_cflags} -std=c++11 -Wall)
     else()
-        set(cat_cxxflags ${cat_cflags} /std:c++latest /W4 /EHsc)
+        set(cat_cxxflags ${cat_cflags} /std:c++latest /W3 /EHsc)
     endif()
     list(REMOVE_ITEM cat_cxxflags ${lint-strict-prototypes})
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
@@ -674,12 +674,11 @@ if (${LIBCAT_BUILD_TESTS})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
     # NOTE: gtest may needs gtest_main before its linking
     target_link_libraries(cat_tests PRIVATE cat GTest::Main GTest::GTest)
-    add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    
-    add_custom_target(libcat_test
+    add_test(
+        NAME cat_tests 
         COMMAND $<TARGET_FILE:cat_tests> --gtest_color=yes
-        DEPENDS cat_tests
     )
+
 else()
     message(STATUS "Tests will not be built")
 endif()
