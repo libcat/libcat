@@ -58,7 +58,7 @@ jobs:
           ECHO ::endgroup::
           ECHO ::group::Test libcat
           REM TODO: make sure this path
-          # note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
+          REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           Debug\cat_tests.exe --gtest_color=yes || goto error
           ECHO ::endgroup::
           EXIT /b 0
