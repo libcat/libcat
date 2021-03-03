@@ -2,9 +2,6 @@ name: tests
 
 on: [push, pull_request]
 
-env:
-  CODECOV_TOKEN: "b55625e6-4e26-46d9-9941-e986b008586d" # from: https://codecov.io/gh/libcat/libcat
-
 jobs:
   win-tests:
     name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
@@ -17,6 +14,11 @@ jobs:
       max-parallel: 2
       fail-fast: false
     steps:
+      - name: Get vcpkg GTest version
+        shell: bash
+        run: |
+          vcpkg search gtest | head -n 1 | awk '{print $2}' > .gtestver
+
       - name: Cache GTest
         uses: actions/cache@v2
         id: cache-gtest
@@ -28,7 +30,7 @@ jobs:
             C:\vcpkg\buildtrees\detect_compiler
             C:\vcpkg\downloads\*
             C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkgdata-${{ hashFiles('.vcpkg_status') }}
+          key: Windows-vcpkg-${{ hashFiles('.gtestver') }}
 
       - name: Install GTest
         shell: cmd
@@ -55,7 +57,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build libcat
-          cmake --build . -j --target cat_tests -- -nologo || goto error
+          cmake --build . -j --target cat_tests -- -nologo -v:d || goto error
           ECHO ::endgroup::
           ECHO ::group::Test libcat
           cmake --build . -j --target libcat_test -- -nologo || goto error
@@ -63,81 +65,72 @@ jobs:
           :error
           EXIT /b %errorlevel%
 
-      # TODO: windows version converage
-
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
     strategy:
       matrix:
         os: [ "ubuntu-latest", "macos-latest" ]
+        #os: [ "ubuntu-latest"]
+        #os: [ "macos-latest"]
       max-parallel: 2
       fail-fast: false
     steps:
+      - name: Checkout GTest
+        uses: actions/checkout@v2
+        with:
+          repository: google/googletest
+          path: googletest
+
       - name: Cache GTest
         uses: actions/cache@v2
-        id: cache-gtest
+        id: gtest-cache
         with:
-          path: |
-            ${{github.workspace}}/googletest
-          key: ${{matrix.os}}-gtestb-${{ hashFiles('googletest/.git/refs/heads/master') }}
-
+          path: ${{github.workspace}}/googletest/build
+          key: ${{ runner.os }}-gtest-${{ hashFiles('googletest/.git/refs/heads/master') }}
+      
       - name: Install GTest
+        working-directory: googletest
         run: |
-          GTEST_DIR=${{github.workspace}}/googletest
-          updategit()
+          info()
           {
-            oldref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
-            git --git-dir=${GTEST_DIR}/.git --work-tree=${GTEST_DIR} pull --ff-only || return 1
-            newref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
+            printf "\x1b[32;1m[IFO] $1\x1b[0m"
+            echo
           }
-          creategit()
+          err()
           {
-            rm -rf ${GTEST_DIR} 2>&- >&-
-            oldref=""
-            git clone --depth 1 --single-branch https://github.com/google/googletest ${GTEST_DIR} || return 1
-            newref=`git --git-dir=${GTEST_DIR}/.git rev-parse HEAD` || return 1
+            printf "\x1b[32;1m[IFO] $1\x1b[0m" >&2
+            echo >&2
           }
-          # prepare cmake source
-          if [ -d ${GTEST_DIR} ]
-          then
-            updategit || creategit
-          else
-            creategit
-          fi || {
-            echo "Failed fetching gtest codes"
-            exit 1
-          }
-          cd googletest &&
-          if [ x"${oldref}" != x"${newref}" ]
-          then
-            echo "Building gtest"
+          [ x"${{ steps.gtest-cache.outputs.cache-hit }}" != 'xtrue' ] && {
+            info "Building gtest"
             cmake -E make_directory build && cd build && 
             cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DBUILD_SHARED_LIBS=ON -DBUILD_GMOCK=OFF &&
-            cmake --build . -j
-          fi || {
-            echo "Failed building gtest"
-            exit 1
+            cmake --build . -j || {
+              err "Failed building gtest"
+              exit 1
+            }
           }
-          echo "Installing gtest"
+          info "Installing gtest" &&
+          cd ${{github.workspace}}/googletest/build &&
           sudo cmake --build . --target install
-
+      
       - name: Checkout sources
         uses: actions/checkout@v2
+        with:
+          path: libcat
 
-      - name: Build Libcat and Run tests
+      - name: Build libcat and Run tests
         shell: bash
-        id: build
+        working-directory: libcat
         run: |
-          echo "::set-output name=wd::$PWD"
-          echo "::endgroup::"
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
           echo "::group::Make cmake cache"
           cmake .. \
             -DCMAKE_CXX_FLAGS="-std=c++11" \
-            -DCODE_COVERAGE=ON \
+            ${{ (runner.os == 'Linux' && '' != secrets.CODECOV_TOKEN) && '-DCODE_COVERAGE=ON' || '' }} \
             -DCMAKE_C_FLAGS_DEBUG="-Werror" \
             -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
           echo "::endgroup::"
@@ -148,20 +141,26 @@ jobs:
           cmake --build . -j --target libcat_test || exit 1
           echo "::endgroup::"
 
-      - name: Run Coverage
+      - name: Coverage tests
+        if: runner.os == 'Linux'
+        working-directory: libcat
         shell: bash
-        run:
-          sudo ${{ ruuner.os == 'macOS' && 'brew' || apt-get }} install lcov &&
-          lcov
-            --capture
-            --directory "${{steps.build.outputs.wd}}"
+        run: |
+          [ x"${{ secrets.CODECOV_TOKEN }}" != x"" ] || {
+            echo "No CODECOV_TOKEN set, skipping coverage tests"
+            exit 0
+          }
+          sudo apt-get install lcov &&
+          lcov \
+            --capture \
+            --directory "." \
             --output-file coverage.info &&
-          lcov
-            --extract coverage.info
-              "${{steps.build.outputs.wd}}/include/*"
-              "${{steps.build.outputs.wd}}/src/*"
+          lcov \
+            --extract coverage.info \
+              "${{github.workspace}}/libcat/include/*" \
+              "${{github.workspace}}/libcat/src/*" \
             --output-file coverage.info &&
           lcov --list coverage.info &&
           curl -s https://codecov.io/bash -o codecov.sh &&
           chmod +x codecov.sh &&
-          ./codecov.sh -f coverage.info -t ${CODECOV_TOKEN}
+          ./codecov.sh -f coverage.info -t ${{ secrets.CODECOV_TOKEN }}

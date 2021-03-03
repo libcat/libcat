@@ -673,7 +673,7 @@ if (${LIBCAT_BUILD_TESTS})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
     # NOTE: gtest may needs gtest_main before its linking
-    target_link_libraries(cat_tests PRIVATE cat ${GTEST_MAIN_LIBRARIES} ${GTEST_LIBRARIES})
+    target_link_libraries(cat_tests PRIVATE cat GTest::Main GTest::GTest)
     add_test(NAME cat_tests COMMAND cat_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     
     add_custom_target(libcat_test
