@@ -68,7 +68,7 @@ TEST(cat_buffer, realloc_standard_data)
     src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     ASSERT_NE(nullptr, src);
 
-    for (char i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
+    for (unsigned char i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
         src[i] = 'a' + i;
         src_tmp[i] = src[i];
     }
@@ -93,7 +93,7 @@ TEST(cat_buffer, realloc_standard_less_data)
     src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     ASSERT_NE(nullptr, src);
 
-    for (char i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
+    for (unsigned char i = 0; i < CAT_TEST_DEFAULT_BUFFER_SIZE; i++) {
         src[i] = 'a' + i;
         src_tmp[i] = src[i];
     }
