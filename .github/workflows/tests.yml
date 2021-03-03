@@ -54,7 +54,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build libcat
-          cmake --build . -j --target cat_tests -- -nologo -v:d || goto error
+          cmake --build . -j --target cat_tests -- -nologo || goto error
           ECHO ::endgroup::
           ECHO ::group::Test libcat
           REM TODO: make sure this path
