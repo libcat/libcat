@@ -172,7 +172,7 @@ set(cat_sources
     src/cat_ssl.c
 )
 
-add_library(cat STATIC $<TARGET_OBJECTS:cat_bcontext> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
+add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
 if(MSVC)
     set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
@@ -282,7 +282,7 @@ if (1)
         ${cat_coroutine_context_dir}/make_${cat_coroutine_context_name}
         ${cat_coroutine_context_dir}/jump_${cat_coroutine_context_name}
     )
-    add_library(cat_bcontext OBJECT ${cat_context_sources})
+    add_library(cat_context OBJECT ${cat_context_sources})
 endif()
 
 # libuv dep /* $Id: 97a903309f79d79496a2a1f95cbcce21bfc2f76e $ */
