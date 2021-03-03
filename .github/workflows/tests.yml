@@ -55,7 +55,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build and test libcat
-          cmake --build . -j -- -nologo || goto error
+          cmake --build . -j -- -nologo --target libcat_test || goto error
           ECHO ::endgroup::
           :error
           EXIT /b %errorlevel%
@@ -139,7 +139,7 @@ jobs:
             -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
           echo "::endgroup::"
           echo "::group::Build and test libcat"
-          cmake --build . -j || exit 1
+          cmake --build . -j --target libcat_test || exit 1
           echo "::endgroup::"
 
       - name: Run Coverage
