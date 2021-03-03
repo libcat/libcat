@@ -85,7 +85,7 @@ CAT_API uint8_t cat_websocket_header_pack(cat_websocket_header_t *header, char *
             return 0;
         }
         header->len = CAT_WEBSOCKET_EXT16_LENGTH;
-        *((uint16_t *) p) = (uint16_t) htons(header->payload_length);
+        *((uint16_t *) p) = (uint16_t) htons((uint16_t) header->payload_length);
         p += sizeof(uint16_t);
     } else {
         if (unlikely(p + sizeof(uint64_t) > pe)) {

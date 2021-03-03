@@ -202,7 +202,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
         if (!cat_sockaddr_is_linux_abstract_name(name)) {
             address->sa_data[name_length++] = '\0';
         }
-        *address_length = (cat_socklen_t) offsetof(cat_sockaddr_local_t, sl_path) + name_length;
+        *address_length = (cat_socklen_t) (offsetof(cat_sockaddr_local_t, sl_path) + name_length);
 
         return 0;
     }
@@ -883,7 +883,7 @@ static cat_always_inline cat_socket_timeout_storage_t cat_socket_align_global_ti
         return -1;
     }
 
-    return timeout;
+    return (cat_socket_timeout_storage_t) timeout;
 }
 
 static cat_always_inline cat_socket_timeout_storage_t cat_socket_align_timeout(cat_timeout_t timeout)
@@ -894,7 +894,7 @@ static cat_always_inline cat_socket_timeout_storage_t cat_socket_align_timeout(c
         return -1;
     }
 
-    return timeout;
+    return (cat_socket_timeout_storage_t) timeout;
 }
 
 static void cat_socket_set_timeout_to_options(cat_socket_timeout_options_t *options, cat_timeout_t timeout)

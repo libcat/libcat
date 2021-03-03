@@ -49,8 +49,8 @@ CAT_API int gettimeofday(struct timeval *time_info, struct timezone *timezone_in
     if (time_info != NULL) {
         uv_timeval64_t _time_info;
         error = uv_gettimeofday(&_time_info);
-        time_info->tv_sec = _time_info.tv_sec
-        time_info->tv_usec = _time_info.tv_usec;
+        time_info->tv_sec = (long) _time_info.tv_sec;
+        time_info->tv_usec = (long) _time_info.tv_usec;
     }
     /* Get the timezone, if they want it */
     if (timezone_info != NULL) {
