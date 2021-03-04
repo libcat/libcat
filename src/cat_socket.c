@@ -1402,10 +1402,14 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         }
     }
 
+#ifndef CAT_OS_WIN
     /* check context related options */
     if (is_client && ioptions.verify_peer) {
         (void) cat_ssl_context_set_default_verify_paths(context);
     }
+#else
+    cat_ssl_context_configure_verify(context);
+#endif
 
     /* create ssl connection */
     ssl = cat_ssl_create(NULL, context);
@@ -1433,6 +1437,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         CAT_ASSERT(ioptions.peer_name.data[ioptions.peer_name.length] == '\0');
         cat_ssl_set_sni_server_name(ssl, ioptions.peer_name.data);
     }
+    ssl->allow_self_signed = ioptions.allow_self_signed;
     if (ioptions.passphrase.length > 0) {
         if (unlikely(!cat_ssl_set_passphrase(ssl, ioptions.passphrase.data, ioptions.passphrase.length))) {
             goto _set_options_error;
