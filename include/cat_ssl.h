@@ -24,6 +24,9 @@ extern "C" {
 
 #include "cat.h"
 
+/* Notice: it returns null if SSL module is not available */
+CAT_API const char *cat_ssl_version(void);
+
 #ifdef CAT_HAVE_OPENSSL
 #define CAT_SSL 1
 
@@ -58,12 +61,6 @@ extern "C" {
 #else
 #define OPENSSL_VERSION_NUMBER  0x1000107fL
 #endif
-#endif
-
-#if (OPENSSL_VERSION_NUMBER >= 0x10100001L)
-#define cat_ssl_version()       OpenSSL_version(OPENSSL_VERSION)
-#else
-#define cat_ssl_version()       SSLeay_version(SSLEAY_VERSION)
 #endif
 
 typedef enum
