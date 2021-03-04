@@ -14,30 +14,38 @@ jobs:
       max-parallel: 2
       fail-fast: false
     steps:
-      - name: Get vcpkg GTest version
-        shell: bash
+      - name: Fetch vcpkg versions from github
         run: |
-          vcpkg search gtest | head -n 1 | awk '{print $2}' > .gtestver
+          Write-Host "::group::Fetching CONTROL from raw.githubusercontent.com"
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/gtest/CONTROL -UseBasicParsing).Content > ${{github.workspace}}/.vcpkgvers || return 1
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/openssl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers || return 1
+          Write-Host "::endgroup::"
+          Write-Host "::group::Show now vers"
+          Get-Content ${{github.workspace}}/.vcpkgvers
+          Write-Host "::endgroup::"
 
-      - name: Cache GTest
+      - name: Cache vcpkg
         uses: actions/cache@v2
         id: cache-gtest
         with:
           path: |
             C:\vcpkg\packages\gtest_x64-windows
+            C:\vcpkg\packages\openssl_x64-windows
             C:\vcpkg\installed\*
+            C:\vcpkg\buildtrees\openssl
             C:\vcpkg\buildtrees\gtest
-            C:\vcpkg\buildtrees\detect_compiler
+            #C:\vcpkg\buildtrees\detect_compiler
             C:\vcpkg\downloads\*
             C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: Windows-vcpkg-${{ hashFiles('.gtestver') }}
+          key: Windows-vcpkg-${{ hashFiles('.vcpkgvers') }}
 
-      - name: Install GTest
+      - name: Install vcpkg dependencies
         shell: cmd
         run: |
-          vcpkg install gtest:x64-windows
+          vcpkg install gtest:x64-windows && ^
+          vcpkg install openssl:x64-windows
 
-      - name: Checkout sources
+      - name: Checkout libcat sources
         uses: actions/checkout@v2
 
       - name: Build and test libcat
@@ -59,6 +67,7 @@ jobs:
           ECHO ::group::Test libcat
           REM TODO: make sure this path
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
+          REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
           Debug\cat_tests.exe --gtest_color=yes || goto error
           ECHO ::endgroup::
           EXIT /b 0
@@ -116,7 +125,7 @@ jobs:
           cd ${{github.workspace}}/googletest/build &&
           sudo cmake --build . --target install
       
-      - name: Checkout sources
+      - name: Checkout libcat sources
         uses: actions/checkout@v2
         with:
           path: libcat
@@ -125,6 +134,7 @@ jobs:
         shell: bash
         working-directory: libcat
         run: |
+          ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
