@@ -32,7 +32,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        usleep((cat_watch_dog_get_quantum() / 1000) * 10);
+        usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 10));
     });
 
     std::string output = testing::internal::GetCapturedStderr();
@@ -56,7 +56,7 @@ TEST(cat_watch_dog, single)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    usleep((cat_watch_dog_get_quantum() / 1000) * 3);
+    usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 3));
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
