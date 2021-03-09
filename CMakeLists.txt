@@ -170,11 +170,6 @@ set(cat_sources
     src/cat_websocket.c
 )
 
-add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
-if(MSVC)
-    set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-endif()
-
 set(cat_libraries)
 
 # ========== Detect mac info (thanks to libcopp) ==========
@@ -559,8 +554,8 @@ if (NOT WIN32)
 	cmake_dependent_option(LIBCAT_WITH_VALGRIND
 		"Build with valgrind by default if build type is Debug and found Valgrind" ON
 		"${CAT_DEBUG}; ${VALGRIND_FOUND}" OFF)
-	if (${LIBCAT_WITH_VALGRIND})
-		if (NOT ${VALGRIND_FOUND})
+	if (LIBCAT_WITH_VALGRIND)
+		if (NOT VALGRIND_FOUND)
 		    message(FATAL_ERROR "Require Valgrind but not found")
 		endif()
 	    message(STATUS "Build with Valgrind")
@@ -585,9 +580,12 @@ endif()
 
 # OpenSSL dep
 find_package(OpenSSL QUIET)
-cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON "${OPENSSL_FOUND}" OFF)
-if (${LIBCAT_ENABLE_OPENSSL})
-	if (NOT ${OPENSSL_FOUND})
+if (NOT OPENSSL_FOUND)
+    pkg_check_modules(OPENSSL openssl QUIET)
+endif()
+cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON OPENSSL_FOUND OFF)
+if (LIBCAT_ENABLE_OPENSSL)
+	if (NOT OPENSSL_FOUND)
 	    message(FATAL_ERROR "Require OpenSSL but not found")
 	endif()
     message(STATUS "Enable OpenSSL")
@@ -602,6 +600,11 @@ else()
     message(STATUS "OpenSSL is not enabled")
 endif()
 
+add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
+if(MSVC)
+    set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 target_compile_definitions(cat PRIVATE ${cat_defines})
 target_compile_options(cat PRIVATE ${cat_cflags})
 # TODO: Separate public and private
@@ -613,7 +616,7 @@ target_link_libraries(cat ${cat_libraries})
 if(NOT MSVC)
     add_library(coverage_config INTERFACE)
     option(CODE_COVERAGE "Enable coverage reporting" OFF)
-    if(${CODE_COVERAGE})
+    if(CODE_COVERAGE)
         target_compile_options(coverage_config INTERFACE
             -O0
             -g
@@ -630,11 +633,15 @@ endif()
 
 # tests
 find_package(GTest QUIET)
+if (NOT GTEST_FOUND)
+    pkg_check_modules(GTEST_MAIN gtest_main QUIET)
+    pkg_check_modules(GTEST gtest QUIET)
+endif()
 cmake_dependent_option(LIBCAT_BUILD_TESTS
 	"Build the GTest-based unit tests when we have GTest and we are the root project" ON
 	"${GTEST_FOUND}; CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
-if (${LIBCAT_BUILD_TESTS})
-	if (NOT ${GTEST_FOUND})
+if (LIBCAT_BUILD_TESTS)
+	if (NOT GTEST_FOUND)
 	    message(FATAL_ERROR "Require GTest to build tests but not found")
 	endif()
     message(STATUS "Enable testing (GTest-based)")
@@ -668,7 +675,7 @@ if (${LIBCAT_BUILD_TESTS})
         tests/test_cat_watch_dog.cc
         tests/test_cat_http.cc
     )
-    if (${LIBCAT_ENABLE_OPENSSL})
+    if (LIBCAT_ENABLE_OPENSSL)
         list(APPEND cat_test_sources tests/test_cat_ssl.cc)
     endif()
     add_executable(cat_tests ${cat_test_sources})
@@ -676,12 +683,11 @@ if (${LIBCAT_BUILD_TESTS})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
     # NOTE: gtest may needs gtest_main before its linking
-    target_link_libraries(cat_tests PRIVATE cat GTest::Main GTest::GTest)
+    target_link_libraries(cat_tests PRIVATE cat ${GTEST_MAIN_LIBRARIES} ${GTEST_LIBRARIES})
     add_test(
-        NAME cat_tests 
+        NAME cat_tests
         COMMAND $<TARGET_FILE:cat_tests> --gtest_color=yes
     )
-
 else()
     message(STATUS "Tests will not be built")
 endif()
