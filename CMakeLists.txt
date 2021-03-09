@@ -638,8 +638,9 @@ if (NOT GTEST_FOUND)
     pkg_check_modules(GTEST gtest QUIET)
 endif()
 cmake_dependent_option(LIBCAT_BUILD_TESTS
-	"Build the GTest-based unit tests when we have GTest and we are the root project" ON
-	"${GTEST_FOUND}; CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+    "Build the GTest-based unit tests when we have GTest and we are the root project"
+    ON GTEST_FOUND
+    OFF)
 if (LIBCAT_BUILD_TESTS)
 	if (NOT GTEST_FOUND)
 	    message(FATAL_ERROR "Require GTest to build tests but not found")
