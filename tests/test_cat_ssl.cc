@@ -19,11 +19,6 @@
 #include "test.h"
 #ifdef CAT_SSL
 
-TEST(cat_ssl, is_available)
-{
-    ASSERT_NE(cat_ssl_version(), nullptr);
-}
-
 TEST(cat_ssl, remote_https_server)
 {
     SKIP_IF(is_offline());

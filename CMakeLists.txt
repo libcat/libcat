@@ -168,8 +168,6 @@ set(cat_sources
     src/cat_watch_dog.c
     src/cat_http.c
     src/cat_websocket.c
-    # [optional]
-    src/cat_ssl.c
 )
 
 add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
@@ -596,6 +594,7 @@ if (${LIBCAT_ENABLE_OPENSSL})
     list(APPEND cat_defines CAT_HAVE_OPENSSL=1)
     list(APPEND cat_includes ${OPENSSL_INCLUDE_DIR})
     list(APPEND cat_libraries ${OPENSSL_LIBRARIES})
+    list(APPEND cat_sources src/cat_ssl.c)
     if(MSVC)
         list(APPEND cat_libraries crypt32.lib)
     endif()
@@ -668,9 +667,10 @@ if (${LIBCAT_BUILD_TESTS})
         tests/test_cat_signal.cc
         tests/test_cat_watch_dog.cc
         tests/test_cat_http.cc
-        # [optional]
-        tests/test_cat_ssl.cc
     )
+    if (${LIBCAT_ENABLE_OPENSSL})
+        list(APPEND cat_test_sources tests/test_cat_ssl.cc)
+    endif()
     add_executable(cat_tests ${cat_test_sources})
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
