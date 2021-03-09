@@ -634,8 +634,11 @@ endif()
 # tests
 find_package(GTest QUIET)
 if (NOT GTEST_FOUND)
-    pkg_check_modules(GTEST_MAIN gtest_main QUIET)
-    pkg_check_modules(GTEST gtest QUIET)
+    pkg_check_modules(CAT_GTEST_MAIN gtest_main QUIET)
+    pkg_check_modules(CAT_GTEST gtest QUIET)
+else()
+    set(CAT_GTEST_MAIN_LIBRARIES "GTest::Main")
+    set(CAT_GTEST_LIBRARIES "GTest::GTest")
 endif()
 cmake_dependent_option(LIBCAT_BUILD_TESTS
     "Build the GTest-based unit tests when we have GTest and we are the root project"
@@ -683,8 +686,8 @@ if (LIBCAT_BUILD_TESTS)
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
-    # NOTE: gtest may needs gtest_main before its linking
-    target_link_libraries(cat_tests PRIVATE cat ${GTEST_MAIN_LIBRARIES} ${GTEST_LIBRARIES})
+    # NOTE: gtest may needs gtest_main before its linking (on windows), that's strange
+    target_link_libraries(cat_tests PRIVATE cat ${CAT_GTEST_MAIN_LIBRARIES} ${CAT_GTEST_LIBRARIES})
     add_test(
         NAME cat_tests
         COMMAND $<TARGET_FILE:cat_tests> --gtest_color=yes
