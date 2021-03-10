@@ -54,7 +54,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip)
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
-    
+
     ASSERT_TRUE(cat_sockaddr_get_address(&info->address.common, info->length, buffer, &buffer_size));
     ASSERT_STREQ(TEST_LISTEN_IPV4, buffer);
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV4), buffer_size);
@@ -73,7 +73,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip4)
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
-    
+
     ASSERT_TRUE(cat_sockaddr_get_address(&info->address.common, info->length, buffer, &buffer_size));
     ASSERT_STREQ(TEST_LISTEN_IPV4, buffer);
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV4), buffer_size);
@@ -92,7 +92,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip6)
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
-    
+
     ASSERT_TRUE(cat_sockaddr_get_address(&info->address.common, info->length, buffer, &buffer_size));
     ASSERT_STREQ(TEST_LISTEN_IPV6, buffer);
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV6), buffer_size);
@@ -112,7 +112,7 @@ TEST(cat_socket, cat_sockaddr_get_address_pipe)
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
-    
+
     ASSERT_TRUE(cat_sockaddr_get_address(&info->address.common, info->length, buffer, &buffer_size));
     ASSERT_STREQ(TEST_PIPE_PATH, buffer);
     ASSERT_EQ(CAT_STRLEN(TEST_PIPE_PATH), buffer_size);
