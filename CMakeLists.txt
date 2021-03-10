@@ -664,7 +664,7 @@ cmake_dependent_option(LIBCAT_BUILD_TESTS
     ON GTEST_FOUND
     OFF)
 if (LIBCAT_BUILD_TESTS)
-	if (NOT GTEST_FOUND)
+	if (NOT GTEST_FOUND AND NOT (CAT_GTEST_FOUND AND CAT_GTEST_MAIN_FOUND))
 	    message(FATAL_ERROR "Require GTest to build tests but not found")
 	endif()
     message(STATUS "Enable testing (GTest-based)")
