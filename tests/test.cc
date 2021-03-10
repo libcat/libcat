@@ -21,9 +21,20 @@
 
 namespace testing
 {
-    cat_timeout_t CONFIG_IO_TIMEOUT = (!is_valgrind() ? 10 : 60) * 1000;
-    uint32_t CONFIG_MAX_REQUESTS = !is_valgrind() ? 256 : 64;
-    uint32_t CONFIG_MAX_CONCURRENCY = !is_valgrind() ? 128 : 8;
+    cat_timeout_t CONFIG_IO_TIMEOUT = (!is_valgrind() ? 30 : 60) * 1000;
+    uint32_t CONFIG_MAX_REQUESTS = !is_valgrind() ? 128 : 64;
+    uint32_t CONFIG_MAX_CONCURRENCY = !is_valgrind() ? 64 : 8;
+
+    /* REMOTE_HTTP_SERVER */
+    std::string CONFIG_REMOTE_HTTP_SERVER_HOST = "http.badssl.com";
+    int CONFIG_REMOTE_HTTP_SERVER_PORT = 80;
+    std::string CONFIG_REMOTE_HTTP_SERVER_KEYWORD = "http.badssl.com";
+    /* REMOTE_HTTPS_SERVER */
+    std::string CONFIG_REMOTE_HTTPS_SERVER_HOST = "sha256.badssl.com";
+    int CONFIG_REMOTE_HTTPS_SERVER_PORT = 443;
+    std::string CONFIG_REMOTE_HTTPS_SERVER_KEYWORD = "sha256.badssl.com";
+    /* REMOTE_IPV6_HTTP_SERVER */
+    std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = "www.taobao.com";
 }
 
 class BootstrapEnvironment : public testing::Environment
@@ -35,6 +46,64 @@ public:
         cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
         ASSERT_NE(cat_coroutine_get_current(), nullptr);
+
+        /* IO_TIMEOUT */
+        if (cat_env_exists("TEST_IO_TIMEOUT")) {
+            char *timeout = cat_env_get("TEST_IO_TIMEOUT");
+            testing::CONFIG_IO_TIMEOUT = atoi(timeout);
+            cat_free(timeout);
+        }
+        /* MAX_REQUEST */
+        if (cat_env_exists("TEST_MAX_REQUESTS")) {
+            char *n = cat_env_get("TEST_MAX_REQUESTS");
+            testing::CONFIG_MAX_REQUESTS = atoi(n);
+            cat_free(n);
+        }
+        /* MAX_CONCURRENCY */
+        if (cat_env_exists("TEST_MAX_CONCURRENCY")) {
+            char *c = cat_env_get("TEST_MAX_CONCURRENCY");
+            testing::CONFIG_MAX_CONCURRENCY = atoi(c);
+            cat_free(c);
+        }
+
+        /* REMOTE_HTTP_SERVER */
+        if (cat_env_exists("TEST_REMOTE_HTTP_SERVER_HOST")) {
+            char *host = cat_env_get("TEST_REMOTE_HTTP_SERVER_HOST");
+            testing::CONFIG_REMOTE_HTTP_SERVER_HOST = host;
+            cat_free(host);
+        }
+        if (cat_env_exists("TEST_REMOTE_HTTP_SERVER_PORT")) {
+            char *port = cat_env_get("TEST_REMOTE_HTTP_SERVER_PORT");
+            testing::CONFIG_REMOTE_HTTP_SERVER_PORT = atoi(port);
+            cat_free(port);
+        }
+        if (cat_env_exists("TEST_REMOTE_HTTP_SERVER_KEYWORD")) {
+            char *keyword = cat_env_get("TEST_REMOTE_HTTP_SERVER_KEYWORD");
+            testing::CONFIG_REMOTE_HTTP_SERVER_KEYWORD = keyword;
+            cat_free(keyword);
+        }
+        /* REMOTE_HTTPS_SERVER */
+        if (cat_env_exists("TEST_REMOTE_HTTPS_SERVER_HOST")) {
+            char *host = cat_env_get("TEST_REMOTE_HTTPS_SERVER_HOST");
+            testing::CONFIG_REMOTE_HTTPS_SERVER_HOST = host;
+            cat_free(host);
+        }
+        if (cat_env_exists("TEST_REMOTE_HTTPS_SERVER_PORT")) {
+            char *port = cat_env_get("TEST_REMOTE_HTTPS_SERVER_PORT");
+            testing::CONFIG_REMOTE_HTTPS_SERVER_PORT = atoi(port);
+            cat_free(port);
+        }
+        if (cat_env_exists("TEST_REMOTE_HTTPS_SERVER_KEYWORD")) {
+            char *keyword = cat_env_get("TEST_REMOTE_HTTPS_SERVER_KEYWORD");
+            testing::CONFIG_REMOTE_HTTPS_SERVER_KEYWORD = keyword;
+            cat_free(keyword);
+        }
+        /* REMOTE_IPV6_HTTP_SERVER */
+        if (cat_env_exists("TEST_REMOTE_IPV6_HTTP_SERVER_HOST")) {
+            char *host = cat_env_get("TEST_REMOTE_IPV6_HTTP_SERVER_HOST");
+            testing::CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = host;
+            cat_free(host);
+        }
     }
 
     virtual void TearDown()

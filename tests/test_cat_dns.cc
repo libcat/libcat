@@ -58,7 +58,7 @@ TEST(cat_dns, get_ip)
                 continue;
             }
             EXPECT_TRUE(ret);
-            cat_debug(DNS, "[af=%s] " TEST_REMOTE_IPV6_HTTP_SERVER_HOST " => %s\n", cat_sockaddr_af_name(af), ip);
+            cat_debug(DNS, "[af=%s] %s => %s\n", TEST_REMOTE_IPV6_HTTP_SERVER_HOST, cat_sockaddr_af_name(af), ip);
         }
     }
 }

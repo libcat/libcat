@@ -23,13 +23,6 @@ TEST(cat_ssl, remote_https_server)
 {
     SKIP_IF(is_offline());
     cat_socket_t *socket;
-    cat_const_string_t request = cat_const_string(
-        "GET / HTTP/1.1\r\n"
-        "Host: " TEST_REMOTE_HTTPS_SERVER_HOST "\r\n"
-        "User-Agent: curl\r\n"
-        "Accept: */*\r\n"
-        "\r\n"
-    );
     char buffer[TEST_BUFFER_SIZE_STD];
     ssize_t nread;
 
@@ -40,7 +33,18 @@ TEST(cat_ssl, remote_https_server)
     ASSERT_TRUE(cat_socket_connect(socket, TEST_REMOTE_HTTPS_SERVER));
     ASSERT_TRUE(cat_socket_enable_crypto(socket, nullptr, nullptr));
 
-    ASSERT_TRUE(cat_socket_send(socket, request.data, request.length));
+    char *request = cat_sprintf(
+        "GET / HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "User-Agent: %s\r\n"
+        "Accept: */*\r\n"
+        "\r\n",
+        TEST_REMOTE_HTTPS_SERVER_HOST,
+        TEST_HTTP_CLIENT_FAKE_USERAGENT
+    );
+    ASSERT_NE(request, nullptr);
+    DEFER(cat_free(request));
+    ASSERT_TRUE(cat_socket_send(socket, request, strlen(request)));
     nread = cat_socket_recv(socket, CAT_STRS(buffer));
     ASSERT_GT(nread, 0);
     cat_debug(SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);

@@ -49,8 +49,8 @@ static void cat_curl_query(const char *url, std::string &response)
 TEST(cat_curl, base)
 {
     std::string response;
-    cat_curl_query("https://baidu.com", response);
-    ASSERT_NE(response.find("\xe7\x99\xbe\xe5\xba\xa6"), std::string::npos);
+    cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response);
+    ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
 TEST(cat_curl, time_usage)
@@ -61,8 +61,8 @@ TEST(cat_curl, time_usage)
     for (size_t n = 0; n < TEST_MAX_CONCURRENCY; n++) {
         co([&wg] {
             std::string response;
-            cat_curl_query("https://baidu.com", response);
-            ASSERT_NE(response.find("\xe7\x99\xbe\xe5\xba\xa6"), std::string::npos);
+            cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response);
+            ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
             ASSERT_TRUE(cat_sync_wait_group_done(&wg));
         });
     }

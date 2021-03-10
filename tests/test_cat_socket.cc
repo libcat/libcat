@@ -836,12 +836,17 @@ TEST(cat_socket, query_remote_http_server)
 
     ASSERT_TRUE(cat_socket_connect(&socket, TEST_REMOTE_HTTP_SERVER));
 
-    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL(
+    char *request = cat_sprintf(
         "GET / HTTP/1.1\r\n"
-        "Host: " TEST_REMOTE_HTTP_SERVER_HOST "\r\n"
-        "User-Agent: " TEST_HTTP_CLIENT_FAKE_USERAGENT "\r\n"
-        "\r\n"
-    )));
+        "Host: %s\r\n"
+        "User-Agent: %s\r\n"
+        "\r\n",
+        TEST_REMOTE_HTTP_SERVER_HOST,
+        TEST_HTTP_CLIENT_FAKE_USERAGENT
+    );
+    ASSERT_NE(request, nullptr);
+    DEFER(cat_free(request));
+    ASSERT_TRUE(cat_socket_send(&socket, request, strlen(request)));
 
     /* invaild read */
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
