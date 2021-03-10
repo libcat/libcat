@@ -86,7 +86,8 @@ jobs:
     runs-on: ${{matrix.os}}
     strategy:
       matrix:
-        os: [ "ubuntu-latest", "macos-latest" ]
+        # should use latest, strange that gh still use 18.04 for libcat/libcat
+        os: [ "ubuntu-20.04", "macos-latest" ]
         #os: [ "ubuntu-latest"]
         #os: [ "macos-latest"]
       max-parallel: 2
