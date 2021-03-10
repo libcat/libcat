@@ -17,8 +17,10 @@ jobs:
       - name: Fetch vcpkg versions from github
         run: |
           Write-Host "::group::Fetching CONTROL from raw.githubusercontent.com"
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/gtest/CONTROL -UseBasicParsing).Content > ${{github.workspace}}/.vcpkgvers || return 1
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/openssl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers || return 1
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/gtest/CONTROL -UseBasicParsing).Content > ${{github.workspace}}/.vcpkgvers
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/openssl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/curl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
+          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/zlib/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
           Write-Host "::endgroup::"
           Write-Host "::group::Show now vers"
           Get-Content ${{github.workspace}}/.vcpkgvers
@@ -31,9 +33,12 @@ jobs:
           path: |
             C:\vcpkg\packages\gtest_x64-windows
             C:\vcpkg\packages\openssl_x64-windows
+            C:\vcpkg\packages\curl_x64-windows
+            C:\vcpkg\packages\zlib_x64-windows
             C:\vcpkg\installed\*
-            C:\vcpkg\buildtrees\openssl
-            C:\vcpkg\buildtrees\gtest
+            #C:\vcpkg\buildtrees\openssl
+            #C:\vcpkg\buildtrees\curl
+            #C:\vcpkg\buildtrees\gtest
             #C:\vcpkg\buildtrees\detect_compiler
             C:\vcpkg\downloads\*
             C:\Users\runneradmin\AppData\Local\vcpkg\archives
@@ -43,7 +48,8 @@ jobs:
         shell: cmd
         run: |
           vcpkg install gtest:x64-windows && ^
-          vcpkg install openssl:x64-windows
+          vcpkg install openssl:x64-windows && ^
+          vcpkg install curl[core,non-http,ssl]:x64-windows
 
       - name: Checkout libcat sources
         uses: actions/checkout@v2
@@ -86,44 +92,15 @@ jobs:
       max-parallel: 2
       fail-fast: false
     steps:
-      - name: Checkout GTest
-        uses: actions/checkout@v2
-        with:
-          repository: google/googletest
-          path: googletest
-
-      - name: Cache GTest
-        uses: actions/cache@v2
-        id: gtest-cache
-        with:
-          path: ${{github.workspace}}/googletest/build
-          key: ${{ runner.os }}-gtest-${{ hashFiles('googletest/.git/refs/heads/master') }}
-      
-      - name: Install GTest
-        working-directory: googletest
+      - name: Install dependencies
+        shell: bash
         run: |
-          info()
-          {
-            printf "\x1b[32;1m[IFO] $1\x1b[0m"
-            echo
-          }
-          err()
-          {
-            printf "\x1b[32;1m[IFO] $1\x1b[0m" >&2
-            echo >&2
-          }
-          [ x"${{ steps.gtest-cache.outputs.cache-hit }}" != 'xtrue' ] && {
-            info "Building gtest"
-            cmake -E make_directory build && cd build && 
-            cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DBUILD_SHARED_LIBS=ON -DBUILD_GMOCK=OFF &&
-            cmake --build . -j || {
-              err "Failed building gtest"
-              exit 1
-            }
-          }
-          info "Installing gtest" &&
-          cd ${{github.workspace}}/googletest/build &&
-          sudo cmake --build . --target install
+          if [ "${{runner.os}}" = "Linux" ]
+          then
+            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev
+          else
+            brew install googletest
+          fi
       
       - name: Checkout libcat sources
         uses: actions/checkout@v2
