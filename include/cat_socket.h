@@ -231,7 +231,7 @@ typedef enum
 #define CAT_SOCKET_TYPE_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_TYPE_FLAG_, name, value)
     CAT_SOCKET_TYPE_FLAG_MAP(CAT_SOCKET_TYPE_FLAG_GEN)
 #undef CAT_SOCKET_TYPE_FLAG_GEN
-} cat_socket_type_flags_t;
+} cat_socket_type_flag_t;
 
 #define CAT_SOCKET_TYPE_MAP_EX(XX, UN) \
     XX(ANY,    0) \
@@ -272,7 +272,7 @@ typedef enum
         CAT_SOCKET_TYPE_FLAG_SERVER |
         CAT_SOCKET_TYPE_FLAG_CLIENT |
         CAT_SOCKET_TYPE_FLAG_SESSION,
-} cat_socket_union_type_flag_t;
+} cat_socket_union_type_flags_t;
 
 typedef uint32_t cat_socket_type_t;
 
