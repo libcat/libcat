@@ -35,6 +35,8 @@ CAT_API cat_bool_t cat_curl_runtime_shutdown(void);
 
 CAT_API CURLcode cat_curl_easy_perform(CURL *ch);
 
+CAT_API CURLMcode cat_curl_multi_wait(CURLM *multi, struct curl_waitfd *extra_fds, unsigned int extra_nfds, int timeout_ms, int *numfds);
+
 #endif /* CAT_HAVE_CURL */
 
 #ifdef __cplusplus
