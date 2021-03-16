@@ -24,18 +24,29 @@ extern "C" {
 
 #include "cat.h"
 
+typedef uv_stat_t cat_stat_t;
+
 CAT_API int cat_fs_open(const char *path, int flags, ...);
 CAT_API ssize_t cat_fs_read(int fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(int fd, const void *buffer, size_t length);
 CAT_API int cat_fs_close(int fd);
 
 CAT_API off_t cat_fs_lseek(int fd, off_t offset, int whence);
+CAT_API int cat_fs_stat(const char* path, cat_stat_t * buf);
+CAT_API int cat_fs_lstat(const char* path, cat_stat_t * buf);
+CAT_API int cat_fs_fstat(int fd, cat_stat_t * buf);
 
 CAT_API int cat_fs_access(const char *path, int mode);
 CAT_API int cat_fs_mkdir(const char *path, int mode);
 CAT_API int cat_fs_rmdir(const char *path);
 CAT_API int cat_fs_rename(const char *path, const char *new_path);
 CAT_API int cat_fs_unlink(const char *path);
+
+CAT_API int cat_fs_link(const char * path, const char * new_path);
+CAT_API int cat_fs_symlink(const char * path, const char * new_path, int flags);
+
+CAT_API ssize_t cat_fs_readlink(const char * pathname, char * buf, size_t len);
+CAT_API char * cat_fs_realpath(const char *pathname, char* buf);
 
 #ifdef __cplusplus
 }

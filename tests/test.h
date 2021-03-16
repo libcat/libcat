@@ -25,7 +25,8 @@
 
 /* common macros */
 
-#define SKIP_IF(expression) do { if (expression) { GTEST_SKIP(); return; } } while (0)
+#define SKIP_IF(expression) SKIP_IF_(expression, "Skipped")
+#define SKIP_IF_(expression, message) do { if (expression) { GTEST_SKIP_(message); return; } } while (0)
 
 #define TEST_BUFFER_SIZE_STD               8192
 

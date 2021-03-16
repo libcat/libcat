@@ -20,11 +20,6 @@
 
 #include "test.h"
 
-bool no_tmp(){
-    static int accessible = access(TEST_TMP_PATH, R_OK | W_OK);
-    return 0 != accessible;
-}
-
 std::string path_join(std::string a, std::string b){
     if("" == a){
         return b;
@@ -49,6 +44,11 @@ std::string path_join(std::string a, std::string b){
     return aa+std::string(TEST_PATH_SEP)+b;
 }
 
+bool no_tmp(){
+    static int accessible = access(TEST_TMP_PATH, R_OK | W_OK);
+    return 0 != accessible;
+}
+
 TEST(cat_fs, path_join)
 {
     ASSERT_EQ(std::string("aaa"), path_join("", "aaa")); 
@@ -58,7 +58,7 @@ TEST(cat_fs, path_join)
 
 TEST(cat_fs, open_close_read_write)
 {
-    SKIP_IF(no_tmp());
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     char buf[CAT_BUFFER_DEFAULT_SIZE], red[CAT_BUFFER_DEFAULT_SIZE];
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw");
@@ -90,9 +90,104 @@ TEST(cat_fs, open_close_read_write)
 }
 
 #define LSEEK_BUFSIZ 32768
+TEST(cat_fs, stat_lstat_fstat)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    umask(0);
+
+    char buf[LSEEK_BUFSIZ];
+    cat_srand(buf, LSEEK_BUFSIZ);
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_stats");
+    const char * fn = fnstr.c_str();
+    int fd = -1;
+    cat_fs_unlink(fn);
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
+    ASSERT_EQ(cat_fs_write(fd, buf, LSEEK_BUFSIZ), LSEEK_BUFSIZ);
+    ASSERT_EQ(cat_fs_close(fd), 0);
+    DEFER({
+        ASSERT_EQ(cat_fs_unlink(fn), 0);
+    });
+
+    cat_stat_t statbuf = {0};
+    ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_mode & 0777, 0666);
+    ASSERT_EQ(statbuf.st_size, LSEEK_BUFSIZ);
+    ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_mode & 0777, 0666);
+    ASSERT_EQ(statbuf.st_size, LSEEK_BUFSIZ);
+}
+
+TEST(cat_fs, link)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_target");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
+    const char * fn2 = fn2str.c_str();
+    
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
+
+    cat_stat_t statbuf;
+
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
+    
+    if(cat_fs_link(fn, fn2) != 0){
+        GTEST_SKIP_("File system may not support hard link");
+    }
+    ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
+    ASSERT_GT(statbuf.st_nlink, 1);
+    uint64_t inode = statbuf.st_ino;
+    ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_GT(statbuf.st_nlink, 1);
+    ASSERT_EQ(inode, statbuf.st_ino);
+}
+
+TEST(cat_fs, symlink){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_target");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
+    const char * fn2 = fn2str.c_str();
+    
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
+
+    cat_stat_t statbuf;
+
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
+    if(cat_fs_symlink(fn, fn2, 0) != 0){
+        GTEST_SKIP_("File system may not support symbol link");
+    }
+    ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
+    uint64_t inode = statbuf.st_ino;
+    ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
+    ASSERT_NE(inode, statbuf.st_ino);
+    ASSERT_EQ(statbuf.st_mode & S_IFLNK, S_IFLNK);
+}
+
+#ifdef CAT_OS_WIN
+TEST(cat_fs, symlink_windows){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+    GTEST_SKIP_("Test not yet implemented");
+}
+#endif
+
 TEST(cat_fs, lseek)
 {
-    SKIP_IF(no_tmp());
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     char buf[LSEEK_BUFSIZ], red[LSEEK_BUFSIZ];
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_seek");
@@ -121,7 +216,7 @@ TEST(cat_fs, lseek)
 
 TEST(cat_fs, access)
 {
-    SKIP_IF(no_tmp());
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_access");
     const char * fn = fnstr.c_str();
@@ -143,7 +238,7 @@ TEST(cat_fs, access)
 
 TEST(cat_fs, mkdir_rmdir)
 {
-    SKIP_IF(no_tmp());
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_dir");
     const char * fn = fnstr.c_str();
@@ -171,7 +266,7 @@ TEST(cat_fs, mkdir_rmdir)
 
 TEST(cat_fs, rename)
 {
-    SKIP_IF(no_tmp());
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     std::string dstr = path_join(TEST_TMP_PATH, "cat_tests_dir");
     const char * d = dstr.c_str();
@@ -200,4 +295,70 @@ TEST(cat_fs, rename)
     ASSERT_LT(cat_fs_rename(fn, fn3), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
     ASSERT_EQ(cat_fs_rename(fn2, fn3), 0);
+}
+
+TEST(cat_fs, readlink){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_target");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
+    const char * fn2 = fn2str.c_str();
+    
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
+
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
+    if(cat_fs_symlink(fn, fn2, 0) != 0){
+        GTEST_SKIP_("File system may not support symbol link");
+    }
+    char buf[4096] = {0};
+    ASSERT_EQ(cat_fs_readlink(fn2, buf, 1), 1);
+    ASSERT_NE(buf[0], 0);
+    ASSERT_EQ(buf[1], 0);
+
+    ASSERT_GT(cat_fs_readlink(fn2, buf, 4096), 0);
+    ASSERT_EQ(std::string(buf), fn);
+}
+
+TEST(cat_fs, realpath){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string dstr = path_join(TEST_TMP_PATH, "cat_tests_dir");
+    const char * d = dstr.c_str();
+    std::string fnstr = path_join(dstr, "cat_tests_target");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(dstr, "cat_tests_link");
+    const char * fn2 = fn2str.c_str();
+
+    std::string pathstr = path_join(TEST_TMP_PATH, "cat_tests_dir" TEST_PATH_SEP ".." TEST_PATH_SEP "cat_tests_dir" TEST_PATH_SEP "cat_tests_link");
+    const char * testpath = pathstr.c_str();
+    
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+        cat_fs_rmdir(d);
+    });
+
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    cat_fs_rmdir(d);
+    ASSERT_EQ(cat_fs_mkdir(d, 0777), 0);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
+    if(cat_fs_symlink(fn, fn2, 0) != 0){
+        GTEST_SKIP_("File system may not support symbol link");
+    }
+    char buf[4096] = {0};
+    char * ret = nullptr;
+    ASSERT_NE(ret = cat_fs_realpath(testpath, nullptr), nullptr);
+    free(ret);
+    ASSERT_EQ(ret = cat_fs_realpath(testpath, buf), buf);
+    std::string teststr = std::string(buf);
+    ASSERT_EQ(ret = cat_fs_realpath(fn, buf), buf);
+    std::string origstr = std::string(buf);
+    ASSERT_EQ(teststr, origstr);
 }
