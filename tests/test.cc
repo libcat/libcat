@@ -45,7 +45,13 @@ public:
     virtual void SetUp()
     {
         ASSERT_TRUE(cat_init_all());
+#ifdef CAT_CURL
+        ASSERT_TRUE(cat_curl_module_init());
+        ASSERT_TRUE(cat_curl_runtime_init());
+#endif
+
         cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
+
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
         ASSERT_NE(cat_coroutine_get_current(), nullptr);
 
@@ -136,6 +142,11 @@ public:
     {
         ASSERT_TRUE(cat_stop());
         ASSERT_EQ(cat_coroutine_get_count() , 1);
+
+#ifdef CAT_CURL
+        ASSERT_TRUE(cat_curl_runtime_shutdown());
+        ASSERT_TRUE(cat_curl_module_shutdown());
+#endif
         ASSERT_TRUE(cat_shutdown_all());
     }
 };

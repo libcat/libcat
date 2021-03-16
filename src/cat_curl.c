@@ -192,18 +192,6 @@ static int cat_curl_start_timeout(CURLM *multi, long timeout, cat_curl_multi_con
     return 0;
 }
 
-CAT_API cat_bool_t cat_curl_module_init(void)
-{
-    CAT_GLOBALS_REGISTER(cat_curl, CAT_GLOBALS_CTOR(cat_curl), NULL);
-
-	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
-        cat_warn_with_reason(EXT, CAT_UNKNOWN, "Curl init failed");
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
 static cat_always_inline void cat_curl_multi_configure(CURLM *multi, void *context)
 {
     curl_multi_setopt(multi, CURLMOPT_SOCKETFUNCTION, cat_curl_socket_function);
@@ -218,6 +206,25 @@ static cat_always_inline void cat_curl_multi_unconfigure(CURLM *multi)
     curl_multi_setopt(multi, CURLMOPT_SOCKETDATA, NULL);
     curl_multi_setopt(multi, CURLMOPT_TIMERFUNCTION, NULL);
     curl_multi_setopt(multi, CURLMOPT_TIMERDATA, NULL);
+}
+
+CAT_API cat_bool_t cat_curl_module_init(void)
+{
+    CAT_GLOBALS_REGISTER(cat_curl, CAT_GLOBALS_CTOR(cat_curl), NULL);
+
+	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        cat_warn_with_reason(EXT, CAT_UNKNOWN, "Curl init failed");
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_curl_module_shutdown(void)
+{
+    curl_global_cleanup();
+
+    return cat_true;
 }
 
 CAT_API cat_bool_t cat_curl_runtime_init(void)

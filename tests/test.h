@@ -23,6 +23,9 @@
 
 #include "cat_api.h"
 
+/* ext, not enabled by default */
+#include "cat_curl.h"
+
 /* common macros */
 
 #define SKIP_IF(expression) do { \

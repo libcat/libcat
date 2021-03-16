@@ -30,6 +30,7 @@ extern "C" {
 #include <curl/curl.h>
 
 CAT_API cat_bool_t cat_curl_module_init(void);
+CAT_API cat_bool_t cat_curl_module_shutdown(void);
 CAT_API cat_bool_t cat_curl_runtime_init(void);
 CAT_API cat_bool_t cat_curl_runtime_shutdown(void);
 

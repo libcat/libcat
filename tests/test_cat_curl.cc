@@ -90,7 +90,7 @@ TEST(cat_curl, concurrency)
         concurrency(TEST_MAX_CONCURRENCY / 2);
         s2 = cat_time_msec() - s2;
 
-        ASSERT_TRUE((s2 / s1) < 3);
+        ASSERT_LE(s2 / s1, 3.0);
     } else {
         concurrency(TEST_MAX_CONCURRENCY);
     }

@@ -36,7 +36,6 @@ extern "C" {
 #include "cat_signal.h"
 #include "cat_watch_dog.h"
 #include "cat_ssl.h"
-#include "cat_curl.h"
 
 typedef enum
 {

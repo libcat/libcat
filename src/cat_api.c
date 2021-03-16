@@ -45,9 +45,6 @@ CAT_API cat_bool_t cat_module_init_all(void)
 #endif
            cat_socket_module_init() &&
            cat_watch_dog_module_init() &&
-#ifdef CAT_CURL
-           cat_curl_module_init() &&
-#endif
            cat_true;
 }
 
@@ -68,9 +65,6 @@ CAT_API cat_bool_t cat_runtime_init_all(void)
            cat_event_runtime_init() &&
            cat_socket_runtime_init() &&
            cat_watch_dog_runtime_init() &&
-#ifdef CAT_CURL
-           cat_curl_runtime_init() &&
-#endif
            cat_true;
 }
 
@@ -78,9 +72,6 @@ CAT_API cat_bool_t cat_runtime_shutdown_all(void)
 {
     cat_bool_t ret = cat_true;
 
-#ifdef CAT_CURL
-    ret = cat_curl_runtime_shutdown() && ret;
-#endif
     ret = cat_watch_dog_runtime_shutdown() && ret;
     ret = cat_event_runtime_shutdown() && ret;
     ret = cat_coroutine_runtime_shutdown() && ret;
