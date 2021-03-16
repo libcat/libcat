@@ -21,7 +21,7 @@
 
 TEST(cat_ssl, remote_https_server)
 {
-    SKIP_IF_(is_offline(), "Needs network connection");
+    SKIP_IF_OFFLINE();
     cat_socket_t *socket;
     char buffer[TEST_BUFFER_SIZE_STD];
     ssize_t nread;

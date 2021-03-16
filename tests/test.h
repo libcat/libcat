@@ -25,8 +25,22 @@
 
 /* common macros */
 
-#define SKIP_IF(expression) SKIP_IF_(expression, "Skipped")
-#define SKIP_IF_(expression, message) do { if (expression) { GTEST_SKIP_(message); return; } } while (0)
+#define SKIP_IF(expression) do { \
+    if (expression) { \
+        GTEST_SKIP(); \
+        return; \
+    } \
+} while (0)
+
+#define SKIP_IF_(expression, message) do { \
+    if (expression) { \
+        GTEST_SKIP_(message); \
+        return; \
+    } \
+} while (0)
+
+#define SKIP_IF_OFFLINE()      SKIP_IF_(is_offline(), "Internet connection required")
+#define SKIP_IF_USE_VALGRIND() SKIP_IF_(is_valgrind(), "Valgrind is too slow")
 
 #define TEST_BUFFER_SIZE_STD               8192
 
