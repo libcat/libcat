@@ -96,6 +96,20 @@ TEST(cat_curl, cancel)
     ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
+TEST(cat_curl, busy)
+{
+    CURL *ch;
+    cat_coroutine_t *coroutine = cat_coroutine_get_current();
+    std::string response;
+
+    co([&ch, coroutine] {
+        cat_time_sleep(0);
+        ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
+    });
+    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);
+    ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
+}
+
 TEST(cat_curl_multi, base)
 {
     CURL *ch;

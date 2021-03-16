@@ -239,6 +239,16 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
 {
     CURLcode *ret = NULL;
 
+    do {
+        cat_coroutine_t *coroutine = NULL;
+        curl_easy_getinfo(ch, CURLINFO_PRIVATE, &coroutine);
+        if (unlikely(coroutine != NULL)) {
+            /* can not find appropriate error code */
+            return CURLE_AGAIN;
+        }
+    } while (0);
+
+
     curl_multi_add_handle(CAT_CURL_G(context).multi, ch);
     curl_easy_setopt(ch, CURLOPT_PRIVATE, CAT_COROUTINE_G(current));
     cat_coroutine_yield(NULL, (cat_data_t **) &ret);
