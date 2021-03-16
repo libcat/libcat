@@ -25,10 +25,11 @@ extern "C" {
 #include "cat.h"
 
 CAT_API int cat_fs_open(const char *path, int flags, ...);
-CAT_API off_t cat_lseek(int fd, off_t offset, int whence);
 CAT_API ssize_t cat_fs_read(int fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(int fd, const void *buffer, size_t length);
 CAT_API int cat_fs_close(int fd);
+
+CAT_API off_t cat_fs_lseek(int fd, off_t offset, int whence);
 
 CAT_API int cat_fs_access(const char *path, int mode);
 CAT_API int cat_fs_mkdir(const char *path, int mode);

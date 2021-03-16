@@ -685,6 +685,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_error.cc
         tests/test_cat_log.cc
         tests/test_cat_env.cc
+        tests/test_cat_fs.cc
         tests/test_cat_coroutine.cc
         tests/test_cat_event.cc
         tests/test_cat_time.cc

@@ -116,7 +116,7 @@ CAT_API int cat_fs_open(const char *path, int flags, ...)
     CAT_FS_DO_RESULT(int, open, path, flags, mode);
 }
 
-CAT_API off_t cat_lseek(int fd, off_t offset, int whence)
+CAT_API off_t cat_fs_lseek(int fd, off_t offset, int whence)
 {
     return lseek(fd, offset, whence);
 }

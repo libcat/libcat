@@ -37,9 +37,12 @@
 #define TEST_LISTEN_HOST                   "localhost"
 #define TEST_LISTEN_IPV4                   "127.0.0.1"
 #define TEST_LISTEN_IPV6                   "::"
+#define TEST_TMP_PATH                      ::testing::CONFIG_TMP_PATH.c_str()
 #ifndef CAT_OS_WIN
+#define TEST_PATH_SEP                      "/"
 #define TEST_PIPE_PATH                     "/tmp/cat_test.sock"
 #else
+#define TEST_PATH_SEP                      "\\"
 #define TEST_PIPE_PATH                     "\\\\?\\pipe\\cat_test"
 #endif
 #define TEST_SERVER_BACKLOG                8192
@@ -117,4 +120,6 @@ namespace testing
     extern std::string CONFIG_REMOTE_HTTPS_SERVER_KEYWORD;
     /* REMOTE_IPV6_HTTP_SERVER */
     extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
+    /* TMP_PATH */
+    extern std::string CONFIG_TMP_PATH;
 }

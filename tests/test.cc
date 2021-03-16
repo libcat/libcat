@@ -35,6 +35,8 @@ namespace testing
     std::string CONFIG_REMOTE_HTTPS_SERVER_KEYWORD = "sha256.badssl.com";
     /* REMOTE_IPV6_HTTP_SERVER */
     std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = "www.taobao.com";
+    /* TMP_PATH */
+    std::string CONFIG_TMP_PATH = "/tmp";
 }
 
 class BootstrapEnvironment : public testing::Environment
@@ -104,6 +106,30 @@ public:
             testing::CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = host;
             cat_free(host);
         }
+
+        /* TMP_PATH */
+        char *host = cat_env_get("TEST_TMP_PATH");
+#ifdef CAT_OS_WIN
+        if(NULL == host || '\0' == host[0]){
+            if(NULL != host && '\0' == host[0]){
+                cat_free(host);
+            }
+            host = cat_env_get("TMP");
+        }
+        if(NULL == host || '\0' == host[0]){
+            if(NULL != host && '\0' == host[0]){
+                cat_free(host);
+            }
+            host = cat_env_get("TEMP");
+        }
+#endif
+        if(NULL != host){
+            if('\0' != host[0]){
+                testing::CONFIG_TMP_PATH = host;
+            }
+            cat_free(host);
+        }
+
     }
 
     virtual void TearDown()
