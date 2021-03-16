@@ -17,58 +17,29 @@
  */
 
 #include "cat_api.h"
-
-#include "llhttp.h"
+#include "cat_http.h"
 
 #define HTTP_REQUEST_MAX_LENGTH              (2 * 1024 * 1024)
 #define HTTP_EMPTY_RESPONSE                  "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 0\r\n\r\n"
 #define HTTP_SERVICE_UNAVAILABLE_RESPONSE    "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"
 
-typedef struct {
-    const char *body_begin;
-    size_t body_length;
-    cat_bool_t complete;
-} echo_context_t;
-
-int llhttp_on_body(llhttp_t *parser, const char *at, size_t length)
-{
-    echo_context_t *context = (echo_context_t *) parser->data;
-    if (unlikely(context->body_begin == NULL)) {
-        context->body_begin = at;
-    }
-    context->body_length += length;
-    return 0;
-}
-
-static int llhttp_on_message_complete(llhttp_t *parser)
-{
-    echo_context_t *context = (echo_context_t *) parser->data;
-    context->complete = 1;
-    return 0;
-}
-
-static cat_data_t *echo_server_accept_callback(cat_data_t *data)
+static cat_data_t *echo_server_handle_connection(cat_data_t *data)
 {
     cat_socket_t *client = (cat_socket_t *) data;
-    llhttp_t parser;
-    llhttp_settings_t settings;
+    cat_http_parser_t parser;
 
-    llhttp_settings_init(&settings);
-    settings.on_body = llhttp_on_body;
-    settings.on_message_complete = llhttp_on_message_complete;
+    cat_http_parser_init(&parser);
+    cat_http_parser_set_type(&parser, CAT_HTTP_PARSER_TYPE_REQUEST);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_BODY | CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
 
     while (1) {
         /* signal thread way */
         static char read_buffer[HTTP_REQUEST_MAX_LENGTH];
+        const char *body_begin = NULL;
+        size_t body_length = 0;
         size_t total_bytes = 0;
-        echo_context_t context = {0};
-        llhttp_init(&parser, HTTP_REQUEST, &settings);
-        parser.data = &context;
         while (1) {
-            ssize_t n;
-            enum llhttp_errno error;
-
-            n = cat_socket_recv(
+            ssize_t n = cat_socket_recv(
                 client,
                 read_buffer + total_bytes,
                 HTTP_REQUEST_MAX_LENGTH - total_bytes
@@ -80,10 +51,21 @@ static cat_data_t *echo_server_accept_callback(cat_data_t *data)
             if (unlikely(total_bytes == HTTP_REQUEST_MAX_LENGTH)) {
                 goto _error;
             }
-
-            error = llhttp_execute(&parser, read_buffer, n);
-            if (context.complete) {
-                if (context.body_length == 0) {
+            while (1) {
+                if (!cat_http_parser_execute(&parser, read_buffer, n)) {
+                    goto _error;
+                }
+                if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_BODY) {
+                    if (body_begin == NULL) {
+                        body_begin = cat_http_parser_get_data(&parser);
+                    }
+                    body_length += cat_http_parser_get_data_length(&parser);
+                } else {
+                    break;
+                }
+            }
+            if (cat_http_parser_is_completed(&parser)) {
+                if (body_length == 0) {
                     (void) cat_socket_send(client, CAT_STRL(HTTP_EMPTY_RESPONSE));
                 } else {
                     char *response = cat_sprintf(
@@ -91,9 +73,9 @@ static cat_data_t *echo_server_accept_callback(cat_data_t *data)
                         "Connection: keep-alive\r\n"
                         "Content-Length: %zu\r\n\r\n"
                         "%.*s",
-                        context.body_length,
-                        (int) context.body_length,
-                        context.body_begin ? context.body_begin : ""
+                        body_length,
+                        (int) body_length,
+                        body_begin ? body_begin : ""
                     );
                     if (unlikely(response == NULL)) {
                         goto _error;
@@ -130,12 +112,13 @@ static void echo_server_run()
     if (!ret) {
         exit(1);
     }
+    fprintf(stdout, "Server is running on 0.0.0.0:%d\n", CAT_MAGIC_PORT);
     while (1) {
         cat_socket_t *client = cat_socket_accept(&server, NULL);
         if (client == NULL) {
             exit(1);
         }
-        cat_coroutine_run(NULL, echo_server_accept_callback, client);
+        cat_coroutine_run(NULL, echo_server_handle_connection, client);
     }
 }
 

@@ -9,9 +9,12 @@ fi
 
 work_dir="${__DIR__}/$1"
 
+#TODO: use CMake
+
 gcc \
 -g \
 -DHAVE_LIBCAT=1 \
+-DCAT_DEBUG=1 \
 -DCAT_MAGIC_BACKLOG=8192 \
 -DCAT_MAGIC_PORT=9764 \
 -I "${__PROJECT__}/include" \
@@ -22,7 +25,7 @@ gcc \
 -c "${work_dir}/main.c" \
 -o "${work_dir}/main.o"
 
-gcc -g -o "${work_dir}/main" "${work_dir}/main.o" "${__PROJECT__}/build/libcat.a" -ldl -pthread
+gcc -g -o "${work_dir}/main" "${work_dir}/main.o" "${__PROJECT__}/build/libcat.a" -ldl -pthread -lssl -lcrypto
 
 ulimit -n 65536
 "${work_dir}/main"
