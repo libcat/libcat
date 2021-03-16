@@ -70,7 +70,6 @@ TEST(cat_fs, open_close_read_write)
     });
 
     ASSERT_LT(cat_fs_read(fd, buf, 5), 0);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     cat_srand(buf, CAT_BUFFER_DEFAULT_SIZE);
 
     for(int i = 0; i<1; i++){
@@ -83,7 +82,6 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER(cat_fs_close(fd));
     ASSERT_LT(cat_fs_write(fd, "hello", 5), 0);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     
     for(int i = 0; i<128; i++){
         ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
@@ -97,7 +95,7 @@ TEST(cat_fs, lseek)
     SKIP_IF(no_tmp());
 
     char buf[LSEEK_BUFSIZ], red[LSEEK_BUFSIZ];
-    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw");
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_seek");
     const char * fn = fnstr.c_str();
     int fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600);
     ASSERT_GT(fd, 0);
@@ -135,12 +133,6 @@ TEST(cat_fs, access)
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY | O_CREAT, 0400), 0);
     ASSERT_EQ(cat_fs_access(fn, R_OK), 0);
     ASSERT_LT(cat_fs_access(fn, X_OK|W_OK), 0);
-    ASSERT_EQ(cat_fs_close(fd), 0);
-
-    cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT, 0200), 0);
-    ASSERT_EQ(cat_fs_access(fn, W_OK), 0);
-    ASSERT_LT(cat_fs_access(fn, X_OK|R_OK), 0);
     ASSERT_EQ(cat_fs_close(fd), 0);
 
     cat_fs_unlink(fn);
