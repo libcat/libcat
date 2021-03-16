@@ -18,6 +18,7 @@
 
 #include "cat_curl.h"
 #include "cat_event.h"
+#include "cat_time.h"
 
 #ifdef CAT_CURL
 
@@ -97,12 +98,17 @@ static void cat_curl_multi_defer(cat_curl_coroutine_transfer_t *transfer)
     }
 }
 
-static void cat_curl_multi_notify(CURLM *multi, cat_coroutine_t *coroutine)
+static void cat_always_inline cat_curl_multi_notify(CURLM *multi, cat_coroutine_t *coroutine, cat_bool_t immediately)
 {
     if (coroutine == NULL) {
         cat_curl_multi_check_info(multi);
     } else {
-        cat_curl_multi_defer((cat_curl_coroutine_transfer_t *) coroutine);
+        cat_curl_coroutine_transfer_t *transfer = (cat_curl_coroutine_transfer_t *) coroutine;
+        if (!immediately || transfer->defered) {
+            cat_curl_multi_defer(transfer);
+        } else {
+            cat_coroutine_resume(coroutine, NULL, NULL);
+        }
     }
 }
 
@@ -120,7 +126,7 @@ static void cat_curl_poll_callback(uv_poll_t *request, int status, int events)
 
     context = (cat_curl_socket_context_t *) request->data;
     curl_multi_socket_action(context->multi, context->sockfd, flags, &running_handles);
-    cat_curl_multi_notify(context->multi, context->coroutine);
+    cat_curl_multi_notify(context->multi, context->coroutine, cat_false);
 }
 
 static int cat_curl_socket_function(CURL *ch, curl_socket_t sockfd, int action, cat_curl_multi_context_t *mcontext, cat_curl_socket_context_t *context)
@@ -168,7 +174,7 @@ static void cat_curl_on_timeout(uv_timer_t *timer)
     int running_handles;
 
     curl_multi_socket_action(context->multi, CURL_SOCKET_TIMEOUT, 0, &running_handles);
-    cat_curl_multi_notify(context->multi, context->coroutine);
+    cat_curl_multi_notify(context->multi, context->coroutine, cat_true);
 }
 
 static int cat_curl_start_timeout(CURLM *multi, long timeout, cat_curl_multi_context_t *context)
@@ -290,18 +296,27 @@ CAT_API CURLMcode cat_curl_multi_wait(
         mcode = curl_multi_perform(multi, &still_running);
     } while (mcode == CURLM_CALL_MULTI_PERFORM);
 
-    do {
+    while (1) {
         cat_curl_coroutine_transfer_t *transfer;
+        cat_bool_t ret;
+
         transfer = (cat_curl_coroutine_transfer_t *) CAT_COROUTINE_G(current);
         transfer->defered = cat_false;
         transfer->numfds = 0;
 
-        cat_coroutine_yield(NULL, NULL);
+        ret = cat_time_wait(timeout_ms);
 
         if (numfds) {
             *numfds = transfer->numfds;
         }
-    } while (uv_is_active((uv_handle_t *) context.timer));
+
+        if (!ret) {
+            break;
+        }
+        if (!uv_is_active((uv_handle_t *) context.timer)) {
+            break;
+        }
+    }
 
     if (context.timer != NULL) {
         uv_close((uv_handle_t *) context.timer, (uv_close_cb) cat_free_function);

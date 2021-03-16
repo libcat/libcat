@@ -25,29 +25,42 @@ static size_t cat_curl_write_function(const char *ptr, size_t length, size_t n, 
 
     return length * n;
 }
-static void cat_curl_query(const char *url, std::string &response)
+
+static CURLcode cat_curl_query(const char *url, std::string &response, cat_msec_t timeout = TEST_IO_TIMEOUT, CURL **ch_ptr = nullptr)
 {
     CURL *ch;
-
+    CURLcode code;
     cat_buffer_t buffer;
-    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+
+    if (!cat_buffer_create(&buffer, 0)) {
+        return CURLE_OUT_OF_MEMORY;
+    }
 
     ch = curl_easy_init();
-    ASSERT_NE(ch, nullptr);
+    if (ch == nullptr) {
+        return CURLE_FAILED_INIT;
+    }
+    if (ch_ptr) {
+        *ch_ptr = ch;
+    }
     curl_easy_setopt(ch, CURLOPT_URL, url);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
-    (void) cat_curl_easy_perform(ch);
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, timeout);
+    code = cat_curl_easy_perform(ch);
+
     response = std::string(buffer.value, buffer.length);
     cat_buffer_close(&buffer);
     curl_easy_cleanup(ch);
+
+    return code;
 }
 
 TEST(cat_curl, base)
 {
     std::string response;
-    cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response);
+    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
     ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
@@ -60,7 +73,7 @@ TEST(cat_curl, concurrency)
         for (size_t n = 0; n < concurrency; n++) {
             co([&wg] {
                 std::string response;
-                cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response);
+                ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
                 ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
                 ASSERT_TRUE(cat_sync_wait_group_done(&wg));
             });
@@ -70,14 +83,14 @@ TEST(cat_curl, concurrency)
 
     if (!is_valgrind()) {
         auto s1 = cat_time_msec();
-        concurrency(TEST_MAX_CONCURRENCY / 4);
+        concurrency(TEST_MAX_CONCURRENCY / 8);
         s1 = cat_time_msec() - s1;
 
         auto s2 = cat_time_msec();
         concurrency(TEST_MAX_CONCURRENCY / 2);
         s2 = cat_time_msec() - s2;
 
-        ASSERT_TRUE((s2 / s1) < 2);
+        ASSERT_TRUE((s2 / s1) < 3);
     } else {
         concurrency(TEST_MAX_CONCURRENCY);
     }
@@ -92,7 +105,14 @@ TEST(cat_curl, cancel)
         cat_time_sleep(0);
         cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
-    cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response);
+    ASSERT_NE(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
+    ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
+}
+
+TEST(cat_curl, timeout)
+{
+    std::string response;
+    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, 1), CURLE_OPERATION_TIMEDOUT);
     ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
