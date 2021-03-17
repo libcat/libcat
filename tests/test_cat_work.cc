@@ -20,7 +20,7 @@
 
 TEST(cat_work, base)
 {
-    SKIP_IF(is_valgrind());
+    SKIP_IF_(is_valgrind(), "Not support valgrind");
     bool done = false;
 
     int buckets[10] = { };

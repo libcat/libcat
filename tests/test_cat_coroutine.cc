@@ -415,7 +415,7 @@ TEST(cat_coroutine, get_elapsed_not_init)
 
 TEST(cat_coroutine, scheduler_run_duplicated)
 {
-    SKIP_IF(cat_coroutine_get_scheduler() == NULL);
+    ASSERT_NE(cat_coroutine_get_scheduler(), nullptr);
     ASSERT_EQ(cat_coroutine_scheduler_run(nullptr, nullptr), nullptr);
     ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
 }
@@ -423,7 +423,7 @@ TEST(cat_coroutine, scheduler_run_duplicated)
 TEST(cat_coroutine, scheduler_stop_duplicated)
 {
     cat_coroutine_t *origin_scheduler = CAT_COROUTINE_G(scheduler);
-    CAT_COROUTINE_G(scheduler) = NULL;
+    CAT_COROUTINE_G(scheduler) = nullptr;
     DEFER(CAT_COROUTINE_G(scheduler) = origin_scheduler);
 
     ASSERT_EQ(cat_coroutine_scheduler_close(), nullptr);

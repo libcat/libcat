@@ -819,7 +819,7 @@ TEST(cat_socket, send_yield)
 
 TEST(cat_socket, query_remote_http_server)
 {
-    SKIP_IF(is_offline());
+    SKIP_IF_(is_offline(), "Needs network connection");
     cat_socket_t socket;
 
     ASSERT_NE(cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP), nullptr);
@@ -898,7 +898,7 @@ TEST(cat_socket, query_remote_http_server)
 
 TEST(cat_socket, cross_close_when_dns_resolve)
 {
-    SKIP_IF(is_offline());
+    SKIP_IF_(is_offline(), "Needs network connection");
     bool exited = false;
     DEFER(exited = true);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
@@ -917,7 +917,7 @@ static const char *test_remote_http_server_ip;
 
 TEST(cat_socket, get_test_remote_http_server_ip)
 {
-    SKIP_IF(is_offline());
+    SKIP_IF_(is_offline(), "Needs network connection");
     static char ip[CAT_SOCKET_IP_BUFFER_SIZE];
     ASSERT_TRUE(cat_dns_get_ip(CAT_STRS(ip), TEST_REMOTE_HTTP_SERVER_HOST, AF_UNSPEC));
     test_remote_http_server_ip = ip;
