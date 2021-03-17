@@ -362,3 +362,48 @@ TEST(cat_fs, realpath){
     std::string origstr = std::string(buf);
     ASSERT_EQ(teststr, origstr);
 }
+
+TEST(cat_fs, chmod_fchmod){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_chmod");
+    const char * fn = fnstr.c_str();
+    cat_fs_unlink(fn);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200)), 0);
+    DEFER({cat_fs_unlink(fn);});
+
+    ASSERT_EQ(cat_fs_chmod(fn, 0600), 0);
+    ASSERT_EQ(cat_fs_chmod(fn, 0400), 0);
+    int fd = -1;
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_EQ(cat_fs_fchmod(fd, 0600), 0);
+    ASSERT_EQ(cat_fs_fchmod(fd, 0200), 0);
+}
+
+TEST(cat_fs, chown_fchown_lchown){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_chown");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_chownlink");
+    const char * fn2 = fn2str.c_str();
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_RDONLY | O_CREAT | O_TRUNC, 0400)), 0);
+    ASSERT_EQ(cat_fs_link(fn, fn2), 0);
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
+
+    ASSERT_EQ(cat_fs_chown(fn, -1, -1), 0);
+    ASSERT_EQ(cat_fs_chown(fn2, -1, -1), 0);
+    ASSERT_EQ(cat_fs_lchown(fn2, -1, -1), 0);
+    int fd = -1;
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_EQ(cat_fs_fchown(fd, -1, -1), 0);
+#ifndef CAT_OS_WIN
+    ASSERT_LT(cat_fs_chown("/", 0, 0), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+    ASSERT_LT(cat_fs_lchown("/", 0, 0), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+#endif
+}

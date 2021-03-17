@@ -97,6 +97,9 @@ static void cat_fs_callback(uv_fs_t *fs)
     cat_free(context);
 }
 
+// basic functions for fs io
+// open, close, read, write, lseek
+
 CAT_API int cat_fs_open(const char *path, int flags, ...)
 {
     va_list args;
@@ -135,10 +138,8 @@ CAT_API int cat_fs_close(int fd)
     CAT_FS_DO_RESULT(int, close, fd);
 }
 
-CAT_API int cat_fs_access(const char *path, int mode)
-{
-    CAT_FS_DO_RESULT(int, access, path, mode);
-}
+// directory/file operations
+// mkdir, rmdir, rename, unlink
 
 CAT_API int cat_fs_mkdir(const char *path, int mode)
 {
@@ -160,6 +161,14 @@ CAT_API int cat_fs_unlink(const char *path)
     CAT_FS_DO_RESULT(int, unlink, path);
 }
 
+// file info utils
+// access, stat(s)
+
+CAT_API int cat_fs_access(const char *path, int mode)
+{
+    CAT_FS_DO_RESULT(int, access, path, mode);
+}
+
 #define CAT_FS_DO_STAT(name, target) \
     CAT_FS_DO_RESULT_EX({return -1;}, {memcpy(buf, &context->fs.statbuf, sizeof(uv_stat_t)); return 0;}, name, target)
 
@@ -174,6 +183,9 @@ CAT_API int cat_fs_lstat(const char * path, cat_stat_t * buf){
 CAT_API int cat_fs_fstat(int fd, cat_stat_t * buf){
     CAT_FS_DO_STAT(fstat, fd);
 }
+
+// hard link and symbol link
+// link, symlink, readlink, realpath
 
 CAT_API int cat_fs_link(const char * path, const char * new_path){
     CAT_FS_DO_RESULT(int, link, path, new_path);
@@ -210,3 +222,26 @@ CAT_API char * cat_fs_realpath(const char *pathname, char* buf){
 #ifdef CAT_OS_WIN
 #   undef PATH_MAX
 #endif
+
+// permissions
+// chmod(s), chown(s)
+
+CAT_API int cat_fs_chmod(const char *path, int mode){
+    CAT_FS_DO_RESULT(int, chmod, path, mode);
+}
+
+CAT_API int cat_fs_fchmod(int fd, int mode){
+    CAT_FS_DO_RESULT(int, fchmod, fd, mode);
+}
+
+CAT_API int cat_fs_chown(const char *path, cat_uid_t uid, cat_gid_t gid){
+    CAT_FS_DO_RESULT(int, chown, path, uid, gid);
+}
+
+CAT_API int cat_fs_fchown(int fd, cat_uid_t uid, cat_gid_t gid){
+    CAT_FS_DO_RESULT(int, fchown, fd, uid, gid);
+}
+
+CAT_API int cat_fs_lchown(const char *path, cat_uid_t uid, cat_gid_t gid){
+    CAT_FS_DO_RESULT(int, lchown, path, uid, gid);
+}
