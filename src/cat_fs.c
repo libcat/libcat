@@ -100,7 +100,7 @@ static void cat_fs_callback(uv_fs_t *fs)
 // basic functions for fs io
 // open, close, read, write, lseek
 
-CAT_API int cat_fs_open(const char *path, int flags, ...)
+CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...)
 {
     va_list args;
     int mode = 0666;
@@ -111,29 +111,29 @@ CAT_API int cat_fs_open(const char *path, int flags, ...)
         va_end(args);
     }
 
-    CAT_FS_DO_RESULT(int, open, path, flags, mode);
+    CAT_FS_DO_RESULT(cat_file_t, open, path, flags, mode);
 }
 
-CAT_API off_t cat_fs_lseek(int fd, off_t offset, int whence)
+CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
 {
     return lseek(fd, offset, whence);
 }
 
-CAT_API ssize_t cat_fs_read(int fd, void *buffer, size_t size)
+CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size)
 {
     uv_buf_t buf = uv_buf_init((char *) buffer, (unsigned int) size);
 
     CAT_FS_DO_RESULT(ssize_t, read, fd, &buf, 1, 0);
 }
 
-CAT_API ssize_t cat_fs_write(int fd, const void *buffer, size_t length)
+CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length)
 {
     uv_buf_t buf = uv_buf_init((char *) buffer, (unsigned int) length);
 
     CAT_FS_DO_RESULT(ssize_t, write, fd, &buf, 1, 0);
 }
 
-CAT_API int cat_fs_close(int fd)
+CAT_API int cat_fs_close(cat_file_t fd)
 {
     CAT_FS_DO_RESULT(int, close, fd);
 }
@@ -180,7 +180,7 @@ CAT_API int cat_fs_lstat(const char * path, cat_stat_t * buf){
     CAT_FS_DO_STAT(lstat, path);
 }
 
-CAT_API int cat_fs_fstat(int fd, cat_stat_t * buf){
+CAT_API int cat_fs_fstat(cat_file_t fd, cat_stat_t * buf){
     CAT_FS_DO_STAT(fstat, fd);
 }
 
@@ -230,7 +230,7 @@ CAT_API int cat_fs_chmod(const char *path, int mode){
     CAT_FS_DO_RESULT(int, chmod, path, mode);
 }
 
-CAT_API int cat_fs_fchmod(int fd, int mode){
+CAT_API int cat_fs_fchmod(cat_file_t fd, int mode){
     CAT_FS_DO_RESULT(int, fchmod, fd, mode);
 }
 
@@ -238,7 +238,7 @@ CAT_API int cat_fs_chown(const char *path, cat_uid_t uid, cat_gid_t gid){
     CAT_FS_DO_RESULT(int, chown, path, uid, gid);
 }
 
-CAT_API int cat_fs_fchown(int fd, cat_uid_t uid, cat_gid_t gid){
+CAT_API int cat_fs_fchown(cat_file_t fd, cat_uid_t uid, cat_gid_t gid){
     CAT_FS_DO_RESULT(int, fchown, fd, uid, gid);
 }
 

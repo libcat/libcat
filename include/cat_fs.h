@@ -24,20 +24,26 @@ extern "C" {
 
 #include "cat.h"
 
+#define CAT_FS_SYMLINK_DIR UV_FS_SYMLINK_DIR
+#define CAT_FS_SYMLINK_JUNCTION UV_FS_SYMLINK_JUNCTION
+
 typedef uv_stat_t cat_stat_t;
 typedef uv_uid_t cat_uid_t;
 typedef uv_gid_t cat_gid_t;
+typedef uv_file cat_file_t;
+typedef uv_dir_t cat_dir_t;
+typedef uv_dirent_t cat_dirent_t;
 
-CAT_API int cat_fs_open(const char *path, int flags, ...);
-CAT_API ssize_t cat_fs_read(int fd, void *buffer, size_t size);
-CAT_API ssize_t cat_fs_write(int fd, const void *buffer, size_t length);
-CAT_API int cat_fs_close(int fd);
-CAT_API off_t cat_fs_lseek(int fd, off_t offset, int whence);
+CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...);
+CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size);
+CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length);
+CAT_API int cat_fs_close(cat_file_t fd);
+CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence);
 
 CAT_API int cat_fs_access(const char *path, int mode);
 CAT_API int cat_fs_stat(const char* path, cat_stat_t * buf);
 CAT_API int cat_fs_lstat(const char* path, cat_stat_t * buf);
-CAT_API int cat_fs_fstat(int fd, cat_stat_t * buf);
+CAT_API int cat_fs_fstat(cat_file_t fd, cat_stat_t * buf);
 
 CAT_API int cat_fs_mkdir(const char *path, int mode);
 CAT_API int cat_fs_rmdir(const char *path);
@@ -51,9 +57,9 @@ CAT_API ssize_t cat_fs_readlink(const char * pathname, char * buf, size_t len);
 CAT_API char * cat_fs_realpath(const char *pathname, char* buf);
 
 CAT_API int cat_fs_chmod(const char *path, int mode);
-CAT_API int cat_fs_fchmod(int fd, int mode);
+CAT_API int cat_fs_fchmod(cat_file_t fd, int mode);
 CAT_API int cat_fs_chown(const char *path, cat_uid_t uid, cat_gid_t gid);
-CAT_API int cat_fs_fchown(int fd, cat_uid_t uid, cat_gid_t gid);
+CAT_API int cat_fs_fchown(cat_file_t fd, cat_uid_t uid, cat_gid_t gid);
 CAT_API int cat_fs_lchown(const char *path, cat_uid_t uid, cat_gid_t gid);
 
 #ifdef __cplusplus
