@@ -501,7 +501,7 @@ if (1)
         # thus we donot maintaince libuv here, we disable them.
         list(APPEND uv_cflags /wd4090 /wd4244 /wd4245 /wd4267 /wd4701 /wd4702)
     endif()
-    
+
     add_library(cat_uv OBJECT ${uv_sources})
     list(APPEND cat_defines ${uv_defines})
     target_compile_definitions(cat_uv PRIVATE ${cat_defines})
@@ -569,7 +569,7 @@ endif()
 # llhttp dep
 if (1)
     set(llhttp_dir "deps/llhttp")
-    add_library(cat_llhttp OBJECT 
+    add_library(cat_llhttp OBJECT
         ${llhttp_dir}/src/api.c
         ${llhttp_dir}/src/http.c
         ${llhttp_dir}/src/llhttp.c
