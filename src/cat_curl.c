@@ -61,8 +61,8 @@ static void cat_curl_multi_check_info(CURLM *multi)
     while ((message = curl_multi_info_read(multi, &pending))) {
         switch (message->msg) {
             case CURLMSG_DONE: {
-                char *done_url;
 #ifdef CAT_DEBUG
+                char *done_url;
                 curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url);
                 cat_debug(EXT, "Curl query '%s' DONE", done_url);
 #endif
@@ -98,7 +98,7 @@ static void cat_curl_multi_defer(cat_curl_coroutine_transfer_t *transfer)
     }
 }
 
-static void cat_always_inline cat_curl_multi_notify(CURLM *multi, cat_coroutine_t *coroutine, cat_bool_t immediately)
+static cat_always_inline void cat_curl_multi_notify(CURLM *multi, cat_coroutine_t *coroutine, cat_bool_t immediately)
 {
     if (coroutine == NULL) {
         cat_curl_multi_check_info(multi);
@@ -261,7 +261,6 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
         }
     } while (0);
 
-
     curl_multi_add_handle(CAT_CURL_G(context).multi, ch);
     curl_easy_setopt(ch, CURLOPT_PRIVATE, CAT_COROUTINE_G(current));
     cat_coroutine_yield(NULL, (cat_data_t **) &ret);
@@ -283,7 +282,6 @@ CAT_API CURLMcode cat_curl_multi_wait(
 {
     cat_curl_multi_context_t context;
     CURLMcode mcode;
-    int error;
 
     CAT_ASSERT(extra_fds == NULL && "Not support");
     CAT_ASSERT(extra_nfds == 0 && "Not support");
