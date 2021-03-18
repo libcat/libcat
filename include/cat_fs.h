@@ -75,6 +75,9 @@ CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length);
 CAT_API int cat_fs_close(cat_file_t fd);
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence);
+CAT_API int cat_fs_fsync(cat_file_t fd);
+CAT_API int cat_fs_fdatasync(cat_file_t fd);
+CAT_API int cat_fs_ftruncate(cat_file_t fd, int64_t offset);
 
 CAT_API cat_dir_t *cat_fs_opendir(const char* path);
 CAT_API uv_dirent_t* cat_fs_readdir(cat_dir_t* dir);
@@ -105,6 +108,11 @@ CAT_API int cat_fs_fchmod(cat_file_t fd, int mode);
 CAT_API int cat_fs_chown(const char *path, cat_uid_t uid, cat_gid_t gid);
 CAT_API int cat_fs_fchown(cat_file_t fd, cat_uid_t uid, cat_gid_t gid);
 CAT_API int cat_fs_lchown(const char *path, cat_uid_t uid, cat_gid_t gid);
+
+CAT_API int cat_fs_copyfile(const char* path, const char* new_path, int flags);
+CAT_API int cat_fs_sendfile(cat_file_t out_fd, cat_file_t in_fd, int64_t in_offset, size_t length);
+CAT_API const char* cat_fs_mkdtemp(const char* tpl);
+CAT_API int cat_fs_mkstemp(const char* tpl);
 
 #ifdef __cplusplus
 }

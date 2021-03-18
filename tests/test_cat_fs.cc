@@ -89,6 +89,35 @@ TEST(cat_fs, open_close_read_write)
     }
 }
 
+// fsync and fdatasync cannot be tested here
+
+TEST(cat_fs, ftruncate)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    char buf[16], red[16];
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ftruncate");
+    const char * fn = fnstr.c_str();
+    int fd = -1;
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
+    DEFER({
+        cat_fs_unlink(fn);
+    });
+
+    cat_srand(buf, 16);
+
+    ASSERT_EQ(cat_fs_write(fd, buf, 16), 16);
+    ASSERT_EQ(0, cat_fs_close(fd));
+
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR), 0);
+    DEFER(cat_fs_close(fd));
+    ASSERT_EQ(cat_fs_ftruncate(fd, 8), 0);
+    
+    ASSERT_EQ(cat_fs_read(fd, red, 16), 8);
+    ASSERT_EQ(std::string(red, 8), std::string(buf, 8));
+}
+
+
 #define LSEEK_BUFSIZ 32768
 TEST(cat_fs, stat_lstat_fstat)
 {
@@ -560,4 +589,75 @@ TEST(cat_fs, chown_fchown_lchown){
     ASSERT_LT(cat_fs_lchown("/", 0, 0), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
 #endif
+}
+
+TEST(cat_fs, copyfile)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    char buf[16], red[16];
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_copyfile1");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_copyfile2");
+    const char * fn2 = fn2str.c_str();
+    int fd = -1;
+    cat_fs_unlink(fn);
+    cat_fs_unlink(fn2);
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
+    cat_srand(buf, 16);
+    ASSERT_EQ(cat_fs_write(fd, buf, 16), 16);
+    ASSERT_EQ(0, cat_fs_close(fd));
+
+    ASSERT_EQ(cat_fs_copyfile(fn, fn2, 0), 0);
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_EQ(cat_fs_read(fd, red, 16), 16);
+    ASSERT_EQ(std::string(red, 16), std::string(buf, 16));
+}
+
+// sendfile should be tested in sockets test
+
+static int cat_test_mkxtemps(const cat_dirent_t * ent){
+    return strlen(ent->name) == sizeof("cat_tests_mktemp.") - 1 &&
+        std::string(ent->name, sizeof("cat_tests_mktemp.") - 1) ==
+            std::string("cat_tests_mktemp.", sizeof("cat_tests_mktemp.") - 1);
+}
+
+TEST(cat_fs, mkdtemp_mkstemp)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    const char * pstr = nullptr;
+    int fd = -1;
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_mktemp.XXXXXX");
+    char * fn = strdup(fnstr.c_str());
+    char * fn2 = strdup(fnstr.c_str());
+    DEFER({
+        if(fn){
+            free(fn);
+        }
+        if(fn2){
+            free(fn2);
+        }
+        cat_dirent_t * namelist;
+        int ret = cat_fs_scandir(TEST_TMP_PATH, &namelist, cat_test_mkxtemps, nullptr);
+        for(int i = 0; i < ret; i++){
+            cat_fs_unlink(path_join(TEST_TMP_PATH, namelist[i].name).c_str());
+            cat_fs_rmdir(path_join(TEST_TMP_PATH, namelist[i].name).c_str());
+            free((void*)namelist[i].name);
+        }
+        free(namelist);
+    });
+
+    ASSERT_NE(pstr = cat_fs_mkdtemp(fn), nullptr);
+    ASSERT_EQ(cat_fs_access(pstr, R_OK | W_OK), 0);
+
+    ASSERT_GT(fd = cat_fs_mkstemp(fn2), 0);
+    cat_stat_t statbuf;
+    ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_mode & 0600, 0600);
+    ASSERT_EQ(cat_fs_close(fd), 0);
 }

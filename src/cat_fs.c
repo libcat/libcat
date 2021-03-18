@@ -20,7 +20,6 @@
 #include "cat_coroutine.h"
 #include "cat_event.h"
 #include "cat_time.h"
-#include "uv.h"
 
 typedef union
 {
@@ -121,6 +120,18 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length)
 CAT_API int cat_fs_close(cat_file_t fd)
 {
     CAT_FS_DO_RESULT(int, close, fd);
+}
+
+CAT_API int cat_fs_fsync(cat_file_t fd){
+    CAT_FS_DO_RESULT(int, fsync, fd);
+}
+
+CAT_API int cat_fs_fdatasync(cat_file_t fd){
+    CAT_FS_DO_RESULT(int, fdatasync, fd);
+}
+
+CAT_API int cat_fs_ftruncate(cat_file_t fd, int64_t offset){
+    CAT_FS_DO_RESULT(int, ftruncate, fd, offset);
 }
 
 // basic dir operations
@@ -336,4 +347,32 @@ CAT_API int cat_fs_fchown(cat_file_t fd, cat_uid_t uid, cat_gid_t gid){
 
 CAT_API int cat_fs_lchown(const char *path, cat_uid_t uid, cat_gid_t gid){
     CAT_FS_DO_RESULT(int, lchown, path, uid, gid);
+}
+
+// miscellaneous
+// copyfile
+CAT_API int cat_fs_copyfile(const char* path, const char* new_path, int flags){
+    CAT_FS_DO_RESULT(int, copyfile, path, new_path, flags);
+}
+
+CAT_API int cat_fs_sendfile(cat_file_t out_fd, cat_file_t in_fd, int64_t in_offset, size_t length){
+    CAT_FS_DO_RESULT(int, sendfile, out_fd, in_fd, in_offset, length);
+}
+
+/*
+* cat_fs_mkdtemp - like mkdtemp(3) but the returned path is not same as inputed template
+*/
+CAT_API const char* cat_fs_mkdtemp(const char* tpl){
+    CAT_FS_DO_RESULT_EX({return NULL;}, {
+        if(0 != context->fs.result){
+            return NULL;
+        }
+        return context->fs.path;
+    }, mkdtemp, tpl);
+}
+
+CAT_API int cat_fs_mkstemp(const char* tpl){
+    CAT_FS_DO_RESULT_EX({return -1;}, {
+        return (int)context->fs.result;
+    }, mkstemp, tpl);
 }
