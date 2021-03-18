@@ -119,10 +119,9 @@ TEST(cat_curl, timeout)
 TEST(cat_curl, busy)
 {
     CURL *ch;
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
     std::string response;
 
-    co([&ch, coroutine] {
+    co([&ch] {
         cat_time_sleep(0);
         ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
     });
