@@ -18,10 +18,7 @@
   +--------------------------------------------------------------------------+
  */
 
-#include "cat_fs.h"
 #include "test.h"
-#include "uv.h"
-#include <cstdio>
 
 std::string path_join(std::string a, std::string b){
     if("" == a){

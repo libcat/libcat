@@ -18,7 +18,6 @@
 
 #ifndef CAT_FS_H
 #define CAT_FS_H
-#include "uv.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -71,7 +70,7 @@ CAT_API int cat_fs_unlink(const char *path);
 CAT_API int cat_fs_link(const char * path, const char * new_path);
 CAT_API int cat_fs_symlink(const char * path, const char * new_path, int flags);
 
-CAT_API ssize_t cat_fs_readlink(const char * pathname, char * buf, size_t len);
+CAT_API int cat_fs_readlink(const char * pathname, char * buf, size_t len);
 CAT_API char * cat_fs_realpath(const char *pathname, char* buf);
 
 CAT_API int cat_fs_chmod(const char *path, int mode);

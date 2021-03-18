@@ -290,15 +290,15 @@ CAT_API int cat_fs_symlink(const char * path, const char * new_path, int flags){
 #ifdef CAT_OS_WIN
 #   define PATH_MAX 32768
 #endif
-CAT_API ssize_t cat_fs_readlink(const char * pathname, char * buf, size_t len){
-    CAT_FS_DO_RESULT_EX({return (ssize_t)-1;}, {
-        int ret = strnlen(context->fs.ptr, PATH_MAX);
+CAT_API int cat_fs_readlink(const char * pathname, char * buf, size_t len){
+    CAT_FS_DO_RESULT_EX({return (int)-1;}, {
+        size_t ret = strnlen(context->fs.ptr, PATH_MAX);
         if(ret > len){
             // will truncate
             ret = len;
         }
         strncpy(buf, context->fs.ptr, len);
-        return (ssize_t)ret;
+        return (int)ret;
     }, readlink, pathname);
 }
 
