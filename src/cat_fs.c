@@ -20,8 +20,7 @@
 #include "cat_coroutine.h"
 #include "cat_event.h"
 #include "cat_time.h"
-
-#include <fcntl.h>
+#include "uv.h"
 
 typedef union
 {
@@ -30,21 +29,15 @@ typedef union
     uv_fs_t fs;
 } cat_fs_context_t;
 
-#define CAT_FS_CREATE_CONTEXT(on_fail, context) \
-    cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context)); do { \
+#define CAT_FS_DO_RESULT_EX(on_fail, on_done, operation, ...) do{\
+    cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context)); \
     if (unlikely(context == NULL)) { \
         cat_update_last_error_of_syscall("Malloc for file-system context failed"); \
         {on_fail} \
     } \
-} while (0)
-
-#define CAT_FS_CALL(on_fail, operation, ...) \
-    CAT_FS_CREATE_CONTEXT(on_fail, context); \
     cat_bool_t done; \
     cat_bool_t ret; \
-    int error = uv_fs_##operation(cat_event_loop, &context->fs, ##__VA_ARGS__, cat_fs_callback);
-
-#define CAT_FS_HANDLE_ERROR(on_fail, operation) do { \
+    int error = uv_fs_##operation(cat_event_loop, &context->fs, ##__VA_ARGS__, cat_fs_callback); \
     if (error != 0) { \
         cat_update_last_error_with_reason(error, "File-System " #operation " init failed"); \
         cat_free(context); \
@@ -64,19 +57,11 @@ typedef union
         (void) uv_cancel(&context->req); \
         {on_fail} \
     } \
-} while (0)
-
-#define CAT_FS_HANDLE_RESULT(on_fail, on_done, operation) \
-    CAT_FS_HANDLE_ERROR(on_fail, operation); \
     if (unlikely(context->fs.result < 0)) { \
         cat_update_last_error_with_reason((cat_errno_t) context->fs.result, "File-System " #operation " failed"); \
         {on_fail} \
     } \
-    {on_done}
-
-#define CAT_FS_DO_RESULT_EX(on_fail, on_done, operation, ...) do { \
-        CAT_FS_CALL({on_fail}, operation, ##__VA_ARGS__) \
-        CAT_FS_HANDLE_RESULT(on_fail, on_done, operation) \
+    {on_done} \
 } while (0)
 
 #define CAT_FS_DO_RESULT(return_type, operation, ...) CAT_FS_DO_RESULT_EX({return -1;}, {return (return_type)context->fs.result;}, operation, __VA_ARGS__)
@@ -136,6 +121,113 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length)
 CAT_API int cat_fs_close(cat_file_t fd)
 {
     CAT_FS_DO_RESULT(int, close, fd);
+}
+
+// basic dir operations
+// opendir, readdir, closedir, scandir
+CAT_API cat_dir_t *cat_fs_opendir(const char* path){
+    CAT_FS_DO_RESULT_EX({return NULL;}, {
+        return (cat_dir_t *)context->fs.ptr;
+    }, opendir, path);
+}
+
+/*
+* cat_fs_readdirs: like readdir(3), but with multi entries
+* Note: you should do free(dir->dirents[x].name), free(dir->dirents[x]) and free(dir->dirents)
+*/
+CAT_API int cat_fs_readdirs(cat_dir_t* dir, uv_dirent_t *dirents, size_t nentries){
+    ((uv_dir_t *)dir)->dirents = dirents;
+    ((uv_dir_t *)dir)->nentries = nentries;
+    CAT_FS_DO_RESULT_EX({return -1;}, {
+        // we donot duplicate names, that's hacky
+        // better duplicate it, then uv__free original, then return our duplication
+        // however we donot have uv__free
+
+        // clean up dir struct to avoid uv's freeing names
+        ((uv_dir_t *)dir)->dirents = NULL;
+        ((uv_dir_t *)dir)->nentries = 0;
+        int ret = (int)context->fs.result;
+        context->fs.result = 0;
+        return ret;
+    }, readdir, dir);
+}
+
+/*
+* cat_fs_readdir: like readdir(3), but return cat_dirent_t
+* Note: you should do both free(retval->name) and free(retval)
+*/
+CAT_API uv_dirent_t* cat_fs_readdir(cat_dir_t* dir){
+    uv_dirent_t *dirent = malloc(sizeof(*dirent));
+    int ret = cat_fs_readdirs(dir, dirent, 1);
+    if(1 != ret){
+        free(dirent);
+        return NULL;
+    }
+    return dirent;
+}
+
+CAT_API int cat_fs_closedir(cat_dir_t* dir){
+    CAT_FS_DO_RESULT(int, closedir, dir);
+}
+
+static uv_fs_t* cat_fs_uv_scandir(const char* path, int flags){
+    CAT_FS_DO_RESULT_EX({return NULL;}, {
+        return &context->fs;
+    }, scandir, path, flags/* no documents/source code coments refer to this, what is this ?*/);
+}
+
+/*
+* cat_fs_scandir: like scandir(3), but with cat_dirent_t
+* Note: you should do free(namelist[x].name), free(namelist[x]) and free(namelist)
+*/
+CAT_API int cat_fs_scandir(const char* path, cat_dirent_t ** namelist,
+  int (*filter)(const cat_dirent_t *),
+  int (*compar)(const cat_dirent_t *, const cat_dirent_t *)){
+
+	cat_dir_t *dir = NULL;
+    if (!(dir = cat_fs_opendir(path))) {
+        // failed open dir
+        return -1;
+    }
+
+    uv_fs_t *req = NULL;
+    if(!(req = cat_fs_uv_scandir(path, 0))){
+        // failed scandir
+        return -1;
+    }
+
+    int ret = -1;
+    cat_dirent_t dirent, *tmp=NULL;
+    int cnt=0, len=0;
+
+    while ((ret = uv_fs_scandir_next(req, &dirent)) == 0) {
+		if (filter && !filter(&dirent)) {
+            continue;
+        }
+		if (cnt >= len) {
+			len = 2*len+1;
+			tmp = realloc(tmp, len * sizeof(*tmp));
+			if (!tmp) {
+                cat_update_last_error(CAT_ENOMEM, "Cannot allocate memory");
+                for(cnt--; cnt>=0; cnt--){
+                    free((void*)tmp[cnt].name);
+                }
+                free(tmp);
+                return -1;
+            };
+		}
+		tmp[cnt].name = strdup(dirent.name);
+        //printf("%s: %p\n", tmp[cnt].name, tmp[cnt].name);
+		tmp[cnt++].type = dirent.type;
+	}
+
+    cat_fs_closedir(dir);
+
+	if(compar) {
+        qsort(tmp, cnt, sizeof(*tmp), (int (*)(const void *, const void *))compar);
+    }
+	*namelist = tmp;
+	return cnt;
 }
 
 // directory/file operations
@@ -199,14 +291,14 @@ CAT_API int cat_fs_symlink(const char * path, const char * new_path, int flags){
 #   define PATH_MAX 32768
 #endif
 CAT_API ssize_t cat_fs_readlink(const char * pathname, char * buf, size_t len){
-    CAT_FS_DO_RESULT_EX({return -1;}, {
+    CAT_FS_DO_RESULT_EX({return (ssize_t)-1;}, {
         int ret = strnlen(context->fs.ptr, PATH_MAX);
         if(ret > len){
             // will truncate
             ret = len;
         }
         strncpy(buf, context->fs.ptr, len);
-        return ret;
+        return (ssize_t)ret;
     }, readlink, pathname);
 }
 

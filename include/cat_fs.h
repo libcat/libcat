@@ -18,6 +18,7 @@
 
 #ifndef CAT_FS_H
 #define CAT_FS_H
+#include "uv.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,14 +32,31 @@ typedef uv_stat_t cat_stat_t;
 typedef uv_uid_t cat_uid_t;
 typedef uv_gid_t cat_gid_t;
 typedef uv_file cat_file_t;
-typedef uv_dir_t cat_dir_t;
+
+#define CAT_DIRENT_UNKNOWN UV_DIRENT_UNKNOWN
+#define CAT_DIRENT_FILE UV_DIRENT_FILE
+#define CAT_DIRENT_DIR UV_DIRENT_DIR
+#define CAT_DIRENT_LINK UV_DIRENT_LINK
+#define CAT_DIRENT_FIFO UV_DIRENT_FIFO
+#define CAT_DIRENT_SOCKET UV_DIRENT_SOCKET
+#define CAT_DIRENT_CHAR UV_DIRENT_CHAR
+#define CAT_DIRENT_BLOCK UV_DIRENT_BLOCK
 typedef uv_dirent_t cat_dirent_t;
+typedef void cat_dir_t;
 
 CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...);
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length);
 CAT_API int cat_fs_close(cat_file_t fd);
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence);
+
+CAT_API cat_dir_t *cat_fs_opendir(const char* path);
+CAT_API uv_dirent_t* cat_fs_readdir(cat_dir_t* dir);
+CAT_API int cat_fs_readdirs(cat_dir_t* dir, uv_dirent_t *dirents, size_t nentries);
+CAT_API int cat_fs_closedir(cat_dir_t* dir);
+CAT_API int cat_fs_scandir(const char* path, cat_dirent_t ** namelist,
+  int (*filter)(const cat_dirent_t *),
+  int (*compar)(const cat_dirent_t *, const cat_dirent_t *));
 
 CAT_API int cat_fs_access(const char *path, int mode);
 CAT_API int cat_fs_stat(const char* path, cat_stat_t * buf);

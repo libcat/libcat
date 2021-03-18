@@ -18,7 +18,10 @@
   +--------------------------------------------------------------------------+
  */
 
+#include "cat_fs.h"
 #include "test.h"
+#include "uv.h"
+#include <cstdio>
 
 std::string path_join(std::string a, std::string b){
     if("" == a){
@@ -262,6 +265,160 @@ TEST(cat_fs, mkdir_rmdir)
     ASSERT_EQ(cat_fs_rmdir(fn), 0);
     ASSERT_LT(cat_fs_rmdir(fn2), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+}
+
+TEST(cat_fs, opendir_readdir_readdirs_closedir)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_readdir");
+    const char * fn = fnstr.c_str();
+    std::string fndstr = path_join(fnstr, "cat_tests_readdir_dir1");
+    const char * fnd = fndstr.c_str();
+    std::string fnd2str = path_join(fnstr, "cat_tests_readdir_dir2");
+    const char * fnd2 = fnd2str.c_str();
+    std::string fnf3str = path_join(fnstr, "cat_tests_readdir_file3");
+    const char * fnf3 = fnf3str.c_str();
+    DEFER({
+        cat_fs_rmdir(fnd);
+        cat_fs_rmdir(fnd2);
+        cat_fs_unlink(fnf3);
+        cat_fs_rmdir(fn);
+    });
+    cat_fs_rmdir(fnd);
+    cat_fs_rmdir(fnd2);
+    cat_fs_unlink(fnf3);
+    cat_fs_rmdir(fn);
+
+    ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+    ASSERT_EQ(cat_fs_mkdir(fnd, 0777), 0);
+    ASSERT_EQ(cat_fs_mkdir(fnd2, 0777), 0);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fnf3, O_RDONLY | O_CREAT | O_TRUNC, 0400)), 0);
+
+    cat_dir_t * dir;
+    ASSERT_NE(dir = cat_fs_opendir(fn), nullptr);
+
+    cat_dirent_t *dirent1 = NULL, *dirent2 = NULL, *dirent3 = NULL;
+    DEFER({
+        if(dirent1){
+            free((void*)dirent1->name);
+            free((void*)dirent1);
+        }
+        if(dirent2){
+            free((void*)dirent2->name);
+            free((void*)dirent2);
+        }
+        if(dirent3){
+            free((void*)dirent3->name);
+            free((void*)dirent3);
+        }
+    });
+
+    ASSERT_NE(dirent1 = cat_fs_readdir(dir), nullptr);
+    ASSERT_EQ(std::string(dirent1->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_NE(dirent2 = cat_fs_readdir(dir), nullptr);
+    ASSERT_EQ(std::string(dirent2->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_NE(dirent3 = cat_fs_readdir(dir), nullptr);
+    ASSERT_EQ(std::string(dirent3->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_NE(std::string(dirent1->name), std::string(dirent2->name));
+    ASSERT_NE(std::string(dirent1->name), std::string(dirent3->name));
+    ASSERT_NE(std::string(dirent2->name), std::string(dirent3->name));
+    //printf("%s\n", dirent1->name);
+    //printf("%s\n", dirent2->name);
+    //printf("%s\n", dirent3->name);
+    free((void*)dirent1->name);
+    free((void*)dirent1);
+    ASSERT_EQ(dirent1 = cat_fs_readdir(dir), nullptr);
+    ASSERT_EQ(cat_fs_closedir(dir), 0);
+
+    cat_dirent_t *dirents1 = (cat_dirent_t *)malloc(sizeof(*dirents1));
+    memset(dirents1, 0, sizeof(*dirents1));
+    cat_dirent_t *dirents2 = (cat_dirent_t *)malloc(sizeof(*dirents2)*2);
+    memset(dirents2, 0, sizeof(*dirents2)*2);
+    DEFER({
+        if(dirents1){
+            if(dirents1[0].name){
+                free((void*)dirents1[0].name);
+            }
+            free(dirents1);
+        }
+        if(dirents2){
+            if(dirents2[0].name){
+                free((void*)dirents2[0].name);
+            }
+            if(dirents2[1].name){
+                free((void*)dirents2[1].name);
+            }
+            free(dirents2);
+        }
+    });
+
+    ASSERT_NE(dir = cat_fs_opendir(fn), nullptr);
+    ASSERT_EQ(cat_fs_readdirs(dir, dirents2, 2), 2);
+    ASSERT_EQ(std::string(dirents2[0].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_EQ(std::string(dirents2[1].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_EQ(cat_fs_readdirs(dir, dirents1, 1), 1);
+    ASSERT_EQ(std::string(dirents1[0].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
+    ASSERT_NE(std::string(dirents1[0].name), std::string(dirents2[0].name));
+    ASSERT_NE(std::string(dirents1[0].name), std::string(dirents2[1].name));
+    ASSERT_NE(std::string(dirents2[0].name), std::string(dirents2[1].name));
+    free((void*)dirents2[0].name);
+    free((void*)dirents2[1].name);
+    memset(dirents2, 0, sizeof(*dirents2)*2);
+    ASSERT_EQ(cat_fs_readdirs(dir, dirents2, 2), 0);
+    ASSERT_EQ(cat_fs_closedir(dir), 0);
+}
+
+static int cat_test_nofile_filter(const cat_dirent_t * x){
+    return x->type != CAT_DIRENT_FILE;
+}
+
+static int cat_test_reverse_compare(const cat_dirent_t * a, const cat_dirent_t * b){
+    //printf("a: %p %s\n", a->name, a->name);
+    //printf("b: %p %s\n", b->name, b->name);
+    return -strcoll(a->name, b->name);
+}
+
+TEST(cat_fs, scandir)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_dir");
+    const char * fn = fnstr.c_str();
+    std::string fndstr = path_join(fnstr, "cat_tests_dir_dir1");
+    const char * fnd = fndstr.c_str();
+    std::string fnd2str = path_join(fnstr, "cat_tests_dir_dir2");
+    const char * fnd2 = fnd2str.c_str();
+    std::string fnf3str = path_join(fnstr, "cat_tests_dir_file3");
+    const char * fnf3 = fnf3str.c_str();
+    DEFER({
+        cat_fs_rmdir(fnd);
+        cat_fs_rmdir(fnd2);
+        cat_fs_unlink(fnf3);
+        cat_fs_rmdir(fn);
+    });
+    cat_fs_rmdir(fnd);
+    cat_fs_rmdir(fnd2);
+    cat_fs_unlink(fnf3);
+    cat_fs_rmdir(fn);
+
+    ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+    ASSERT_EQ(cat_fs_mkdir(fnd, 0777), 0);
+    ASSERT_EQ(cat_fs_mkdir(fnd2, 0777), 0);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fnf3, O_RDONLY | O_CREAT | O_TRUNC, 0400)), 0);
+
+    int ret = -1;
+    cat_dirent_t * namelist;
+    ASSERT_EQ(ret = cat_fs_scandir(fn, &namelist, cat_test_nofile_filter, cat_test_reverse_compare), 2);
+    DEFER({
+        for(int i = 0 ;i < ret; i++){
+            free((void*)namelist[i].name);
+        }
+        free(namelist);
+    });
+    ASSERT_EQ(std::string("cat_tests_dir_dir2"), std::string(namelist[0].name));
+    ASSERT_EQ(std::string("cat_tests_dir_dir1"), std::string(namelist[1].name));
+    
 }
 
 TEST(cat_fs, rename)
