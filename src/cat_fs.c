@@ -388,3 +388,10 @@ CAT_API int cat_fs_mkstemp(const char* tpl){
         return (int)context->fs.result;
     }, mkstemp, tpl);
 }
+
+CAT_API int cat_fs_statfs(const char* path, cat_statfs_t* buf){
+    CAT_FS_DO_RESULT_EX({return -1;}, {
+        memcpy(buf, context->fs.ptr, sizeof(*buf));
+        return 0;
+    }, statfs, path);
+}

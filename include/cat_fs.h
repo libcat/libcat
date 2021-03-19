@@ -55,6 +55,7 @@ extern "C" {
 #define CAT_FS_SYMLINK_JUNCTION   UV_FS_SYMLINK_JUNCTION
 
 typedef uv_stat_t cat_stat_t;
+typedef uv_statfs_t cat_statfs_t;
 typedef uv_uid_t cat_uid_t;
 typedef uv_gid_t cat_gid_t;
 typedef uv_file cat_file_t;
@@ -116,6 +117,7 @@ CAT_API int cat_fs_copyfile(const char* path, const char* new_path, int flags);
 CAT_API int cat_fs_sendfile(cat_file_t out_fd, cat_file_t in_fd, int64_t in_offset, size_t length);
 CAT_API const char* cat_fs_mkdtemp(const char* tpl);
 CAT_API int cat_fs_mkstemp(const char* tpl);
+CAT_API int cat_fs_statfs(const char* path, cat_statfs_t* buf);
 
 #ifdef __cplusplus
 }

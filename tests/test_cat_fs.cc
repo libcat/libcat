@@ -674,8 +674,8 @@ TEST(cat_fs, utime_lutime_futime){
     std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_lutime");
     const char * fn2 = fn2str.c_str();
 
-    double changed_time1 = -4785984343.0;
-    double changed_time2 = -2398838743.0;
+    double changed_time1 = 865353600.0;
+    double changed_time2 = 936201600.0;
     cat_stat_t statbuf;
 
     cat_fs_unlink(fn2);
@@ -684,8 +684,8 @@ TEST(cat_fs, utime_lutime_futime){
     ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200), 0);
     ASSERT_EQ(cat_fs_futime(fd, changed_time2, changed_time2), 0);
     ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, -2398838743);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, -2398838743);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
     ASSERT_EQ(cat_fs_close(cat_fs_close(fd)), 0);
     ASSERT_EQ(cat_fs_symlink(fn, fn2, 0), 0);
     DEFER({
@@ -701,13 +701,22 @@ TEST(cat_fs, utime_lutime_futime){
 
     ASSERT_EQ(cat_fs_utime(fn, changed_time1, changed_time1), 0);
     ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, -4785984343);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, -4785984343);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, 865353600);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, 865353600);
     ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, -4785984343);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, -4785984343);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, 865353600);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, 865353600);
     ASSERT_EQ(cat_fs_lutime(fn2, changed_time2, changed_time2), 0);
     ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, -2398838743);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, -2398838743);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
+}
+
+TEST(cat_fs, statfs){
+    cat_statfs_t statfsbuf;
+#ifdef CAT_OS_WIN
+    ASSERT_EQ(cat_fs_statfs("C:\\", &statfsbuf), 0);
+#else
+    ASSERT_EQ(cat_fs_statfs("/", &statfsbuf), 0);
+#endif
 }
