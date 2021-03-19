@@ -17,8 +17,7 @@
   |         dixyes <dixyes@gmail.com>                                        |
   +--------------------------------------------------------------------------+
  */
-
-#include "cat_fs.h"
+ 
 #include "test.h"
 
 std::string path_join(std::string a, std::string b){
@@ -686,7 +685,7 @@ TEST(cat_fs, utime_lutime_futime){
     ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
     ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
     ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
-    ASSERT_EQ(cat_fs_close(cat_fs_close(fd)), 0);
+    ASSERT_EQ(cat_fs_close(fd), 0);
     ASSERT_EQ(cat_fs_symlink(fn, fn2, 0), 0);
     DEFER({
         cat_fs_unlink(fn2);
