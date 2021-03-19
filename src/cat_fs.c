@@ -265,7 +265,7 @@ CAT_API int cat_fs_unlink(const char *path)
 }
 
 // file info utils
-// access, stat(s)
+// access, stat(s), utime(s)
 
 CAT_API int cat_fs_access(const char *path, int mode)
 {
@@ -285,6 +285,18 @@ CAT_API int cat_fs_lstat(const char * path, cat_stat_t * buf){
 
 CAT_API int cat_fs_fstat(cat_file_t fd, cat_stat_t * buf){
     CAT_FS_DO_STAT(fstat, fd);
+}
+
+CAT_API int cat_fs_utime(const char* path, double atime, double mtime){
+    CAT_FS_DO_RESULT(int, utime, path, atime, mtime);
+}
+
+CAT_API int cat_fs_lutime(const char* path, double atime, double mtime){
+    CAT_FS_DO_RESULT(int, lutime, path, atime, mtime);
+}
+
+CAT_API int cat_fs_futime(cat_file_t fd, double atime, double mtime){
+    CAT_FS_DO_RESULT(int, futime, fd, atime, mtime);
 }
 
 // hard link and symbol link

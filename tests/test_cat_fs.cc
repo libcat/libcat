@@ -18,6 +18,7 @@
   +--------------------------------------------------------------------------+
  */
 
+#include "cat_fs.h"
 #include "test.h"
 
 std::string path_join(std::string a, std::string b){
@@ -621,9 +622,10 @@ TEST(cat_fs, copyfile)
 // sendfile should be tested in sockets test
 
 static int cat_test_mkxtemps(const cat_dirent_t * ent){
-    return strlen(ent->name) == sizeof("cat_tests_mktemp.") - 1 &&
-        std::string(ent->name, sizeof("cat_tests_mktemp.") - 1) ==
-            std::string("cat_tests_mktemp.", sizeof("cat_tests_mktemp.") - 1);
+    const size_t tpl_len = sizeof("cat_tests_mktemp.") - 1;
+    return strlen(ent->name) == tpl_len + 6 &&
+        std::string(ent->name, tpl_len) ==
+            std::string("cat_tests_mktemp.", tpl_len);
 }
 
 TEST(cat_fs, mkdtemp_mkstemp)
@@ -645,8 +647,10 @@ TEST(cat_fs, mkdtemp_mkstemp)
         cat_dirent_t * namelist;
         int ret = cat_fs_scandir(TEST_TMP_PATH, &namelist, cat_test_mkxtemps, nullptr);
         for(int i = 0; i < ret; i++){
-            cat_fs_unlink(path_join(TEST_TMP_PATH, namelist[i].name).c_str());
-            cat_fs_rmdir(path_join(TEST_TMP_PATH, namelist[i].name).c_str());
+            std::string deletefnstr = path_join(TEST_TMP_PATH, namelist[i].name);
+            const char* deletefn = deletefnstr.c_str();
+            cat_fs_unlink(deletefn);
+            cat_fs_rmdir(deletefn);
             free((void*)namelist[i].name);
         }
         free(namelist);
@@ -660,4 +664,50 @@ TEST(cat_fs, mkdtemp_mkstemp)
     ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
     ASSERT_EQ(statbuf.st_mode & 0600, 0600);
     ASSERT_EQ(cat_fs_close(fd), 0);
+}
+
+TEST(cat_fs, utime_lutime_futime){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_utime");
+    const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_lutime");
+    const char * fn2 = fn2str.c_str();
+
+    double changed_time1 = -4785984343.0;
+    double changed_time2 = -2398838743.0;
+    cat_stat_t statbuf;
+
+    cat_fs_unlink(fn2);
+    cat_fs_unlink(fn);
+    int fd = -1;
+    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200), 0);
+    ASSERT_EQ(cat_fs_futime(fd, changed_time2, changed_time2), 0);
+    ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, -2398838743);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, -2398838743);
+    ASSERT_EQ(cat_fs_close(cat_fs_close(fd)), 0);
+    ASSERT_EQ(cat_fs_symlink(fn, fn2, 0), 0);
+    DEFER({
+        cat_fs_unlink(fn2);
+        cat_fs_unlink(fn);
+    });
+    ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_GT(statbuf.st_atim.tv_sec, changed_time1);
+    ASSERT_GT(statbuf.st_mtim.tv_sec, changed_time1);
+    ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
+    ASSERT_GT(statbuf.st_atim.tv_sec, changed_time2);
+    ASSERT_GT(statbuf.st_mtim.tv_sec, changed_time2);
+
+    ASSERT_EQ(cat_fs_utime(fn, changed_time1, changed_time1), 0);
+    ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, -4785984343);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, -4785984343);
+    ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, -4785984343);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, -4785984343);
+    ASSERT_EQ(cat_fs_lutime(fn2, changed_time2, changed_time2), 0);
+    ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_atim.tv_sec, -2398838743);
+    ASSERT_EQ(statbuf.st_mtim.tv_sec, -2398838743);
 }

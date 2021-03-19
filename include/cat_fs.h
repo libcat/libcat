@@ -91,6 +91,9 @@ CAT_API int cat_fs_access(const char *path, int mode);
 CAT_API int cat_fs_stat(const char* path, cat_stat_t * buf);
 CAT_API int cat_fs_lstat(const char* path, cat_stat_t * buf);
 CAT_API int cat_fs_fstat(cat_file_t fd, cat_stat_t * buf);
+CAT_API int cat_fs_utime(const char* path, double atime, double mtime);
+CAT_API int cat_fs_lutime(const char* path, double atime, double mtime);
+CAT_API int cat_fs_futime(cat_file_t fd, double atime, double mtime);
 
 CAT_API int cat_fs_mkdir(const char *path, int mode);
 CAT_API int cat_fs_rmdir(const char *path);
