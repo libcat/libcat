@@ -90,6 +90,57 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_LT(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
 }
 
+#define PWRITE_PREAD_BUFSIZ 8192
+TEST(cat_fs, pwrite_pread)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    char zeros[PWRITE_PREAD_BUFSIZ], rands[PWRITE_PREAD_BUFSIZ], red[PWRITE_PREAD_BUFSIZ];
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw2");
+    const char * fn = fnstr.c_str();
+    int fd = -1;
+    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
+    DEFER({
+        cat_fs_unlink(fn);
+    });
+
+    memset(zeros, 0, sizeof(zeros));
+    memset(red, 0, sizeof(red));
+    cat_srand(rands, PWRITE_PREAD_BUFSIZ);
+
+    ASSERT_EQ(cat_fs_write(fd, zeros, PWRITE_PREAD_BUFSIZ - 1024), PWRITE_PREAD_BUFSIZ - 1024);
+
+    ASSERT_EQ(cat_fs_pwrite(fd, &rands[0], 128, 0), 128);
+    ASSERT_EQ(cat_fs_pwrite(fd, &rands[1234], 512, 1234), 512);
+    ASSERT_EQ(cat_fs_pwrite(fd, &rands[PWRITE_PREAD_BUFSIZ - 1024], 512, PWRITE_PREAD_BUFSIZ - 1024), 512);
+    // after these:
+    // 0:128=rands, 128:1234=zeros, 1234:1746=rands, 1746:(siz-1024)=zeros, (size-1024):(siz-512)=rands
+
+    ASSERT_EQ(0, cat_fs_close(fd));
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
+    DEFER({cat_fs_close(fd);});
+
+    // 0:128 = rands
+    ASSERT_EQ(cat_fs_pread(fd, &red[0], 128, 0), 128);
+    ASSERT_EQ(std::string(&red[0], 128), std::string(&rands[0], 128));
+    // reproducibility
+    ASSERT_EQ(cat_fs_pread(fd, &red[0], 128, 0), 128);
+    ASSERT_EQ(std::string(&red[0], 128), std::string(&rands[0], 128));
+    // 128:1234 = zeros
+    ASSERT_EQ(cat_fs_pread(fd, &red[128], 1234-128, 128), 1234-128);
+    ASSERT_EQ(std::string(&red[128], 1234-128), std::string(&zeros[128], 1234-128));
+    // 1234:1746 = rands
+    ASSERT_EQ(cat_fs_pread(fd, &red[1234], 512, 1234), 512);
+    ASSERT_EQ(std::string(&red[1234], 512), std::string(&rands[1234], 512));
+    // 1746:(siz-1024) = zeros
+    ASSERT_EQ(cat_fs_pread(fd, &red[1746], PWRITE_PREAD_BUFSIZ-1024-1746, 1746), PWRITE_PREAD_BUFSIZ-1024-1746);
+    ASSERT_EQ(std::string(&red[1746], PWRITE_PREAD_BUFSIZ-1024-1746), std::string(&zeros[1746], PWRITE_PREAD_BUFSIZ-1024-1746));
+    // (size-1024):(siz-512) = rands
+    ASSERT_EQ(cat_fs_pread(fd, &red[PWRITE_PREAD_BUFSIZ-1024], 1024, PWRITE_PREAD_BUFSIZ-1024), 512);
+    ASSERT_EQ(std::string(&red[PWRITE_PREAD_BUFSIZ-1024], 512), std::string(&rands[PWRITE_PREAD_BUFSIZ-1024], 512));
+
+}
+
 // fsync and fdatasync cannot be tested here
 
 TEST(cat_fs, ftruncate)
