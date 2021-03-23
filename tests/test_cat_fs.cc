@@ -345,7 +345,7 @@ TEST(cat_fs, mkdir_rmdir)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
 }
 
-TEST(cat_fs, opendir_readdir_readdirs_closedir)
+TEST(cat_fs, opendir_readdir_rewinddir_closedir)
 {
     SKIP_IF_(no_tmp(), "Temp dir not writable");
 
@@ -376,74 +376,66 @@ TEST(cat_fs, opendir_readdir_readdirs_closedir)
     cat_dir_t * dir;
     ASSERT_NE(dir = cat_fs_opendir(fn), nullptr);
 
-    cat_dirent_t *dirent1 = NULL, *dirent2 = NULL, *dirent3 = NULL;
+    cat_dirent_t* dirents[5] = {0};
     DEFER({
-        if(dirent1){
-            free((void*)dirent1->name);
-            free((void*)dirent1);
-        }
-        if(dirent2){
-            free((void*)dirent2->name);
-            free((void*)dirent2);
-        }
-        if(dirent3){
-            free((void*)dirent3->name);
-            free((void*)dirent3);
+        for (int i = 0; i < 5; i++) {
+            if (dirents[i]) {
+                if (dirents[i]->name) {
+                    free((void*)dirents[i]->name);
+                }
+                free(dirents[i]);
+            }
         }
     });
-
-    ASSERT_NE(dirent1 = cat_fs_readdir(dir), nullptr);
-    ASSERT_EQ(std::string(dirent1->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_NE(dirent2 = cat_fs_readdir(dir), nullptr);
-    ASSERT_EQ(std::string(dirent2->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_NE(dirent3 = cat_fs_readdir(dir), nullptr);
-    ASSERT_EQ(std::string(dirent3->name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_NE(std::string(dirent1->name), std::string(dirent2->name));
-    ASSERT_NE(std::string(dirent1->name), std::string(dirent3->name));
-    ASSERT_NE(std::string(dirent2->name), std::string(dirent3->name));
-    //printf("%s\n", dirent1->name);
-    //printf("%s\n", dirent2->name);
-    //printf("%s\n", dirent3->name);
-    free((void*)dirent1->name);
-    free((void*)dirent1);
-    ASSERT_EQ(dirent1 = cat_fs_readdir(dir), nullptr);
-    ASSERT_EQ(cat_fs_closedir(dir), 0);
-
-    cat_dirent_t *dirents1 = (cat_dirent_t *)malloc(sizeof(*dirents1));
-    memset(dirents1, 0, sizeof(*dirents1));
-    cat_dirent_t *dirents2 = (cat_dirent_t *)malloc(sizeof(*dirents2)*2);
-    memset(dirents2, 0, sizeof(*dirents2)*2);
-    DEFER({
-        if(dirents1){
-            if(dirents1[0].name){
-                free((void*)dirents1[0].name);
+    for (int repeat = 0; repeat < 3; repeat++) {
+        //printf("repeat %d\n", repeat);
+        for (int i = 0; i < 5; i++) {
+            ASSERT_NE(dirents[i] = cat_fs_readdir(dir), nullptr);
+            /*
+            if ((dirents[i] = cat_fs_readdir(dir)) == nullptr) {
+                printf("%d: %s",cat_get_last_error_code(), cat_get_last_error_message());
+                ASSERT_NE(0, 0);
             }
-            free(dirents1);
+            printf("found %s\n", dirents[i]->name);
+            */
+            std::string name = std::string(dirents[i]->name);
+
+            if(std::string(".") == name){
+                ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
+            }else if(std::string("..") == name){
+                ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
+            }else if(std::string("cat_tests_readdir_dir1") == name){
+                ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
+            }else if(std::string("cat_tests_readdir_dir2") == name){
+                ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
+            }else if(std::string("cat_tests_readdir_file3") == name){
+                ASSERT_EQ(dirents[i]->type, CAT_DIRENT_FILE);
+            }else{
+                const char* msg = cat_sprintf("Bad result: %s at repeat %d", dirents[i]->name, repeat);
+                GTEST_FATAL_FAILURE_(msg);
+                cat_free((void*)msg);
+            }
         }
-        if(dirents2){
-            if(dirents2[0].name){
-                free((void*)dirents2[0].name);
+        for (int i = 0; i < 5; i++) {
+            for (int j = 4; j > i; j--) {
+                //printf("compare %d with %d\n", i, j);
+                //printf("compare %s with %s\n", dirents[i]->name, dirents[j]->name);
+                ASSERT_NE(std::string(dirents[i]->name), std::string(dirents[j]->name));
             }
-            if(dirents2[1].name){
-                free((void*)dirents2[1].name);
-            }
-            free(dirents2);
         }
-    });
+        ASSERT_EQ(dirents[0] = cat_fs_readdir(dir), nullptr);
+        for (int i = 0; i < 5; i++) {
+            if (dirents[i]) {
+                if (dirents[i]->name) {
+                    free((void*)dirents[i]->name);
+                }
+                free(dirents[i]);
+                dirents[i] = nullptr;
+            }
+        }
+        cat_fs_rewinddir(dir);
+    }
 
-    ASSERT_NE(dir = cat_fs_opendir(fn), nullptr);
-    ASSERT_EQ(cat_fs_readdirs(dir, dirents2, 2), 2);
-    ASSERT_EQ(std::string(dirents2[0].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_EQ(std::string(dirents2[1].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_EQ(cat_fs_readdirs(dir, dirents1, 1), 1);
-    ASSERT_EQ(std::string(dirents1[0].name, sizeof("cat_tests_readdir_")-1), std::string("cat_tests_readdir_"));
-    ASSERT_NE(std::string(dirents1[0].name), std::string(dirents2[0].name));
-    ASSERT_NE(std::string(dirents1[0].name), std::string(dirents2[1].name));
-    ASSERT_NE(std::string(dirents2[0].name), std::string(dirents2[1].name));
-    free((void*)dirents2[0].name);
-    free((void*)dirents2[1].name);
-    memset(dirents2, 0, sizeof(*dirents2)*2);
-    ASSERT_EQ(cat_fs_readdirs(dir, dirents2, 2), 0);
     ASSERT_EQ(cat_fs_closedir(dir), 0);
 }
 

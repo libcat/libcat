@@ -85,7 +85,7 @@ CAT_API int cat_fs_ftruncate(cat_file_t fd, int64_t offset);
 
 CAT_API cat_dir_t *cat_fs_opendir(const char* path);
 CAT_API uv_dirent_t* cat_fs_readdir(cat_dir_t* dir);
-CAT_API int cat_fs_readdirs(cat_dir_t* dir, uv_dirent_t *dirents, size_t nentries);
+CAT_API void cat_fs_rewinddir(cat_dir_t* dir);
 CAT_API int cat_fs_closedir(cat_dir_t* dir);
 CAT_API int cat_fs_scandir(const char* path, cat_dirent_t ** namelist,
   int (*filter)(const cat_dirent_t *),

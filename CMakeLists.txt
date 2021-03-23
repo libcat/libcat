@@ -17,6 +17,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 90)
 
+find_package(PkgConfig)
+
 # Qemu Build
 option(QEMU "build for qemu" OFF)
 if(QEMU)
@@ -580,7 +582,7 @@ endif()
 
 # OpenSSL dep
 find_package(OpenSSL QUIET)
-if (NOT OPENSSL_FOUND)
+if (NOT OPENSSL_FOUND AND PkgConfig_FOUND)
     pkg_check_modules(OPENSSL openssl QUIET)
 endif()
 cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON OPENSSL_FOUND OFF)
@@ -601,8 +603,8 @@ else()
 endif()
 
 # cURL dep
-find_package(cURL QUIET)
-if (NOT CURL_FOUND)
+find_package(CURL QUIET)
+if (NOT CURL_FOUND AND PkgConfig_FOUND)
     pkg_check_modules(CURL libcurl QUIET)
 endif()
 cmake_dependent_option(LIBCAT_ENABLE_CURL "Enable cURL if found" ON CURL_FOUND OFF)
@@ -652,7 +654,7 @@ endif()
 
 # tests
 find_package(GTest QUIET)
-if (NOT GTEST_FOUND)
+if (NOT GTEST_FOUND AND PkgConfig_FOUND)
     pkg_check_modules(CAT_GTEST_MAIN gtest_main QUIET)
     pkg_check_modules(CAT_GTEST gtest QUIET)
 else()
