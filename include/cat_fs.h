@@ -18,6 +18,7 @@
 
 #ifndef CAT_FS_H
 #define CAT_FS_H
+#include <sys/types.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -72,6 +73,8 @@ typedef uv_dirent_t cat_dirent_t;
 typedef void cat_dir_t;
 
 CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...);
+CAT_API ssize_t cat_fs_pread(cat_file_t fd, void *buffer, size_t size, off_t offset);
+CAT_API ssize_t cat_fs_pwrite(cat_file_t fd, const void *buffer, size_t length, off_t offset);
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length);
 CAT_API int cat_fs_close(cat_file_t fd);
@@ -116,7 +119,7 @@ CAT_API int cat_fs_lchown(const char *path, cat_uid_t uid, cat_gid_t gid);
 CAT_API int cat_fs_copyfile(const char* path, const char* new_path, int flags);
 CAT_API int cat_fs_sendfile(cat_file_t out_fd, cat_file_t in_fd, int64_t in_offset, size_t length);
 CAT_API const char* cat_fs_mkdtemp(const char* tpl);
-CAT_API int cat_fs_mkstemp(const char* tpl);
+CAT_API cat_file_t cat_fs_mkstemp(const char* tpl);
 CAT_API int cat_fs_statfs(const char* path, cat_statfs_t* buf);
 
 #ifdef __cplusplus

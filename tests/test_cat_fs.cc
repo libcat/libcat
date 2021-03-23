@@ -72,7 +72,7 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_LT(cat_fs_read(fd, buf, 5), 0);
     cat_srand(buf, CAT_BUFFER_DEFAULT_SIZE);
 
-    for(int i = 0; i<1; i++){
+    for(int i = 0; i<128; i++){
         ASSERT_EQ(cat_fs_write(fd, buf, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
     }
 
@@ -87,6 +87,7 @@ TEST(cat_fs, open_close_read_write)
         ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
         ASSERT_EQ(std::string(buf, CAT_BUFFER_DEFAULT_SIZE), std::string(red, CAT_BUFFER_DEFAULT_SIZE));
     }
+    ASSERT_LT(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
 }
 
 // fsync and fdatasync cannot be tested here

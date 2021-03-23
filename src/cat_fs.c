@@ -13,6 +13,7 @@
   | limitations under the License. See accompanying LICENSE file.            |
   +--------------------------------------------------------------------------+
   | Author: Twosee <twosee@php.net>                                          |
+  | Author: dixyes <dixyes@gmail.com>                                        |
   +--------------------------------------------------------------------------+
  */
 
@@ -20,6 +21,7 @@
 #include "cat_coroutine.h"
 #include "cat_event.h"
 #include "cat_time.h"
+#include <sys/types.h>
 
 typedef union
 {
@@ -82,7 +84,7 @@ static void cat_fs_callback(uv_fs_t *fs)
 }
 
 // basic functions for fs io
-// open, close, read, write, lseek
+// open, close, read, write
 
 CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...)
 {
@@ -98,23 +100,18 @@ CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...)
     CAT_FS_DO_RESULT(cat_file_t, open, path, flags, mode);
 }
 
-CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
-{
-    return lseek(fd, offset, whence);
-}
-
-CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size)
+CAT_API ssize_t cat_fs_pread(cat_file_t fd, void *buffer, size_t size, off_t offset)
 {
     uv_buf_t buf = uv_buf_init((char *) buffer, (unsigned int) size);
 
-    CAT_FS_DO_RESULT(ssize_t, read, fd, &buf, 1, 0);
+    CAT_FS_DO_RESULT(ssize_t, read, fd, &buf, 1, offset);
 }
 
-CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length)
+CAT_API ssize_t cat_fs_pwrite(cat_file_t fd, const void *buffer, size_t length, off_t offset)
 {
     uv_buf_t buf = uv_buf_init((char *) buffer, (unsigned int) length);
 
-    CAT_FS_DO_RESULT(ssize_t, write, fd, &buf, 1, 0);
+    CAT_FS_DO_RESULT(ssize_t, write, fd, &buf, 1, offset);
 }
 
 CAT_API int cat_fs_close(cat_file_t fd)
@@ -394,4 +391,52 @@ CAT_API int cat_fs_statfs(const char* path, cat_statfs_t* buf){
         memcpy(buf, context->fs.ptr, sizeof(*buf));
         return 0;
     }, statfs, path);
+}
+
+// cat_work wrapped fs functions
+#define CAT_FS_WORK_STRUCT3(name, ta, tb, tc) \
+    struct cat_fs_ ##name ##_s { \
+        int ret; \
+        ta a; \
+        tb b; \
+        tc c; \
+    };
+#define CAT_FS_WORK_CALL(name, ...) \
+    ()
+#define CAT_FS_WORK_CB(name) static void _cat_fs_##name##_cb(struct cat_fs_##name##_s* data)
+
+CAT_FS_WORK_STRUCT3(read, int, void*, size_t)
+CAT_FS_WORK_CB(read){
+    data->ret = read(data->a, data->b, data->c);
+}
+CAT_API ssize_t cat_fs_read(cat_file_t fd, void* buf, size_t size){
+    struct cat_fs_read_s data = {-1, fd, buf, size};
+    if(cat_work(_cat_fs_read_cb, &data, CAT_TIMEOUT_FOREVER)){
+        return data.ret;
+    }
+    return -1;
+}
+
+CAT_FS_WORK_STRUCT3(write, int, const void*, size_t)
+CAT_FS_WORK_CB(write){
+    data->ret = write(data->a, data->b, data->c);
+}
+CAT_API ssize_t cat_fs_write(cat_file_t fd, const void* buf, size_t length){
+    struct cat_fs_write_s data = {-1, fd, buf,length};
+    if(cat_work(_cat_fs_write_cb, &data, CAT_TIMEOUT_FOREVER)){
+        return data.ret;
+    }
+    return -1;
+}
+
+CAT_FS_WORK_STRUCT3(lseek, int, off_t, int)
+CAT_FS_WORK_CB(lseek){
+    data->ret = lseek(data->a, data->b, data->c);
+}
+CAT_API ssize_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence){
+    struct cat_fs_lseek_s data = {-1, fd, offset, whence};
+    if(cat_work(_cat_fs_lseek_cb, &data, CAT_TIMEOUT_FOREVER)){
+        return data.ret;
+    }
+    return -1;
 }
