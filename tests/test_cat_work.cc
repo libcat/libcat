@@ -28,7 +28,7 @@ TEST(cat_work, base)
 
     for (int n = 0; n < 10; n++) {
         co([&, n] {
-            EXPECT_TRUE(work([&] {
+            EXPECT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [&] {
                 usleep((n + 1) * 5000); /* 5ms ~ 50ms */
                 buckets[n] = n;
             }, 500)); /* wait max 500ms */

@@ -114,9 +114,9 @@ namespace testing
         }, &function);
     }
 
-    static inline bool work(std::function<void(void)> function, cat_timeout_t timeout)
+    static inline bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout)
     {
-        return cat_work([](cat_data_t *data) {
+        return cat_work(kind, [](cat_data_t *data) {
             auto function = (std::function<void(void)> *) data;
             (*function)();
         }, &function, timeout);
