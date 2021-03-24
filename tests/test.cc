@@ -47,7 +47,6 @@ public:
         ASSERT_TRUE(cat_init_all());
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_init());
-        ASSERT_TRUE(cat_curl_runtime_init());
 #endif
 
         cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
@@ -144,7 +143,6 @@ public:
         ASSERT_EQ(cat_coroutine_get_count() , 1);
 
 #ifdef CAT_CURL
-        ASSERT_TRUE(cat_curl_runtime_shutdown());
         ASSERT_TRUE(cat_curl_module_shutdown());
 #endif
         ASSERT_TRUE(cat_shutdown_all());
