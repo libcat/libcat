@@ -22,6 +22,7 @@
 #include "cat_event.h"
 #include "cat_time.h"
 #include "cat_work.h"
+#include "uv.h"
 #ifdef CAT_OS_WIN
 #   include <winternl.h>
 #endif
@@ -408,7 +409,7 @@ CAT_FS_WORK_CB(read){
 #endif
     data->c);
     if(0 > data->ret){
-        cat_update_last_error_of_syscall("Read failed");
+        cat_update_last_error(uv_translate_sys_error(errno), "Read failed: %s", strerror(errno));
     }
 }
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void* buf, size_t size){
@@ -427,7 +428,7 @@ CAT_FS_WORK_CB(write){
 #endif
     data->c);
     if(0 > data->ret){
-        cat_update_last_error_of_syscall("Write failed");
+        cat_update_last_error(uv_translate_sys_error(errno), "Write failed: %s", strerror(errno));
     }
 }
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void* buf, size_t length){
@@ -442,7 +443,7 @@ CAT_FS_WORK_STRUCT3(lseek, ssize_t, int, off_t, int)
 CAT_FS_WORK_CB(lseek){
     data->ret = (ssize_t)lseek(data->a, data->b, data->c);
     if(0 > data->ret){
-        cat_update_last_error_of_syscall("Calling lseek failed");
+        cat_update_last_error(uv_translate_sys_error(errno), "Calling lseek failed: %s", strerror(errno));
     }
 }
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence){
