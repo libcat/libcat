@@ -70,6 +70,7 @@ TEST(cat_fs, open_close_read_write)
     });
 
     ASSERT_LT(cat_fs_read(fd, buf, 5), 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     cat_srand(buf, CAT_BUFFER_DEFAULT_SIZE);
 
     for(int i = 0; i<128; i++){
@@ -82,12 +83,14 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER(cat_fs_close(fd));
     ASSERT_LT(cat_fs_write(fd, "hello", 5), 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     
     for(int i = 0; i<128; i++){
         ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
         ASSERT_EQ(std::string(buf, CAT_BUFFER_DEFAULT_SIZE), std::string(red, CAT_BUFFER_DEFAULT_SIZE));
     }
     ASSERT_LT(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
+    ASSERT_NE(cat_get_last_error_code(), 0);
 }
 
 #define PWRITE_PREAD_BUFSIZ 8192
@@ -273,6 +276,8 @@ TEST(cat_fs, lseek)
     char buf[LSEEK_BUFSIZ], red[LSEEK_BUFSIZ];
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_seek");
     const char * fn = fnstr.c_str();
+    ASSERT_LT(cat_fs_lseek(-1, -1, -1), 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     int fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600);
     ASSERT_GT(fd, 0);
     DEFER({
