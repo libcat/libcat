@@ -407,7 +407,9 @@ CAT_FS_WORK_CB(read){
     (unsigned int)
 #endif
     data->c);
-    cat_update_last_error_of_syscall("Read failed");
+    if(0 > data->ret){
+        cat_update_last_error_of_syscall("Read failed");
+    }
 }
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void* buf, size_t size){
     struct cat_fs_read_s data = {-1, fd, buf, size};
@@ -424,7 +426,9 @@ CAT_FS_WORK_CB(write){
     (unsigned int)
 #endif
     data->c);
-    cat_update_last_error_of_syscall("Write failed");
+    if(0 > data->ret){
+        cat_update_last_error_of_syscall("Write failed");
+    }
 }
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void* buf, size_t length){
     struct cat_fs_write_s data = {-1, fd, buf,length};
@@ -437,7 +441,9 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void* buf, size_t length){
 CAT_FS_WORK_STRUCT3(lseek, ssize_t, int, off_t, int)
 CAT_FS_WORK_CB(lseek){
     data->ret = (ssize_t)lseek(data->a, data->b, data->c);
-    cat_update_last_error_of_syscall("Calling lseek failed");
+    if(0 > data->ret){
+        cat_update_last_error_of_syscall("Calling lseek failed");
+    }
 }
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence){
     struct cat_fs_lseek_s data = {-1, fd, offset, whence};
