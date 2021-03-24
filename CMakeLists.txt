@@ -160,6 +160,7 @@ set(cat_sources
     src/cat_channel.c
     src/cat_sync.c
     src/cat_event.c
+    src/cat_poll.c
     src/cat_time.c
     src/cat_socket.c
     src/cat_dns.c
