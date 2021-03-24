@@ -70,9 +70,9 @@ typedef enum
 
 typedef enum
 {
-    CAT_RET_OK       = 0,
     CAT_RET_ERROR    = -1,
-    CAT_RET_AGAIN    = -2,
+    CAT_RET_NONE     = 0,
+    CAT_RET_OK       = 1,
 } cat_ret_t;
 
 CAT_API cat_errno_t cat_get_last_error_code(void);

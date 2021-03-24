@@ -1473,7 +1473,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
             ret = cat_true;
             break;
         }
-        CAT_ASSERT(n == CAT_RET_AGAIN); {
+        CAT_ASSERT(n == CAT_RET_NONE); {
             ssize_t nread, nwritten;
             CAT_TIME_WAIT_START() {
                 nread = cat_socket_recv_ex(socket, buffer->value, buffer->size, timeout);
@@ -2446,7 +2446,7 @@ static ssize_t cat_socket_internal_peekfrom(
 #endif
         nread = recvfrom(
             fd,
-            buffer, (cat_socket_recv_length_t) size, 
+            buffer, (cat_socket_recv_length_t) size,
             MSG_PEEK,
             address, address_length
         );

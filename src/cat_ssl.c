@@ -889,7 +889,7 @@ CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t si
             return CAT_RET_ERROR;
         }
         cat_debug(SSL, "BIO_read() should retry");
-        return CAT_RET_AGAIN;
+        return CAT_RET_NONE;
     }
 
     return n;
@@ -909,7 +909,7 @@ CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, si
             return CAT_RET_ERROR;
         }
         cat_debug(SSL, "BIO_write() should retry");
-        return CAT_RET_AGAIN;
+        return CAT_RET_NONE;
     }
 
     return n;
@@ -947,7 +947,7 @@ static size_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_t *i
 
         if (n > 0) {
             nread += n;
-        } else if (n == CAT_RET_AGAIN) {
+        } else if (n == CAT_RET_NONE) {
             // continue to SSL_write()
         } else {
             cat_update_last_error_with_previous("SSL_write() error");
@@ -1131,7 +1131,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         if (n > 0) {
             nwritten += n;
-        } else if (n == CAT_RET_AGAIN) {
+        } else if (n == CAT_RET_NONE) {
             // continue to SSL_read()
         } else {
             cat_update_last_error_with_previous("SSL_write() error");
