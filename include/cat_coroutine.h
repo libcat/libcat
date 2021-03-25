@@ -264,6 +264,9 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who); CAT_INTERNAL
 /* lock */
 CAT_API cat_bool_t cat_coroutine_lock(void);                         CAT_INTERNAL
 CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine); CAT_INTERNAL
+/* main/scheduler/none */
+CAT_API const char *cat_coroutine_get_role_name(const cat_coroutine_t *coroutine);
+CAT_API const char *cat_coroutine_get_current_role_name(void);
 
 /* helper */
 CAT_API cat_coroutine_t *cat_coroutine_run(cat_coroutine_t *coroutine, cat_coroutine_function_t function, cat_data_t *data);

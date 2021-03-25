@@ -92,17 +92,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
     }
 
     do {
-        /* Notice: current coroutine is NULL before runtime_init() */
-        cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
-        cat_coroutine_id_t id = coroutine != NULL ? coroutine->id : CAT_COROUTINE_MAIN_ID;
-        const char *name;
-        if (id == CAT_COROUTINE_MAX_ID) {
-            name = "Scheduler";
-        } else if (id == CAT_COROUTINE_MAIN_ID) {
-            name = "main()";
-        } else {
-            name = NULL;
-        }
+        const char *name = cat_coroutine_get_current_role_name();
         if (name != NULL) {
             fprintf(
                 output,
@@ -113,7 +103,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
             fprintf(
                 output,
                 "%s: <%s> %s in R" CAT_COROUTINE_ID_FMT CAT_EOL,
-                type_string, module_name, message, id
+                type_string, module_name, message, cat_coroutine_get_current_id()
             );
         }
     } while (0);
