@@ -262,13 +262,6 @@ TEST(cat_fs, symlink){
     ASSERT_EQ(statbuf.st_mode & S_IFLNK, S_IFLNK);
 }
 
-#ifdef CAT_OS_WIN
-TEST(cat_fs, symlink_windows){
-    SKIP_IF_(no_tmp(), "Temp dir not writable");
-    GTEST_SKIP_("Test not yet implemented");
-}
-#endif
-
 TEST(cat_fs, lseek)
 {
     SKIP_IF_(no_tmp(), "Temp dir not writable");
@@ -350,6 +343,57 @@ TEST(cat_fs, mkdir_rmdir)
     ASSERT_LT(cat_fs_rmdir(fn2), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
 }
+
+#ifdef CAT_OS_WIN
+TEST(cat_fs, symlink_windows) {
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_linkdir");
+    const char* fn = fnstr.c_str();
+    std::string lnstr = path_join(TEST_TMP_PATH, "cat_tests_linkdir2");
+    const char* ln = lnstr.c_str();
+    DEFER({
+        cat_fs_rmdir(fn);
+        cat_fs_rmdir(ln);
+        cat_fs_unlink(ln);
+    });
+    cat_fs_rmdir(fn);
+    cat_fs_rmdir(ln);
+    cat_fs_unlink(ln);
+    // make dir target
+    ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+    // make symlink
+    ASSERT_EQ(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_DIR), 0);
+    cat_stat_t statbuf;
+    __int64 ino = 0;
+    ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
+    ino = statbuf.st_ino;
+    ASSERT_EQ(cat_fs_stat(ln, &statbuf), 0);
+    ASSERT_EQ(ino, statbuf.st_ino);
+    ASSERT_EQ(cat_fs_lstat(ln, &statbuf), 0);
+    ASSERT_NE(ino, statbuf.st_ino);
+    // remove it
+    ASSERT_EQ(cat_fs_unlink(ln), 0);
+    // make symlink
+    ASSERT_EQ(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_DIR), 0);
+    // remove it
+    ASSERT_EQ(cat_fs_rmdir(ln), 0);
+    // make symlink
+    ASSERT_EQ(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_JUNCTION), 0);
+    ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
+    ino = statbuf.st_ino;
+    ASSERT_EQ(cat_fs_stat(ln, &statbuf), 0);
+    ASSERT_EQ(ino, statbuf.st_ino);
+    ASSERT_EQ(cat_fs_lstat(ln, &statbuf), 0);
+    ASSERT_NE(ino, statbuf.st_ino);
+    // remove it
+    ASSERT_EQ(cat_fs_unlink(ln), 0);
+    // make symlink
+    ASSERT_EQ(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_JUNCTION), 0);
+    // remove it
+    ASSERT_EQ(cat_fs_unlink(ln), 0);
+}
+#endif
 
 TEST(cat_fs, opendir_readdir_rewinddir_closedir)
 {
