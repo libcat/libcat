@@ -49,7 +49,7 @@ typedef ULONG cat_nfds_t;
 # define POLLNVAL    0x0020    /* Invalid request: fd not open */
 #endif
 
-CAT_API cat_ret_t cat_poll_one(cat_fd_t fd, int events, int *revents, cat_timeout_t timeout);
+CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat_timeout_t timeout);
 
 CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout);
 

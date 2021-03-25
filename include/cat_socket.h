@@ -125,23 +125,20 @@ CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen
 
 /* socket fd */
 
-#define CAT_SOCKET_FD_FMT "%d"
-typedef uv_os_sock_t cat_socket_fd_t;
+typedef cat_os_socket_t cat_socket_fd_t;
+#define CAT_SOCKET_FD_FMT CAT_OS_SOCKET_FMT
+#define CAT_SOCKET_INVALID_FD CAT_OS_INVALID_SOCKET
 
-#ifndef CAT_OS_WIN
-#define CAT_SOCKET_INVALID_FD -1
-#else
-#define CAT_SOCKET_INVALID_FD INVALID_SOCKET
-#endif
+/* stdio os fd */
 
 #ifndef STDIN_FILENO
-#define STDIN_FILENO  ((cat_socket_fd_t) 0) /* standard input file descriptor */
+#define STDIN_FILENO  0 /* standard input file descriptor */
 #endif
 #ifndef STDOUT_FILENO
-#define STDOUT_FILENO ((cat_socket_fd_t) 1) /* standard output file descriptor */
+#define STDOUT_FILENO 1 /* standard output file descriptor */
 #endif
 #ifndef STDERR_FILENO
-#define STDERR_FILENO ((cat_socket_fd_t) 2) /* standard error file descriptor */
+#define STDERR_FILENO 2 /* standard error file descriptor */
 #endif
 
 /* socket length */

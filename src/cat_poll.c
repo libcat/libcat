@@ -85,13 +85,13 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
     }
 }
 
-CAT_API cat_ret_t cat_poll_one(cat_fd_t fd, int events, int *revents, cat_timeout_t timeout)
+CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat_timeout_t timeout)
 {
     cat_poll_one_t *poll;
     cat_ret_t ret;
     int error;
 
-    cat_debug(EVENT, "poll_one(fd=" CAT_FD_FMT ", events=%d, timeout=" CAT_TIMEOUT_FMT ")", fd, events, timeout);
+    cat_debug(EVENT, "poll_one(fd=" CAT_OS_SOCKET_FMT ", events=%d, timeout=" CAT_TIMEOUT_FMT ")", fd, events, timeout);
 
     if (likely(revents != NULL)) {
         *revents = 0;
@@ -103,7 +103,7 @@ CAT_API cat_ret_t cat_poll_one(cat_fd_t fd, int events, int *revents, cat_timeou
         return CAT_RET_ERROR;
     }
 
-    error = uv_poll_init(cat_event_loop, &poll->u.poll, fd);
+    error = uv_poll_init_socket(cat_event_loop, &poll->u.poll, fd);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll init failed");
         cat_free(poll);
@@ -220,10 +220,10 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     for (i = 0; i < nfds;) {
         cat_pollfd_t *fd = &fds[i];
         cat_poll_t *poll = &polls[i];
-        CAT_ASSERT(fd->fd >= 0); // TODO: shall we support negative fd?
+        CAT_ASSERT(fd->fd != CAT_OS_INVALID_SOCKET); // TODO: shall we support negative fd?
         fd->revents = 0; // clear it
-        cat_debug(EVENT, "poll_add(fd=%d, event=%d)", fd->fd, fd->events);
-        error = uv_poll_init(cat_event_loop, &poll->u.poll, fd->fd);
+        cat_debug(EVENT, "poll_add(fd=" CAT_OS_SOCKET_FMT ", event=%d)", fd->fd, fd->events);
+        error = uv_poll_init_socket(cat_event_loop, &poll->u.poll, fd->fd);
         if (unlikely(error != 0)) {
             cat_update_last_error_with_reason(error, "Poll init failed");
             goto _error;

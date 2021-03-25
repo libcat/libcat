@@ -406,7 +406,7 @@ TEST(cat_socket, get_fd_fast)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
     fd = cat_socket_get_fd_fast(&socket);
-    ASSERT_GT(fd, 0);
+    ASSERT_GE((cat_os_fd_t) fd, 0);
 }
 
 TEST(cat_socket, get_fd)
@@ -422,7 +422,7 @@ TEST(cat_socket, get_fd)
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
     fd = cat_socket_get_fd(&socket);
-    ASSERT_GT(fd, 0);
+    ASSERT_GE((cat_os_fd_t) fd, 0);
 }
 
 TEST(cat_socket, bind)

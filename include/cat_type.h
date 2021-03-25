@@ -45,11 +45,6 @@ typedef void (*cat_data_dtor_t)(cat_data_t *data);
 #define PRIx64 "llx"
 #endif
 
-/* fd */
-
-typedef int cat_fd_t;
-#define CAT_FD_FMT "%d"
-
 /* time */
 
 typedef int64_t cat_nsec_t;
