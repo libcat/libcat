@@ -414,7 +414,7 @@ CAT_FS_WORK_CB(read){
 }
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void* buf, size_t size){
     struct cat_fs_read_s data = {-1, fd, buf, size};
-    if(cat_work(CAT_FS_WORK_CB_CALL(read), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(read), &data, CAT_TIMEOUT_FOREVER)){
         return data.ret;
     }
     return -1;
@@ -433,7 +433,7 @@ CAT_FS_WORK_CB(write){
 }
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void* buf, size_t length){
     struct cat_fs_write_s data = {-1, fd, buf,length};
-    if(cat_work(CAT_FS_WORK_CB_CALL(write), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(write), &data, CAT_TIMEOUT_FOREVER)){
         return data.ret;
     }
     return -1;
@@ -448,7 +448,7 @@ CAT_FS_WORK_CB(lseek){
 }
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence){
     struct cat_fs_lseek_s data = {-1, fd, offset, whence};
-    if(cat_work(CAT_FS_WORK_CB_CALL(lseek), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(lseek), &data, CAT_TIMEOUT_FOREVER)){
         return (off_t) data.ret;
     }
     return -1;
@@ -519,7 +519,7 @@ CAT_FS_WORK_CB(readdir){
 CAT_API cat_dirent_t* cat_fs_readdir(cat_dir_t* dir){
     uv_dir_t * uv_dir = (uv_dir_t*)dir;
     struct cat_fs_readdir_s data = {NULL, uv_dir->dir};
-    if(cat_work(CAT_FS_WORK_CB_CALL(readdir), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(readdir), &data, CAT_TIMEOUT_FOREVER)){
         return data.ret;
     }
     return NULL;
@@ -534,7 +534,7 @@ CAT_FS_WORK_CB(rewinddir){
 CAT_API void cat_fs_rewinddir(cat_dir_t * dir){
     uv_dir_t * uv_dir = (uv_dir_t*)dir;
     struct cat_fs_rewinddir_s data = {uv_dir->dir};
-    cat_work(CAT_FS_WORK_CB_CALL(rewinddir), &data, CAT_TIMEOUT_FOREVER);
+    cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(rewinddir), &data, CAT_TIMEOUT_FOREVER);
 }
 #else
 // use NtQueryDirectoryFile to mock readdir,rewinddir behavior.
@@ -700,7 +700,7 @@ CAT_FS_WORK_CB(opendir){
 }
 CAT_API cat_dir_t *cat_fs_opendir(const char* path){
     struct cat_fs_opendir_s data = {NULL, path};
-    if(cat_work(CAT_FS_WORK_CB_CALL(opendir), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(opendir), &data, CAT_TIMEOUT_FOREVER)){
         return (cat_dir_t*)data.ret;
     }
     return NULL;
@@ -722,7 +722,7 @@ CAT_FS_WORK_CB(closedir){
 }
 CAT_API int cat_fs_closedir(cat_dir_t* dir){
     struct cat_fs_closedir_s data = {-1, (cat_dir_int_t *)dir};
-    if(cat_work(CAT_FS_WORK_CB_CALL(closedir), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(closedir), &data, CAT_TIMEOUT_FOREVER)){
         return data.ret;
     }
     return -1;
@@ -834,7 +834,7 @@ CAT_FS_WORK_CB(readdir){
 }
 CAT_API uv_dirent_t* cat_fs_readdir(cat_dir_t* dir){
     struct cat_fs_readdir_s data = {NULL, (cat_dir_int_t*)dir};
-    if(cat_work(CAT_FS_WORK_CB_CALL(readdir), &data, CAT_TIMEOUT_FOREVER)){
+    if(cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(readdir), &data, CAT_TIMEOUT_FOREVER)){
         return data.ret;
     }
     return NULL;
