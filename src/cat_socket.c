@@ -870,7 +870,7 @@ static cat_socket_fd_t cat_socket_internal_get_fd(const cat_socket_internal_t *i
         cat_update_last_error_with_reason(error, "Socket get fd failed");
     }
 
-    return fd;
+    return (cat_socket_fd_t) fd;
 }
 
 CAT_API cat_socket_fd_t cat_socket_get_fd(const cat_socket_t *socket)
