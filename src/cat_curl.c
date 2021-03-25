@@ -123,7 +123,7 @@ static const char *cat_curl_translate_action_name(int action)
 }
 #endif
 
-static cat_always_inline long cat_curl_timeout_min(long timeout1, long timeout2)
+static cat_always_inline cat_msec_t cat_curl_timeout_min(cat_msec_t timeout1, cat_msec_t timeout2)
 {
     if (timeout1 < timeout2 && timeout1 >= 0) {
         return timeout1;
@@ -393,32 +393,27 @@ CAT_API CURLMcode cat_curl_multi_cleanup(CURLM *multi)
     return mcode;
 }
 
-CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
-{
-    cat_debug(EXT, "curl_multi_perform(multi=%p)", multi);
-
-    /* this way even can solve the problem of CPU 100% if we perform in while loop */
-    return cat_curl_multi_wait(multi, NULL, 0, 0, running_handles);
-}
-
-CAT_API CURLMcode cat_curl_multi_wait(
+static CURLMcode cat_curl_multi_exec(
     CURLM *multi,
     struct curl_waitfd *extra_fds, unsigned int extra_nfds,
-    int timeout_ms, int *running_handles
+    int timeout_ms, int *numfds, int *running_handles
 )
 {
     cat_curl_multi_context_t *context;
     cat_pollfd_t *fds = NULL;
     CURLMcode mcode = CURLM_OK;
-    cat_msec_t t = cat_time_msec_cached();
+    cat_msec_t start_line = cat_time_msec_cached();
+    cat_timeout_t timeout = timeout_ms; /* maybe reduced in the loop */
+    int ret = 0, _running_handles;
 
     cat_debug(EXT, "curl_multi_wait(multi=%p, timeout_ms=%d)", multi, timeout_ms);
 
-    CAT_ASSERT(extra_fds == NULL && "Not support");
-    CAT_ASSERT(extra_nfds == 0 && "Not support");
+    /* TODO: Support it? */
+    CAT_ASSERT(extra_fds == NULL && "Not support yet");
+    CAT_ASSERT(extra_nfds == 0 && "Not support yet");
 
-    if (running_handles != NULL) {
-        *running_handles = 0;
+    if (running_handles == NULL) {
+        running_handles = &_running_handles;
     }
 
     context = cat_curl_multi_context_get(multi);
@@ -427,8 +422,10 @@ CAT_API CURLMcode cat_curl_multi_wait(
 
     while (1) {
         if (context->nfds == 0) {
-            cat_debug(EXT, "curl_time_delay(multi=%p, timeout=%ld)", multi, cat_curl_timeout_min(context->timeout, timeout_ms));
-            cat_ret_t ret = cat_time_delay(cat_curl_timeout_min(context->timeout, timeout_ms));
+            cat_msec_t op_timeout = cat_curl_timeout_min(context->timeout, timeout);
+            cat_ret_t ret;
+            cat_debug(EXT, "curl_time_delay(multi=%p, timeout=" CAT_TIMEOUT_FMT ")", multi, op_timeout);
+            ret = cat_time_delay(op_timeout);
             if (unlikely(ret != CAT_RET_OK)) {
                 goto _out;
             }
@@ -439,7 +436,6 @@ CAT_API CURLMcode cat_curl_multi_wait(
             }
         } else {
             cat_nfds_t i;
-            int ret;
             fds = (cat_pollfd_t *) cat_malloc(sizeof(*fds) * context->nfds);
             if (unlikely(fds == NULL)) {
                 mcode = CURLM_OUT_OF_MEMORY;
@@ -452,8 +448,9 @@ CAT_API CURLMcode cat_curl_multi_wait(
                 fd->events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
                 i++;
             } CAT_QUEUE_FOREACH_DATA_END();
-            ret = cat_poll(fds, context->nfds, cat_curl_timeout_min(context->timeout, timeout_ms));
+            ret = cat_poll(fds, context->nfds, cat_curl_timeout_min(context->timeout, timeout));
             if (unlikely(ret == CAT_RET_ERROR)) {
+                mcode = CURLM_OUT_OF_MEMORY; // or internal error?
                 goto _out;
             }
             if (ret != 0) {
@@ -482,17 +479,43 @@ CAT_API CURLMcode cat_curl_multi_wait(
             }
             goto _out;
         }
-        if (cat_time_msec_cached() - t > timeout_ms) {
-            /* timeout */
-            break;
-        }
+        do {
+            cat_msec_t new_start_line = cat_time_msec_cached();
+            timeout -= (new_start_line - start_line);
+            start_line = new_start_line;
+            if (timeout <= 0) {
+                /* timeout */
+                goto _out;
+            }
+        } while (0);
     }
 
     _out:
+    cat_debug(EXT, "curl_multi_wait(multi=%p, timeout_ms=%d) = %d, numfds=%d", multi, timeout_ms, mcode, ret);
     if (fds != NULL) {
         cat_free(fds);
     }
+    if (numfds != NULL) {
+        *numfds = ret;
+    }
     return mcode;
+}
+
+CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
+{
+    cat_debug(EXT, "curl_multi_perform(multi=%p)", multi);
+
+    /* this way even can solve the problem of CPU 100% if we perform in while loop */
+    return cat_curl_multi_exec(multi, NULL, 0, 0, NULL, running_handles);
+}
+
+CAT_API CURLMcode cat_curl_multi_wait(
+    CURLM *multi,
+    struct curl_waitfd *extra_fds, unsigned int extra_nfds,
+    int timeout_ms, int *numfds
+)
+{
+    return cat_curl_multi_exec(multi, extra_fds, extra_nfds, timeout_ms, numfds, NULL);
 }
 
 #endif /* CAT_CURL */
