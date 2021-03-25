@@ -396,14 +396,13 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
     for (int repeat = 0; repeat < 3; repeat++) {
         //printf("repeat %d\n", repeat);
         for (int i = 0; i < 5; i++) {
-            ASSERT_NE(dirents[i] = cat_fs_readdir(dir), nullptr);
-            /*
+            //ASSERT_NE(dirents[i] = cat_fs_readdir(dir), nullptr);
             if ((dirents[i] = cat_fs_readdir(dir)) == nullptr) {
-                printf("%d: %s",cat_get_last_error_code(), cat_get_last_error_message());
-                ASSERT_NE(0, 0);
+                printf("cat_fs_readdir failed at repeat %d, index %d\n", repeat, i);
+                printf("%d: %s\n",cat_get_last_error_code(), cat_get_last_error_message());
+                GTEST_FATAL_FAILURE_("failed test");
             }
-            printf("found %s\n", dirents[i]->name);
-            */
+            //printf("found %s\n", dirents[i]->name);
             std::string name = std::string(dirents[i]->name);
 
             if(std::string(".") == name){
@@ -417,9 +416,8 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
             }else if(std::string("cat_tests_readdir_file3") == name){
                 ASSERT_EQ(dirents[i]->type, CAT_DIRENT_FILE);
             }else{
-                const char* msg = cat_sprintf("Bad result: %s at repeat %d", dirents[i]->name, repeat);
-                GTEST_FATAL_FAILURE_(msg);
-                cat_free((void*)msg);
+                printf("Bad result: %s at repeat %d, index %d", dirents[i]->name, repeat, i);
+                GTEST_FATAL_FAILURE_("failed test");
             }
         }
         for (int i = 0; i < 5; i++) {
@@ -429,7 +427,6 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
                 ASSERT_NE(std::string(dirents[i]->name), std::string(dirents[j]->name));
             }
         }
-        ASSERT_EQ(dirents[0] = cat_fs_readdir(dir), nullptr);
         for (int i = 0; i < 5; i++) {
             if (dirents[i]) {
                 if (dirents[i]->name) {
@@ -439,6 +436,7 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
                 dirents[i] = nullptr;
             }
         }
+        ASSERT_EQ(dirents[0] = cat_fs_readdir(dir), nullptr);
         cat_fs_rewinddir(dir);
     }
 
