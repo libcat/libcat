@@ -207,7 +207,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     cat_ret_t ret;
     int error;
 
-    cat_debug(EVENT, "poll(fds=%p, nfds=%lu, timeout=" CAT_TIMEOUT_FMT ")", fds, nfds, timeout);
+    cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ")", fds, (size_t) nfds, timeout);
 
     polls = (cat_poll_t *) cat_malloc(sizeof(*polls) * nfds);;
     if (unlikely(polls == NULL)) {
@@ -268,12 +268,12 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
         }
     }
 
-    cat_debug(EVENT, "poll(fds=%p, nfds=%lu, timeout=" CAT_TIMEOUT_FMT ") = %lu", fds, nfds, timeout, n);
+    cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = %zu", fds, (size_t) nfds, timeout, (size_t) n);
 
     return n;
 
     _error:
-    cat_debug(EVENT, "poll(fds=%p, nfds=%lu, timeout=" CAT_TIMEOUT_FMT ") failed", fds, nfds, timeout);
+    cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") failed", fds, (size_t) nfds, timeout);
     for (; i > 0; i--) {
         cat_poll_t *poll = &polls[i];
         CAT_ASSERT(!context.deferred);

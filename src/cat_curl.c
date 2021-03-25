@@ -157,8 +157,8 @@ static int cat_curl_multi_socket_function(
 {
     CURLM *multi = context->multi;
 
-    cat_debug(EXT, "curl_multi_socket_function(multi=%p, sockfd=%d, action=%s), nfds=%lu, timeout=%ld",
-        multi, sockfd, cat_curl_translate_action_name(action), context->nfds, context->timeout);
+    cat_debug(EXT, "curl_multi_socket_function(multi=%p, sockfd=%d, action=%s), nfds=%zu, timeout=%ld",
+        multi, sockfd, cat_curl_translate_action_name(action), (size_t) context->nfds, context->timeout);
 
     if (action != CURL_POLL_REMOVE) {
         if (fd == NULL) {
@@ -299,7 +299,7 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
     curl_easy_setopt(ch, CURLOPT_PRIVATE, CAT_COROUTINE_G(current));
     context.multi = curl_multi_init();
     if (unlikely(context.multi == NULL)) {
-        return CURLM_OUT_OF_MEMORY;
+        return CURLE_OUT_OF_MEMORY;
     }
     context.coroutine = CAT_COROUTINE_G(current);
     context.sockfd = -1;
@@ -317,7 +317,7 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
         if (context.events == POLLNONE) {
             cat_ret_t ret = cat_time_delay(context.timeout);
             if (unlikely(ret != CAT_RET_OK)) {
-                mcode = CURLE_RECV_ERROR;
+                code = CURLE_RECV_ERROR;
                 break;
             }
             mcode = curl_multi_socket_action(context.multi, CURL_SOCKET_TIMEOUT, 0, &running_handles);
@@ -326,7 +326,7 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
             cat_ret_t ret;
             ret = cat_poll_one(context.sockfd, context.events, &revents, context.timeout);
             if (unlikely(ret == CAT_RET_ERROR)) {
-                mcode = CURLE_RECV_ERROR;
+                code = CURLE_RECV_ERROR;
                 break;
             }
             action = cat_curl_translate_poll_flags_from_sys(revents);
