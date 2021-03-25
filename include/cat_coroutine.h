@@ -32,7 +32,9 @@ extern "C" {
 
 #define CAT_COROUTINE_MIN_ID                    0ULL
 #define CAT_COROUTINE_MAX_ID                    UINT64_MAX
-#define CAT_COROUTINE_MAIN_ID                   1ULL
+
+#define CAT_COROUTINE_MAIN_ID                   CAT_COROUTINE_MIN_ID
+#define CAT_COROUTINE_SCHEDULER_ID              CAT_COROUTINE_MAX_ID
 
 typedef void cat_coroutine_stack_t;
 

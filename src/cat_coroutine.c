@@ -671,10 +671,10 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine,
         return NULL;
     }
 
-    /* let scheduler id be 0 */
+    /* let scheduler id be MAX */
     do {
         cat_coroutine_id_t last_id = CAT_COROUTINE_G(last_id);
-        CAT_COROUTINE_G(last_id) = 0;
+        CAT_COROUTINE_G(last_id) = CAT_COROUTINE_SCHEDULER_ID;
         coroutine = cat_coroutine_create(coroutine, (void *) scheduler);
         CAT_COROUTINE_G(last_id) = last_id;
     } while (0);
