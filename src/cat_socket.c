@@ -2316,7 +2316,7 @@ static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_wr
         }
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (unlikely(!ret)) {
-           cat_update_last_error_with_previous("Socket bind failed");
+           cat_update_last_error_with_previous("Socket write failed");
            return cat_false;
         }
         address = &address_info.address.common;
