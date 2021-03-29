@@ -25,7 +25,7 @@ TEST(cat_log, info)
     testing::internal::CaptureStdout();
     cat_info(TEST, "info log");
     std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_EQ(output, "Info: <TEST> info log in R1" CAT_EOL);
+    ASSERT_EQ(output, "Info: <TEST> info log in main" CAT_EOL);
 }
 
 TEST(cat_log, notice)
@@ -33,7 +33,7 @@ TEST(cat_log, notice)
     testing::internal::CaptureStderr();
     cat_notice(TEST, "notice log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "Notice: <TEST> notice log in R1" CAT_EOL);
+    ASSERT_EQ(output, "Notice: <TEST> notice log in main" CAT_EOL);
 }
 
 TEST(cat_log, warn)
@@ -41,7 +41,7 @@ TEST(cat_log, warn)
     testing::internal::CaptureStderr();
     cat_warn(TEST, "warn log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "Warning: <TEST> warn log in R1" CAT_EOL);
+    ASSERT_EQ(output, "Warning: <TEST> warn log in main" CAT_EOL);
 }
 
 #ifdef CAT_OS_LINUX
@@ -56,10 +56,10 @@ TEST(cat_log, null)
 
 TEST(cat_log, error)
 {
-    ASSERT_DEATH_IF_SUPPORTED(cat_error(TEST, "error log"), "Error: <TEST> error log in R1" CAT_EOL);
+    ASSERT_DEATH_IF_SUPPORTED(cat_error(TEST, "error log"), "Error: <TEST> error log in main" CAT_EOL);
 }
 
 TEST(cat_log, core_error)
 {
-    ASSERT_DEATH_IF_SUPPORTED(cat_core_error(TEST, "core error log"), "Core Error: <TEST> core error log in R1" CAT_EOL);
+    ASSERT_DEATH_IF_SUPPORTED(cat_core_error(TEST, "core error log"), "Core Error: <TEST> core error log in main" CAT_EOL);
 }
