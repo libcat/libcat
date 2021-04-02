@@ -17,7 +17,6 @@
  */
 
 #include "test.h"
-#include "uv/errno.h"
 
 #ifdef CAT_OS_LINUX
 TEST(cat_error, update_last_error_null)
