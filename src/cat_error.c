@@ -382,3 +382,19 @@ CAT_API int cat_orig_errno(cat_errno_t error)
 
     return -1;
 }
+
+#ifdef CAT_OS_WIN
+/* return uv errno from posix errno */
+/* why so WET */
+cat_errno_t cat_translate_unix_error(int error){
+#define CAT_ERROR_GEN(name, _)\
+    if(error == name){\
+        return CAT_##name;\
+    }
+
+    ORIG_ERRNO_MAP(CAT_ERROR_GEN)
+#undef CAT_ERROR_GEN
+
+    return CAT_UNCODED;
+}
+#endif
