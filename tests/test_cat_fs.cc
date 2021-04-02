@@ -803,6 +803,37 @@ TEST(cat_fs, utime_lutime_futime){
     ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
 }
 
+TEST(cat_fs, stat_2038)
+{
+    SKIP_IF_(true, "Not yet fix in upstream");
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    umask(0);
+
+    char buf[LSEEK_BUFSIZ];
+    cat_srand(buf, LSEEK_BUFSIZ);
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_stat2038");
+    const char * fn = fnstr.c_str();
+    int fd = -1;
+    cat_fs_unlink(fn);
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
+    ASSERT_EQ(cat_fs_write(fd, buf, LSEEK_BUFSIZ), LSEEK_BUFSIZ);
+    ASSERT_EQ(cat_fs_close(fd), 0);
+    DEFER({
+        ASSERT_EQ(cat_fs_unlink(fn), 0);
+    });
+
+    cat_stat_t statbuf = {0};
+
+    ASSERT_EQ(cat_fs_utime(fn, (double)((uint64_t)INT32_MAX + 86400ULL), (double)((uint64_t)INT32_MAX + 86400ULL)), 0);
+    ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_GT(statbuf.st_atim.tv_sec, 0);
+    ASSERT_GT(statbuf.st_atim.tv_nsec, 0);
+    ASSERT_GT(statbuf.st_mtim.tv_sec, 0);
+    ASSERT_GT(statbuf.st_mtim.tv_nsec, 0);
+}
+
 TEST(cat_fs, statfs){
     cat_statfs_t statfsbuf;
 #ifdef CAT_OS_WIN
