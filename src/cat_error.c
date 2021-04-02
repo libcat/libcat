@@ -367,13 +367,13 @@ CAT_API const char *cat_strerror(cat_errno_t error)
 /* return original posix errno from uv errno */
 CAT_API int cat_orig_errno(cat_errno_t error)
 {
-#define CAT_ERROR_GEN(name, code) \
+#define CAT_ERROR_GEN(name, _) \
     if(error == UV_ ## name)\
-        return code;
+        return name;
 
     ORIG_ERRNO_MAP(CAT_ERROR_GEN)
 #undef CAT_ERROR_GEN
-#define CAT_ERROR_GEN(name, code) \
+#define CAT_ERROR_GEN(name, _) \
     if(error == -name)\
         return name;
 
