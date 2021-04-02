@@ -300,7 +300,7 @@ TEST(cat_error, strerror)
 
 TEST(cat_error, orig_errno){
     #define ORIG_ASSERT(name, _) \
-        ASSERT_EQ(cat_orig_errno(UV_##name), name);
+        ASSERT_EQ(cat_orig_errno(CAT_##name), name);
     ORIG_ERRNO_MAP(ORIG_ASSERT);
     #undef ORIG_ASSERT
 }
