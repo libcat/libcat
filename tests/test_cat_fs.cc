@@ -842,3 +842,130 @@ TEST(cat_fs, statfs){
     ASSERT_EQ(cat_fs_statfs("/", &statfsbuf), 0);
 #endif
 }
+
+#ifdef CAT_OS_WIN
+#define LONGNAME "_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128"
+#define SHORTNAME "_128_1~1"
+
+inline void maxpath_260_clean(const char *dir){
+    cat_dirent_t * entry = NULL;
+    cat_dir_t * rmd = cat_fs_opendir(dir);
+    std::string fullfnstr;
+    const char * fullfn;
+    if(NULL != rmd){
+        while(nullptr != (entry = cat_fs_readdir(rmd))){
+            const char *fn = entry->name;
+            if (
+                ('.' == fn[0] && 0 == fn[1]) ||
+                ('.' == fn[0] && '.' == fn[1] && 0 == fn[2])
+            ){
+                free((void*)entry->name);
+                free((void*)entry);
+                continue;
+            }
+            fullfnstr = path_join(dir, fn);
+            free((void*)entry->name);
+            free((void*)entry);
+            fullfn = fullfnstr.c_str();
+            //printf("rm %s\n", fullfn);
+            ASSERT_TRUE(cat_fs_unlink(fullfn) == 0 || cat_fs_rmdir(fullfn) == 0);
+        }
+    }
+    //printf("rm %s\n", dir);
+    cat_fs_rmdir(dir);
+}
+
+TEST(cat_fs, maxpath_260){
+    // prepare target names
+    std::string dirstr = path_join(TEST_TMP_PATH, "cat_tests_maxpath_260" LONGNAME);
+    const char * dir = dirstr.c_str();
+    std::stringstream sstream = std::stringstream();
+    sstream << dirstr << "\\s" << LONGNAME;
+    std::string srcstr = sstream.str();
+    const char * src = srcstr.c_str();
+    //printf("s: %s\n", src);
+    std::stringstream dstream = std::stringstream();
+    dstream << dirstr << "\\d" << LONGNAME;
+    std::string dststr = dstream.str();
+    const char * dst = dststr.c_str();
+    //printf("d: %s\n", dst);
+    std::stringstream tstream = std::stringstream();
+    tstream << dirstr << "\\t" << LONGNAME << ".XXXXXX";
+    std::string tmpstr = tstream.str();
+    const char * tmp = tmpstr.c_str();
+    //printf("t: %s\n", tmp);
+
+    // prepare temp dir
+    maxpath_260_clean(dir);
+    ASSERT_EQ(cat_fs_mkdir(dir, 0777), 0);
+    DEFER({maxpath_260_clean(dir);});
+
+    // defer show errors
+    int report_error = 1;
+    int ret = -1;
+    cat_clear_last_error();
+    DEFER({
+        if(report_error){
+            printf("ret = %d, error %d, msg %s\n", ret, cat_get_last_error_code(), cat_get_last_error_message());\
+        }
+    });
+
+    ASSERT_GT(ret = cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666), 0);
+    ASSERT_EQ(ret = cat_fs_close(ret), 0);
+
+    ASSERT_EQ(ret = cat_fs_mkdir(dst, 0777), 0);
+    cat_dir_t * d = nullptr;
+    ASSERT_NE(d = cat_fs_opendir(dst), nullptr);
+    ASSERT_EQ(ret = cat_fs_closedir(d), 0);
+    ASSERT_EQ(ret = cat_fs_rmdir(dst), 0);
+
+    ASSERT_EQ(ret = cat_fs_rename(src, dst), 0);
+    ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+
+    ASSERT_EQ(ret = cat_fs_close(cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666)), 0);
+    ASSERT_EQ(ret = cat_fs_access(src, 0), 0);
+
+    cat_stat_t statbuf = {0};
+    ASSERT_EQ(ret = cat_fs_stat(src, &statbuf), 0);
+    ASSERT_EQ(ret = cat_fs_lstat(src, &statbuf), 0);
+
+    ASSERT_EQ(ret = cat_fs_utime(src, 0, 0), 0);
+    ASSERT_EQ(ret = cat_fs_lutime(src, 0, 0), 0);
+
+    // link and sym link may fail because of permission
+    ret = cat_fs_link(src, dst);
+    if(0 == ret){
+        ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+        ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+    }
+    ret = cat_fs_symlink(src, dst, 0);
+    if(0 == ret){
+        ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
+        ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+        ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+    }
+    ret = cat_fs_symlink(src, dst, 1);
+    if(0 == ret){
+        ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
+        ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+    }
+
+    
+    ASSERT_EQ(ret = cat_fs_chmod(src, 0666), 0);
+    ASSERT_EQ(ret = cat_fs_chown(src, -1 , -1), 0);
+    ASSERT_EQ(ret = cat_fs_lchown(src, -1, -1), 0);
+
+    ASSERT_EQ(ret = cat_fs_copyfile(src, dst, 0), 0);
+
+    const char * tmpname = nullptr;
+    ASSERT_NE(tmpname = cat_fs_mkdtemp(tmp), nullptr);
+    ASSERT_EQ(ret = cat_fs_rmdir(tmpname), 0);
+    ASSERT_GT(ret = cat_fs_mkstemp(tmp), 0);
+    ASSERT_EQ(cat_fs_close(ret), 0);
+
+    cat_statfs_t statfsbuf;
+    ASSERT_EQ(ret = cat_fs_statfs(src, &statfsbuf), 0);
+
+    report_error = 0;
+}
+#endif
