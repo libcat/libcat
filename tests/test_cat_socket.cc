@@ -678,28 +678,26 @@ TEST(cat_socket, echo_tcp_server)
                 EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
                 break;
             }
-            cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
-                cat_socket_t *client = (cat_socket_t *) data;
-
+            co([client] {
+                DEFER(cat_socket_close(client));
                 while (true) {
                     char read_buffer[TEST_BUFFER_SIZE_STD];
                     ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
-                    if (read_n > 0) {
-                        bool send_ok = cat_socket_send(client, read_buffer, read_n);
-                        EXPECT_TRUE(send_ok);
-                        if (send_ok) {
-                            continue;
-                        }
-                    } else {
-                        EXPECT_EQ(read_n, 0);
+                    ASSERT_GE(read_n, 0);
+                    if (read_n == 0) {
+                        break;
                     }
-                    break;
+                    if (std::string(read_buffer, read_n) == "RESET") {
+                        break;
+                    }
+                    if (std::string(read_buffer, read_n) == "TIMEOUT") {
+                        ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
+                        break;
+                    }
+                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                    continue;
                 }
-
-                cat_socket_close(client);
-
-                return nullptr;
-            }, client);
+            });
         }
 
         cat_socket_close(&server);
@@ -718,7 +716,7 @@ TEST(cat_socket, echo_tcp_client)
     ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&echo_client));
 
-    ASSERT_TRUE(cat_socket_connect(&echo_client, CAT_STRL(TEST_LISTEN_IPV4), echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
 
     /* normal loop */
     for (n = TEST_MAX_REQUESTS; n--;) {
@@ -780,7 +778,7 @@ TEST(cat_socket, send_yield)
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&client));
 
-    ASSERT_TRUE(cat_socket_connect(&client, CAT_STRL(TEST_LISTEN_IPV4), echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
 
     int send_buffer_size = cat_socket_get_send_buffer_size(&client);
     ASSERT_GT(send_buffer_size, 0);
@@ -955,6 +953,40 @@ TEST(cat_socket, cancel_connect)
     });
     ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+}
+
+TEST(cat_socket, connreset)
+{
+    SKIP_IF(echo_tcp_server == nullptr);
+    cat_socket_t client;
+    char buffer[1];
+    ssize_t n;
+
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("RESET")));
+    n = cat_socket_recv(&client, CAT_STRS(buffer));
+    ASSERT_LE(n, 0);
+    if (n < 0) {
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECONNRESET);
+    }
+}
+
+TEST(cat_socket, timeout)
+{
+    SKIP_IF(echo_tcp_server == nullptr);
+    cat_socket_t client;
+    char buffer[1];
+    ssize_t n;
+
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("TIMEOUT")));
+    n = cat_socket_recv_ex(&client, CAT_STRS(buffer), 1);
+    ASSERT_LT(n, 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
 
 TEST(cat_socket, dump_all)
