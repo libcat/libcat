@@ -1887,6 +1887,9 @@ static ssize_t cat_socket_internal_read_raw(
         }
         nread = context.nread;
         error = context.error;
+        if (unlikely(error != 0)) {
+            goto _error;
+        }
     }
 
 #ifdef CAT_OS_UNIX_LIKE
