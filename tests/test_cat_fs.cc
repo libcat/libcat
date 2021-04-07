@@ -34,7 +34,10 @@ std::string path_join(std::string a, std::string b){
         // too long
         return "";
     }
-    if(a.length() + 1/* '\\' */ + b.length() > MAX_PATH){
+    if( 
+        a.rfind("\\\\?\\", 0) != 0 && // already \\?\-ed
+        a.length() + 1/* '\\' */ + b.length() > MAX_PATH
+    ){
         aa = std::string("\\\\?\\") + a;
     }
 #endif
@@ -51,9 +54,17 @@ bool no_tmp(){
 
 TEST(cat_fs, path_join)
 {
-    ASSERT_EQ(std::string("aaa"), path_join("", "aaa")); 
-    ASSERT_EQ(std::string("tmp" TEST_PATH_SEP "aaa"), path_join("tmp", "aaa")); 
-    ASSERT_EQ(std::string("tmp" TEST_PATH_SEP "aaa"), path_join("tmp" TEST_PATH_SEP, "aaa")); 
+    ASSERT_EQ(std::string("aaa"), path_join("", "aaa"));
+    ASSERT_EQ(std::string("tmp" TEST_PATH_SEP "aaa"), path_join("tmp", "aaa"));
+    ASSERT_EQ(std::string("tmp" TEST_PATH_SEP "aaa"), path_join("tmp" TEST_PATH_SEP, "aaa"));
+#ifdef CAT_OS_WIN
+    std::string longname = std::string(299, 'x');
+    std::string shortleft = std::string("\\\\?\\C:\\");
+    std::string longleft = shortleft + longname;
+    std::string full = longleft + std::string("\\") + longname;
+    ASSERT_EQ(path_join(longleft, longname), full);
+    ASSERT_EQ(path_join(path_join(shortleft, longname), longname), full);
+#endif
 }
 
 TEST(cat_fs, open_close_read_write)
@@ -844,14 +855,19 @@ TEST(cat_fs, statfs){
 }
 
 #ifdef CAT_OS_WIN
-#define LONGNAME "_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128_128"
-#define SHORTNAME "_128_1~1"
 
-inline void maxpath_260_clean(const char *dir){
+inline int maxpath_260_clean(const char *dir){
     cat_dirent_t * entry = NULL;
     cat_dir_t * rmd = cat_fs_opendir(dir);
     std::string fullfnstr;
     const char * fullfn;
+    int report_error = 1;
+    int ret;
+    DEFER({
+        if(report_error){
+            printf("ret = %d, error %d, msg %s\n", ret, cat_get_last_error_code(), cat_get_last_error_message());\
+        }
+    });
     if(NULL != rmd){
         while(nullptr != (entry = cat_fs_readdir(rmd))){
             const char *fn = entry->name;
@@ -867,104 +883,159 @@ inline void maxpath_260_clean(const char *dir){
             free((void*)entry->name);
             free((void*)entry);
             fullfn = fullfnstr.c_str();
-            //printf("rm %s\n", fullfn);
-            ASSERT_TRUE(cat_fs_unlink(fullfn) == 0 || cat_fs_rmdir(fullfn) == 0);
+            cat_stat_t statbuf;
+            if((ret = cat_fs_lstat(fullfn, &statbuf)) != 0){
+                return -1;
+            }
+            if((statbuf.st_mode & S_IFMT) == S_IFDIR){
+                if(maxpath_260_clean(fullfn) != 0){
+                    return -1;
+                }
+            }else{
+                if((ret = cat_fs_unlink(fullfn)) != 0){
+                    return -1;
+                }
+            }
         }
+        //printf("rm %s\n", dir);
+        if((ret = cat_fs_rmdir(dir)) != 0){
+            return -1;
+        }
+        cat_fs_closedir(rmd);
     }
-    //printf("rm %s\n", dir);
-    cat_fs_rmdir(dir);
+    report_error = 0;
+    return 0;
 }
 
 TEST(cat_fs, maxpath_260){
     // prepare target names
-    std::string dirstr = path_join(TEST_TMP_PATH, "cat_tests_maxpath_260" LONGNAME);
+    std::string dirstr = path_join(TEST_TMP_PATH, "cat_tests_maxpath_260");
+    const size_t dirlen = dirstr.length();
     const char * dir = dirstr.c_str();
-    std::stringstream sstream = std::stringstream();
-    sstream << dirstr << "\\s" << LONGNAME;
-    std::string srcstr = sstream.str();
-    const char * src = srcstr.c_str();
-    //printf("s: %s\n", src);
-    std::stringstream dstream = std::stringstream();
-    dstream << dirstr << "\\d" << LONGNAME;
-    std::string dststr = dstream.str();
-    const char * dst = dststr.c_str();
-    //printf("d: %s\n", dst);
-    std::stringstream tstream = std::stringstream();
-    tstream << dirstr << "\\t" << LONGNAME << ".XXXXXX";
-    std::string tmpstr = tstream.str();
-    const char * tmp = tmpstr.c_str();
-    //printf("t: %s\n", tmp);
+    SKIP_IF_(dirlen > 239 /* 247(see below) - "\\.XXXXXX" */, "Temp dir path is too long");
 
     // prepare temp dir
-    maxpath_260_clean(dir);
+    ASSERT_EQ(maxpath_260_clean(dir), 0);
     ASSERT_EQ(cat_fs_mkdir(dir, 0777), 0);
-    DEFER({maxpath_260_clean(dir);});
+    DEFER({ASSERT_EQ(maxpath_260_clean(dir), 0);});
 
     // defer show errors
     int report_error = 1;
     int ret = -1;
+    size_t fnlen;
+    int rlen;
+    cat_dir_t * d = nullptr;
     cat_clear_last_error();
     DEFER({
         if(report_error){
-            printf("ret = %d, error %d, msg %s\n", ret, cat_get_last_error_code(), cat_get_last_error_message());\
+            printf("fn length=%zu, recursive mkdir path len=%d,\nret = %d, error %d, msg %s\n", fnlen, rlen, ret, cat_get_last_error_code(), cat_get_last_error_message());\
         }
     });
 
-    ASSERT_GT(ret = cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666), 0);
-    ASSERT_EQ(ret = cat_fs_close(ret), 0);
+    // start from 247
+    // 247: nothing special
+    // [248, 259]: MAXPATH-sizeof(8.3) > fnlen > MAXPATH
+    // 260: MAXPATH
+    // 261: fnlen > MAXPATH
+    // end at 261
+    for(fnlen = 247; fnlen < 262; fnlen++){
+        // prepare "source" file name
+        std::stringstream sstream = std::stringstream();
+        sstream << dirstr << "\\" << std::setfill('s') << std::setw(fnlen - dirlen - 1/*\*/) << "";
+        std::string srcstr = sstream.str();
+        const char* src = srcstr.c_str();
+        //printf("s: %s\n", src);
+        // prepare "destnation" file name
+        std::stringstream dstream = std::stringstream();
+        dstream << dirstr << "\\" << std::setfill('d') << std::setw(fnlen - dirlen - 1/*\*/) << "";
+        std::string dststr = dstream.str();
+        const char* dst = dststr.c_str();
+        //printf("d: %s\n", dst);
+        // prepare mk{d,s}temp template
+        std::stringstream tstream = std::stringstream();
+        tstream << dirstr << "\\" << std::setfill('t') << std::setw(fnlen - dirlen - 1/*\*/) << ".XXXXXX";
+        std::string tmpstr = tstream.str();
+        const char* tmp = tmpstr.c_str();
+        //printf("t: %s\n", tmp);
 
-    ASSERT_EQ(ret = cat_fs_mkdir(dst, 0777), 0);
-    cat_dir_t * d = nullptr;
-    ASSERT_NE(d = cat_fs_opendir(dst), nullptr);
-    ASSERT_EQ(ret = cat_fs_closedir(d), 0);
-    ASSERT_EQ(ret = cat_fs_rmdir(dst), 0);
+        ASSERT_GT(ret = cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666), 0);
+        ASSERT_EQ(ret = cat_fs_close(ret), 0);
 
-    ASSERT_EQ(ret = cat_fs_rename(src, dst), 0);
-    ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+        ASSERT_EQ(ret = cat_fs_mkdir(dst, 0777), 0);
+        ASSERT_NE(d = cat_fs_opendir(dst), nullptr);
+        ASSERT_EQ(ret = cat_fs_closedir(d), 0);
+        ASSERT_EQ(ret = cat_fs_rmdir(dst), 0);
 
-    ASSERT_EQ(ret = cat_fs_close(cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666)), 0);
-    ASSERT_EQ(ret = cat_fs_access(src, 0), 0);
-
-    cat_stat_t statbuf = {0};
-    ASSERT_EQ(ret = cat_fs_stat(src, &statbuf), 0);
-    ASSERT_EQ(ret = cat_fs_lstat(src, &statbuf), 0);
-
-    ASSERT_EQ(ret = cat_fs_utime(src, 0, 0), 0);
-    ASSERT_EQ(ret = cat_fs_lutime(src, 0, 0), 0);
-
-    // link and sym link may fail because of permission
-    ret = cat_fs_link(src, dst);
-    if(0 == ret){
-        ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+        ASSERT_EQ(ret = cat_fs_rename(src, dst), 0);
         ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+
+        ASSERT_EQ(ret = cat_fs_close(cat_fs_open(src, CAT_FS_O_WRONLY | CAT_FS_O_CREAT, 0666)), 0);
+        ASSERT_EQ(ret = cat_fs_access(src, 0), 0);
+
+        cat_stat_t statbuf = {0};
+        ASSERT_EQ(ret = cat_fs_stat(src, &statbuf), 0);
+        ASSERT_EQ(ret = cat_fs_lstat(src, &statbuf), 0);
+
+        ASSERT_EQ(ret = cat_fs_utime(src, 0, 0), 0);
+        ASSERT_EQ(ret = cat_fs_lutime(src, 0, 0), 0);
+
+        // link and sym link may fail because of permission
+        ret = cat_fs_link(src, dst);
+        if(0 == ret){
+            ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+            ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+        }
+        ret = cat_fs_symlink(src, dst, 0);
+        if(0 == ret){
+            ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
+            ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+            ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+        }
+        ret = cat_fs_symlink(src, dst, 1);
+        if(0 == ret){
+            ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
+            ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+        }
+
+        
+        ASSERT_EQ(ret = cat_fs_chmod(src, 0666), 0);
+        ASSERT_EQ(ret = cat_fs_chown(src, -1 , -1), 0);
+        ASSERT_EQ(ret = cat_fs_lchown(src, -1, -1), 0);
+
+        ASSERT_EQ(ret = cat_fs_copyfile(src, dst, 0), 0);
+
+        const char * tmpname = nullptr;
+        ASSERT_NE(tmpname = cat_fs_mkdtemp(tmp), nullptr);
+        ASSERT_EQ(ret = cat_fs_rmdir(tmpname), 0);
+        ASSERT_GT(ret = cat_fs_mkstemp(tmp), 0);
+        ASSERT_EQ(cat_fs_close(ret), 0);
+        // should rm that temp here?
+
+        cat_statfs_t statfsbuf;
+        ASSERT_EQ(ret = cat_fs_statfs(src, &statfsbuf), 0);
     }
-    ret = cat_fs_symlink(src, dst, 0);
-    if(0 == ret){
-        ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
-        ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
-        ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
+
+    // deep mkdir/rmdir
+    std::stringstream rstream = std::stringstream();
+    rstream << dirstr ;
+    for(rlen = 255; rlen > 0; rlen--){
+        rstream << "\\" << std::setfill('r') << std::setw(rlen) << "";
+        std::string rstr = rstream.str();
+        //printf("%d\n", rstr.length());
+        // hard limit for directory path is 32740, not documented
+        // donot know why, see https://github.com/dotnet/runtime/issues/23807
+        // maybe it's 32767 - sizeof(L"\\88888888.333") - sizeof('\0') ?
+        if(rstr.length() > 32739){
+            break;
+        }
+        const char* r = rstr.c_str();
+        //printf("r: %s\n", r);
+        ASSERT_EQ(ret = cat_fs_mkdir(r, 0777), 0);
+        ASSERT_NE(d = cat_fs_opendir(r), nullptr);
+        ASSERT_EQ(ret = cat_fs_closedir(d), 0);
+        ASSERT_EQ(ret = cat_fs_rmdir(r), 0);
+        ASSERT_EQ(ret = cat_fs_mkdir(r, 0777), 0);
     }
-    ret = cat_fs_symlink(src, dst, 1);
-    if(0 == ret){
-        ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
-        ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
-    }
-
-    
-    ASSERT_EQ(ret = cat_fs_chmod(src, 0666), 0);
-    ASSERT_EQ(ret = cat_fs_chown(src, -1 , -1), 0);
-    ASSERT_EQ(ret = cat_fs_lchown(src, -1, -1), 0);
-
-    ASSERT_EQ(ret = cat_fs_copyfile(src, dst, 0), 0);
-
-    const char * tmpname = nullptr;
-    ASSERT_NE(tmpname = cat_fs_mkdtemp(tmp), nullptr);
-    ASSERT_EQ(ret = cat_fs_rmdir(tmpname), 0);
-    ASSERT_GT(ret = cat_fs_mkstemp(tmp), 0);
-    ASSERT_EQ(cat_fs_close(ret), 0);
-
-    cat_statfs_t statfsbuf;
-    ASSERT_EQ(ret = cat_fs_statfs(src, &statfsbuf), 0);
 
     report_error = 0;
 }
