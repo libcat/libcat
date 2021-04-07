@@ -1,0 +1,36 @@
+name: aa64tests
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  aa64-tests:
+    name: Test on Linux aa64
+    runs-on: [ self-hosted, Linux, ARM64, opi4b ]
+    steps:
+
+      - name: Checkout libcat sources
+        uses: actions/checkout@v2
+        with:
+          path: libcat
+
+      - name: Build libcat and Run tests
+        shell: bash
+        working-directory: libcat
+        run: |
+          echo "::group::Create build dir"
+          mkdir -p build && cd build || exit 1
+          echo "::endgroup::"
+          echo "::group::Make cmake cache"
+          cmake .. \
+            -DCMAKE_CXX_FLAGS="-std=c++11" \
+            ${{ (runner.os == 'Linux' && '' != secrets.CODECOV_TOKEN) && '-DCODE_COVERAGE=ON' || '' }} \
+            -DCMAKE_C_FLAGS_DEBUG="-Werror" \
+            -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
+          echo "::endgroup::"
+          echo "::group::Build libcat"
+          cmake --build . -j4 --target cat_tests || exit 1
+          echo "::endgroup::"
+          echo "::group::Test libcat"
+          ./cat_tests --gtest_color=yes || exit 1
+          echo "::endgroup::"
