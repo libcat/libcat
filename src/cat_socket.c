@@ -2245,23 +2245,23 @@ static cat_always_inline cat_bool_t cat_socket_internal_write(
     return cat_socket_internal_write_raw(isocket, vector, vector_count, address, address_length, timeout);
 }
 
-#define CAT_SOCKET_IO_CHECK(_socket, _isocket, _io_flag) \
-    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flag, return -1); \
+#define CAT_SOCKET_IO_CHECK(_socket, _isocket, _io_flag, _failure) \
+    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flag, _failure); \
     do { \
         if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
-            CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, return -1); \
+            CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure); \
         } \
     } while (0)
 
 static cat_always_inline ssize_t cat_socket__read(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout, cat_bool_t once)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ);
+    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return -1);
     return cat_socket_internal_read(isocket, buffer, size, address, address_length, timeout, once);
 }
 
 static cat_always_inline cat_bool_t cat_socket__write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE);
+    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
     return cat_socket_internal_write(isocket, vector, vector_count, address, address_length, timeout);
 }
 
@@ -2297,7 +2297,7 @@ CAT_PROTECT_LAST_ERROR_START() { \
 
 static ssize_t cat_socket__read_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ);
+    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return -1);
     CAT_SOCKET_READ_ADDRESS_CONTEXT(address, name, name_length, port);
     ssize_t ret;
 
@@ -2310,7 +2310,7 @@ static ssize_t cat_socket__read_from(cat_socket_t *socket, char *buffer, size_t 
 
 static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE);
+    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
     cat_sockaddr_info_t address_info;
     cat_sockaddr_t *address;
     cat_socklen_t address_length;
