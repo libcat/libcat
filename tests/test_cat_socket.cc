@@ -989,6 +989,24 @@ TEST(cat_socket, timeout)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
 
+#define TEST_TTY(type, TYPE) \
+TEST(cat_socket, std##type) \
+{ \
+    SKIP_IF_(uv_guess_handle(STD##TYPE##_FILENO) != UV_TTY, "STD" #TYPE " is not a tty"); \
+    cat_socket_t client; \
+    char buffer[TEST_BUFFER_SIZE_STD]; \
+    cat_snrand(CAT_STRS(buffer) - 1); \
+    buffer[TEST_BUFFER_SIZE_STD - 1] = '\0'; \
+ \
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_STD##TYPE), nullptr); \
+    DEFER(cat_socket_close(&client)); \
+    ASSERT_TRUE(cat_socket_is_available(&client)); \
+}
+
+TEST_TTY(in, IN)
+TEST_TTY(out, OUT)
+TEST_TTY(err, ERR)
+
 TEST(cat_socket, dump_all)
 {
     // TODO: now all sockets are unavailable

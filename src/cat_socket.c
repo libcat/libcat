@@ -706,7 +706,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             type |= CAT_SOCKET_TYPE_FLAG_STDOUT;
         } else if (os_fd == STDERR_FILENO) {
             type |= CAT_SOCKET_TYPE_FLAG_STDERR;
+        } else {
+            os_fd = CAT_OS_INVALID_FD;
         }
+        fd = (cat_socket_fd_t) os_fd;
         error = uv_tty_init(cat_event_loop, &isocket->u.tty, os_fd, 0);
     }
     if (unlikely(error != 0)) {
