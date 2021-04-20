@@ -75,13 +75,35 @@ TEST(cat_fs, open_close_read_write)
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw");
     const char * fn = fnstr.c_str();
     int fd = -1;
+    cat_fs_unlink(fn);
+    SKIP_IF_(cat_fs_access(fn, F_OK) == 0, "Cannot remove test file");
+    // error info tests
+    //  open
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    //  close
+    errno = 0;
+    cat_clear_last_error();
+    // uv wraps close, this may not fail with -1
+    // so we donot assert it
+    cat_fs_close(-1);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
     });
 
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_read(fd, buf, 5), 0);
+    ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
+
     cat_srand(buf, CAT_BUFFER_DEFAULT_SIZE);
 
     for(int i = 0; i<128; i++){
@@ -93,9 +115,13 @@ TEST(cat_fs, open_close_read_write)
     //printf("%s\n",cat_get_last_error_message());
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER(cat_fs_close(fd));
+
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_write(fd, "hello", 5), 0);
+    ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
-    
+
     for(int i = 0; i<128; i++){
         ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
         ASSERT_EQ(std::string(buf, CAT_BUFFER_DEFAULT_SIZE), std::string(red, CAT_BUFFER_DEFAULT_SIZE));
@@ -113,10 +139,17 @@ TEST(cat_fs, pwrite_pread)
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw2");
     const char * fn = fnstr.c_str();
     int fd = -1;
+    cat_fs_unlink(fn);
     ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
     });
+    
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_read(fd, zeros, PWRITE_PREAD_BUFSIZ - 1024), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
 
     memset(zeros, 0, sizeof(zeros));
     memset(red, 0, sizeof(red));
@@ -133,6 +166,12 @@ TEST(cat_fs, pwrite_pread)
     ASSERT_EQ(0, cat_fs_close(fd));
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER({cat_fs_close(fd);});
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_write(fd, zeros, PWRITE_PREAD_BUFSIZ - 1024), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
 
     // 0:128 = rands
     ASSERT_EQ(cat_fs_pread(fd, &red[0], 128, 0), 128);
@@ -181,6 +220,14 @@ TEST(cat_fs, ftruncate)
     
     ASSERT_EQ(cat_fs_read(fd, red, 16), 8);
     ASSERT_EQ(std::string(red, 8), std::string(buf, 8));
+
+    cat_fs_close(fd);
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_ftruncate(fd, 8), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
 }
 
 
@@ -191,6 +238,7 @@ TEST(cat_fs, stat_lstat_fstat)
 
     umask(0);
 
+    cat_stat_t statbuf = {0};
     char buf[LSEEK_BUFSIZ];
     cat_srand(buf, LSEEK_BUFSIZ);
 
@@ -200,18 +248,40 @@ TEST(cat_fs, stat_lstat_fstat)
     cat_fs_unlink(fn);
     ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
     ASSERT_EQ(cat_fs_write(fd, buf, LSEEK_BUFSIZ), LSEEK_BUFSIZ);
+    ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_mode & 0777, 0666);
+    ASSERT_EQ(statbuf.st_size, LSEEK_BUFSIZ);
     ASSERT_EQ(cat_fs_close(fd), 0);
-    DEFER({
-        ASSERT_EQ(cat_fs_unlink(fn), 0);
-    });
 
-    cat_stat_t statbuf = {0};
+    /*
+    // getosfhandle have internal assertions, so we donot test this
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_fstat(fd, &statbuf), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    DEFER(cat_fs_unlink(fn));
+    */
+
     ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
     ASSERT_EQ(statbuf.st_mode & 0777, 0666);
     ASSERT_EQ(statbuf.st_size, LSEEK_BUFSIZ);
     ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
     ASSERT_EQ(statbuf.st_mode & 0777, 0666);
     ASSERT_EQ(statbuf.st_size, LSEEK_BUFSIZ);
+
+    cat_fs_unlink(fn);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_stat(fn, &statbuf), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_lstat(fn, &statbuf), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
 }
 
 TEST(cat_fs, link)
@@ -234,9 +304,17 @@ TEST(cat_fs, link)
     cat_fs_unlink(fn2);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
     
+    errno = 0;
+    cat_clear_last_error();
     if(cat_fs_link(fn, fn2) != 0){
+        ASSERT_NE(errno, 0);
+        ASSERT_NE(cat_get_last_error_code(), 0);
         GTEST_SKIP_("File system may not support hard link");
     }
+    ASSERT_LT(cat_fs_link(fn, fn), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
     ASSERT_GT(statbuf.st_nlink, 1);
     uint64_t inode = statbuf.st_ino;
@@ -263,9 +341,17 @@ TEST(cat_fs, symlink){
     cat_fs_unlink(fn);
     cat_fs_unlink(fn2);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
+    errno = 0;
+    cat_clear_last_error();
     if(cat_fs_symlink(fn, fn2, 0) != 0){
+        ASSERT_NE(errno, 0);
+        ASSERT_NE(cat_get_last_error_code(), 0);
         GTEST_SKIP_("File system may not support symbol link");
     }
+    ASSERT_LT(cat_fs_symlink(fn, fn, 0), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
     uint64_t inode = statbuf.st_ino;
     ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
@@ -318,7 +404,11 @@ TEST(cat_fs, access)
     cat_fs_unlink(fn);
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY | O_CREAT, 0400), 0);
     ASSERT_EQ(cat_fs_access(fn, R_OK), 0);
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_access(fn, X_OK|W_OK), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     ASSERT_EQ(cat_fs_close(fd), 0);
 
     cat_fs_unlink(fn);
@@ -341,18 +431,26 @@ TEST(cat_fs, mkdir_rmdir)
     });
     cat_fs_rmdir(fn2);
     cat_fs_rmdir(fn);
+    errno = 0;
     ASSERT_LT(cat_fs_mkdir(fn2, 0777), 0);
+    ASSERT_EQ(errno, ENOENT);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
     ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+    errno = 0;
     ASSERT_LT(cat_fs_mkdir(fn, 0777), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EEXIST);
+    ASSERT_EQ(errno, EEXIST);
     ASSERT_EQ(cat_fs_mkdir(fn2, 0777), 0);
+    errno = 0;
     ASSERT_LT(cat_fs_rmdir(fn), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTEMPTY);
+    ASSERT_EQ(errno, ENOTEMPTY);
     ASSERT_EQ(cat_fs_rmdir(fn2), 0);
     ASSERT_EQ(cat_fs_rmdir(fn), 0);
+    errno = 0;
     ASSERT_LT(cat_fs_rmdir(fn2), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+    ASSERT_EQ(errno, ENOENT);
 }
 
 #ifdef CAT_OS_WIN
@@ -371,10 +469,22 @@ TEST(cat_fs, symlink_windows) {
     cat_fs_rmdir(fn);
     cat_fs_rmdir(ln);
     cat_fs_unlink(ln);
+
     // make dir target
     ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+
     // make symlink
-    ASSERT_EQ(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_DIR), 0);
+    errno = 0;
+    cat_clear_last_error();
+    if(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_DIR) != 0){
+        ASSERT_NE(errno, 0);
+        ASSERT_NE(cat_get_last_error_code(), 0);
+        GTEST_SKIP_("File system may not support symbol link or perm denied");
+    }
+    ASSERT_LT(cat_fs_symlink(fn, ln, CAT_FS_SYMLINK_DIR), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     cat_stat_t statbuf;
     __int64 ino = 0;
     ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
@@ -428,6 +538,22 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
     cat_fs_rmdir(fnd2);
     cat_fs_unlink(fnf3);
     cat_fs_rmdir(fn);
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_opendir(nullptr), nullptr);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_closedir(nullptr), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_readdir(nullptr), nullptr);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
 
     ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
     ASSERT_EQ(cat_fs_mkdir(fnd, 0777), 0);
@@ -531,13 +657,20 @@ TEST(cat_fs, scandir)
     cat_fs_unlink(fnf3);
     cat_fs_rmdir(fn);
 
+    int ret = -1;
+    cat_dirent_t * namelist;
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_scandir(fn, &namelist, NULL, NULL), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
     ASSERT_EQ(cat_fs_mkdir(fnd, 0777), 0);
     ASSERT_EQ(cat_fs_mkdir(fnd2, 0777), 0);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fnf3, O_RDONLY | O_CREAT | O_TRUNC, 0400)), 0);
 
-    int ret = -1;
-    cat_dirent_t * namelist;
     ASSERT_EQ(ret = cat_fs_scandir(fn, &namelist, cat_test_nofile_filter, cat_test_reverse_compare), 2);
     DEFER({
         for(int i = 0 ;i < ret; i++){
@@ -578,7 +711,11 @@ TEST(cat_fs, rename)
     ASSERT_EQ(cat_fs_rename(fn, fn2), 0);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT, 0321)), 0);
     ASSERT_EQ(cat_fs_rename(fn, fn2), 0);
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_rename(fn, fn3), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
     ASSERT_EQ(cat_fs_rename(fn2, fn3), 0);
 }
@@ -596,13 +733,20 @@ TEST(cat_fs, readlink){
         cat_fs_unlink(fn2);
     });
 
+    char buf[4096] = {0};
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_readlink(fn2, buf, 4096), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     cat_fs_unlink(fn);
     cat_fs_unlink(fn2);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
     if(cat_fs_symlink(fn, fn2, 0) != 0){
         GTEST_SKIP_("File system may not support symbol link");
     }
-    char buf[4096] = {0};
     ASSERT_EQ(cat_fs_readlink(fn2, buf, 1), 1);
     ASSERT_NE(buf[0], 0);
     ASSERT_EQ(buf[1], 0);
@@ -633,12 +777,19 @@ TEST(cat_fs, realpath){
     cat_fs_unlink(fn);
     cat_fs_unlink(fn2);
     cat_fs_rmdir(d);
+
+    char buf[4096] = {0};
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_realpath(testpath, buf), nullptr);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     ASSERT_EQ(cat_fs_mkdir(d, 0777), 0);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
     if(cat_fs_symlink(fn, fn2, 0) != 0){
         GTEST_SKIP_("File system may not support symbol link");
     }
-    char buf[4096] = {0};
     char * ret = nullptr;
     ASSERT_NE(ret = cat_fs_realpath(testpath, nullptr), nullptr);
     free(ret);
@@ -687,9 +838,15 @@ TEST(cat_fs, chown_fchown_lchown){
     ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
     ASSERT_EQ(cat_fs_fchown(fd, -1, -1), 0);
 #ifndef CAT_OS_WIN
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_chown("/", 0, 0), 0);
+    ASSERT_EQ(errno, EPERM);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+    errno = 0;
+    cat_clear_last_error();
     ASSERT_LT(cat_fs_lchown("/", 0, 0), 0);
+    ASSERT_EQ(errno, EPERM);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
 #endif
 }
@@ -706,11 +863,18 @@ TEST(cat_fs, copyfile)
     int fd = -1;
     cat_fs_unlink(fn);
     cat_fs_unlink(fn2);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
         cat_fs_unlink(fn2);
     });
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_copyfile(fn, fn2, 0), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
+    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
     cat_srand(buf, 16);
     ASSERT_EQ(cat_fs_write(fd, buf, 16), 16);
     ASSERT_EQ(0, cat_fs_close(fd));
@@ -782,6 +946,25 @@ TEST(cat_fs, utime_lutime_futime){
 
     cat_fs_unlink(fn2);
     cat_fs_unlink(fn);
+    DEFER({
+        cat_fs_unlink(fn2);
+        cat_fs_unlink(fn);
+    });
+
+    // getosfhandle have internel assertion
+    // so we donot test futime
+    //ASSERT_GT(cat_fs_futime(-1, -1, -1), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_utime(fn, -1, -1), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_LT(cat_fs_lutime(fn, -1, -1), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
     int fd = -1;
     ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200), 0);
     ASSERT_EQ(cat_fs_futime(fd, changed_time2, changed_time2), 0);
@@ -789,29 +972,29 @@ TEST(cat_fs, utime_lutime_futime){
     ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
     ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
     ASSERT_EQ(cat_fs_close(fd), 0);
-    ASSERT_EQ(cat_fs_symlink(fn, fn2, 0), 0);
-    DEFER({
-        cat_fs_unlink(fn2);
-        cat_fs_unlink(fn);
-    });
+    int symlink_usable = (cat_fs_symlink(fn, fn2, 0) == 0);
     ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
     ASSERT_GT(statbuf.st_atim.tv_sec, changed_time1);
     ASSERT_GT(statbuf.st_mtim.tv_sec, changed_time1);
-    ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
-    ASSERT_GT(statbuf.st_atim.tv_sec, changed_time2);
-    ASSERT_GT(statbuf.st_mtim.tv_sec, changed_time2);
+    if(symlink_usable){
+        ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
+        ASSERT_GT(statbuf.st_atim.tv_sec, changed_time2);
+        ASSERT_GT(statbuf.st_mtim.tv_sec, changed_time2);
+    }
 
     ASSERT_EQ(cat_fs_utime(fn, changed_time1, changed_time1), 0);
     ASSERT_EQ(cat_fs_stat(fn, &statbuf), 0);
     ASSERT_EQ(statbuf.st_atim.tv_sec, 865353600);
     ASSERT_EQ(statbuf.st_mtim.tv_sec, 865353600);
-    ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, 865353600);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, 865353600);
-    ASSERT_EQ(cat_fs_lutime(fn2, changed_time2, changed_time2), 0);
-    ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
-    ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
-    ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
+    if(symlink_usable){
+        ASSERT_EQ(cat_fs_stat(fn2, &statbuf), 0);
+        ASSERT_EQ(statbuf.st_atim.tv_sec, 865353600);
+        ASSERT_EQ(statbuf.st_mtim.tv_sec, 865353600);
+        ASSERT_EQ(cat_fs_lutime(fn2, changed_time2, changed_time2), 0);
+        ASSERT_EQ(cat_fs_lstat(fn2, &statbuf), 0);
+        ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
+        ASSERT_EQ(statbuf.st_mtim.tv_sec, 936201600);
+    }
 }
 
 TEST(cat_fs, stat_2038)
@@ -865,7 +1048,7 @@ inline int maxpath_260_clean(const char *dir){
     int ret;
     DEFER({
         if(report_error){
-            printf("ret = %d, error %d, msg %s\n", ret, cat_get_last_error_code(), cat_get_last_error_message());\
+            printf("ret = %d, error %d, msg %s\n", ret, cat_get_last_error_code(), cat_get_last_error_message());
         }
     });
     if(NULL != rmd){
@@ -981,14 +1164,17 @@ TEST(cat_fs, maxpath_260){
 
         // link and sym link may fail because of permission
         ret = cat_fs_link(src, dst);
+        void* resolved = NULL;
         if(0 == ret){
-            ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+            ASSERT_NE(resolved = cat_fs_realpath(dst, nullptr), nullptr);
+            free(resolved);
             ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
         }
         ret = cat_fs_symlink(src, dst, 0);
         if(0 == ret){
             ASSERT_EQ(ret = cat_fs_readlink(dst, nullptr, 0), 0);
-            ASSERT_NE(cat_fs_realpath(dst, nullptr), nullptr);
+            ASSERT_NE(resolved = cat_fs_realpath(dst, nullptr), nullptr);
+            free(resolved);
             ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
         }
         ret = cat_fs_symlink(src, dst, 1);
