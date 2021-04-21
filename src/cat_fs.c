@@ -543,7 +543,7 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e){
             return cat_translate_sys_error(errno);
         default:
             // never here
-            abort();
+            CAT_NEVER_HERE("Strange error type");
     }
 }
 
@@ -648,7 +648,7 @@ static inline const char* cat_fs_error_msg(cat_fs_error_t *e){
             e->msg = strerror(cat_orig_errno(e->val.cat_errno));
             break;
         default:
-            abort(); // never here
+            CAT_NEVER_HERE("Strange error type");
     }
     return e->msg;
 }
@@ -1041,7 +1041,7 @@ CAT_FS_WORK_CB(readdir){
         NULL, // wildcard filename
         data->a->rewind // from first
     );
-    
+
     if(!NT_SUCCESS(status)){
         const char* _msg;
         if (NULL != (_msg = cat_fs_proveRtlNtStatusToDosError())) {
@@ -1130,3 +1130,266 @@ CAT_API void cat_fs_rewinddir(cat_dir_t * dir){
     ((cat_dir_int_t*)dir)->rewind = cat_true;
 }
 #endif
+
+CAT_FS_WORK_STRUCT3(flock, cat_file_t, int, int*)
+
+/*
+* original flock(2) platform-specific implement
+*/
+static void cat_fs_orig_flock(struct cat_fs_flock_s*data){
+    cat_file_t fd = data->a;
+    int cat_op = data->b;
+    int *running = data->c;
+    int operation = 0;
+    int op_type = cat_op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
+#ifdef CAT_OS_WIN
+    // Windows implement
+    HANDLE hFile = (HANDLE)_get_osfhandle(fd);
+    if(INVALID_HANDLE_VALUE == hFile){
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = EBADF;
+        data->ret.ret.num = -1;
+        *running = 0;
+        return;
+    }
+
+    OVERLAPPED overlapped = { 0 };
+    // mock unix-like behavier: if we already have a lock,
+    // flock only update the lock to specified type (shared or exclusive)
+    // so we unlock first, then re-lock it
+    if (
+        (!UnlockFileEx(
+            hFile,
+            0,
+            MAXDWORD,
+            MAXDWORD,
+            &overlapped
+        )) &&
+        GetLastError() != ERROR_NOT_LOCKED // not an error
+    ){
+        //printf("u failed\n");
+        //printf("le %08x\n", errno, GetLastError());
+        data->ret.error.type = CAT_FS_ERROR_WIN32;
+        data->ret.error.val.le = GetLastError();
+        data->ret.ret.num = -1;
+        *running = 0;
+        return;
+    }
+    if (CAT_LOCK_UN == op_type){
+        // already unlocked
+        //printf("u end\n");
+        data->ret.ret.num = 0;
+        *running = 0;
+        return;
+    }
+
+    if (CAT_LOCK_EX == op_type || CAT_LOCK_SH == op_type){
+        DWORD flags = 0;
+        if(CAT_LOCK_EX == op_type){
+            flags |= LOCKFILE_EXCLUSIVE_LOCK;
+        }
+        if ((CAT_LOCK_NB & cat_op) == CAT_LOCK_NB){
+            flags |= LOCKFILE_FAIL_IMMEDIATELY;
+        }
+        if(!LockFileEx(
+            hFile,
+            flags,
+            0,
+            MAXDWORD,
+            MAXDWORD,
+            &overlapped
+        )){
+            // if LOCK_NB is set, but we donot get lock
+            // we should unlock it after it was done (cancelling lock behavior)
+            if ((CAT_LOCK_NB & cat_op) == CAT_LOCK_NB){
+                //printf("nb wait\n");
+                data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
+                data->ret.error.val.le = CAT_EAGAIN;
+                data->ret.ret.num = -1;
+                *running = 0;
+                DWORD dummy;
+                BOOL done = GetOverlappedResult(hFile, &overlapped, &dummy, 1);
+                //printf("nb wait done\n");
+                UnlockFileEx(
+                    hFile,
+                    0,
+                    MAXDWORD,
+                    MAXDWORD,
+                    &overlapped
+                );
+                return;
+            }
+            //printf("b done\n");
+            data->ret.error.type = CAT_FS_ERROR_WIN32;
+            data->ret.error.val.le = GetLastError();
+            data->ret.ret.num = -1;
+            *running = 0;
+            return;
+        }
+        //printf("nb done\n");
+        data->ret.ret.num = 0;
+        *running = 0;
+        return;
+    } else {
+        //printf("not supported\n");
+        data->ret.error.type = CAT_FS_ERROR_WIN32;
+        data->ret.error.val.le = ERROR_INVALID_PARAMETER;
+        data->ret.ret.num = -1;
+        *running = 0;
+        return;
+    }
+    // never here
+    CAT_NEVER_HERE("impossible");
+#elif defined(LOCK_EX) && defined(LOCK_SH) && defined(LOCK_UN)
+    // Linux / BSDs / macOS implement with flock(2)
+# ifdef LOCK_NB
+#  define FLOCK_HAVE_NB
+    operation = cat_op;
+# else
+    operation = op_type;
+# endif // LOCK_NB
+    data->ret.ret.num = flock(fd, operation);
+    data->ret.error.type = CAT_FS_ERROR_ERRNO;
+    data->ret.error.val.error = errno;
+    *running = 0;
+    return;
+#elif defined(F_SETLK) && defined(F_SETLKW) && defined(F_RDLCK) && defined(F_WRLCK) && defined(F_UNLCK)
+    // fcntl implement
+# define FLOCK_HAVE_NB
+    int cmd = (CAT_LOCK_NB == (cat_op & CAT_LOCK_NB)) ? F_SETLK : F_SETLKW;
+    struct flock lbuf = {
+        .l_whence = SEEK_SET,
+        .l_start = 0,
+        .l_len = 0
+    };
+    if (CAT_LOCK_SH == op_type){
+        lbuf.l_type = F_RDLCK;
+    }else if(CAT_LOCK_EX == op_type){
+        lbuf.l_type = F_WRLCK;
+    }else if(CAT_LOCK_UN == op_type){
+        lbuf.l_type = F_UNLCK;
+    }
+    data->ret.ret.num = fcntl(fd, cmd, &lbuf);
+    data->ret.error.type = CAT_FS_ERROR_ERRNO;
+    data->ret.error.val.error = errno;
+    *running = 0;
+    return;
+#elif defined(F_LOCK) && defined(F_ULOCK) && defined(F_TLOCK)
+    // lockf implement (not well tested, maybe buggy)
+    // linux man page lockf(3) says
+    // "POSIX.1 leaves the relationship between lockf() and fcntl(2) locks unspecified"
+    // so we assume that some os may have an indepednent lockf implement
+# define FLOCK_HAVE_NB
+    int cmd;
+    if (CAT_LOCK_SH == op_type){
+        // fcntl donot have a share flock
+        data->ret.ret.num = -1;
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = EINVAL;
+        return;
+    }else if(CAT_LOCK_EX == op_type){
+        if((CAT_LOCK_NB & cat_op) == CAT_LOCK_NB){
+            cmd = F_TLOCK;
+        } else {
+            cmd = F_LOCK;
+        }
+    }else if(CAT_LOCK_UN == op_type){
+        cmd = F_ULOCK;
+    }
+    // we need seek to 0, then do this
+    // however this is not atomic for this fd
+    data->ret.ret.num = lockf(fd, cmd, 0); // not real full file
+    data->ret.error.type = CAT_FS_ERROR_ERRNO;
+    data->ret.error.val.error = errno;
+    *running = 0;
+    return;
+#else
+    // maybe sometimes we can implement robust flock by ourselves?
+# warning "not supported platform for flock"
+    data->ret.ret.num = -1;
+    data->ret.error.type = CAT_FS_ERROR_ERRNO;
+    data->ret.error.val.error = ENOSYS;
+    *running = 0;
+    return -1;
+#endif // LOCK_EX...
+}
+
+
+// work (thread pool) callback
+CAT_FS_WORK_CB(flock){
+#ifdef FLOCK_HAVE_NB
+    if((CAT_LOCK_NB & data->b) == CAT_LOCK_NB){
+        // we have LOCK_NB and LOCK_NB is set
+        cat_fs_orig_flock(data);
+        return;
+    }
+#endif
+    if((data->b & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN){
+        // LOCK_UN is not blocking
+        cat_fs_orig_flock(data);
+        return;
+    }
+    // we donot put blocking flock into thread pool directly,
+    // we create another thread to do flock to avoid dead lock when thread pool is full
+    // (all threads in pool waiting flock(xx, LOCK_EX), while flock(xx, LOCK_UN) after them in queue)
+    uv_thread_t tid;
+    uv_thread_options_t params = {
+        .flags = UV_THREAD_HAS_STACK_SIZE,
+        .stack_size = 4096 // TODO: use real single page size as this
+    };
+    int ret = uv_thread_create_ex(&tid, &params, (uv_thread_cb)cat_fs_orig_flock, data);
+    if(0 != ret){
+        //printf("thread failed\n");
+        data->ret.ret.num = -1;
+        data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
+        data->ret.error.val.cat_errno = ret;
+        *data->c = 0;
+    }
+}
+
+/*
+* flock(2) like implement for coroutine model
+*/
+CAT_API int cat_fs_flock(cat_file_t fd, int cat_op){
+    int running = 1;
+    CAT_FS_WORK_STRUCT_INIT(flock, data, fd, cat_op, &running);
+    if (cat_work(CAT_WORK_KIND_FAST_IO, CAT_FS_WORK_CB_CALL(flock), &data, CAT_TIMEOUT_FOREVER)) {
+        if(!running){
+            // LOCK_NB is set / LOCK_UN, things done immediately
+            cat_fs_work_mkerr(&data.ret.error, "Flock failed: %s");
+            //printf("nb done %d\n", data.ret.ret.num);
+            return (int)data.ret.ret.num;
+        }
+        cat_fs_error_t e;
+        int waittime = 1;
+        while(running){
+            switch(cat_time_delay(waittime)){
+                case CAT_RET_OK:
+                    break;
+                case CAT_RET_NONE:
+                    // cancelled
+                    // TODO: should we kill worker thread, then recover locks like what will os do?
+                    e.type = CAT_FS_ERROR_CAT_ERRNO;
+                    e.val.cat_errno = CAT_ECANCELED;
+                    cat_fs_work_mkerr(&e, "Flock failed: %s");
+                    return -1;
+                case CAT_RET_ERROR:
+                    // ???
+                    e.type = CAT_FS_ERROR_CAT_ERRNO;
+                    e.val.cat_errno = cat_get_last_error_code();
+                    e.msg = cat_get_last_error_message();
+                    e.msg_free = CAT_FS_FREER_NONE;
+                    cat_fs_work_mkerr(&e, "Flock failed: %s");
+                    return -1;
+                default:
+                    CAT_NEVER_HERE("Strange cat_time_delay result");
+            }
+            if(waittime < 64){
+                waittime*=2;
+            }
+        }
+        //printf("wait done %d\n", data.ret.ret.num);
+        return (int)data.ret.ret.num;
+    }
+    return -1;
+}

@@ -1091,6 +1091,8 @@ inline int maxpath_260_clean(const char *dir){
 }
 
 TEST(cat_fs, maxpath_260){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
     // prepare target names
     std::string dirstr = path_join(TEST_TMP_PATH, "cat_tests_maxpath_260");
     const size_t dirlen = dirstr.length();
@@ -1226,3 +1228,10 @@ TEST(cat_fs, maxpath_260){
     report_error = 0;
 }
 #endif
+
+// thread numbers used in test,
+// needs more then thread pool capability
+#define FLOCK_TEST_THREADS 24
+TEST(cat_fs, flock_deadlock){
+    SKIP_IF_(true, "TODO: implement mp_tester to test flock");
+}
