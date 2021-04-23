@@ -989,23 +989,53 @@ TEST(cat_socket, timeout)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
 
-#define TEST_TTY(type, TYPE) \
-TEST(cat_socket, std##type) \
-{ \
-    SKIP_IF_(uv_guess_handle(STD##TYPE##_FILENO) != UV_TTY, "STD" #TYPE " is not a tty"); \
-    cat_socket_t client; \
-    char buffer[TEST_BUFFER_SIZE_STD]; \
-    cat_snrand(CAT_STRS(buffer) - 1); \
-    buffer[TEST_BUFFER_SIZE_STD - 1] = '\0'; \
- \
-    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_STD##TYPE), nullptr); \
-    DEFER(cat_socket_close(&client)); \
-    ASSERT_TRUE(cat_socket_is_available(&client)); \
+static inline void test_tty(int fd)
+{
+    const char* msg;
+    uv_file fh;
+    cat_socket_type_t cat_sock_type;
+    switch(fd){
+        case 0:
+            msg = "stdin is not a tty";
+            fh = STDIN_FILENO;
+            cat_sock_type = CAT_SOCKET_TYPE_STDIN;
+            break;
+        case 1:
+            msg = "stdout is not a tty";
+            fh = STDOUT_FILENO;
+            cat_sock_type = CAT_SOCKET_TYPE_STDOUT;
+            break;
+        case 2:
+            msg = "stderr is not a tty";
+            fh = STDERR_FILENO;
+            cat_sock_type = CAT_SOCKET_TYPE_STDERR;
+            break;
+        default:
+            GTEST_FATAL_FAILURE_("bad file descriptor");
+    }
+    SKIP_IF_(uv_guess_handle(fh) != UV_TTY, msg);
+    cat_socket_t client;
+    char buffer[TEST_BUFFER_SIZE_STD];
+    cat_snrand(CAT_STRS(buffer) - 1);
+    buffer[TEST_BUFFER_SIZE_STD - 1] = '\0';
+
+    ASSERT_NE(cat_socket_create(&client, cat_sock_type), nullptr);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_is_available(&client));
 }
 
-TEST_TTY(in, IN)
-TEST_TTY(out, OUT)
-TEST_TTY(err, ERR)
+TEST(cat_socket, tty_stdin)
+{
+    ASSERT_NO_FATAL_FAILURE(test_tty(0));
+}
+TEST(cat_socket, tty_stdout)
+{
+    ASSERT_NO_FATAL_FAILURE(test_tty(1));
+}
+TEST(cat_socket, tty_stderr)
+{
+    ASSERT_NO_FATAL_FAILURE(test_tty(2));
+}
 
 TEST(cat_socket, dump_all)
 {
