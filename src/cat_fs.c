@@ -515,7 +515,7 @@ typedef struct cat_fs_work_ret_s{
         tb b; \
         tc c; \
     };
-#define CAT_FS_WORK_STRUCT_INIT(name, valname, ...) struct cat_fs_##name##_s valname = {{0}, __VA_ARGS__}
+#define CAT_FS_WORK_STRUCT_INIT(name, valname, ...) struct cat_fs_##name##_s valname = {{{0},{0}}, __VA_ARGS__}
 #define CAT_FS_WORK_CB(name) static void _cat_fs_##name##_cb(struct cat_fs_##name##_s* data)
 #define CAT_FS_WORK_CB_CALL(name) ((void(*)(void*))_cat_fs_##name##_cb)
 
