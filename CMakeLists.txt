@@ -4,13 +4,32 @@ PROJECT(libcat LANGUAGES C)
 cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
 cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
 
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
 include(CheckCCompilerFlag)
 include(GNUInstallDirs)
 include(CTest)
+
+macro(check_add_cflags)
+    check_c_compiler_flag(${ARGV0} ${ARGV2})
+    if(${ARGV2})
+        list(APPEND ${ARGV1} ${ARGV0})
+        set(${ARGV2} BOOL TRUE)
+    else()
+        set(${ARGV2} BOOL FALSE)
+    endif()
+endmacro()
+
+macro(check_add_cflags_global)
+    check_c_compiler_flag(${ARGV0} ${ARGV1})
+    if(${ARGV1})
+        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ARGV0}")
+        set (CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${ARGV0}")
+        set(${ARGV1} BOOL TRUE)
+    else()
+        set(${ARGV1} BOOL FALSE)
+    endif()
+endmacro()
 
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -20,17 +39,11 @@ set(CMAKE_C_STANDARD 90)
 find_package(PkgConfig)
 
 # Qemu Build
-option(QEMU "build for qemu" OFF)
-if(QEMU)
-    add_definitions(-D__QEMU__=1)
-endif()
-
-option(ASAN "Enable AddressSanitizer (ASan)" OFF)
-if(ASAN AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
-  add_definitions(-D__ASAN__=1)
-  set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-  set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-endif()
+# seems libcat is not used in qemu
+#option(QEMU "build for qemu" OFF)
+#if(QEMU)
+#    add_definitions(-D__QEMU__=1)
+#endif()
 
 # Compiler check
 message(STATUS "C Compiler is ${CMAKE_C_COMPILER_ID}")
@@ -39,65 +52,141 @@ string(CONCAT is-msvc $<OR:
     $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
 >)
 
-set(lint-no-unused-parameter $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER}>:-Wno-unused-parameter>)
-set(lint-strict-prototypes $<$<BOOL:${CAT_LINT_STRICT_PROTOTYPES}>:-Wstrict-prototypes>)
-set(lint-extra $<$<BOOL:${CAT_LINT_EXTRA}>:-Wextra>)
-list(APPEND cat_cflags ${lint-strict-prototypes} ${lint-extra} ${lint-default} ${lint-w4})
-list(APPEND cat_cflags ${lint-no-unused-parameter})
+# prepare debug cflags
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(CMAKE_BUILD_TYPE Debug)
+	set(CAT_DEBUG 1)
+    set(CAT_LINT_EXTRA TRUE)
+    list(APPEND cat_defines CAT_DEBUG=1)
+    if(NOT MSVC)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -O0")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -O0")
+        check_add_cflags(-Wextra cat_cflags HAVE_LINT_WEXTRA)
+        check_add_cflags(-Wno-unused-parameter cat_cflags HAVE_LINT_NO_UNUSED_PARAMETER)
+        check_add_cflags(-Wbool-conversion cat_cflags HAVE_LINT_BOOL_CONVERSION)
+        check_add_cflags(-Wignored-qualifiers cat_cflags HAVE_LINT_IGNORED_QUALIFIERS)
+        check_add_cflags(-Wduplicate-enum cat_cflags HAVE_LINT_DUPLICATE_ENUM)
+        check_add_cflags(-Wempty-body cat_cflags HAVE_LINT_EMPTY_BODY)
+        check_add_cflags(-Wenum-compare cat_cflags HAVE_LINT_ENUM_COMPARE)
+        check_add_cflags(-Wformat-security cat_cflags HAVE_LINT_FORMAT_SECURITY)
+        check_add_cflags(-Wheader-guard cat_cflags HAVE_LINT_HEADER_GUARD)
+        check_add_cflags(-Wincompatible-pointer-types-discards-qualifiers cat_cflags HAVE_LINT_INCOMPATIBLE_POINTER_TYPES_DISCARDS_QUALIFIERS)
+        check_add_cflags(-Winit-self cat_cflags HAVE_LINT_INIT_SELF)
+        check_add_cflags(-Wlogical-not-parentheses cat_cflags HAVE_LINT_LOGICAL_NOT_PARENTHESES)
+        check_add_cflags(-Wlogical-op-parentheses cat_cflags HAVE_LINT_LOGICAL_OP_PARENTHESES)
+        check_add_cflags(-Wloop-analysis cat_cflags HAVE_LINT_LOOP_ANALYSIS)
+        check_add_cflags(-Wuninitialized cat_cflags HAVE_LINT_UNINITIALIZED)
+        check_add_cflags(-Wno-missing-field-initializers cat_cflags HAVE_LINT_NO_MISSING_FIELD_INITIALIZERS)
+        check_add_cflags(-Wno-sign-compare cat_cflags HAVE_LINT_NO_SIGN_COMPARE)
+        check_add_cflags(-Wno-unused-const-variable cat_cflags HAVE_LINT_NO_UNUSED_CONST_VARIABLE)
+        check_add_cflags(-Wno-unused-parameter cat_cflags HAVE_LINT_NO_UNUSED_PARAMETER)
+        check_add_cflags(-Wno-variadic-macros cat_cflags HAVE_LINT_NO_VARIADIC_MACROS)
+        check_add_cflags(-Wparentheses cat_cflags HAVE_LINT_PARENTHESES)
+        check_add_cflags(-Wpointer-bool-conversion cat_cflags HAVE_LINT_POINTER_BOOL_CONVERSION)
+        check_add_cflags(-Wsizeof-array-argument cat_cflags HAVE_LINT_SIZEOF_ARRAY_ARGUMENT)
+        check_add_cflags(-Wwrite-strings cat_cflags HAVE_LINT_WRITE_STRINGS)
+        check_add_cflags(-fdiagnostics-show-option cat_cflags HAVE_FDIAGNOSTICS_SHOW_OPTION)
+        check_add_cflags(-fno-omit-frame-pointer cat_cflags HAVE_FNO-OMIT_FRAME_POINTER)
+        check_add_cflags(-fno-optimize-sibling-calls cat_cflags HAVE_FNO_OPTIMIZE_SIBLING_CALLS)
+        check_add_cflags(-fstack-protector cat_cflags HAVE_FSTACK_PROTECTOR)
+    else()
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Od")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Od")
+        # arrange cat's debug warnings
+        check_add_cflags(/W4 cat_cflags HAVE_MSVC_LINT_W4)
+        check_add_cflags(/wd4820 cat_cflags HAVE_MSVC_LINT_wd4820)
+        check_add_cflags(/wd4668 cat_cflags HAVE_MSVC_LINT_wd4668)
+        check_add_cflags(/wd5045 cat_cflags HAVE_MSVC_LINT_wd5045)
+        check_add_cflags(/wd4127 cat_cflags HAVE_MSVC_LINT_wd4127)
+        check_add_cflags(/wd4201 cat_cflags HAVE_MSVC_LINT_wd4201)
+        check_add_cflags(/wd4206 cat_cflags HAVE_MSVC_LINT_wd4206)
+        check_add_cflags(/wd4210 cat_cflags HAVE_MSVC_LINT_wd4210)
+        check_add_cflags(/wd4232 cat_cflags HAVE_MSVC_LINT_wd4232)
+        check_add_cflags(/wd4245 cat_cflags HAVE_MSVC_LINT_wd4245)
+        check_add_cflags(/wd4456 cat_cflags HAVE_MSVC_LINT_wd4456)
+        check_add_cflags(/wd4457 cat_cflags HAVE_MSVC_LINT_wd4457)
+        check_add_cflags(/wd4459 cat_cflags HAVE_MSVC_LINT_wd4459)
+        check_add_cflags(/wd4464 cat_cflags HAVE_MSVC_LINT_wd4464)
+        check_add_cflags(/wd4706 cat_cflags HAVE_MSVC_LINT_wd4706)
+        check_add_cflags(/wd4710 cat_cflags HAVE_MSVC_LINT_wd4710)
+    endif()
+    check_add_cflags(-Wall cat_cflags HAVE_LINT_WALL)
+else()
+    if(MSVC)
+        check_add_cflags(/wd4267 cat_cflags HAVE_MSVC_LINT_wd4267)
+    endif()
+endif()
+
+
+# prepare warning cflags
 if(MSVC)
-    check_c_compiler_flag(/W4 CAT_LINT_W4)
-    check_c_compiler_flag(/wd4100 CAT_LINT_NO_UNUSED_PARAMETER_MSVC)
-    check_c_compiler_flag(/wd4127 CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC)
-    check_c_compiler_flag(/wd4201 CAT_LINT_NO_NONSTANDARD_MSVC)
-    check_c_compiler_flag(/wd4206 CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC)
-    check_c_compiler_flag(/wd4210 CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC)
-    check_c_compiler_flag(/wd4232 CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC)
-    check_c_compiler_flag(/wd4456 CAT_LINT_NO_HIDES_LOCAL)
-    check_c_compiler_flag(/wd4457 CAT_LINT_NO_HIDES_PARAM)
-    check_c_compiler_flag(/wd4459 CAT_LINT_NO_HIDES_GLOBAL)
-    check_c_compiler_flag(/wd4706 CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC)
-    check_c_compiler_flag(/wd4996 CAT_LINT_NO_UNSAFE_MSVC)
+    # arrange uv's warnings
+    check_add_cflags(/W3 uv_cflags HAVE_MSVC_LINT_W3)
+    check_add_cflags(/wd4018 uv_cflags HAVE_MSVC_LINT_wd4018)
+    check_add_cflags(/wd4090 uv_cflags HAVE_MSVC_LINT_wd4090)
+    check_add_cflags(/wd4100 uv_cflags HAVE_MSVC_LINT_wd4100)
+    check_add_cflags(/wd4244 uv_cflags HAVE_MSVC_LINT_wd4244)
+    check_add_cflags(/wd4267 uv_cflags HAVE_MSVC_LINT_wd4267)
+    check_add_cflags(/wd4819 uv_cflags HAVE_MSVC_LINT_wd4819)
+    # arrange global warnings
+    check_add_cflags_global(/wd4996 HAVE_MSVC_LINT_wd4996)
+    check_add_cflags_global(/utf-8 HAVE_MSVC_UTF8)
+    check_add_cflags_global(/we4013 HAVE_MSVC_LINT_we4013)
+else()
+    check_add_cflags(-Wstrict-prototypes cat_cflags HAVE_STRICT_PROTOTYPES)
+    check_add_cflags(-Werror=implicit-function-declaration cat_cflags HAVE_LINT_ERROR_IMPLICIT_FUNCTION_DECLARATION)
+endif()
 
-    check_c_compiler_flag(-Wall CAT_LINT_WALL) # DO NOT use this under MSVC
+# ASan options
+option(ASAN "Enable AddressSanitizer (ASan)" OFF)
+if(ASAN)
+    if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+        message(WARNING "ASan is not supported in release build")
+        message(STATUS "ASan is not enabled")
+    else()
+        # asan cflags needs to be added in global cflags
+        if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+            add_definitions(-D__ASAN__=1)
+            set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+            set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+            set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+            message(STATUS "ASan is enabled by ${CMAKE_C_COMPILER_ID}")
+        elseif(MSVC)
+            # vs donot need linker enable asan cflags
+            check_c_compiler_flag(-fsanitize=address MSVC_HAVE_ASAN_CFLAGS)
+            if(NOT MSVC_HAVE_ASAN_CFLAGS)
+                message(WARNING "Your visual studio donot have a workable asan, use VS 2019 atleast version 16.9 to support it.")
+            else()
+            message(STATUS "ASan is enabled by ${CMAKE_C_COMPILER_ID}")
+                set(cflags
+                    CMAKE_CXX_FLAGS
+                    CMAKE_CXX_FLAGS_DEBUG
+                    CMAKE_CXX_FLAGS_RELWITHDEBINFO
+                    CMAKE_C_FLAGS
+                    CMAKE_C_FLAGS_DEBUG
+                    CMAKE_C_FLAGS_RELWITHDEBINFO)
+                foreach(flag ${cflags})
+                    string(REGEX REPLACE "/M[DT]d{0,1}" "/M\\1d" ${flag} "${${flag}}")
+                    string(REGEX REPLACE "/Z[7iI]" "" ${flag} "${${flag}}")
+                    set(${flag} "${${flag}} -fsanitize=address /MDd /Z7") # todo: MDd -> M(T|D)
+                    # MSVC donot support RTC with ASan
+                    string(REGEX REPLACE "/RTC(su|[1su])" "" ${flag} "${${flag}}")
+                endforeach()
 
-    # TODO: Place these into its own function
-    check_c_compiler_flag(-Wno-unused-parameter CAT_LINT_NO_UNUSED_PARAMETER)
-    check_c_compiler_flag(-Wstrict-prototypes CAT_LINT_STRICT_PROTOTYPES)
-    check_c_compiler_flag(-Wextra CAT_LINT_EXTRA)
-
-    check_c_compiler_flag(/utf-8 CAT_LINT_UTF8_MSVC)
-
-    set(lint-w4 $<$<BOOL:${CAT_LINT_W4}>:/W4>)
-    set(lint-no-unused-parameter-msvc $<$<BOOL:${CAT_LINT_NO_UNUSED_PARAMETER_MSVC}>:/wd4100>)
-    set(lint-no-conditional-constant-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_CONSTANT_MSVC}>:/wd4127>)
-    set(lint-no-nonstandard-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_MSVC}>:/wd4201>)
-    set(lint-no-nonstandard-empty-tu-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC}>:/wd4206>)
-    set(lint-no-nonstandard-file-scope-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC}>:/wd4210>)
-    set(lint-no-nonstandard-nonstatic-dlimport-msvc $<$<BOOL:${CAT_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC}>:/wd4232>)
-    set(lint-no-hides-local-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_LOCAL}>:/wd4456>)
-    set(lint-no-hides-param-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_PARAM}>:/wd4457>)
-    set(lint-no-hides-global-msvc $<$<BOOL:${CAT_LINT_NO_HIDES_GLOBAL}>:/wd4459>)
-    set(lint-no-conditional-assignment-msvc $<$<BOOL:${CAT_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC}>:/wd4706>)
-    set(lint-no-unsafe-msvc $<$<BOOL:${CAT_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
-    # Unfortunately, this one is complicated because MSVC and clang-cl support -Wall
-    # but using it is like calling -Weverything
-    string(CONCAT lint-default $<
-    $<AND:$<BOOL:${CAT_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
-    >)
-    set(lint-utf8-msvc $<$<BOOL:${CAT_LINT_UTF8_MSVC}>:/utf-8>)
-    set(cat_msvc_cflags ${lint-utf8-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-unused-parameter-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-conditional-constant-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-empty-tu-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-file-scope-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-nonstandard-nonstatic-dlimport-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-hides-local-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-hides-param-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-hides-global-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-conditional-assignment-msvc})
-    list(APPEND cat_msvc_cflags ${lint-no-unsafe-msvc})
-    list(APPEND cat_cflags ${cat_msvc_cflags})
+                set(ldflags
+                    CMAKE_EXE_LINKER_FLAGS
+                    CMAKE_EXE_LINKER_FLAGS_DEBUG
+                    CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO)
+                foreach(flag ${ldflags})
+                    # disable incremental build option
+                    string(REGEX REPLACE "/INCREMENTAL(\\:YES)*" "/INCREMENTAL:NO" ${flag} "${${flag}}")
+                    set(${flag} "${${flag}} /debug")
+                endforeach()
+            endif()
+        endif()
+    endif()
+else()
+    message(STATUS "ASan is not enabled")
 endif()
 
 # ========== ASM ===========
@@ -130,17 +219,6 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 # endif()
 
 set(cat_defines HAVE_LIBCAT=1)
-
-if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
-	set(CMAKE_BUILD_TYPE Debug)
-	set(CAT_DEBUG 1)
-    list(APPEND cat_defines CAT_DEBUG=1)
-    if(NOT MSVC)
-        list(APPEND cat_cflags -g3 -O0)
-    else()
-        list(APPEND cat_cflags /Od)
-    endif()
-endif()
 
 set(cat_includes include)
 
@@ -498,14 +576,13 @@ if (1)
 
     # TODO: include => public, src => private
     set(uv_includes ${uv_dir}/include ${uv_dir}/src)
-    if(MSVC)
-        list(APPEND uv_cflags ${cat_msvc_cflags})
-        # things that dump warnings in libuv
-        # thus we donot maintaince libuv here, we disable them.
-        list(APPEND uv_cflags /wd4090 /wd4244 /wd4245 /wd4267 /wd4701 /wd4702)
-    endif()
 
     add_library(cat_uv OBJECT ${uv_sources})
+    
+    if(MSVC)
+        set_property(TARGET cat_uv PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
+
     list(APPEND cat_defines ${uv_defines})
     target_compile_definitions(cat_uv PRIVATE ${cat_defines})
     target_compile_options(cat_uv PRIVATE ${uv_cflags})
@@ -577,6 +654,9 @@ if (1)
         ${llhttp_dir}/src/http.c
         ${llhttp_dir}/src/llhttp.c
     )
+    if(MSVC)
+        set_property(TARGET cat_llhttp PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
     list(APPEND cat_includes ${llhttp_dir}/include)
     target_include_directories(cat_llhttp PRIVATE ${llhttp_dir}/include)
 endif()
@@ -676,9 +756,14 @@ if (LIBCAT_BUILD_TESTS)
     if(NOT MSVC)
         set(cat_cxxflags ${cat_cflags} -std=c++11 -Wall)
     else()
-        set(cat_cxxflags ${cat_cflags} /std:c++latest /W3 /EHsc)
+        set(cat_cxxflags ${cat_cflags} /std:c++latest /EHsc)
+        #check_add_cflags(/wd5039 cat_cxxflags HAVE_MSVC_LINT_wd5039)
+        list(REMOVE_ITEM cat_cxxflags /W4)
+        list(REMOVE_ITEM cat_cxxflags -Wall)
     endif()
-    list(REMOVE_ITEM cat_cxxflags ${lint-strict-prototypes})
+    list(REMOVE_ITEM cat_cxxflags -Werror=implicit-function-declaration)
+    list(REMOVE_ITEM cat_cxxflags -Wstrict-prototypes)
+    
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
 	set(cat_test_sources
         tests/test.cc
@@ -709,6 +794,9 @@ if (LIBCAT_BUILD_TESTS)
         list(APPEND cat_test_sources tests/test_cat_curl.cc)
     endif()
     add_executable(cat_tests ${cat_test_sources})
+    if(MSVC)
+        set_property(TARGET cat_tests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
     target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
@@ -722,11 +810,15 @@ else()
     message(STATUS "Tests will not be built")
 endif()
 
-message(STATUS "summary of build options:
+message(STATUS "Summary of build options:
     Install prefix:  ${CMAKE_INSTALL_PREFIX}
     Target system:   ${CMAKE_SYSTEM_NAME}
     Compiler:
-      C compiler:    ${CMAKE_C_COMPILER}
-      CFLAGS:        ${CMAKE_C_FLAGS_${_build_type}} ${CMAKE_C_FLAGS}
+      C Compiler:    ${CMAKE_C_COMPILER}
+      C++ Compiler:  ${CMAKE_CXX_COMPILER}
+      CFLAGS:        ${CMAKE_C_FLAGS}
+      CXXFLAGS:      ${CMAKE_CXX_FLAGS}
+      cat CFLAGS:    ${cat_cflags}
+      cat CXXFLAGS:  ${cat_cxxflags}
     Build type:      ${CMAKE_BUILD_TYPE}
 ")
