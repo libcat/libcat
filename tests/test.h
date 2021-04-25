@@ -97,7 +97,11 @@ namespace testing
 
     static inline bool is_valgrind(void)
     {
+#if defined(__SANITIZE_ADDRESS__) || ( defined(__has_feature) && __has_feature(address_sanitizer) )
+        return true;
+#else
         return cat_env_is_true("USE_VALGRIND", cat_false);
+#endif
     }
 
     static inline bool is_offline(void)
