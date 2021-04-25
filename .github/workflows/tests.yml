@@ -58,23 +58,31 @@ jobs:
         shell: cmd
         run: |
           @ECHO OFF
+          ECHO ::group::Start MSVC environment
+          FOR /F "USEBACKQ DELIMS=" %%i in (`vswhere.exe -prerelease -latest -property installationPath`) do (
+            IF EXIST "%%i\VC\Auxiliary\Build\vcvars64.bat" (
+              CALL "%%i\VC\Auxiliary\Build\vcvars64.bat"
+            ) ELSE ( EXIT /B 1 )
+          )
+          ECHO ::endgroup::
           ECHO ::group::Create build dir
           MKDIR build && CD build || goto error
           ECHO ::endgroup::
           ECHO ::group::Make cmake cache
           cmake .. ^
-            -DCMAKE_CXX_FLAGS=/std:c++latest ^
+            -DASAN=ON ^
+            -DCMAKE_C_FLAGS=/WX ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build libcat
-          cmake --build . -j --target cat_tests -- -nologo || goto error
+          cmake --build . -j --target cat_tests -- -nologo -p:Configuration=${{ matrix.build-type }} || goto error
           ECHO ::endgroup::
           ECHO ::group::Test libcat
           REM TODO: make sure this path
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
-          Debug\cat_tests.exe --gtest_color=yes || goto error
+          ${{ matrix.build-type }}\cat_tests.exe --gtest_color=yes || goto error
           ECHO ::endgroup::
           EXIT /b 0
           
@@ -121,10 +129,9 @@ jobs:
           echo "::endgroup::"
           echo "::group::Make cmake cache"
           cmake .. \
-            -DCMAKE_CXX_FLAGS="-std=c++11" \
+            -DASAN=ON \
             ${{ (runner.os == 'Linux' && '' != secrets.CODECOV_TOKEN) && '-DCODE_COVERAGE=ON' || '' }} \
-            -DCMAKE_C_FLAGS_DEBUG="-Werror" \
-            -DCMAKE_CXX_FLAGS_DEBUG="-Werror" || exit 1
+            -DCMAKE_C_FLAGS="-Werror" || exit 1
           echo "::endgroup::"
           echo "::group::Build libcat"
           cmake --build . -j --target cat_tests || exit 1
