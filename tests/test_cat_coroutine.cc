@@ -267,24 +267,6 @@ TEST(cat_coroutine, init)
     ASSERT_EQ(CAT_COROUTINE_STATE_INIT, coroutine->state);
 }
 
-TEST(cat_coroutine, close_null)
-{
-    /* we can't pass nullptr */
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_close(nullptr), "");
-}
-
-TEST(cat_coroutine, close_double_close)
-{
-    cat_coroutine_t *coroutine;
-
-    coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        return nullptr;
-    });
-
-    cat_coroutine_close(coroutine);
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_close(coroutine), "");
-}
-
 TEST(cat_coroutine, get_id_main)
 {
     cat_coroutine_id_t id;
@@ -478,14 +460,6 @@ TEST(cat_coroutine, register_resume)
 
     /* register origin resume function */
     cat_coroutine_register_resume(origin_resume);
-}
-
-TEST(cat_coroutine, register_main_nullptr)
-{
-    cat_coroutine_t *new_main = nullptr;
-
-    /* we can't register nullptr main coroutine */
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_register_main(new_main), "");
 }
 
 TEST(cat_coroutine, register_main)
