@@ -18,15 +18,17 @@
 
 #include "test.h"
 
-#ifdef CAT_OS_LINUX
-TEST(cat_error, update_last_error_null)
+TEST(cat_error, update_last_error)
 {
-    testing::internal::CaptureStderr();
+    cat_update_last_error(CAT_EAGAIN, "hello %s", "world");
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+    ASSERT_EQ(strcmp(cat_get_last_error_message(), "hello world"), 0);
     cat_update_last_error(CAT_UNKNOWN, nullptr);
-    std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "Sprintf last error message failed" CAT_EOL);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_UNKNOWN);
+    cat_update_last_error(CAT_EBADF, nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(strcmp(cat_get_last_error_message(), cat_strerror(CAT_EBADF)), 0);
 }
-#endif
 
 TEST(cat_error, strerror)
 {
