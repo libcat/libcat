@@ -2160,7 +2160,9 @@ static cat_bool_t cat_socket_internal_write_raw(
             cat_socket_udp_send_callback
         );
     }
-    if (likely(error == 0)) {
+    if (unlikely(error != 0)) {
+        cat_free(request);
+    } else {
         request->error = CAT_ECANCELED;
         request->u.coroutine = CAT_COROUTINE_G(current);
         cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
