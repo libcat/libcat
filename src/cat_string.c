@@ -20,9 +20,9 @@
 
 /* Searches a string based on the pointer to the beginning and end of the string for a given character.
  * Returns a pointer to the first match of that character. */
-CAT_API const unsigned char *cat_strlchr(const unsigned char *p, const unsigned char *last, unsigned char c)
+CAT_API const char *cat_strlchr(const char *p, const char *last, char c)
 {
-    while (p < last) {
+    while ((unsigned char *) p < (unsigned char *) last) {
         if (*p == c) {
             return p;
         }

@@ -70,3 +70,15 @@ TEST(cat_string, snrand_null_buffer)
     ASSERT_NE(nullptr, out);
     cat_free(out);
 }
+
+TEST(cat_string, strlchr)
+{
+    const char p[] = "foobarchar";
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'f'), p);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'o'), p + 1);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'b'), p + 3);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'a'), p + 4);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'r'), p + 5);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'c'), p + 6);
+    ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'h'), p + 7);
+}
