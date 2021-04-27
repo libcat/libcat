@@ -85,7 +85,7 @@ jobs:
           ${{ matrix.build-type }}\cat_tests.exe --gtest_color=yes || goto error
           ECHO ::endgroup::
           EXIT /b 0
-          
+          REM error condition
           :error
           EXIT /b %errorlevel%
 
@@ -113,7 +113,7 @@ jobs:
             brew install googletest ||
             brew install googletest
           fi
-      
+
       - name: Checkout libcat sources
         uses: actions/checkout@v2
         with:
