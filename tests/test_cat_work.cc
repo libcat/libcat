@@ -53,3 +53,15 @@ TEST(cat_work, base)
     }
     ASSERT_TRUE(done);
 }
+
+TEST(cat_work, cancel)
+{
+    cat_coroutine_t *coroutine = co([] {
+        bool ret = work(CAT_WORK_KIND_SLOW_IO, [] {
+            usleep(1000); // 1ms
+        }, TEST_IO_TIMEOUT);
+        ASSERT_FALSE(ret);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    });
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+}

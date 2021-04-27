@@ -80,12 +80,7 @@ CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, 
         return cat_false;
     }
     if (unlikely(context->status != 0)) {
-        if (context->status == CAT_ECANCELED) {
-            cat_update_last_error(CAT_ECANCELED, "Work has been canceled");
-            (void) uv_cancel(&context->request.req);
-        } else {
-            cat_update_last_error_with_reason(context->status, "Work failed");
-        }
+        cat_update_last_error_with_reason(context->status, "Work failed");
         return cat_false;
     }
 
