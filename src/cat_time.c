@@ -49,32 +49,32 @@ CAT_API cat_msec_t cat_time_msec_cached(void)
 
 CAT_API char *cat_time_format_msec(cat_msec_t msec)
 {
-#define DAY    (24 * HOUR)
-#define HOUR   (60 * MINUTE)
-#define MINUTE (60 * SECOND)
-#define SECOND 1000
+#define DAY    (24ULL * HOUR)
+#define HOUR   (60ULL * MINUTE)
+#define MINUTE (60ULL * SECOND)
+#define SECOND 1000ULL
     cat_msec_t rmsec = msec;
-    int day, hour, minute, second;
+    uint64_t day, hour, minute, second;
 
-    day = (int) (msec / DAY);
+    day = (uint64_t) (msec / DAY);
     rmsec -= (day * DAY);
-    hour = (int) (rmsec / HOUR);
+    hour = (uint64_t) (rmsec / HOUR);
     rmsec -= (hour * HOUR);
-    minute = (int) (rmsec / MINUTE);
+    minute = (uint64_t) (rmsec / MINUTE);
     rmsec -= (minute * MINUTE);
-    second = (int) (rmsec / SECOND);
+    second = (uint64_t) (rmsec / SECOND);
     rmsec -= (second * SECOND);
 
     if (day > 0) {
-        return cat_sprintf("%dd%dh%dm%ds%dms", day, hour, minute, second, (int) rmsec);
+        return cat_sprintf("%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s%" PRIu64 "ms", day, hour, minute, second, (uint64_t) rmsec);
     } else if (hour > 0) {
-        return cat_sprintf("%dh%dm%ds%dms", hour, minute, second, (int) rmsec);
+        return cat_sprintf("%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s%" PRIu64 "ms", hour, minute, second, (uint64_t) rmsec);
     } else if (minute > 0) {
-        return cat_sprintf("%dm%ds%dms", minute, second, (int) rmsec);
+        return cat_sprintf("%" PRIu64 "m%" PRIu64 "s%" PRIu64 "ms", minute, second, (uint64_t) rmsec);
     } else if (second > 0) {
-        return cat_sprintf("%ds%dms", second, (int) rmsec);
+        return cat_sprintf("%" PRIu64 "s%" PRIu64 "ms", second, (uint64_t) rmsec);
     } else {
-        return cat_sprintf("%dms", (int) rmsec);
+        return cat_sprintf("%" PRIu64 "ms", (uint64_t) rmsec);
     }
 #undef DAY
 #undef HOUR
@@ -161,7 +161,7 @@ CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout)
 CAT_API cat_ret_t cat_time_delay(cat_timeout_t timeout)
 {
     if (timeout < 0) {
-        return cat_coroutine_yield(NULL, NULL) ? CAT_RET_OK : CAT_RET_ERROR;
+        cat_coroutine_yield(NULL, NULL);
     } else {
         cat_timer_t *timer;
 
@@ -173,18 +173,14 @@ CAT_API cat_ret_t cat_time_delay(cat_timeout_t timeout)
         if (timer->coroutine == NULL) {
             return CAT_RET_OK;
         }
-
-        return CAT_RET_NONE;
     }
+
+    return CAT_RET_NONE;
 }
 
 CAT_API unsigned int cat_time_sleep(unsigned int seconds)
 {
-    cat_msec_t ret = cat_time_msleep((cat_msec_t) (seconds * 1000)) / 1000;
-    if (unlikely(ret < 0)) {
-        return seconds;
-    }
-    return (unsigned int) ret;
+    return (unsigned int) cat_time_msleep((cat_msec_t) (seconds * 1000)) / 1000;
 }
 
 CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
@@ -194,7 +190,7 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
     timer = cat_timer_wait(msec);
 
     if (unlikely(timer == NULL)) {
-        return -1;
+        return msec;
     }
 
     if (unlikely(timer->coroutine != NULL)) {
@@ -212,10 +208,9 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
     return 0;
 }
 
-CAT_API int cat_time_usleep(uint64_t microseconds)
+CAT_API int cat_time_usleep(cat_usec_t microseconds)
 {
-    cat_msec_t msec = (cat_msec_t) (((double) microseconds) / 1000);
-    return likely(cat_time_msleep(msec) == 0) ? 0 : -1;
+    return cat_time_msleep((cat_msec_t) (((double) microseconds) / 1000)) == 0 ? 0 : -1;
 }
 
 CAT_API int cat_time_nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
@@ -224,16 +219,13 @@ CAT_API int cat_time_nanosleep(const struct timespec *rqtp, struct timespec *rmt
         cat_update_last_error(CAT_EINVAL, "The value in the tv_nsec field was not in the range 0 to 999999999 or tv_sec was negative");
         return -1;
     } else {
-        uint64_t msec = (uint64_t) (rqtp->tv_sec * 1000 + (((double) rqtp->tv_nsec) / (1000 * 1000)));
-        if (unlikely(msec > INT64_MAX)) {
-            msec = INT64_MAX;
-        }
+        cat_msec_t msec = (uint64_t) (rqtp->tv_sec * 1000 + (((double) rqtp->tv_nsec) / (1000 * 1000)));
         cat_msec_t rmsec = cat_time_msleep(msec);
         if (rmsec > 0 && rmtp) {
-            rmtp->tv_sec = rmsec - (rmsec % 1000);
+            rmtp->tv_sec = (rmsec - (rmsec % 1000)) / 1000;
             rmtp->tv_nsec = (rmsec % 1000) * 1000 * 1000;
         }
-        return likely(rmsec == 0) ? 0 : -1;
+        return rmsec == 0 ? 0 : -1;
     }
 }
 
