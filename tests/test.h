@@ -87,6 +87,26 @@
 
 #define DEFER(X) std::shared_ptr<void> UNIQUE_NAME(defer)(nullptr, [&](...){ X; })
 
+/* test dependency management */
+
+#define TEST_REQUIREMENT_NAME(test_suite_name, test_name) \
+        _test_##test_suite_name##_##test_name
+
+#define TEST_REQUIREMENT(test_suite_name, test_name) \
+static void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void); \
+TEST(test_suite_name, test_name) \
+{ \
+    TEST_REQUIREMENT_NAME(test_suite_name, test_name)(); \
+} \
+static void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void)
+
+#define TEST_REQUIRE(condition, test_suite_name, test_name) do { \
+    if (!(condition)) { \
+        TEST_REQUIREMENT_NAME(test_suite_name, test_name)(); \
+        SKIP_IF_(!(condition), #test_suite_name "." #test_name " is not available"); \
+    } \
+} while (0)
+
 /* cover all test source files */
 
 using namespace testing;

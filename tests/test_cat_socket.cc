@@ -657,7 +657,7 @@ char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 size_t echo_tcp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
 int echo_tcp_server_port;
 
-TEST(cat_socket, echo_tcp_server)
+TEST_REQUIREMENT(cat_socket, echo_tcp_server)
 {
     co([] {
         cat_socket_t server;
@@ -715,7 +715,7 @@ char echo_udp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 size_t echo_udp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
 int echo_udp_server_port;
 
-TEST(cat_socket, echo_udp_server)
+TEST_REQUIREMENT(cat_socket, echo_udp_server)
 {
     co([] {
         cat_socket_t server;
@@ -732,11 +732,11 @@ TEST(cat_socket, echo_udp_server)
 
         while (true) {
             char read_buffer[TEST_BUFFER_SIZE_STD];
-            cat_sockaddr_storage_t address;
+            cat_sockaddr_union_t address;
             cat_socklen_t address_length = sizeof(address);
             ssize_t read_n = cat_socket_recvfrom(
                 &server, CAT_STRS(read_buffer),
-                (cat_sockaddr_t *) &address,
+                &address.common,
                 &address_length
             );
             if (read_n <= 0) {
@@ -744,7 +744,7 @@ TEST(cat_socket, echo_udp_server)
             }
             ASSERT_TRUE(cat_socket_sendto(
                 &server, read_buffer, read_n,
-                (cat_sockaddr_t *) &address, address_length
+                &address.common, address_length
             ));
             continue;
         }
@@ -759,7 +759,7 @@ TEST(cat_socket, echo_udp_server)
 
 TEST(cat_socket, echo_tcp_client)
 {
-    SKIP_IF(echo_tcp_server == nullptr);
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t echo_client;
     size_t n;
     ssize_t ret;
@@ -824,9 +824,8 @@ TEST(cat_socket, echo_tcp_client)
 
 TEST(cat_socket, echo_udp_client)
 {
-    SKIP_IF(echo_udp_server == nullptr);
+    TEST_REQUIRE(echo_udp_server != nullptr, cat_socket, echo_udp_server);
     cat_socket_t echo_client;
-    size_t n;
     ssize_t ret;
 
     ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_UDP), nullptr);
@@ -1067,7 +1066,7 @@ TEST(cat_socket, cancel_connect)
 
 TEST(cat_socket, connreset)
 {
-    SKIP_IF(echo_tcp_server == nullptr);
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t client;
     char buffer[1];
     ssize_t n;
@@ -1085,7 +1084,7 @@ TEST(cat_socket, connreset)
 
 TEST(cat_socket, timeout)
 {
-    SKIP_IF(echo_tcp_server == nullptr);
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t client;
     char buffer[1];
     ssize_t n;
