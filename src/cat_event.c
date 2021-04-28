@@ -52,6 +52,11 @@ CAT_API cat_bool_t cat_event_module_shutdown(void)
 
     if (unlikely(error != 0)) {
         cat_warn_with_reason(EVENT, error, "Event loop close failed");
+#ifdef CAT_DEBUG
+        if (error == CAT_EBUSY) {
+            uv_print_all_handles(cat_event_loop, stderr);
+        }
+#endif
         return cat_false;
     }
 
