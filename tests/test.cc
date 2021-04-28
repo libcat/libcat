@@ -71,6 +71,7 @@ namespace testing
                 uv_sem_post(context->sem); // notify
                 function();
             }, &context, timeout);
+            done = true;
             if (wait) {
                 cat_coroutine_resume(waiter, nullptr, nullptr);
             }

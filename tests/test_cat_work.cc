@@ -54,6 +54,14 @@ TEST(cat_work, base)
     ASSERT_TRUE(done);
 }
 
+TEST(cat_work, timeout)
+{
+    ASSERT_FALSE(work(CAT_WORK_KIND_SLOW_IO, [] {
+        usleep(10 * 1000);
+    }, 1));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+}
+
 TEST(cat_work, cancel)
 {
     cat_coroutine_t *coroutine = co([] {
