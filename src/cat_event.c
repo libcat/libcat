@@ -116,6 +116,9 @@ CAT_API void cat_event_schedule(void)
 {
     uv_loop_t *loop = CAT_EVENT_G(loop);
 
+    /* do not forget to call it first */
+    cat_event_do_defer_tasks();
+
     while (1) {
         cat_bool_t alive;
 
