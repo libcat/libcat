@@ -52,6 +52,8 @@ string(CONCAT is-msvc $<OR:
     $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
 >)
 
+set(cat_defines "")
+
 # prepare debug cflags
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_BUILD_TYPE Debug)
@@ -218,7 +220,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 # 	set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
 # endif()
 
-set(cat_defines HAVE_LIBCAT=1)
+list(APPEND cat_defines HAVE_LIBCAT=1)
 
 set(cat_includes include)
 
@@ -578,7 +580,7 @@ if (1)
     set(uv_includes ${uv_dir}/include ${uv_dir}/src)
 
     add_library(cat_uv OBJECT ${uv_sources})
-    
+
     if(MSVC)
         set_property(TARGET cat_uv PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     endif()
@@ -763,7 +765,7 @@ if (LIBCAT_BUILD_TESTS)
     endif()
     list(REMOVE_ITEM cat_cxxflags -Werror=implicit-function-declaration)
     list(REMOVE_ITEM cat_cxxflags -Wstrict-prototypes)
-    
+
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
 	set(cat_test_sources
         tests/test.cc
