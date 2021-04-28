@@ -19,6 +19,8 @@
 
 #include "test.h"
 
+#include <list>
+
 namespace testing
 {
     cat_timeout_t CONFIG_IO_TIMEOUT = (!is_valgrind() ? 30 : 60) * 1000;
@@ -87,6 +89,20 @@ namespace testing
         uv_sem_destroy(&sem);
 
         return ret;
+    }
+
+    static std::list<std::function<void(void)>> shutdown_functions;
+
+    void register_shutdown_function(std::function<void(void)> function)
+    {
+        shutdown_functions.push_back(function);
+    }
+
+    static void call_shutdown_functions(void)
+    {
+        for (auto const& f : shutdown_functions) {
+            f();
+        }
     }
 }
 
@@ -166,21 +182,21 @@ public:
         /* TMP_PATH */
         char *host = cat_env_get("TEST_TMP_PATH");
 #ifdef CAT_OS_WIN
-        if(NULL == host || '\0' == host[0]){
-            if(NULL != host && '\0' == host[0]){
+        if (nullptr == host || '\0' == host[0]) {
+            if (nullptr != host && '\0' == host[0]) {
                 cat_free(host);
             }
             host = cat_env_get("TMP");
         }
-        if(NULL == host || '\0' == host[0]){
-            if(NULL != host && '\0' == host[0]){
+        if (nullptr == host || '\0' == host[0]) {
+            if (nullptr != host && '\0' == host[0]) {
                 cat_free(host);
             }
             host = cat_env_get("TEMP");
         }
 #endif
-        if(NULL != host){
-            if('\0' != host[0]){
+        if (nullptr != host) {
+            if ('\0' != host[0]) {
                 testing::CONFIG_TMP_PATH = host;
             }
             cat_free(host);
@@ -190,6 +206,8 @@ public:
 
     virtual void TearDown()
     {
+        call_shutdown_functions();
+
         ASSERT_TRUE(cat_stop());
         ASSERT_EQ(cat_coroutine_get_count() , 1);
 
