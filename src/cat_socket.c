@@ -2971,7 +2971,7 @@ static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
     int sock_port, peer_port;
 
     // this convert makes MSVC happy (C4061)
-    switch ((int)handle->type) {
+    switch ((int) handle->type) {
         case UV_TCP:
             isocket = cat_container_of(handle, cat_socket_internal_t, u.tcp);
             type_name = "TCP";
@@ -3016,4 +3016,42 @@ static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
 CAT_API void cat_socket_dump_all(void)
 {
     uv_walk(cat_event_loop, cat_socket_dump_callback, NULL);
+}
+
+static void cat_socket_close_by_handle_callback(uv_handle_t* handle, void* arg)
+{
+    (void) arg;
+
+    cat_socket_t *socket;
+    cat_socket_internal_t *isocket;
+
+    // this convert makes MSVC happy (C4061)
+    switch ((int) handle->type) {
+        case UV_TCP:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.tcp);
+            break;
+        case UV_NAMED_PIPE:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.pipe);
+            break;
+        case UV_TTY:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.tty);
+            break;
+        case UV_UDP:
+            isocket = cat_container_of(handle, cat_socket_internal_t, u.udp);
+            break;
+        default:
+            return;
+    }
+
+    socket = isocket->u.socket;
+    if (socket == NULL) {
+        return;
+    }
+
+    cat_socket_close(socket);
+}
+
+CAT_API void cat_socket_close_all(void)
+{
+    uv_walk(cat_event_loop, cat_socket_close_by_handle_callback, NULL);
 }
