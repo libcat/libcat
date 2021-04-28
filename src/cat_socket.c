@@ -773,7 +773,9 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     uv_close(&isocket->u.handle, NULL);
     _error:
     cat_free(isocket);
+#ifndef CAT_DO_NOT_OPTIMIZE
     _pre_error:
+#endif
     cat_update_last_error_with_reason(error, "Socket init with type %s failed", cat_socket_type_name(type));
     _syscall_error:
 
