@@ -28,3 +28,95 @@ TEST(cat_event, defer)
     cat_time_sleep(0);
     ASSERT_TRUE(done);
 }
+
+TEST(cat_event, wait)
+{
+    bool done = false;
+    co([&] {
+        ASSERT_TRUE(cat_time_delay(1));
+        done = true;
+    });
+    cat_event_wait();
+    ASSERT_TRUE(done);
+}
+
+#ifdef CAT_OS_UNIX_LIKE
+
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+TEST(cat_event, fork)
+{
+    cat_socket_t server;
+    cat_socket_t dummy, dummy_peer;
+    int port;
+    char buffer[TEST_BUFFER_SIZE_STD];
+    ssize_t nread;
+
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_HOST), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, 1));
+    port = cat_socket_get_sock_port(&server);
+    ASSERT_GT(port, 0);
+
+    // dummy should be closed in sub-process
+    ASSERT_EQ(cat_socket_create(&dummy, CAT_SOCKET_TYPE_TCP), &dummy);
+    DEFER(cat_socket_close(&dummy));
+    ASSERT_TRUE(cat_socket_connect(&dummy, CAT_STRL(TEST_LISTEN_HOST), port));
+    ASSERT_EQ(cat_socket_accept_ex(&server, &dummy_peer, TEST_IO_TIMEOUT), &dummy_peer);
+    ASSERT_TRUE(cat_socket_send(&dummy_peer, CAT_STRS("PING")));
+    DEFER(cat_socket_close(&dummy_peer));
+
+    pid_t pid = fork();
+    SKIP_IF_(pid < 0, "Fork failed");
+    if (pid > 0) {
+        cat_msec_t s = cat_time_msec();
+        cat_socket_t client;
+        ASSERT_EQ(cat_socket_accept_ex(&server, &client, TEST_IO_TIMEOUT), &client);
+        DEFER(cat_socket_close(&client));
+        ASSERT_GT(nread = cat_socket_recv(&client, CAT_STRS(buffer)), 0);
+        ASSERT_EQ(std::string(buffer, nread - 1), "Forked\n");
+        int wstatus;
+        pid_t dead_pid;
+        dead_pid = waitpid(pid, &wstatus, 0);
+        ASSERT_EQ(dead_pid, pid);
+        ASSERT_EQ(WIFEXITED(wstatus), 1);
+        ASSERT_EQ(WEXITSTATUS(wstatus), 0);
+        s = cat_time_msec() - s;
+        ASSERT_GE(s, 5);
+    } else if (pid == 0) {
+        cat_event_fork();
+        if ((nread = cat_socket_recv(&dummy, CAT_STRS(buffer))) <= 0) {
+            fprintf(stderr, "dummy recv failed\n");
+            _exit(1);
+        }
+        if (std::string(buffer, nread - 1) != "PING") {
+            fprintf(stderr, "dummy recv bad data\n");
+            _exit(1);
+        }
+        if (cat_time_delay(10) != CAT_RET_OK) {
+            fprintf(stderr, "time delay failed\n");
+            _exit(1);
+        }
+        cat_socket_t client;
+        if (cat_socket_create(&client, CAT_SOCKET_TYPE_TCP) != &client) {
+            fprintf(stderr, "socket create failed\n");
+            _exit(1);
+        }
+        DEFER(cat_socket_close(&client));
+        if (!cat_socket_connect(&client, CAT_STRL(TEST_LISTEN_HOST), port)) {
+            fprintf(stderr, "socket connect failed\n");
+            _exit(1);
+        }
+        if (!cat_socket_send(&client, CAT_STRS("Forked\n"))) {
+            fprintf(stderr, "socket send failed\n");
+            _exit(1);
+        }
+        _exit(0);
+    } else {
+        CAT_NEVER_HERE("Should be skipped");
+    }
+}
+#endif
