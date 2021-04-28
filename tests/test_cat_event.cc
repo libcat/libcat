@@ -57,7 +57,7 @@ TEST(cat_event, fork)
     ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), &server);
     DEFER(cat_socket_close(&server));
     ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_HOST), 0));
-    ASSERT_TRUE(cat_socket_listen(&server, 1));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
     port = cat_socket_get_sock_port(&server);
     ASSERT_GT(port, 0);
 
@@ -88,12 +88,9 @@ TEST(cat_event, fork)
         ASSERT_GE(s, 5);
     } else if (pid == 0) {
         cat_event_fork();
-        if ((nread = cat_socket_recv(&dummy, CAT_STRS(buffer))) <= 0) {
-            fprintf(stderr, "dummy recv failed\n");
-            _exit(1);
-        }
-        if (std::string(buffer, nread - 1) != "PING") {
-            fprintf(stderr, "dummy recv bad data\n");
+        cat_socket_close_all();
+        if (cat_socket_check_liveness(&dummy)) {
+            fprintf(stderr, "dummy socket should be closed\n");
             _exit(1);
         }
         if (cat_time_delay(10) != CAT_RET_OK) {

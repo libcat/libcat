@@ -92,20 +92,22 @@
 #define TEST_REQUIREMENT_NAME(test_suite_name, test_name) \
         _test_##test_suite_name##_##test_name
 
+#define TEST_REQUIREMENT_DTOR_NAME(test_suite_name, test_name) \
+        _test_##test_suite_name##_##test_name##_dtor
+
 #define TEST_REQUIREMENT(test_suite_name, test_name) \
-static void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void); \
-TEST(test_suite_name, test_name) \
-{ \
-    TEST_REQUIREMENT_NAME(test_suite_name, test_name)(); \
-} \
+TEST_REQUIREMENT_DTOR(test_suite_name, test_name); \
 static void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void)
 
-#define TEST_REQUIRE(condition, test_suite_name, test_name) do { \
+#define TEST_REQUIREMENT_DTOR(test_suite_name, test_name) \
+static void TEST_REQUIREMENT_DTOR_NAME(test_suite_name, test_name)(void)
+
+#define TEST_REQUIRE(condition, test_suite_name, test_name) \
     if (!(condition)) { \
         TEST_REQUIREMENT_NAME(test_suite_name, test_name)(); \
         SKIP_IF_(!(condition), #test_suite_name "." #test_name " is not available"); \
     } \
-} while (0)
+    DEFER(TEST_REQUIREMENT_DTOR_NAME(test_suite_name, test_name)())
 
 /* cover all test source files */
 

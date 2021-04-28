@@ -654,7 +654,7 @@ TEST(cat_socket, set_tcp_accept_balance)
 
 cat_coroutine_t *echo_tcp_server;
 char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
-size_t echo_tcp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
+size_t echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip);
 int echo_tcp_server_port;
 
 TEST_REQUIREMENT(cat_socket, echo_tcp_server)
@@ -667,7 +667,9 @@ TEST_REQUIREMENT(cat_socket, echo_tcp_server)
         ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
         ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
         ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_tcp_server_ip, &echo_tcp_server_ip_length));
+        DEFER(echo_tcp_server_ip[0] = '\0'; echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip));
         ASSERT_GT(echo_tcp_server_port = cat_socket_get_sock_port(&server), 0);
+        DEFER(echo_tcp_server_port = 0);
 
         echo_tcp_server = cat_coroutine_get_current();
         DEFER(echo_tcp_server = nullptr);
@@ -703,11 +705,13 @@ TEST_REQUIREMENT(cat_socket, echo_tcp_server)
         }
     });
     ASSERT_NE(echo_tcp_server, nullptr);
-    register_shutdown_function([] {
-        ASSERT_NE(echo_tcp_server, nullptr);
-        cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
-        ASSERT_EQ(echo_tcp_server, nullptr);
-    });
+}
+
+TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server)
+{
+    ASSERT_NE(echo_tcp_server, nullptr);
+    cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
+    ASSERT_EQ(echo_tcp_server, nullptr);
 }
 
 cat_coroutine_t *echo_udp_server;
@@ -724,7 +728,9 @@ TEST_REQUIREMENT(cat_socket, echo_udp_server)
         DEFER(cat_socket_close(&server));
         ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
         ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_udp_server_ip, &echo_udp_server_ip_length));
+        DEFER(echo_udp_server_ip[0] = '\0'; echo_udp_server_ip_length = sizeof(echo_udp_server_ip));
         ASSERT_GT(echo_udp_server_port = cat_socket_get_sock_port(&server), 0);
+        DEFER(echo_udp_server_port = 0);
 
         echo_udp_server = cat_coroutine_get_current();
         DEFER(echo_udp_server = nullptr;);
@@ -750,11 +756,13 @@ TEST_REQUIREMENT(cat_socket, echo_udp_server)
         }
     });
     ASSERT_NE(echo_udp_server, nullptr);
-    register_shutdown_function([] {
-        ASSERT_NE(echo_udp_server, nullptr);
-        cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
-        ASSERT_EQ(echo_udp_server, nullptr);
-    });
+}
+
+TEST_REQUIREMENT_DTOR(cat_socket, echo_udp_server)
+{
+    ASSERT_NE(echo_udp_server, nullptr);
+    cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
+    ASSERT_EQ(echo_udp_server, nullptr);
 }
 
 TEST(cat_socket, echo_tcp_client)
@@ -882,6 +890,7 @@ TEST(cat_socket, echo_udp_client)
 
 TEST(cat_socket, send_yield)
 {
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t client;
 
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
