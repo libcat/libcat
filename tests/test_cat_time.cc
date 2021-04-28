@@ -184,3 +184,15 @@ TEST(cat_time, tv2to)
     tv.tv_usec = 1000;
     ASSERT_EQ(cat_time_tv2to(&tv), 1001);
 }
+
+TEST(cat_time, blocking)
+{
+    cat_coroutine_t *coroutine = co([] {
+        cat_msec_t r = cat_time_msleep(1);
+        ASSERT_EQ(r, 1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    });
+    usleep(10);
+    ASSERT_TRUE(cat_time_delay(0));
+    ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+}

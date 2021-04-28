@@ -194,15 +194,13 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
     }
 
     if (unlikely(timer->coroutine != NULL)) {
-        cat_msec_t reserve;
         cat_update_last_error(CAT_ECANCELED, "Time waiter has been canceled");
-        reserve = timer->timer.timeout - cat_event_loop->time;
-        if (unlikely(reserve <= 0)) {
+        if (unlikely(timer->timer.timeout <= cat_event_loop->time)) {
             /* blocking IO lead it to be negative or 0
              * we can not know the real reserve time */
             return msec;
         }
-        return reserve;
+        return timer->timer.timeout - cat_event_loop->time;
     }
 
     return 0;
