@@ -35,6 +35,9 @@ TEST(cat_watch_dog, base)
         usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 10));
     });
 
+    cat_watch_dog_stop(); // make sure not output error anymore
+    fflush(stderr); // flush stderr to prevent from affecting the next test
+
     std::string output = testing::internal::GetCapturedStderr();
     std::string::size_type pos = 0;
     size_t count = 0;
@@ -58,7 +61,11 @@ TEST(cat_watch_dog, single)
 
     usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 3));
 
+    cat_watch_dog_stop(); // make sure not output error anymore
+    fflush(stderr); // flush stderr to prevent from affecting the next test
+
     std::string output = testing::internal::GetCapturedStderr();
+    printf("%s\n", output.c_str());
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
 }
 
@@ -70,6 +77,9 @@ TEST(cat_watch_dog, scheduler_blocking)
     DEFER(cat_watch_dog_stop());
 
     cat_time_usleep((cat_watch_dog_get_quantum() / 1000) * 3);
+
+    cat_watch_dog_stop(); // make sure not output error anymore
+    fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
@@ -94,6 +104,9 @@ TEST(cat_watch_dog, nothing)
         co(sleeper);
     }
     sleeper();
+
+    cat_watch_dog_stop(); // make sure not output error anymore
+    fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
