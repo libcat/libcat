@@ -23,12 +23,12 @@ TEST(cat_work, base)
     SKIP_IF_USE_VALGRIND();
     bool done = false;
 
-    int buckets[10] = { };
+    static int buckets[10] = { };
     cat_msec_t s = cat_time_msec();
 
     for (int n = 0; n < 10; n++) {
         co([&, n] {
-            EXPECT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [&] {
+            ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [n] {
                 usleep((n + 1) * 5000); /* 5ms ~ 50ms */
                 buckets[n] = n;
             }, 500)); /* wait max 500ms */

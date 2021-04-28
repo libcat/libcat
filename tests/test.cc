@@ -37,6 +37,56 @@ namespace testing
     std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = "www.taobao.com";
     /* TMP_PATH */
     std::string CONFIG_TMP_PATH = "/tmp";
+
+    cat_coroutine_t *co(std::function<void(void)> function)
+    {
+        return cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
+            auto function = *((std::function<void(void)> *) data);
+            function();
+            return nullptr;
+        }, &function);
+    }
+
+    bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout)
+    {
+        struct work_context_s {
+            std::function<void(void)> function;
+            uv_sem_t *sem;
+        } context;
+        uv_sem_t sem;
+        int error;
+        bool ret = true, wait = true, done = false;
+        error = uv_sem_init(&sem, 0);
+        if (error != 0) {
+            cat_update_last_error_with_reason(error, "Sem init failed");
+            return false;
+        }
+        context.function = function;
+        context.sem = &sem;
+        cat_coroutine_t *waiter = cat_coroutine_get_current();
+        cat_coroutine_t *worker = co([&] {
+            ret = cat_work(kind, [](cat_data_t *data) {
+                struct work_context_s *context = (struct work_context_s *) data;
+                std::function<void(void)> function = context->function; // must copy it
+                uv_sem_post(context->sem); // notify
+                function();
+            }, &context, timeout);
+            if (wait) {
+                cat_coroutine_resume(waiter, nullptr, nullptr);
+            }
+        });
+        if (ret) {
+            uv_sem_wait(&sem);
+        }
+        cat_coroutine_yield(nullptr, nullptr);
+        wait = false;
+        if (!done) {
+            cat_coroutine_resume(worker, nullptr, nullptr);
+        }
+        uv_sem_destroy(&sem);
+
+        return ret;
+    }
 }
 
 class BootstrapEnvironment : public testing::Environment
