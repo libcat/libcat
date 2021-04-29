@@ -23,6 +23,119 @@ extern "C"
 #include "llhttp.h"
 }
 
+cat_coroutine_t *echo_tcp_server;
+char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
+size_t echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip);
+int echo_tcp_server_port;
+
+TEST_REQUIREMENT(cat_socket, echo_tcp_server)
+{
+    co([] {
+        cat_socket_t server;
+
+        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_tcp_server_ip, &echo_tcp_server_ip_length));
+        DEFER(echo_tcp_server_ip[0] = '\0'; echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip));
+        ASSERT_GT(echo_tcp_server_port = cat_socket_get_sock_port(&server), 0);
+        DEFER(echo_tcp_server_port = 0);
+
+        echo_tcp_server = cat_coroutine_get_current();
+        DEFER(echo_tcp_server = nullptr);
+        cat_socket_set_read_timeout(&server, -1);
+
+        while (true) {
+            cat_socket_t *client = cat_socket_accept(&server, nullptr);
+
+            if (client == nullptr) {
+                EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+                break;
+            }
+            co([client] {
+                DEFER(cat_socket_close(client));
+                while (true) {
+                    char read_buffer[TEST_BUFFER_SIZE_STD];
+                    ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
+                    ASSERT_GE(read_n, 0);
+                    if (read_n == 0) {
+                        break;
+                    }
+                    if (std::string(read_buffer, read_n) == "RESET") {
+                        break;
+                    }
+                    if (std::string(read_buffer, read_n) == "TIMEOUT") {
+                        ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
+                        break;
+                    }
+                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                    continue;
+                }
+            });
+        }
+    });
+    ASSERT_NE(echo_tcp_server, nullptr);
+}
+
+TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server)
+{
+    ASSERT_NE(echo_tcp_server, nullptr);
+    cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
+    ASSERT_EQ(echo_tcp_server, nullptr);
+}
+
+cat_coroutine_t *echo_udp_server;
+char echo_udp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
+size_t echo_udp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
+int echo_udp_server_port;
+
+TEST_REQUIREMENT(cat_socket, echo_udp_server)
+{
+    co([] {
+        cat_socket_t server;
+
+        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_UDP), nullptr);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_udp_server_ip, &echo_udp_server_ip_length));
+        DEFER(echo_udp_server_ip[0] = '\0'; echo_udp_server_ip_length = sizeof(echo_udp_server_ip));
+        ASSERT_GT(echo_udp_server_port = cat_socket_get_sock_port(&server), 0);
+        DEFER(echo_udp_server_port = 0);
+
+        echo_udp_server = cat_coroutine_get_current();
+        DEFER(echo_udp_server = nullptr;);
+        cat_socket_set_read_timeout(&server, -1);
+
+        while (true) {
+            char read_buffer[TEST_BUFFER_SIZE_STD];
+            cat_sockaddr_union_t address;
+            cat_socklen_t address_length = sizeof(address);
+            ssize_t read_n = cat_socket_recvfrom(
+                &server, CAT_STRS(read_buffer),
+                &address.common,
+                &address_length
+            );
+            if (read_n <= 0) {
+                break;
+            }
+            ASSERT_TRUE(cat_socket_sendto(
+                &server, read_buffer, read_n,
+                &address.common, address_length
+            ));
+            continue;
+        }
+    });
+    ASSERT_NE(echo_udp_server, nullptr);
+}
+
+TEST_REQUIREMENT_DTOR(cat_socket, echo_udp_server)
+{
+    ASSERT_NE(echo_udp_server, nullptr);
+    cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
+    ASSERT_EQ(echo_udp_server, nullptr);
+}
+
 TEST(cat_socket, get_local_free_port)
 {
     ASSERT_GT(cat_socket_get_local_free_port(), 0);
@@ -650,119 +763,6 @@ TEST(cat_socket, set_tcp_accept_balance)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
-}
-
-cat_coroutine_t *echo_tcp_server;
-char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
-size_t echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip);
-int echo_tcp_server_port;
-
-TEST_REQUIREMENT(cat_socket, echo_tcp_server)
-{
-    co([] {
-        cat_socket_t server;
-
-        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
-        DEFER(cat_socket_close(&server));
-        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
-        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
-        ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_tcp_server_ip, &echo_tcp_server_ip_length));
-        DEFER(echo_tcp_server_ip[0] = '\0'; echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip));
-        ASSERT_GT(echo_tcp_server_port = cat_socket_get_sock_port(&server), 0);
-        DEFER(echo_tcp_server_port = 0);
-
-        echo_tcp_server = cat_coroutine_get_current();
-        DEFER(echo_tcp_server = nullptr);
-        cat_socket_set_read_timeout(&server, -1);
-
-        while (true) {
-            cat_socket_t *client = cat_socket_accept(&server, nullptr);
-
-            if (client == nullptr) {
-                EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
-                break;
-            }
-            co([client] {
-                DEFER(cat_socket_close(client));
-                while (true) {
-                    char read_buffer[TEST_BUFFER_SIZE_STD];
-                    ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
-                    ASSERT_GE(read_n, 0);
-                    if (read_n == 0) {
-                        break;
-                    }
-                    if (std::string(read_buffer, read_n) == "RESET") {
-                        break;
-                    }
-                    if (std::string(read_buffer, read_n) == "TIMEOUT") {
-                        ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
-                        break;
-                    }
-                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
-                    continue;
-                }
-            });
-        }
-    });
-    ASSERT_NE(echo_tcp_server, nullptr);
-}
-
-TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server)
-{
-    ASSERT_NE(echo_tcp_server, nullptr);
-    cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
-    ASSERT_EQ(echo_tcp_server, nullptr);
-}
-
-cat_coroutine_t *echo_udp_server;
-char echo_udp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
-size_t echo_udp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
-int echo_udp_server_port;
-
-TEST_REQUIREMENT(cat_socket, echo_udp_server)
-{
-    co([] {
-        cat_socket_t server;
-
-        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_UDP), nullptr);
-        DEFER(cat_socket_close(&server));
-        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
-        ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_udp_server_ip, &echo_udp_server_ip_length));
-        DEFER(echo_udp_server_ip[0] = '\0'; echo_udp_server_ip_length = sizeof(echo_udp_server_ip));
-        ASSERT_GT(echo_udp_server_port = cat_socket_get_sock_port(&server), 0);
-        DEFER(echo_udp_server_port = 0);
-
-        echo_udp_server = cat_coroutine_get_current();
-        DEFER(echo_udp_server = nullptr;);
-        cat_socket_set_read_timeout(&server, -1);
-
-        while (true) {
-            char read_buffer[TEST_BUFFER_SIZE_STD];
-            cat_sockaddr_union_t address;
-            cat_socklen_t address_length = sizeof(address);
-            ssize_t read_n = cat_socket_recvfrom(
-                &server, CAT_STRS(read_buffer),
-                &address.common,
-                &address_length
-            );
-            if (read_n <= 0) {
-                break;
-            }
-            ASSERT_TRUE(cat_socket_sendto(
-                &server, read_buffer, read_n,
-                &address.common, address_length
-            ));
-            continue;
-        }
-    });
-    ASSERT_NE(echo_udp_server, nullptr);
-}
-
-TEST_REQUIREMENT_DTOR(cat_socket, echo_udp_server)
-{
-    ASSERT_NE(echo_udp_server, nullptr);
-    cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
-    ASSERT_EQ(echo_udp_server, nullptr);
 }
 
 TEST(cat_socket, echo_tcp_client)
