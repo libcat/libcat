@@ -672,7 +672,7 @@ TEST(cat_socket, check_liveness)
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_check_liveness(&socket));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
-    cat_time_sleep(0);
+    cat_time_delay(1);
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECONNRESET);
 }
@@ -1215,7 +1215,7 @@ TEST(cat_socket, peekfrom)
         ASSERT_TRUE(cat_sockaddr_to_name(&address.common, address_length, ip, &ip_length, &port));
         ASSERT_EQ(std::string(ip, ip_length), std::string(echo_udp_server_ip, echo_udp_server_ip_length));
         ASSERT_EQ(port, echo_udp_server_port);
-        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, NULL);
+        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
     }
 
     ASSERT_TRUE(cat_socket_send_to(&client, CAT_STRL("Hello libcat"), echo_udp_server_ip, echo_udp_server_ip_length, echo_udp_server_port));
@@ -1232,7 +1232,7 @@ TEST(cat_socket, peekfrom)
         ASSERT_EQ(std::string(buffer, n), std::string("Hello libcat"));
         ASSERT_EQ(std::string(ip, ip_length), std::string(echo_udp_server_ip, echo_udp_server_ip_length));
         ASSERT_EQ(port, echo_udp_server_port);
-        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, NULL);
+        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
     }
 }
 
