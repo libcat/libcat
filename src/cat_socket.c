@@ -2477,7 +2477,8 @@ static ssize_t cat_socket_internal_peekfrom(
     } while (unlikely(nread < 0 && errno == EINTR));
 #endif
     if (nread < 0) {
-        if (unlikely(nread != CAT_EAGAIN && nread != CAT_EMSGSIZE)) {
+         cat_errno_t error = cat_translate_sys_error(cat_sys_errno);
+        if (unlikely(error != CAT_EAGAIN && error != CAT_EMSGSIZE)) {
             /* there was an unrecoverable error */
             cat_update_last_error_of_syscall("Socket peek failed");
         } else {
