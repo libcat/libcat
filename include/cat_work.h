@@ -25,6 +25,7 @@ extern "C" {
 #include "cat.h"
 
 typedef cat_data_callback_t cat_work_function_t;
+typedef cat_data_callback_t cat_work_cleanup_callback_t;
 
 typedef enum {
   CAT_WORK_KIND_CPU = UV_WORK_CPU,
@@ -32,7 +33,7 @@ typedef enum {
   CAT_WORK_KIND_SLOW_IO = UV_WORK_SLOW_IO,
 } cat_work_kind_t;
 
-CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, cat_data_t *data, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, cat_work_cleanup_callback_t cleanup, cat_data_t *data, cat_timeout_t timeout);
 
 #ifdef __cplusplus
 }

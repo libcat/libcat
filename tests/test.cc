@@ -72,7 +72,7 @@ namespace testing
                 std::function<void(void)> function = context->function; // must copy it
                 uv_sem_post(context->sem); // notify
                 function();
-            }, &context, timeout);
+            }, nullptr, &context, timeout);
             done = true;
             if (wait) {
                 cat_coroutine_resume(waiter, nullptr, nullptr);

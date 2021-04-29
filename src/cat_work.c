@@ -29,6 +29,7 @@ typedef struct
         uv_work_t work;
     } request;
     cat_work_function_t function;
+    cat_work_cleanup_callback_t cleanup;
     cat_data_t *data;
     int status;
 } cat_work_context_t;
@@ -50,10 +51,11 @@ static void cat_work_after_done(uv_work_t *request, int status)
         }
     }
 
+    context->cleanup(context->data);
     cat_free(context);
 }
 
-CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, cat_data_t *data, cat_timeout_t timeout)
+CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, cat_work_cleanup_callback_t cleanup, cat_data_t *data, cat_timeout_t timeout)
 {
     cat_work_context_t *context = (cat_work_context_t *) cat_malloc(sizeof(*context));
     int error;
@@ -64,6 +66,7 @@ CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, 
         return cat_false;
     }
     context->function = function;
+    context->cleanup = cleanup;
     context->data = data;
     error = uv_queue_work_ex(cat_event_loop, &context->request.work, (uv_work_kind) kind, cat_work_callback, cat_work_after_done);
     if (unlikely(error != 0)) {
