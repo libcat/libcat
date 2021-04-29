@@ -23,8 +23,8 @@
 #include "cat_time.h"
 #include "cat_work.h"
 #ifdef CAT_OS_WIN
-#include <winternl.h>
-#endif
+# include <winternl.h>
+#endif // CAT_OS_WIN
 
 typedef enum {
     CAT_FS_ERROR_NONE = 0, // no error
@@ -33,7 +33,7 @@ typedef enum {
 #ifdef CAT_OS_WIN
     CAT_FS_ERROR_WIN32, // is GetLastError() result
     // CAT_FS_ERROR_NT // is NTSTATUS, not implemented yet
-#endif
+#endif // CAT_OS_WIN
 } cat_fs_error_type_t;
 
 typedef enum {
@@ -43,7 +43,7 @@ typedef enum {
 #ifdef CAT_OS_WIN
     CAT_FS_FREER_LOCAL_FREE, // LocalFree(x)
     CAT_FS_FREER_HEAP_FREE, // HeapFree(GetProcessHeap(), 0, x)
-#endif
+#endif // CAT_OS_WIN
 } cat_fs_freer_type_t;
 
 typedef struct cat_fs_error_s {
@@ -54,7 +54,7 @@ typedef struct cat_fs_error_s {
 #ifdef CAT_OS_WIN
         DWORD le;
         // NTSTATUS nt;
-#endif
+#endif // CAT_OS_WIN
     } val;
     cat_fs_freer_type_t msg_free;
     const char *msg;
@@ -82,7 +82,7 @@ typedef union
     if (error != 0) { \
         cat_update_last_error_with_reason(error, "File-System " #operation " init failed"); \
         errno = cat_orig_errno(cat_get_last_error_code()); \
-        cat_debug(FS, "Failed uv_fs_" #operation " context=%p, uv_errno=%d", context, error) \
+        cat_debug(FS, "Failed uv_fs_" #operation " context=%p, uv_errno=%d", context, error); \
         cat_free(context); \
         {on_fail} \
     } \
@@ -107,7 +107,7 @@ typedef union
     if (unlikely(context->fs.result < 0)) { \
         cat_update_last_error_with_reason((cat_errno_t) context->fs.result, "File-System " #operation " failed"); \
         errno = cat_orig_errno((cat_errno_t) context->fs.result); \
-        cat_debug(FS, "Failed cat_fs_" #operation " context=%p, uv_errno=%d", context, (int) context->fs.result) \
+        cat_debug(FS, "Failed cat_fs_" #operation " context=%p, uv_errno=%d", context, (int) context->fs.result); \
         {on_fail} \
     } \
     cat_debug(FS, "Done cat_fs_" #operation " context=%p", context); \
@@ -133,7 +133,7 @@ static void cat_fs_callback(uv_fs_t *fs)
 }
 
 #ifdef CAT_OS_WIN
-#define wrappath(_path, path) \
+# define wrappath(_path, path) \
 char path##buf[(32767/*hard limit*/ + 4/* \\?\ */ + 1/* \0 */)*sizeof(wchar_t)] = {'\\', '\\', '?', '\\'}; \
 const char *path = NULL; \
 do { \
@@ -141,7 +141,7 @@ do { \
         path = NULL; \
         break; \
     } \
-    const size_t lenpath = strnlen(_path, 32767) \
+    const size_t lenpath = strnlen(_path, 32767); \
     if ( \
         !( /* not  \\?\-ed */ \
             '\\' == _path[0] && \
@@ -154,14 +154,14 @@ do { \
     ) { \
         /* fix it: prepend "\\?\" */ \
         memcpy(&path##buf[4], _path, lenpath + 1/*\0*/); \
-        path = path##buf \
-    } else \
-        path = _path \
-     \
+        path = path##buf; \
+    } else { \
+        path = _path; \
+    } \
 } while (0)
 #else
-#define wrappath(_path, path) const char *path = _path
-#endif
+# define wrappath(_path, path) const char *path = _path
+#endif // CAT_OS_WIN
 
 // basic functions for fs io
 // open, close, read, write
@@ -264,7 +264,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
     }
     CAT_FS_DO_RESULT(int, closedir, dir);
 }
-#endif
+#endif // CAT_OS_WIN
 
 static uv_fs_t *cat_fs_uv_scandir(const char *path, int flags)
 {
@@ -413,8 +413,8 @@ CAT_API int cat_fs_symlink(const char *_path, const char *_new_path, int flags)
 }
 
 #ifdef CAT_OS_WIN
-#define PATH_MAX 32768
-#endif
+# define PATH_MAX 32768
+#endif // CAT_OS_WIN
 CAT_API int cat_fs_readlink(const char *_path, char *buf, size_t len)
 {
     wrappath(_path, path);
@@ -441,8 +441,8 @@ CAT_API char *cat_fs_realpath(const char *_path, char *buf)
     }, realpath, path);
 }
 #ifdef CAT_OS_WIN
-#undef PATH_MAX
-#endif
+# undef PATH_MAX
+#endif // CAT_OS_WIN
 
 // permissions
 // chmod(s), chown(s)
@@ -548,7 +548,7 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e)
         case CAT_FS_ERROR_ERRNO:
             errno = e->val.error;
             return cat_translate_sys_error(errno);
-#endif
+#endif // CAT_OS_WIN
         case CAT_FS_ERROR_CAT_ERRNO:
             errno = cat_orig_errno(e->val.cat_errno);
             return cat_translate_sys_error(errno);
@@ -655,7 +655,7 @@ static inline const char *cat_fs_error_msg(cat_fs_error_t *e)
             e->msg_free = CAT_FS_FREER_HEAP_FREE;
             e->msg = cat_fs_win_strerror(e->val.le);
             break;
-#endif
+#endif // CAT_OS_WIN
         case CAT_FS_ERROR_ERRNO:
             e->msg_free = CAT_FS_FREER_NONE;
             e->msg = strerror(e->val.error);
@@ -681,7 +681,7 @@ static inline void cat_fs_error_msg_free(cat_fs_error_t *e)
         case CAT_FS_FREER_HEAP_FREE:
             HeapFree(GetProcessHeap(), 0, (LPVOID) e->msg);
             return;
-#endif
+#endif // CAT_OS_WIN
         case CAT_FS_FREER_CAT_FREE:
             cat_free((void*) e->msg);
             return;
@@ -691,7 +691,7 @@ static inline void cat_fs_error_msg_free(cat_fs_error_t *e)
 #ifdef CAT_OS_WIN
         case CAT_FS_FREER_LOCAL_FREE:
             // not implemented
-#endif
+#endif // CAT_OS_WIN
         default:
             return;
     }
@@ -719,7 +719,7 @@ typedef size_t cat_fs_write_size_t;
 #else
 typedef unsigned int cat_fs_read_size_t;
 typedef unsigned int cat_fs_write_size_t;
-#endif
+#endif // CAT_OS_WIN
 
 typedef struct {
     cat_fs_work_ret_t ret;
@@ -748,7 +748,7 @@ CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buf, size_t size)
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
     data->buf = buf;
-    data->size = size;
+    data->size = (cat_fs_read_size_t)size;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_read_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
@@ -783,7 +783,7 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buf, size_t length)
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
     data->buf = buf;
-    data->length = length;
+    data->length = (cat_fs_write_size_t)length;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_write_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
@@ -954,7 +954,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
 }
 #else
 // use NtQueryDirectoryFile to mock readdir,rewinddir behavior.
-typedef {
+typedef struct {
     HANDLE dir;
     cat_bool_t rewind;
 } cat_dir_int_t;
@@ -1070,8 +1070,8 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return NULL;
     }
-    cat_fs_work_check_error(&data.ret.error, "Opendir");
-    return data.ret.ret.ptr;
+    cat_fs_work_check_error(&data->ret.error, "Opendir");
+    return data->ret.ret.ptr;
 }
 
 typedef struct {
@@ -1116,8 +1116,8 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
-    cat_fs_work_check_error(&data.ret.error, "Closedir");
-    return (int) data.ret.ret.num;
+    cat_fs_work_check_error(&data->ret.error, "Closedir");
+    return (int) data->ret.ret.num;
 }
 
 typedef struct _CAT_FILE_DIRECTORY_INFORMATION {
@@ -1169,11 +1169,11 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
 
     IO_STATUS_BLOCK iosb = {0};
     NTSTATUS status;
-#if _MSC_VER
+# if _MSC_VER
     __declspec(align(8))
-#else
+# else
     __attribute__ ((aligned (8)))
-#endif
+# endif // _MSC_VER
         char buffer[8192];
     status = pNtQueryDirectoryFile(
         data->dir->dir, // file handle
@@ -1260,15 +1260,15 @@ CAT_API uv_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) cat_malloc(sizeof(*data));
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs readdir failed");
-        return -1;
+        return NULL;
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->dir = dir;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return NULL;
     }
-    cat_fs_work_check_error(&data.ret.error, "Readdir");
-    return data.ret.ret.ptr;
+    cat_fs_work_check_error(&data->ret.error, "Readdir");
+    return data->ret.ret.ptr;
 }
 
 CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
@@ -1285,7 +1285,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
     }
     ((cat_dir_int_t *) dir)->rewind = cat_true;
 }
-#endif
+#endif // CAT_OS_WIN
 
 typedef struct {
     cat_fs_work_ret_t ret;
@@ -1406,12 +1406,12 @@ static void cat_fs_orig_flock(void *arg)
 #elif defined(LOCK_EX) && defined(LOCK_SH) && defined(LOCK_UN)
     // Linux / BSDs / macOS implement with flock(2)
     int operation = 0;
-#ifdef LOCK_NB
-#define FLOCK_HAVE_NB
+# ifdef LOCK_NB
+#  define FLOCK_HAVE_NB
     operation = op;
-#else
+# else
     operation = op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
-#endif // LOCK_NB
+# endif // LOCK_NB
     data->ret.ret.num = flock(fd, operation);
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = errno;
@@ -1419,7 +1419,7 @@ static void cat_fs_orig_flock(void *arg)
     return;
 #elif defined(F_SETLK) && defined(F_SETLKW) && defined(F_RDLCK) && defined(F_WRLCK) && defined(F_UNLCK)
     // fcntl implement
-#define FLOCK_HAVE_NB
+# define FLOCK_HAVE_NB
     int op_type = op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
     int cmd = (CAT_LOCK_NB == (op & CAT_LOCK_NB)) ? F_SETLK : F_SETLKW;
     struct flock lbuf = {
@@ -1444,7 +1444,7 @@ static void cat_fs_orig_flock(void *arg)
     // linux man page lockf(3) says
     // "POSIX.1 leaves the relationship between lockf() and fcntl(2) locks unspecified"
     // so we assume that some os may have an indepednent lockf implement
-#define FLOCK_HAVE_NB
+# define FLOCK_HAVE_NB
     int op_type = op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
     int cmd;
     if (CAT_LOCK_SH == op_type) {
@@ -1471,7 +1471,7 @@ static void cat_fs_orig_flock(void *arg)
     return;
 #else
     // maybe sometimes we can implement robust flock by ourselves?
-#warning "not supported platform for flock"
+# warning "not supported platform for flock"
     data->ret.ret.num = -1;
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = ENOSYS;
@@ -1490,7 +1490,7 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
         cat_fs_orig_flock(data);
         return;
     }
-#endif
+#endif // FLOCK_HAVE_NB
     if ((data->op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN) {
         // LOCK_UN is not blocking
         cat_fs_orig_flock(data);
