@@ -1371,7 +1371,7 @@ CAT_API int cat_fs_flock(cat_file_t fd, int cat_op){
             //printf("nb done %d\n", data.ret.ret.num);
             return (int)data.ret.ret.num;
         }
-        cat_fs_error_t e;
+        cat_fs_error_t e = {0};
         int waittime = 1;
         while(running){
             switch(cat_time_delay(waittime)){
