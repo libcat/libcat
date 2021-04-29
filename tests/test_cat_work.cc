@@ -20,11 +20,8 @@
 
 TEST(cat_work, base)
 {
-    SKIP_IF_USE_VALGRIND();
-    bool done = false;
-
     static int buckets[10] = { };
-    cat_msec_t s = cat_time_msec();
+    bool done = false;
 
     for (int n = 0; n < 10; n++) {
         co([&, n] {
@@ -34,14 +31,13 @@ TEST(cat_work, base)
             }, 500)); /* wait max 500ms */
         });
     }
+    ASSERT_EQ(buckets[9], 0);
 
-    s = cat_time_msec() - s;
-    EXPECT_LE(s, 10); /* <= 10ms := no-blocking */
     for (int c = 0; c < 5; c++) {
-        cat_time_msleep(100);
+        cat_time_msleep(100); // 100ms
         done = ([&] {
             for (int n = 0; n < 10; n++) {
-                if(buckets[n] != n) {
+                if (buckets[n] != n) {
                     return false;
                 }
             }
