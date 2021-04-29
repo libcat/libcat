@@ -1229,9 +1229,31 @@ TEST(cat_fs, maxpath_260){
 }
 #endif
 
-// thread numbers used in test,
-// needs more then thread pool capability
-#define FLOCK_TEST_THREADS 24
-TEST(cat_fs, flock_deadlock){
-    SKIP_IF_(true, "TODO: implement mp_tester to test flock");
+/*
+* flock behavior cannot be tested here without multi process support
+* here we only test return value
+* see mp_tests/flock_<platform>.c for detail
+*/
+TEST(cat_fs, flock_retval){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+    // prepare fn
+    char rand[sizeof("cat_tests_flock.") + 6] = "cat_tests_flock.";
+    cat_srand(rand+sizeof("cat_tests_flock.")-1, 6);
+    rand[sizeof(rand) - 1] = 0;
+    std::string fnstr = path_join(TEST_TMP_PATH, rand);
+    const char * fn = fnstr.c_str();
+    // remove fn
+    cat_fs_unlink(fn);
+    DEFER({cat_fs_unlink(fn);});
+    // create file
+    int fd;
+    ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT), 0);
+
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_SH), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_EX), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_SH | CAT_LOCK_NB), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_EX | CAT_LOCK_NB), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_UN | CAT_LOCK_NB), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_EX | CAT_LOCK_NB), 0);
+    ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_UN | CAT_LOCK_NB), 0);
 }
