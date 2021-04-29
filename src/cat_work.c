@@ -51,7 +51,9 @@ static void cat_work_after_done(uv_work_t *request, int status)
         }
     }
 
-    context->cleanup(context->data);
+    if (context->cleanup != NULL) {
+        context->cleanup(context->data);
+    }
     cat_free(context);
 }
 
