@@ -2872,11 +2872,11 @@ CAT_API int cat_socket_set_send_buffer_size(cat_socket_t *socket, int size)
 }
 
 /* we always set the flag for extending (whether it works or not) */
-#define CAT_SOCKET_SET_FLAG(_socket, _flag, _value) do { \
-    if (_value) { \
-        _socket->type &= ~(CAT_SOCKET_TYPE_FLAG_##_flag); \
-    } else { \
+#define CAT_SOCKET_SET_FLAG(_socket, _flag, _enable) do { \
+    if (_enable) { \
         _socket->type |= (CAT_SOCKET_TYPE_FLAG_##_flag); \
+    } else { \
+        _socket->type &= ~(CAT_SOCKET_TYPE_FLAG_##_flag); \
     } \
 } while (0)
 
@@ -2885,7 +2885,7 @@ CAT_API cat_bool_t cat_socket_set_tcp_nodelay(cat_socket_t *socket, cat_bool_t e
     CAT_SOCKET_TCP_ONLY(socket, return cat_false);
     CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
 
-    CAT_SOCKET_SET_FLAG(socket, TCP_DELAY, enable);
+    CAT_SOCKET_SET_FLAG(socket, TCP_DELAY, !enable);
     if (!cat_socket_is_open(socket)) {
         return cat_true;
     }
