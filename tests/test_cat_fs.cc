@@ -17,7 +17,7 @@
   |         dixyes <dixyes@gmail.com>                                        |
   +--------------------------------------------------------------------------+
  */
- 
+
 #include "test.h"
 
 std::string path_join(std::string a, std::string b){
@@ -34,7 +34,7 @@ std::string path_join(std::string a, std::string b){
         // too long
         return "";
     }
-    if( 
+    if(
         a.rfind("\\\\?\\", 0) != 0 && // already \\?\-ed
         a.length() + 1/* '\\' */ + b.length() > MAX_PATH
     ){
@@ -144,7 +144,7 @@ TEST(cat_fs, pwrite_pread)
     DEFER({
         cat_fs_unlink(fn);
     });
-    
+
     errno = 0;
     cat_clear_last_error();
     ASSERT_LT(cat_fs_read(fd, zeros, PWRITE_PREAD_BUFSIZ - 1024), 0);
@@ -217,7 +217,7 @@ TEST(cat_fs, ftruncate)
     ASSERT_GT(fd = cat_fs_open(fn, O_RDWR), 0);
     DEFER(cat_fs_close(fd));
     ASSERT_EQ(cat_fs_ftruncate(fd, 8), 0);
-    
+
     ASSERT_EQ(cat_fs_read(fd, red, 16), 8);
     ASSERT_EQ(std::string(red, 8), std::string(buf, 8));
 
@@ -292,7 +292,7 @@ TEST(cat_fs, link)
     const char * fn = fnstr.c_str();
     std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
     const char * fn2 = fn2str.c_str();
-    
+
     DEFER({
         cat_fs_unlink(fn);
         cat_fs_unlink(fn2);
@@ -303,7 +303,7 @@ TEST(cat_fs, link)
     cat_fs_unlink(fn);
     cat_fs_unlink(fn2);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600)), 0);
-    
+
     errno = 0;
     cat_clear_last_error();
     if(cat_fs_link(fn, fn2) != 0){
@@ -330,7 +330,7 @@ TEST(cat_fs, symlink){
     const char * fn = fnstr.c_str();
     std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
     const char * fn2 = fn2str.c_str();
-    
+
     DEFER({
         cat_fs_unlink(fn);
         cat_fs_unlink(fn2);
@@ -375,7 +375,7 @@ TEST(cat_fs, lseek)
         ASSERT_EQ(cat_fs_close(fd), 0);
         ASSERT_EQ(cat_fs_unlink(fn), 0);
     });
-    
+
     cat_srand(buf, LSEEK_BUFSIZ);
 
     int ret;
@@ -680,7 +680,7 @@ TEST(cat_fs, scandir)
     });
     ASSERT_EQ(std::string("cat_tests_dir_dir2"), std::string(namelist[0].name));
     ASSERT_EQ(std::string("cat_tests_dir_dir1"), std::string(namelist[1].name));
-    
+
 }
 
 TEST(cat_fs, rename)
@@ -727,7 +727,7 @@ TEST(cat_fs, readlink){
     const char * fn = fnstr.c_str();
     std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_link");
     const char * fn2 = fn2str.c_str();
-    
+
     DEFER({
         cat_fs_unlink(fn);
         cat_fs_unlink(fn2);
@@ -767,7 +767,7 @@ TEST(cat_fs, realpath){
 
     std::string pathstr = path_join(TEST_TMP_PATH, "cat_tests_dir" TEST_PATH_SEP ".." TEST_PATH_SEP "cat_tests_dir" TEST_PATH_SEP "cat_tests_link");
     const char * testpath = pathstr.c_str();
-    
+
     DEFER({
         cat_fs_unlink(fn);
         cat_fs_unlink(fn2);
@@ -1185,7 +1185,7 @@ TEST(cat_fs, maxpath_260){
             ASSERT_EQ(ret = cat_fs_unlink(dst), 0);
         }
 
-        
+
         ASSERT_EQ(ret = cat_fs_chmod(src, 0666), 0);
         ASSERT_EQ(ret = cat_fs_chown(src, -1 , -1), 0);
         ASSERT_EQ(ret = cat_fs_lchown(src, -1, -1), 0);
