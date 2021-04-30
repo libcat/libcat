@@ -60,7 +60,6 @@ static void cat_work_after_done(uv_work_t *request, int status)
 CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, cat_work_cleanup_callback_t cleanup, cat_data_t *data, cat_timeout_t timeout)
 {
     cat_work_context_t *context = (cat_work_context_t *) cat_malloc(sizeof(*context));
-    int error;
     cat_bool_t ret;
 
     if (unlikely(context == NULL)) {
