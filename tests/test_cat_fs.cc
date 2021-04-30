@@ -1271,7 +1271,7 @@ TEST(cat_fs, cancel){
     DEFER({cat_fs_rmdir(dn);});
     char buf[4096];
     int fd;
-cat_dir_t *dir;
+    cat_dir_t *dir;
 
     cat_coroutine_t *c;
 #define CANCEL_TEST(expr) do{\
@@ -1312,9 +1312,11 @@ cat_dir_t *dir;
     ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
     CANCEL_TEST(ASSERT_EQ(cat_fs_readdir(dir), nullptr));
     // rewinddir is not blocking(it's not in thread pool)
+    ASSERT_EQ(cat_fs_closedir(dir), 0);
+    ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
     CANCEL_TEST(ASSERT_LT(cat_fs_closedir(dir), 0));
-    CANCEL_TEST(ASSERT_NE(cat_fs_scandir(dn, nullptr, nullptr, nullptr), 0));
     // path
+    CANCEL_TEST(ASSERT_LT(cat_fs_scandir(dn, nullptr, nullptr, nullptr), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_access(fn, F_OK), 0));
     CANCEL_TEST({
         cat_stat_t dummy;

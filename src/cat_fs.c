@@ -250,16 +250,6 @@ static int cat_fs_readdirs(cat_dir_t *dir, uv_dirent_t *dirents, size_t nentries
     }, readdir, dir);
 }
 */
-
-CAT_API int cat_fs_closedir(cat_dir_t *dir)
-{
-    if (NULL == dir) {
-        errno = EINVAL;
-        cat_update_last_error(CAT_EINVAL, "Closedir failed: bad dir handle");
-        return -1;
-    }
-    CAT_FS_DO_RESULT(int, closedir, dir);
-}
 #endif // CAT_OS_WIN
 
 static uv_fs_t *cat_fs_uv_scandir(const char *path, int flags)
@@ -828,9 +818,31 @@ CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
 
 #ifndef CAT_OS_WIN
 
+static void cat_fs_dir_async_close(void *ptr)
+{
+    uv_dir_t *dir = (uv_dir_t *) calloc(1, sizeof(*dir));
+    if (dir == NULL) {
+        return;
+    }
+    dir->dir = ptr;
+    cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context));
+    if (context == NULL) {
+        goto _malloc_context_error;
+    }
+    context->coroutine = NULL;
+    if (uv_fs_closedir(cat_event_loop, &context->fs, dir, cat_fs_callback) != 0) {
+        goto _closedir_error;
+    }
+    return;
+    _closedir_error:
+    cat_free(context);
+    _malloc_context_error:
+    free(dir);
+}
+
 typedef struct {
     cat_fs_work_ret_t ret;
-    const char *path;
+    char *path;
     cat_bool_t canceled;
 } cat_fs_opendir_data_t;
 
@@ -852,24 +864,10 @@ static void cat_fs_opendir_free(cat_data_t *ptr)
 {
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) ptr;
 
-    while (data->canceled && NULL != data->ret.ret.ptr) {
-        uv_dir_t *dir = (uv_dir_t *) calloc(1, sizeof(*dir));
-        if (dir == NULL) {
-            break;
-        }
-        dir->dir = data->ret.ret.ptr;
-        cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context));
-        if (context == NULL) {
-            free(dir);
-            break;
-        }
-        context->coroutine = NULL;
-        if (uv_fs_closedir(cat_event_loop, &context->fs, dir, cat_fs_callback) != 0) {
-            free(dir);
-            cat_free(context);
-        }
-        break;
+    if (data->canceled && NULL != data->ret.ret.ptr) {
+        cat_fs_dir_async_close(data->ret.ret.ptr);
     }
+    cat_free(data->path);
     cat_free(data);
 }
 
@@ -892,7 +890,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->canceled = cat_false;
-    data->path = path;
+    data->path = cat_strdup(path);
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
         // canceled, tell freer close handle
         data->canceled = cat_true;
@@ -912,14 +910,14 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
 
 typedef struct {
     cat_fs_work_ret_t ret;
-    uv_dir_t *dir;
+    DIR *dir;
 } cat_fs_readdir_data_t;
 
 static void cat_fs_readdir_cb(cat_data_t *ptr)
 {
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
 
-    struct dirent *pdirent = readdir(data->dir->dir);
+    struct dirent *pdirent = readdir(data->dir);
     if (NULL == pdirent) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
@@ -994,7 +992,8 @@ static void cat_fs_readdir_free(cat_data_t *ptr)
 */
 CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
 {
-    if (NULL == dir) {
+    uv_dir_t *uv_dir = (uv_dir_t*) dir;
+    if (NULL == uv_dir || uv_dir->dir == NULL) {
         cat_fs_error_t error = {
             .type = CAT_FS_ERROR_ERRNO,
             .val.error = EINVAL,
@@ -1010,8 +1009,10 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     memset(data, 0, sizeof(*data));
-    data->dir = dir;
+    data->dir = uv_dir->dir;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
+        cat_fs_dir_async_close(uv_dir->dir);
+        uv_dir->dir = NULL;
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Readdir");
@@ -1039,7 +1040,8 @@ static void cat_fs_rewinddir_cb(cat_data_t *ptr)
 
 CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
 {
-    if (NULL == dir) {
+    uv_dir_t *uv_dir = (uv_dir_t*) dir;
+    if (NULL == uv_dir || NULL == uv_dir->dir) {
         cat_fs_error_t error = {
             .type = CAT_FS_ERROR_ERRNO,
             .val.error = EINVAL,
@@ -1049,14 +1051,56 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
         cat_fs_work_check_error(&error, "Rewinddir");
         return;
     }
-    uv_dir_t *uv_dir = (uv_dir_t*) dir;
     cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) cat_malloc(sizeof(*data));
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs rewinddir failed");
         return;
     }
     data->dir = uv_dir->dir;
-    cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_rewinddir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER);
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_rewinddir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        cat_fs_dir_async_close(uv_dir->dir);
+        uv_dir->dir = NULL;
+    }
+}
+
+typedef struct {
+    DIR *dir;
+} cat_fs_closedir_data_t;
+
+static void cat_fs_closedir_cb(cat_data_t *ptr)
+{
+    cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) ptr;
+    closedir(data->dir);
+}
+
+CAT_API int cat_fs_closedir(cat_dir_t *dir)
+{
+    uv_dir_t *uv_dir = (uv_dir_t*) dir;
+    if (NULL == uv_dir) {
+        cat_fs_error_t error = {
+            .type = CAT_FS_ERROR_ERRNO,
+            .val.error = EINVAL,
+            .msg_free = CAT_FS_FREER_NONE,
+            .msg = "Invalid dir handle"
+        };
+        cat_fs_work_check_error(&error, "Closedir");
+        return -1;
+    }
+    if (NULL == uv_dir->dir) {
+        cat_free(uv_dir);
+        return 0;
+    }
+    cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) cat_malloc(sizeof(*data));
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs closedir failed");
+        return -1;
+    }
+    data->dir = uv_dir->dir;
+    cat_free(uv_dir);
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return -1;
+    }
+    return 0;
 }
 #else
 // use NtQueryDirectoryFile to mock readdir,rewinddir behavior.
