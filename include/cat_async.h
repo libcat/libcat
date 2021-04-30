@@ -36,6 +36,7 @@ struct cat_async_s {
     } u;
     cat_async_cleanup_callback cleanup;
     cat_coroutine_t *coroutine;
+    cat_bool_t allocated;
     cat_bool_t done;
     cat_bool_t closing;
 };

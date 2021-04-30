@@ -16,7 +16,7 @@
   +--------------------------------------------------------------------------+
  */
 
-#include "cat_thread.h"
+#include "cat_async.h"
 
 #include "cat_event.h"
 #include "cat_time.h"
@@ -35,9 +35,14 @@
 static void cat_async_close_callback(uv_handle_t *handle)
 {
     cat_async_t *async = cat_container_of(handle, cat_async_t, u.handle);
+    /* async maybe free'd in cleanup if it's not allocated */
+    cat_bool_t allocated = async->allocated;
 
     if (async->cleanup != NULL) {
         async->cleanup(async);
+    }
+    if (allocated) {
+        cat_free(async);
     }
 }
 
@@ -64,7 +69,16 @@ CAT_API cat_async_t *cat_async_create(cat_async_t *async)
 {
     int error;
 
-    CAT_ASSERT(async != NULL && "Async should be allocated by user");
+    if (async == NULL) {
+        async = (cat_async_t *) cat_malloc(sizeof(*async));
+        if (unlikely(async == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for async failed");
+            return NULL;
+        }
+        async->allocated = cat_true;
+    } else {
+        async->allocated = cat_false;
+    }
     async->cleanup = NULL;
     async->done = cat_false;
     async->closing = cat_false;

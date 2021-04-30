@@ -22,7 +22,7 @@
 #include "cat_event.h"
 #include "cat_time.h"
 #include "cat_work.h"
-#include "cat_thread.h"
+#include "cat_async.h"
 #ifdef CAT_OS_WIN
 # include <winternl.h>
 #endif // CAT_OS_WIN
