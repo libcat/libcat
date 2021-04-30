@@ -927,13 +927,13 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         data->ret.error.val.error = errno;
         return;
     }
-    cat_dirent_t *pret = cat_malloc(sizeof(*pret));
+    cat_dirent_t *pret = malloc(sizeof(*pret));
     if (NULL == pret) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
         return;
     }
-    pret->name = cat_strdup(pdirent->d_name);
+    pret->name = strdup(pdirent->d_name);
     if (NULL == pret->name) {
         free(pret);
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
@@ -983,9 +983,9 @@ static void cat_fs_readdir_free(cat_data_t *ptr)
     if (data->ret.ret.ptr) {
         cat_dirent_t *dirent = data->ret.ret.ptr;
         if (dirent->name) {
-            cat_free((void*)dirent->name);
+            free((void*)dirent->name);
         }
-        cat_free(dirent);
+        free(dirent);
     }
     cat_free(data);
 }
@@ -1334,7 +1334,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         data->dir->rewind = cat_false;
     }
 
-    cat_dirent_t *pdirent = cat_malloc(sizeof(*pdirent));
+    cat_dirent_t *pdirent = malloc(sizeof(*pdirent));
     if (NULL == pdirent) {
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.error =  ERROR_NOT_ENOUGH_MEMORY;
@@ -1373,7 +1373,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
 static void cat_fs_readdir_free(cat_fs_readdir_data_t *data)
 {
     if(data->ret.ret.ptr){
-        cat_free(data->ret.ret.ptr);
+        free(data->ret.ret.ptr);
     }
     cat_free(data);
 }
