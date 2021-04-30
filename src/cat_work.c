@@ -65,7 +65,7 @@ CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, 
 
     if (unlikely(context == NULL)) {
         cat_update_last_error_of_syscall("Malloc for work context failed");
-        return cat_false;
+        goto _error;
     }
     context->function = function;
     context->cleanup = cleanup;
@@ -73,7 +73,7 @@ CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, 
     error = uv_queue_work_ex(cat_event_loop, &context->request.work, (uv_work_kind) kind, cat_work_callback, cat_work_after_done);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Work queue failed");
-        return cat_false;
+        goto _error;
     }
     context->status = CAT_ECANCELED;
     context->request.coroutine = CAT_COROUTINE_G(current);
@@ -90,4 +90,10 @@ CAT_API cat_bool_t cat_work(cat_work_kind_t kind, cat_work_function_t function, 
     }
 
     return cat_true;
+
+    _error:
+    if (cleanup != NULL) {
+        cleanup(data);
+    }
+    return cat_false;
 }
