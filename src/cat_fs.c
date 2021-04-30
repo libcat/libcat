@@ -133,9 +133,7 @@ static void cat_fs_callback(uv_fs_t *fs)
     if (context->coroutine != NULL) {
         cat_coroutine_t *coroutine = context->coroutine;
         context->coroutine = NULL;
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(FS, "File-System schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, FS, "File-System");
     }
 
     uv_fs_req_cleanup(&context->fs);

@@ -80,9 +80,7 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
     poll->status = status;
     poll->events = events;
 
-    if (unlikely(!cat_coroutine_resume(poll->u.coroutine, NULL, NULL))) {
-        cat_core_error_with_last(TIME, "Poll one schedule failed");
-    }
+    cat_coroutine_schedule(poll->u.coroutine, EVENT, "Poll one");
 }
 
 CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat_timeout_t timeout)
@@ -184,9 +182,7 @@ static void cat_poll_done_callback(cat_data_t *data)
         // cancalled
         return;
     }
-    if (unlikely(!cat_coroutine_resume(context->coroutine, NULL, NULL))) {
-        cat_core_error_with_last(EVENT, "Poll schedule failed");
-    }
+    cat_coroutine_schedule(context->coroutine, EVENT, "Poll");
 }
 
 static void cat_poll_callback(uv_poll_t* handle, int status, int events)

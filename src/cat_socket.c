@@ -1110,9 +1110,7 @@ static void cat_socket_accept_connection_callback(uv_stream_t *stream, int statu
         cat_coroutine_t *coroutine = iserver->context.accept.coroutine;
         CAT_ASSERT(coroutine != NULL);
         iserver->context.accept.data.status = status;
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "Connect schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "Accept");
     }
     // else we can call uv_accept to get it later
 }
@@ -1203,9 +1201,7 @@ static void cat_socket_connect_callback(uv_connect_t* request, int status)
         cat_coroutine_t *coroutine = isocket->context.connect.coroutine;
         CAT_ASSERT(coroutine != NULL);
         isocket->context.connect.data.status = status;
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "Connect schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "Connect");
     }
 
     cat_free(request);
@@ -1710,9 +1706,7 @@ static void cat_socket_read_callback(uv_stream_t *stream, ssize_t nread, const u
     if (context->once || context->nread == context->size || context->error != 0) {
         cat_coroutine_t *coroutine = isocket->context.io.read.coroutine;
         CAT_ASSERT(coroutine != NULL);
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "Stream read schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "Stream read");
     }
 }
 
@@ -1762,9 +1756,7 @@ static void cat_socket_udp_recv_callback(uv_udp_t *udp, ssize_t nread, const uv_
     do {
         cat_coroutine_t *coroutine = isocket->context.io.read.coroutine;
         CAT_ASSERT(coroutine != NULL);
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "UDP recv schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "UDP recv");
     } while (0);
 }
 
@@ -2035,9 +2027,7 @@ static cat_always_inline void cat_socket_internal_write_callback(cat_socket_inte
         CAT_ASSERT(isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE);
         request->error = status;
         /* just resume and it will retry to send on while loop */
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "UDP send schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "Write");
     }
 
     cat_free(request);
@@ -2519,9 +2509,7 @@ static cat_always_inline void cat_socket_cancel_io(cat_coroutine_t *coroutine, c
 {
     if (coroutine != NULL) {
         /* interrupt the operation */
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(SOCKET, "Cancel %s failed when closing", type_name);
-        }
+        cat_coroutine_schedule(coroutine, SOCKET, "Cancel %s", type_name);
     }
 }
 

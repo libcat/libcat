@@ -56,9 +56,7 @@ static void cat_async_callback(uv_async_t *handle)
 
     async->done = cat_true;
     if (coroutine != NULL) {
-        if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-            cat_core_error_with_last(THREAD, "Async schedule failed");
-        }
+        cat_coroutine_schedule(coroutine, THREAD, "Async");
     } else if (async->closing) {
         /* wait failed/cancelled and reach here */
         uv_close(&async->u.handle, cat_async_close_callback);

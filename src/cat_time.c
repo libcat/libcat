@@ -95,10 +95,7 @@ static void cat_sleep_timer_callback(uv_timer_t* handle)
     cat_coroutine_t *coroutine = timer->coroutine;
 
     timer->coroutine = NULL;
-
-    if (unlikely(!cat_coroutine_resume(coroutine, NULL, NULL))) {
-        cat_core_error_with_last(TIME, "Timer schedule failed");
-    }
+    cat_coroutine_schedule(coroutine, TIME, "Timer");
 }
 
 static cat_timer_t *cat_timer_wait(cat_msec_t msec)
