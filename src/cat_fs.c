@@ -61,61 +61,70 @@ typedef struct cat_fs_error_s {
     const char *msg;
 } cat_fs_error_t;
 
-typedef union
-{
+typedef union {
     cat_coroutine_t *coroutine;
     uv_req_t req;
     uv_fs_t fs;
 } cat_fs_context_t;
+
+static cat_bool_t cat_fs_do_result(cat_fs_context_t *context, int error, const char *operation)
+{
+    cat_bool_t done;
+    cat_bool_t ret;
+
+    if (error != 0) {
+        cat_update_last_error_with_reason(error, "File-System %s init failed", operation);
+        errno = cat_orig_errno(cat_get_last_error_code());
+        cat_debug(FS, "Failed uv_fs_%s context=%p, uv_errno=%d", operation, context, error);
+        cat_free(context);
+        return cat_false;
+    }
+    context->coroutine = CAT_COROUTINE_G(current);
+    ret = cat_time_wait(CAT_TIMEOUT_FOREVER);
+    done = context->coroutine == NULL;
+    context->coroutine = NULL;
+    if (unlikely(!ret)) {
+        cat_update_last_error_with_previous("File-System %s wait failed", operation);
+        (void) uv_cancel(&context->req);
+        errno = cat_orig_errno(cat_get_last_error_code());
+        cat_debug(FS, "Failed %s() context=%p waiting failed", operation, context);
+        return cat_false;
+    }
+    if (unlikely(!done)) {
+        cat_update_last_error(CAT_ECANCELED, "File-System %s has been canceled", operation);
+        (void) uv_cancel(&context->req);
+        errno = ECANCELED;
+        cat_debug(FS, "Failed %s() context=%p canceled", operation, context);
+        return cat_false;
+    }
+    if (unlikely(context->fs.result < 0)) {
+        cat_update_last_error_with_reason((cat_errno_t) context->fs.result, "File-System %s failed", operation);
+        errno = cat_orig_errno((cat_errno_t) context->fs.result);
+        cat_debug(FS, "Failed %s() context=%p, uv_errno=%d", operation, context, (int) context->fs.result);
+        return cat_false;
+    }
+
+    cat_debug(FS, "Done %s() context=%p", operation, context);
+    return cat_true;
+}
 
 #define CAT_FS_DO_RESULT_EX(on_fail, on_done, operation, ...) do { \
     cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context)); \
     if (unlikely(context == NULL)) { \
         cat_update_last_error_of_syscall("Malloc for file-system context failed"); \
         errno = ENOMEM; \
-        cat_debug(FS, "Cannot alloc fs context"); \
         {on_fail} \
     } \
-    cat_debug(FS, "Start cat_fs_" #operation " context=%p", context); \
-    cat_bool_t done; \
-    cat_bool_t ret; \
+    cat_debug(FS, "Start " #operation "() context=%p", context); \
     int error = uv_fs_##operation(cat_event_loop, &context->fs, ##__VA_ARGS__, cat_fs_callback); \
-    if (error != 0) { \
-        cat_update_last_error_with_reason(error, "File-System " #operation " init failed"); \
-        errno = cat_orig_errno(cat_get_last_error_code()); \
-        cat_debug(FS, "Failed uv_fs_" #operation " context=%p, uv_errno=%d", context, error); \
-        cat_free(context); \
+    if (!cat_fs_do_result(context, error, #operation)) { \
         {on_fail} \
     } \
-    context->coroutine = CAT_COROUTINE_G(current); \
-    ret = cat_time_wait(-1); \
-    done = context->coroutine == NULL; \
-    context->coroutine = NULL; \
-    if (unlikely(!ret)) { \
-        cat_update_last_error_with_previous("File-System " #operation " wait failed"); \
-        (void) uv_cancel(&context->req); \
-        errno = cat_orig_errno(cat_get_last_error_code()); \
-        cat_debug(FS, "Failed cat_fs_" #operation " context=%p waiting failed", context); \
-        {on_fail} \
-    } \
-    if (unlikely(!done)) { \
-        cat_update_last_error(CAT_ECANCELED, "File-System " #operation " has been canceled"); \
-        (void) uv_cancel(&context->req); \
-        errno = ECANCELED; \
-        cat_debug(FS, "Failed cat_fs_" #operation " context=%p canceled", context); \
-        {on_fail} \
-    } \
-    if (unlikely(context->fs.result < 0)) { \
-        cat_update_last_error_with_reason((cat_errno_t) context->fs.result, "File-System " #operation " failed"); \
-        errno = cat_orig_errno((cat_errno_t) context->fs.result); \
-        cat_debug(FS, "Failed cat_fs_" #operation " context=%p, uv_errno=%d", context, (int) context->fs.result); \
-        {on_fail} \
-    } \
-    cat_debug(FS, "Done cat_fs_" #operation " context=%p", context); \
     {on_done} \
 } while (0)
 
-#define CAT_FS_DO_RESULT(return_type, operation, ...) CAT_FS_DO_RESULT_EX({return -1;}, {return (return_type) context->fs.result;}, operation, __VA_ARGS__)
+#define CAT_FS_DO_RESULT(return_type, operation, ...) \
+        CAT_FS_DO_RESULT_EX({return -1;}, {return (return_type) context->fs.result;}, operation, __VA_ARGS__)
 
 static void cat_fs_callback(uv_fs_t *fs)
 {
@@ -220,18 +229,6 @@ CAT_API int cat_fs_ftruncate(cat_file_t fd, int64_t offset)
 // basic dir operations
 // opendir, readdir, closedir, scandir
 #ifndef CAT_OS_WIN
-CAT_API cat_dir_t *cat_fs_opendir(const char *path)
-{
-    if (NULL == path) {
-        errno = EINVAL;
-        cat_update_last_error(CAT_EINVAL, "Closedir failed: bad dir path (NULL)");
-        return NULL;
-    }
-    CAT_FS_DO_RESULT_EX({return NULL;}, {
-        return (cat_dir_t *) context->fs.ptr;
-    }, opendir, path);
-}
-
 /*
 * cat_fs_readdirs: like readdir(3), but with multi entries
 * Note: you should do free(dir->dirents[x].name), free(dir->dirents[x]) and free(dir->dirents)
@@ -835,11 +832,95 @@ CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
 
 typedef struct {
     cat_fs_work_ret_t ret;
+    const char *path;
+    cat_bool_t canceled;
+} cat_fs_opendir_data_t;
+
+static void cat_fs_opendir_cb(cat_data_t *ptr)
+{
+    cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) ptr;
+    CAT_ASSERT(NULL != data->path);
+
+    DIR *d = opendir(data->path);
+
+    if (NULL == d) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+    data->ret.ret.ptr = d;
+}
+
+static void cat_fs_opendir_free(cat_data_t *ptr)
+{
+    cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) ptr;
+
+    while (data->canceled && NULL != data->ret.ret.ptr) {
+        uv_dir_t *dir = (uv_dir_t *) calloc(1, sizeof(*dir));
+        if (dir == NULL) {
+            break;
+        }
+        dir->dir = data->ret.ret.ptr;
+        cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context));
+        if (context == NULL) {
+            free(dir);
+            break;
+        }
+        context->coroutine = NULL;
+        if (uv_fs_closedir(cat_event_loop, &context->fs, dir, cat_fs_callback) != 0) {
+            free(dir);
+            cat_free(context);
+        }
+        break;
+    }
+    cat_free(data);
+}
+
+CAT_API cat_dir_t *cat_fs_opendir(const char *path)
+{
+    if (!path) {
+        cat_fs_error_t error = {
+            .type = CAT_FS_ERROR_ERRNO,
+            .val.error = EINVAL,
+            .msg_free = CAT_FS_FREER_NONE,
+            .msg = "Invalid path (NULL)"
+        };
+        cat_fs_work_check_error(&error, "Opendir");
+        return NULL;
+    }
+    cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) cat_malloc(sizeof(*data));
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs opendir failed");
+        return NULL;
+    }
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->canceled = cat_false;
+    data->path = path;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
+        // canceled, tell freer close handle
+        data->canceled = cat_true;
+        return NULL;
+    }
+    cat_fs_work_check_error(&data->ret.error, "Opendir");
+    if (CAT_FS_ERROR_NONE != data->ret.error.type) {
+        return NULL;
+    }
+    // if no error occured, ret handle must be assigned
+    CAT_ASSERT(data->ret.ret.ptr);
+    // copy retval out
+    uv_dir_t *pdir = (uv_dir_t *) calloc(1, sizeof(uv_dir_t));
+    pdir->dir = data->ret.ret.ptr;
+    return pdir;
+}
+
+typedef struct {
+    cat_fs_work_ret_t ret;
     uv_dir_t *dir;
 } cat_fs_readdir_data_t;
 
-static void cat_fs_readdir_cb(cat_fs_readdir_data_t *data)
+static void cat_fs_readdir_cb(cat_data_t *ptr)
 {
+    cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
+
     struct dirent *pdirent = readdir(data->dir->dir);
     if (NULL == pdirent) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
@@ -894,8 +975,11 @@ static void cat_fs_readdir_cb(cat_fs_readdir_data_t *data)
 #endif
     data->ret.ret.ptr = pret;
 }
-static void cat_fs_readdir_free(cat_fs_readdir_data_t *data)
+
+static void cat_fs_readdir_free(cat_data_t *ptr)
 {
+    cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
+
     if (data->ret.ret.ptr) {
         cat_dirent_t *dirent = data->ret.ret.ptr;
         if (dirent->name) {
@@ -929,7 +1013,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     }
     memset(data, 0, sizeof(*data));
     data->dir = dir;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, (cat_work_function_t)cat_fs_readdir_cb, (cat_work_cleanup_callback_t)cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Readdir");
@@ -1092,10 +1176,8 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
     data->path = path;
     data->ret.ret.handle = INVALID_HANDLE_VALUE;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
-        if (CAT_ECANCELED == cat_get_last_error_code()) {
-            // canceled, tell freer close handle
-            data->canceled = cat_true;
-        }
+        // canceled, tell freer close handle
+        data->canceled = cat_true;
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Opendir");
