@@ -1265,27 +1265,78 @@ TEST(cat_fs, cancel){
     const char * fn = fnstr.c_str();
     cat_fs_unlink(fn);
     DEFER({cat_fs_unlink(fn);});
+    std::string dnstr = path_join(TEST_TMP_PATH, "cat_tests_cancel_dir");
+    const char * dn = dnstr.c_str();
+    cat_fs_rmdir(dn);
+    DEFER({cat_fs_rmdir(dn);});
     char buf[4096];
     int fd;
+    cat_dir_t *dir;
     
     cat_coroutine_t *c;
 #define CANCEL_TEST(expr) do{\
-    c = co([fn, fd, &buf]{\
+    c = co([fn, fd, dn, &dir, &buf]{\
         expr;\
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);\
     });\
     ASSERT_NE(c, nullptr);\
     cat_coroutine_resume(c, nullptr, nullptr);\
 }while(0);
+    // fd
     CANCEL_TEST(ASSERT_LT(cat_fs_open(fn, CAT_FS_O_RDWR, 0666), 0));
     ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
     CANCEL_TEST(ASSERT_LT(cat_fs_close(fd), 0));
     ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDONLY, 0666), 0);
-    CANCEL_TEST(ASSERT_LT(cat_fs_read(fd, buf, 4096), 4096));
-    CANCEL_TEST(ASSERT_LT(cat_fs_write(fd, buf, 4096), 4096));
-    CANCEL_TEST(ASSERT_LT(cat_fs_pread(fd, buf, 4096, 0), 4096));
-    CANCEL_TEST(ASSERT_LT(cat_fs_pwrite(fd, buf, 4096, 0), 4096));
+    CANCEL_TEST(ASSERT_LT(cat_fs_read(fd, buf, 4096), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_write(fd, buf, 4096), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_pread(fd, buf, 4096, 0), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_pwrite(fd, buf, 4096, 0), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_lseek(fd, 0, SEEK_SET), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_fsync(fd), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_fdatasync(fd), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_ftruncate(fd, 0), 0));
+    // sendfile should be tested in socket
+    // CANCEL_TEST(ASSERT_LT(cat_fs_sendfile(fd, 0, 0, 0), 0));
+    CANCEL_TEST({
+        cat_stat_t dummy;
+        ASSERT_LT(cat_fs_fstat(fd, &dummy), 0);
+    });
+    CANCEL_TEST(ASSERT_LT(cat_fs_futime(fd, 0.0, 0.0), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_fchmod(fd, 0666), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_fchown(fd, -1, -1), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_flock(fd, CAT_LOCK_UN), 0));
+    ASSERT_EQ(cat_fs_close(fd), 0);
+    // dir
+    ASSERT_EQ(cat_fs_mkdir(dn, 0777), 0);
+    CANCEL_TEST(ASSERT_EQ(cat_fs_opendir(dn), nullptr));
+    ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
+    CANCEL_TEST(ASSERT_EQ(cat_fs_readdir(dir), nullptr));
+    // rewinddir is not blocking(it's not in thread pool)
+    CANCEL_TEST(ASSERT_LT(cat_fs_closedir(dir), 0));
+    CANCEL_TEST(ASSERT_NE(cat_fs_scandir(dn, nullptr, nullptr, nullptr), 0));
+    // path
+    CANCEL_TEST(ASSERT_LT(cat_fs_access(fn, F_OK), 0));
+    CANCEL_TEST({
+        cat_stat_t dummy;
+        ASSERT_LT(cat_fs_stat(fn, &dummy), 0);
+    });
+    CANCEL_TEST({
+        cat_stat_t dummy;
+        ASSERT_LT(cat_fs_lstat(fn, &dummy), 0);
+    });
+    CANCEL_TEST(ASSERT_LT(cat_fs_utime(fn, 0.0, 0.0), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_lutime(fn, 0.0, 0.0), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_unlink(fn), 0));
+    cat_fs_unlink(fn);
+    CANCEL_TEST(ASSERT_LT(cat_fs_rename(fn, dn), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_link(fn, dn), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_symlink(fn, dn, 0), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_readlink(fn, buf, 4096), 0));
+    CANCEL_TEST(ASSERT_EQ(cat_fs_realpath(fn, buf), nullptr));
+    CANCEL_TEST(ASSERT_LT(cat_fs_chmod(fn, 0666), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_chown(fn, -1, -1), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_lchown(fn, -1, -1), 0));
+    CANCEL_TEST(ASSERT_LT(cat_fs_copyfile(fn, dn, 0), 0));
 #undef CANCEL_TEST
 
 }

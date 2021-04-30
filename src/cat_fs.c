@@ -526,6 +526,9 @@ typedef struct cat_fs_work_ret_s {
     union {
         signed long long int num;
         void *ptr;
+#ifdef CAT_OS_WIN
+        HANDLE handle;
+#endif // CAT_OS_WIN
     } ret;
 } cat_fs_work_ret_t;
 
@@ -697,6 +700,7 @@ static inline void cat_fs_error_msg_free(cat_fs_error_t *e)
     }
 }
 
+// if error occured, this macro will set error
 #define cat_fs_work_check_error(error, fmt) do { \
     cat_fs_error_t *_error = error; \
     if (_error->type != CAT_FS_ERROR_NONE) { \
@@ -1009,6 +1013,7 @@ static const char *cat_fs_nt_strerror(NTSTATUS status)
 typedef struct {
     cat_fs_work_ret_t ret;
     const char *path;
+    cat_bool_t canceled;
 } cat_fs_opendir_data_t;
 
 static void cat_fs_opendir_cb(cat_data_t *ptr)
@@ -1026,25 +1031,22 @@ static void cat_fs_opendir_cb(cat_data_t *ptr)
         FILE_FLAG_BACKUP_SEMANTICS,
         NULL
     );
+    // printf("created %p\n", dir_handle);
     HeapFree(GetProcessHeap(), 0, (LPVOID) pathw);
 
     if (INVALID_HANDLE_VALUE == dir_handle) {
-        data->ret.ret.ptr = NULL;
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.error = GetLastError();
-        return;
     }
-    cat_dir_int_t *pdir = malloc(sizeof(cat_dir_int_t));
-    if (NULL == pdir) {
-        data->ret.ret.ptr = NULL;
-        CloseHandle(dir_handle);
-        data->ret.error.type = CAT_FS_ERROR_WIN32;
-        data->ret.error.val.error = ERROR_NOT_ENOUGH_MEMORY;
-        return;
+    data->ret.ret.handle = dir_handle;
+}
+
+static void cat_fs_opendir_free(cat_fs_opendir_data_t *data)
+{
+    if (data->canceled && INVALID_HANDLE_VALUE != data->ret.ret.handle) {
+        CloseHandle(data->ret.ret.handle);
     }
-    pdir->dir = dir_handle;
-    pdir->rewind = cat_true;
-    data->ret.ret.ptr = pdir;
+    cat_free(data);
 }
 
 CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
@@ -1066,37 +1068,53 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
         return NULL;
     }
     memset(&data->ret, 0, sizeof(data->ret));
+    data->canceled = cat_false;
     data->path = path;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+    data->ret.ret.handle = INVALID_HANDLE_VALUE;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
+        if (CAT_ECANCELED == cat_get_last_error_code()) {
+            // canceled, tell freer close handle
+            data->canceled = cat_true;
+        }
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Opendir");
-    return data->ret.ret.ptr;
+    if(CAT_FS_ERROR_NONE != data->ret.error.type){
+        return NULL;
+    }
+    // if no error occured, ret handle must be assigned
+    CAT_ASSERT(INVALID_HANDLE_VALUE != data->ret.ret.handle);
+    // copy retval out
+    cat_dir_int_t *pdir = malloc(sizeof(cat_dir_int_t));
+    pdir->dir = data->ret.ret.handle;
+    pdir->rewind = cat_true;
+    return pdir;
 }
 
 typedef struct {
     cat_fs_work_ret_t ret;
-    cat_dir_int_t *dir;
+    HANDLE handle;
 } cat_fs_closedir_data_t;
 
 static void cat_fs_closedir_cb(cat_data_t *ptr)
 {
     cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) ptr;
-    BOOL ret = CloseHandle(data->dir->dir);
+    BOOL ret = CloseHandle(data->handle);
     if (FALSE == ret) {
-        data->ret.ret.num = -1;
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.error = GetLastError();
-        return ;
     }
-    data->ret.ret.num = 0;
-    free(data->dir);
+    data->ret.ret.num = ret;
     return;
 }
-
+/*
+*   cat_fs_closedir: close dir returned by cat_fs_opendir
+*   NOTE: this will not free dir if canceled,
+*       but the dir will be unusable after cancel.
+*/
 CAT_API int cat_fs_closedir(cat_dir_t *dir)
 {
-    if (NULL == dir) {
+    if (NULL == dir || INVALID_HANDLE_VALUE == ((cat_dir_int_t*)dir)->dir) {
         cat_fs_error_t error = {
             .type = CAT_FS_ERROR_ERRNO,
             .val.error = EINVAL,
@@ -1112,12 +1130,17 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return -1;
     }
     memset(&data->ret, 0, sizeof(data->ret));
-    data->dir = dir;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+    data->handle = ((cat_dir_int_t*)dir)->dir;
+    cat_bool_t ret = cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER);
+    ((cat_dir_int_t*)dir)->dir = INVALID_HANDLE_VALUE;
+    if (!ret) {
         return -1;
     }
     cat_fs_work_check_error(&data->ret.error, "Closedir");
-    return (int) data->ret.ret.num;
+    if(CAT_FS_ERROR_NONE != data->ret.error.type){
+        return -1;
+    }
+    return 0;
 }
 
 typedef struct _CAT_FILE_DIRECTORY_INFORMATION {
@@ -1209,7 +1232,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         data->dir->rewind = cat_false;
     }
 
-    cat_dirent_t *pdirent = malloc(sizeof(cat_dirent_t));
+    cat_dirent_t *pdirent = cat_malloc(sizeof(*pdirent));
     if (NULL == pdirent) {
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.error =  ERROR_NOT_ENOUGH_MEMORY;
@@ -1245,7 +1268,15 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
     data->ret.ret.ptr = pdirent;
 }
 
-CAT_API uv_dirent_t *cat_fs_readdir(cat_dir_t *dir)
+static void cat_fs_readdir_free(cat_fs_readdir_data_t *data)
+{
+    if(data->ret.ret.ptr){
+        cat_free(data->ret.ret.ptr);
+    }
+    cat_free(data);
+}
+
+CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
 {
     if (NULL == dir) {
         cat_fs_error_t error = {
@@ -1264,11 +1295,17 @@ CAT_API uv_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->dir = dir;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Readdir");
-    return data->ret.ret.ptr;
+    if(data->ret.error.type != CAT_FS_ERROR_NONE){
+        return NULL;
+    }
+    CAT_ASSERT(data->ret.ret.ptr);
+    cat_dirent_t *ret = malloc(sizeof(*ret));
+    memcpy(ret, data->ret.ret.ptr, sizeof(*ret));
+    return ret;
 }
 
 CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
