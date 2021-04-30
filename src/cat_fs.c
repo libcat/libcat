@@ -1348,8 +1348,9 @@ typedef struct {
     cat_fs_work_ret_t ret;
     cat_file_t fd;
     int op;
-    cat_bool_t started;
-    cat_bool_t done;
+    cat_bool_t non_blocking; /* operation is non-blocking (UN/NB) */
+    cat_bool_t started; /* new thread in worker */
+    cat_bool_t done; /* new thread finished */
     uv_thread_t tid;
     cat_async_t async;
 } cat_fs_flock_data_t;
@@ -1357,9 +1358,9 @@ typedef struct {
 /*
 * original flock(2) platform-specific implement
 */
-static void cat_fs_orig_flock(void *arg)
+static void cat_fs_orig_flock(cat_data_t *ptr)
 {
-    cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) arg;
+    cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) ptr;
     cat_file_t fd = data->fd;
     int op = data->op;
 #ifdef CAT_OS_WIN
@@ -1527,27 +1528,15 @@ static void cat_fs_orig_flock(void *arg)
 #endif // LOCK_EX...
     _done:
     data->done = cat_true;
-    cat_async_notify(&data->async);
+    if (!data->non_blocking) {
+        cat_async_notify(&data->async);
+    }
 }
 
 // work (thread pool) callback
 static void cat_fs_flock_cb(cat_data_t *ptr)
 {
     cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) ptr;
-#ifdef FLOCK_HAVE_NB
-    if ((CAT_LOCK_NB & data->op) == CAT_LOCK_NB) {
-        // we have LOCK_NB and LOCK_NB is set
-        cat_fs_orig_flock(data);
-        cat_async_notify(&data->async);
-        return;
-    }
-#endif // FLOCK_HAVE_NB
-    if ((data->op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN) {
-        // LOCK_UN is not blocking
-        cat_fs_orig_flock(data);
-        cat_async_notify(&data->async);
-        return;
-    }
     // we donot put blocking flock into thread pool directly,
     // we create another thread to do flock to avoid dead lock when thread pool is full
     // (all threads in pool waiting flock(xx, LOCK_EX), while flock(xx, LOCK_UN) after them in queue)
@@ -1555,27 +1544,34 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
         .flags = UV_THREAD_HAS_STACK_SIZE,
         .stack_size = cat_getpagesize() // TODO: use real single page size as this
     };
-    int ret = uv_thread_create_ex(&data->tid, &params, cat_fs_orig_flock, data);
-    if (0 != ret) {
+    int error = uv_thread_create_ex(&data->tid, &params, cat_fs_orig_flock, data);
+    if (0 != error) {
         // printf("thread failed\n");
         data->ret.ret.num = -1;
         data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
-        data->ret.error.val.cat_errno = ret;
+        data->ret.error.val.cat_errno = error;
+        cat_async_notify(&data->async);
+    } else {
+        data->started = cat_true;
     }
-    data->started = cat_true;
 }
 
-static void cat_fs_flock_data_cleanup(cat_async_t *async, cat_data_t *unused)
+static void cat_fs_flock_data_cleanup(cat_async_t *async)
 {
     cat_fs_flock_data_t *data = cat_container_of(async, cat_fs_flock_data_t, async);
 
-    (void) unused;
     CAT_ASSERT(data->done);
     if (data->started) {
         uv_thread_join(&data->tid); // shell we run it in work()?
     }
     cat_free(data);
 }
+
+#ifdef FLOCK_HAVE_NB
+#define _CAT_LOCK_NB CAT_LOCK_NB
+#else
+#define _CAT_LOCK_NB 0
+#endif // FLOCK_HAVE_NB
 
 /*
 * flock(2) like implement for coroutine model
@@ -1587,31 +1583,32 @@ CAT_API int cat_fs_flock(cat_file_t fd, int op)
         cat_update_last_error_of_syscall("Malloc for fs flock failed");
         return -1;
     }
-    if (cat_async_create(&data->async) != &data->async) {
-        return -1;
-    }
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
     data->op = op;
     data->started = cat_false;
     data->done = cat_false;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_flock_cb, NULL, data, CAT_TIMEOUT_FOREVER)) {
-        return -1;
+    data->non_blocking = ((data->op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN) || (data->op & _CAT_LOCK_NB);
+    if (data->non_blocking) {
+        // operation is non-blocking, things done immediately
+        if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_orig_flock, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+            return -1;
+        }
+    } else {
+        if (cat_async_create(&data->async) != &data->async) {
+            return -1;
+        }
+        if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_flock_cb, NULL, data, CAT_TIMEOUT_FOREVER)) {
+            cat_async_cleanup(&data->async, cat_fs_flock_data_cleanup);
+            return -1;
+        }
+        if (!cat_async_wait_and_close(&data->async, cat_fs_flock_data_cleanup, CAT_TIMEOUT_FOREVER)) {
+            return -1;
+        }
+        CAT_ASSERT(data->done);
     }
-    if (!cat_async_wait_and_close(&data->async, cat_fs_flock_data_cleanup, NULL, CAT_TIMEOUT_FOREVER)) {
-        cat_fs_error_t e = {0};
-        e.type = CAT_FS_ERROR_CAT_ERRNO;
-        e.val.cat_errno = cat_get_last_error_code();
-        e.msg = cat_get_last_error_message();
-        e.msg_free = CAT_FS_FREER_NONE;
-        cat_fs_work_check_error(&e, "Flock");
-        return -1;
-    }
-    if (!data->started) {
-        // LOCK_NB is set / LOCK_UN, things done immediately
-        cat_fs_work_check_error(&data->ret.error, "Flock");
-        // printf("nb done %d\n", data.ret.ret.num);
-    }
-    CAT_ASSERT(data->done);
+    cat_fs_work_check_error(&data->ret.error, "Flock");
     return (int) data->ret.ret.num;
 }
+
+#undef _CAT_LOCK_NB
