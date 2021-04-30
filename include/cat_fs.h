@@ -132,7 +132,7 @@ CAT_API int cat_fs_link(const char  *path, const char  *new_path);
 CAT_API int cat_fs_symlink(const char  *path, const char  *new_path, int flags);
 
 CAT_API int cat_fs_readlink(const char  *pathname, char  *buf, size_t len);
-CAT_API char  *cat_fs_realpath(const char *pathname, char *buf);
+CAT_API char *cat_fs_realpath(const char *pathname, char *buf);
 
 CAT_API int cat_fs_chmod(const char *path, int mode);
 CAT_API int cat_fs_fchmod(cat_file_t fd, int mode);

@@ -1148,6 +1148,9 @@ static void cat_fs_opendir_free(cat_fs_opendir_data_t *data)
     if (data->canceled && INVALID_HANDLE_VALUE != data->ret.ret.handle) {
         CloseHandle(data->ret.ret.handle);
     }
+    if(data->path){
+        cat_free((void*)data->path);
+    }
     cat_free(data);
 }
 
@@ -1171,7 +1174,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->canceled = cat_false;
-    data->path = path;
+    data->path = cat_strdup(path);
     data->ret.ret.handle = INVALID_HANDLE_VALUE;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
         // canceled, tell freer close handle
@@ -1209,12 +1212,11 @@ static void cat_fs_closedir_cb(cat_data_t *ptr)
 }
 /*
 *   cat_fs_closedir: close dir returned by cat_fs_opendir
-*   NOTE: this will not free dir if canceled,
-*       but the dir will be unusable after cancel.
+*   NOTE: this will free the dir passed in unconditionally
 */
 CAT_API int cat_fs_closedir(cat_dir_t *dir)
 {
-    if (NULL == dir || INVALID_HANDLE_VALUE == ((cat_dir_int_t*)dir)->dir) {
+    if (NULL == dir) {
         cat_fs_error_t error = {
             .type = CAT_FS_ERROR_ERRNO,
             .val.error = EINVAL,
@@ -1224,6 +1226,10 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         cat_fs_work_check_error(&error, "Closedir");
         return -1;
     }
+    if (INVALID_HANDLE_VALUE == ((cat_dir_int_t*)dir)->dir) {
+        free(dir);
+        return 0;
+    }
     cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) cat_malloc(sizeof(*data));
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs closedir failed");
@@ -1231,8 +1237,8 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->handle = ((cat_dir_int_t*)dir)->dir;
+    free(dir);
     cat_bool_t ret = cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER);
-    ((cat_dir_int_t*)dir)->dir = INVALID_HANDLE_VALUE;
     if (!ret) {
         return -1;
     }
@@ -1259,7 +1265,7 @@ typedef struct _CAT_FILE_DIRECTORY_INFORMATION {
 
 typedef struct {
     cat_fs_work_ret_t ret;
-    cat_dir_int_t * dir;
+    cat_dir_int_t dir;
 } cat_fs_readdir_data_t;
 
 static void cat_fs_readdir_cb(cat_data_t *ptr)
@@ -1299,7 +1305,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
 # endif // _MSC_VER
         char buffer[8192];
     status = pNtQueryDirectoryFile(
-        data->dir->dir, // file handle
+        data->dir.dir, // file handle
         NULL, // whatever
         NULL, // whatever
         NULL, // whatever
@@ -1309,7 +1315,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         FileDirectoryInformation,
         TRUE, // if we get only 1 entry
         NULL, // wildcard filename
-        data->dir->rewind // from first
+        data->dir.rewind // from first
     );
 
     if (!NT_SUCCESS(status)) {
@@ -1328,8 +1334,8 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         }
     }
 
-    if (data->dir->rewind) {
-        data->dir->rewind = cat_false;
+    if (data->dir.rewind) {
+        data->dir.rewind = cat_false;
     }
 
     cat_dirent_t *pdirent = malloc(sizeof(*pdirent));
@@ -1368,17 +1374,26 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
     data->ret.ret.ptr = pdirent;
 }
 
-static void cat_fs_readdir_free(cat_fs_readdir_data_t *data)
+static void cat_fs_readdir_free(cat_data_t *ptr)
 {
-    if(data->ret.ret.ptr){
-        free(data->ret.ret.ptr);
+    cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t*)ptr;
+    cat_dirent_t *dirent = data->ret.ret.ptr;
+    if(dirent){
+        if(dirent->name){
+            free((void*)dirent->name);
+        }
+        free(dirent);
     }
     cat_free(data);
 }
-
+/*
+*   cat_fs_readdir: read a file entry in cat_dir_t
+*   NOTE: if canceled, the dir will be unusable after cancel.
+*/
 CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
 {
-    if (NULL == dir) {
+    cat_dir_int_t *pintdir = dir;
+    if (NULL == pintdir || INVALID_HANDLE_VALUE == pintdir->dir) {
         cat_fs_error_t error = {
             .type = CAT_FS_ERROR_ERRNO,
             .val.error = EINVAL,
@@ -1394,8 +1409,12 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     memset(&data->ret, 0, sizeof(data->ret));
-    data->dir = dir;
+    data->dir.dir = pintdir->dir;
+    data->dir.rewind = pintdir->rewind;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
+        // canceled
+        CloseHandle(pintdir->dir);
+        pintdir->dir = INVALID_HANDLE_VALUE;
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Readdir");
@@ -1403,8 +1422,11 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     CAT_ASSERT(data->ret.ret.ptr);
+    pintdir->rewind = data->dir.rewind;
+    cat_dirent_t *cbret = data->ret.ret.ptr;
     cat_dirent_t *ret = malloc(sizeof(*ret));
-    memcpy(ret, data->ret.ret.ptr, sizeof(*ret));
+    ret->name = strdup(cbret->name);
+    ret->type = cbret->type;
     return ret;
 }
 
