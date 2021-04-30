@@ -838,22 +838,21 @@ typedef struct {
     uv_dir_t *dir;
 } cat_fs_readdir_data_t;
 
-static void cat_fs_readdir_cb(cat_data_t *ptr)
+static void cat_fs_readdir_cb(cat_fs_readdir_data_t *data)
 {
-    cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
     struct dirent *pdirent = readdir(data->dir->dir);
     if (NULL == pdirent) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
         return;
     }
-    cat_dirent_t *pret = malloc(sizeof(*pret));
+    cat_dirent_t *pret = cat_malloc(sizeof(*pret));
     if (NULL == pret) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
         return;
     }
-    pret->name = strdup(pdirent->d_name);
+    pret->name = cat_strdup(pdirent->d_name);
     if (NULL == pret->name) {
         free(pret);
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
@@ -895,6 +894,17 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
 #endif
     data->ret.ret.ptr = pret;
 }
+static void cat_fs_readdir_free(cat_fs_readdir_data_t *data)
+{
+    if (data->ret.ret.ptr) {
+        cat_dirent_t *dirent = data->ret.ret.ptr;
+        if (dirent->name) {
+            cat_free((void*)dirent->name);
+        }
+        cat_free(dirent);
+    }
+    cat_free(data);
+}
 
 /*
 * cat_fs_readdir: like readdir(3), but return cat_dirent_t
@@ -917,13 +927,22 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         cat_update_last_error_of_syscall("Malloc for fs readdir failed");
         return NULL;
     }
-    memset(&data->ret, 0, sizeof(data->ret));
+    memset(data, 0, sizeof(*data));
     data->dir = dir;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, (cat_work_function_t)cat_fs_readdir_cb, (cat_work_cleanup_callback_t)cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "Readdir");
-    return data->ret.ret.ptr;
+    if (CAT_FS_ERROR_NONE != data->ret.error.type) {
+        return NULL;
+    }
+    cat_dirent_t *work_ret = (cat_dirent_t*)data->ret.ret.ptr;
+    CAT_ASSERT(work_ret);
+    CAT_ASSERT(work_ret->name);
+    cat_dirent_t *ret = malloc(sizeof(*ret));
+    ret->type = work_ret->type;
+    ret->name = strdup(work_ret->name);
+    return ret;
 }
 
 typedef struct {
