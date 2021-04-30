@@ -68,6 +68,7 @@ static cat_always_inline void cat_string_close(cat_string_t *string)
 {
     if (string->value != NULL) {
         cat_free(string->value);
+        cat_string_init(string);
     }
 }
 

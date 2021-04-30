@@ -82,3 +82,12 @@ TEST(cat_string, strlchr)
     ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'c'), p + 6);
     ASSERT_EQ(cat_strlchr(p, p + CAT_STRLEN(p), 'h'), p + 7);
 }
+
+TEST(cat_string, create)
+{
+    cat_string_t string;
+    ASSERT_TRUE(cat_string_create(&string, CAT_STRL("Hello libcat")));
+    ASSERT_NE(string.value, nullptr);
+    ASSERT_GT(string.length, 0);
+    cat_string_close(&string);
+}
