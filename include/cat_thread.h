@@ -26,23 +26,25 @@ extern "C" {
 #include "cat_coroutine.h"
 
 typedef struct cat_async_s cat_async_t;
-typedef void (*cat_async_cleanup_callback)(cat_async_t *async, cat_data_t *data);
+typedef void (*cat_async_cleanup_callback)(cat_async_t *async);
 
 struct cat_async_s {
+
     union {
-        cat_coroutine_t *coroutine;
         uv_handle_t handle;
         uv_async_t async;
     } u;
-    cat_bool_t closing;
-    cat_bool_t done;
     cat_async_cleanup_callback cleanup;
-    cat_data_t *cleanup_data;
+    cat_coroutine_t *coroutine;
+    cat_bool_t done;
+    cat_bool_t closing;
 };
 
 CAT_API cat_async_t *cat_async_create(cat_async_t *async);
 CAT_API int cat_async_notify(cat_async_t *async);
-CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanup_callback cleanup, cat_data_t *data, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanup_callback cleanup, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_async_cleanup(cat_async_t *async, cat_async_cleanup_callback cleanup);
+CAT_API cat_bool_t cat_async_close(cat_async_t *async, cat_async_cleanup_callback cleanup);
 
 #ifdef __cplusplus
 }

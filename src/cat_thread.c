@@ -22,7 +22,7 @@
 #include "cat_time.h"
 
 #define CAT_ASYNC_CHECK_AVAILABILITY(async, failure) do { \
-    if (async->u.coroutine != NULL) { \
+    if (async->coroutine != NULL) { \
         cat_update_last_error(CAT_EINVAL, "Async is in waiting"); \
         failure; \
     } \
@@ -37,14 +37,14 @@ static void cat_async_close_callback(uv_handle_t *handle)
     cat_async_t *async = cat_container_of(handle, cat_async_t, u.handle);
 
     if (async->cleanup != NULL) {
-        async->cleanup(async, async->cleanup_data);
+        async->cleanup(async);
     }
 }
 
 static void cat_async_callback(uv_async_t *handle)
 {
     cat_async_t *async = cat_container_of(handle, cat_async_t, u.async);
-    cat_coroutine_t *coroutine = async->u.coroutine;
+    cat_coroutine_t *coroutine = async->coroutine;
     /* coroutine must be in waiting and not in closing,
      * or coroutine (have not had time to wait / wait failed / cancelled). */
     CAT_ASSERT((coroutine != NULL && !async->closing) || coroutine == NULL);
@@ -65,11 +65,10 @@ CAT_API cat_async_t *cat_async_create(cat_async_t *async)
     int error;
 
     CAT_ASSERT(async != NULL && "Async should be allocated by user");
-    async->closing = cat_false;
-    async->done = cat_false;
     async->cleanup = NULL;
-    async->cleanup_data = NULL;
-    async->u.coroutine = NULL;
+    async->done = cat_false;
+    async->closing = cat_false;
+    async->coroutine = NULL;
 
     error = uv_async_init(cat_event_loop, &async->u.async, cat_async_callback);
 
@@ -88,18 +87,17 @@ CAT_API int cat_async_notify(cat_async_t *async)
     return uv_async_send(&async->u.async);
 }
 
-CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanup_callback cleanup, cat_data_t *data, cat_timeout_t timeout)
+CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanup_callback cleanup, cat_timeout_t timeout)
 {
     CAT_ASYNC_CHECK_AVAILABILITY(async, return cat_false);
     cat_bool_t ret;
 
     async->cleanup = cleanup;
-    async->cleanup_data = data;
 
     if (!async->done) {
-        async->u.coroutine = CAT_COROUTINE_G(current);
+        async->coroutine = CAT_COROUTINE_G(current);
         ret = cat_time_wait(timeout);
-        async->u.coroutine = NULL;
+        async->coroutine = NULL;
         /* we can not close it here, because thread may access it later,
          * it will be closed in notify callback */
         async->closing = cat_true;
@@ -115,6 +113,34 @@ CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanu
         }
     } /* else thread done the work before we wait it, fast return */
     uv_close(&async->u.handle, cat_async_close_callback); /* close it if it was done */
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_async_cleanup(cat_async_t *async, cat_async_cleanup_callback cleanup)
+{
+    CAT_ASYNC_CHECK_AVAILABILITY(async, return cat_false);
+
+    async->cleanup = cleanup;
+
+    if (async->done) {
+        /* fast close it if it was done */
+        uv_close(&async->u.handle, cat_async_close_callback);
+    } else {
+        /* we can not close it here, because thread may access it later,
+         * it will be closed in notify callback */
+        async->closing = cat_true;
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_async_close(cat_async_t *async, cat_async_cleanup_callback cleanup)
+{
+    CAT_ASYNC_CHECK_AVAILABILITY(async, return cat_false);
+
+    async->cleanup = cleanup;
+    uv_close(&async->u.handle, cat_async_close_callback);
 
     return cat_true;
 }
