@@ -1274,14 +1274,14 @@ TEST(cat_fs, cancel){
     cat_dir_t *dir;
 
     cat_coroutine_t *c;
-#define CANCEL_TEST(expr) do{\
-    c = co([fn, fd, dn, &dir, &buf]{\
-        expr;\
-        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);\
-    });\
-    ASSERT_NE(c, nullptr);\
-    cat_coroutine_resume(c, nullptr, nullptr);\
-}while(0);
+#define CANCEL_TEST(expr) do{ \
+    c = co([&]{ \
+        expr; \
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED); \
+    }); \
+    ASSERT_NE(c, nullptr); \
+    cat_coroutine_resume(c, nullptr, nullptr); \
+}while(0)
     // fd
     CANCEL_TEST(ASSERT_LT(cat_fs_open(fn, CAT_FS_O_RDWR, 0666), 0));
     ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
