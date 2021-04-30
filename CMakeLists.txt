@@ -248,6 +248,7 @@ set(cat_sources
     src/cat_buffer.c
     src/cat_fs.c
     src/cat_signal.c
+    src/cat_thread.c
     src/cat_watch_dog.c
     src/cat_http.c
     src/cat_websocket.c
