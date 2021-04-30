@@ -22,6 +22,7 @@
 #include "cat_event.h"
 #include "cat_time.h"
 #include "cat_work.h"
+#include "cat_thread.h"
 #ifdef CAT_OS_WIN
 # include <winternl.h>
 #endif // CAT_OS_WIN
@@ -1328,9 +1329,10 @@ typedef struct {
     cat_fs_work_ret_t ret;
     cat_file_t fd;
     int op;
-    cat_bool_t running;
-    cat_bool_t waiting;
+    cat_bool_t started;
+    cat_bool_t done;
     uv_thread_t tid;
+    cat_async_t async;
 } cat_fs_flock_data_t;
 
 /*
@@ -1349,8 +1351,7 @@ static void cat_fs_orig_flock(void *arg)
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EBADF;
         data->ret.ret.num = -1;
-        data->running = cat_false;
-        return;
+        goto _done;
     }
 
     OVERLAPPED overlapped = { 0 };
@@ -1372,15 +1373,13 @@ static void cat_fs_orig_flock(void *arg)
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.le = GetLastError();
         data->ret.ret.num = -1;
-        data->running = cat_false;
-        return;
+        goto _done;
     }
     if (CAT_LOCK_UN == op_type) {
         // already unlocked
         // printf("u end\n");
         data->ret.ret.num = 0;
-        data->running = cat_false;
-        return;
+        goto _done;
     }
 
     if (CAT_LOCK_EX == op_type || CAT_LOCK_SH == op_type) {
@@ -1406,7 +1405,6 @@ static void cat_fs_orig_flock(void *arg)
                 data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
                 data->ret.error.val.le = CAT_EAGAIN;
                 data->ret.ret.num = -1;
-                data->running = cat_false;
                 DWORD dummy;
                 // BOOL done =
                 GetOverlappedResult(hFile, &overlapped, &dummy, 1);
@@ -1419,26 +1417,23 @@ static void cat_fs_orig_flock(void *arg)
                     &overlapped
                 );
                 // assert(done);
-                return;
+                goto _done;
             }
             // printf("b done\n");
             data->ret.error.type = CAT_FS_ERROR_WIN32;
             data->ret.error.val.le = GetLastError();
             data->ret.ret.num = -1;
-            data->running = cat_false;
-            return;
+            goto _done;
         }
         // printf("nb done\n");
         data->ret.ret.num = 0;
-        data->running = cat_false;
-        return;
+        goto _done;
     } else {
         // printf("not supported\n");
         data->ret.error.type = CAT_FS_ERROR_WIN32;
         data->ret.error.val.le = ERROR_INVALID_PARAMETER;
         data->ret.ret.num = -1;
-        data->running = cat_false;
-        return;
+        goto _done;
     }
 #elif defined(LOCK_EX) && defined(LOCK_SH) && defined(LOCK_UN)
     // Linux / BSDs / macOS implement with flock(2)
@@ -1452,8 +1447,7 @@ static void cat_fs_orig_flock(void *arg)
     data->ret.ret.num = flock(fd, operation);
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = errno;
-    data->running = cat_false;
-    return;
+    goto _done;
 #elif defined(F_SETLK) && defined(F_SETLKW) && defined(F_RDLCK) && defined(F_WRLCK) && defined(F_UNLCK)
     // fcntl implement
 # define FLOCK_HAVE_NB
@@ -1474,8 +1468,7 @@ static void cat_fs_orig_flock(void *arg)
     data->ret.ret.num = fcntl(fd, cmd, &lbuf);
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = errno;
-    data->running = cat_false;
-    return;
+    goto _done;
 #elif defined(F_LOCK) && defined(F_ULOCK) && defined(F_TLOCK)
     // lockf implement (not well tested, maybe buggy)
     // linux man page lockf(3) says
@@ -1489,7 +1482,7 @@ static void cat_fs_orig_flock(void *arg)
         data->ret.ret.num = -1;
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EINVAL;
-        return;
+        goto _done;
     } else if (CAT_LOCK_EX == op_type) {
         if ((CAT_LOCK_NB & op) == CAT_LOCK_NB) {
             cmd = F_TLOCK;
@@ -1504,17 +1497,18 @@ static void cat_fs_orig_flock(void *arg)
     data->ret.ret.num = lockf(fd, cmd, 0); // not real full file
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = errno;
-    data->running = cat_false;
-    return;
+    goto _done;
 #else
     // maybe sometimes we can implement robust flock by ourselves?
 # warning "not supported platform for flock"
     data->ret.ret.num = -1;
     data->ret.error.type = CAT_FS_ERROR_ERRNO;
     data->ret.error.val.error = ENOSYS;
-    data->running = cat_false;
-    return;
+    goto _done;
 #endif // LOCK_EX...
+    _done:
+    data->done = cat_true;
+    cat_async_notify(&data->async);
 }
 
 // work (thread pool) callback
@@ -1525,12 +1519,14 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
     if ((CAT_LOCK_NB & data->op) == CAT_LOCK_NB) {
         // we have LOCK_NB and LOCK_NB is set
         cat_fs_orig_flock(data);
+        cat_async_notify(&data->async);
         return;
     }
 #endif // FLOCK_HAVE_NB
     if ((data->op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN) {
         // LOCK_UN is not blocking
         cat_fs_orig_flock(data);
+        cat_async_notify(&data->async);
         return;
     }
     // we donot put blocking flock into thread pool directly,
@@ -1546,8 +1542,20 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
         data->ret.ret.num = -1;
         data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
         data->ret.error.val.cat_errno = ret;
-        data->running = cat_false;
     }
+    data->started = cat_true;
+}
+
+static void cat_fs_flock_data_cleanup(cat_async_t *async, cat_data_t *unused)
+{
+    cat_fs_flock_data_t *data = cat_container_of(async, cat_fs_flock_data_t, async);
+
+    (void) unused;
+    CAT_ASSERT(data->done);
+    if (data->started) {
+        uv_thread_join(&data->tid); // shell we run it in work()?
+    }
+    cat_free(data);
 }
 
 /*
@@ -1555,59 +1563,36 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
 */
 CAT_API int cat_fs_flock(cat_file_t fd, int op)
 {
-    cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) cat_sys_malloc(sizeof(*data));
+    cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) cat_malloc(sizeof(*data));
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs flock failed");
+        return -1;
+    }
+    if (cat_async_create(&data->async) != &data->async) {
         return -1;
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
     data->op = op;
-    data->running = cat_true;
-    data->waiting = cat_true;
+    data->started = cat_false;
+    data->done = cat_false;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_flock_cb, NULL, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
-    if (!data->running) {
+    if (!cat_async_wait_and_close(&data->async, cat_fs_flock_data_cleanup, NULL, CAT_TIMEOUT_FOREVER)) {
+        cat_fs_error_t e = {0};
+        e.type = CAT_FS_ERROR_CAT_ERRNO;
+        e.val.cat_errno = cat_get_last_error_code();
+        e.msg = cat_get_last_error_message();
+        e.msg_free = CAT_FS_FREER_NONE;
+        cat_fs_work_check_error(&e, "Flock");
+        return -1;
+    }
+    if (!data->started) {
         // LOCK_NB is set / LOCK_UN, things done immediately
         cat_fs_work_check_error(&data->ret.error, "Flock");
         // printf("nb done %d\n", data.ret.ret.num);
-        return (int) data->ret.ret.num;
     }
-    cat_fs_error_t e = {0};
-    cat_timeout_t waittime = 1;
-    while (data->running) {
-        switch (cat_time_delay(waittime)) {
-            case CAT_RET_OK:
-                break;
-            case CAT_RET_NONE:
-                // cancelled
-                // TODO: should we kill worker thread, then recover locks like what will os do?
-                data->waiting = cat_false;
-                e.type = CAT_FS_ERROR_CAT_ERRNO;
-                e.val.cat_errno = CAT_ECANCELED;
-                cat_fs_work_check_error(&e, "Flock");
-                return -1;
-            case CAT_RET_ERROR:
-                // ???
-                data->waiting = cat_false;
-                e.type = CAT_FS_ERROR_CAT_ERRNO;
-                e.val.cat_errno = cat_get_last_error_code();
-                e.msg = cat_get_last_error_message();
-                e.msg_free = CAT_FS_FREER_NONE;
-                cat_fs_work_check_error(&e, "Flock");
-                return -1;
-            default:
-                CAT_NEVER_HERE("Strange cat_time_delay result");
-        }
-        if (waittime < 64) {
-            waittime *= 2;
-        }
-    }
-    int ret = (int) data->ret.ret.num;
-    data->waiting = cat_false;
-    // printf("wait done %d\n", ret);
-    // TODO: recycle thread
-    // uv_thread_join(&data->tid);
-    return ret;
+    CAT_ASSERT(data->done);
+    return (int) data->ret.ret.num;
 }
