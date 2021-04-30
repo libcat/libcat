@@ -978,6 +978,7 @@ static void cat_fs_readdir_free(cat_data_t *ptr)
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
 
     if (data->canceled) {
+        // if canceled, tell freer to free things
         cat_fs_dir_async_close(data->dir);
     }
     if (data->ret.ret.ptr) {
@@ -1038,19 +1039,20 @@ typedef struct {
     cat_bool_t canceled;
 } cat_fs_rewinddir_data_t;
 
-static void cat_fs_rewinddir_free(cat_data_t *ptr)
-{
-    cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) ptr;
-    if (data->canceled) {
-        cat_fs_dir_async_close(data->dir);
-    }
-    cat_free(data);
-}
-
 static void cat_fs_rewinddir_cb(cat_data_t *ptr)
 {
     cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) ptr;
     rewinddir(data->dir);
+}
+
+static void cat_fs_rewinddir_free(cat_data_t *ptr)
+{
+    cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) ptr;
+    if (data->canceled) {
+        // if canceled, tell freer to free things
+        cat_fs_dir_async_close(data->dir);
+    }
+    cat_free(data);
 }
 
 CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
@@ -1073,7 +1075,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
     }
     data->dir = uv_dir->dir;
     data->canceled = cat_false;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_rewinddir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_rewinddir_cb, cat_fs_rewinddir_free, data, CAT_TIMEOUT_FOREVER)) {
         data->canceled = cat_true;
         uv_dir->dir = NULL;
     }
