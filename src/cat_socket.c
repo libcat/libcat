@@ -1783,12 +1783,12 @@ static ssize_t cat_socket_internal_read_raw(
         goto _error;
     }
 
-    if (is_dgram) {
-        once = cat_true;
-    } else {
+    if (!is_dgram) {
         if (unlikely(address_length != NULL)) {
             *address_length = 0;
         }
+    } else {
+        once = cat_true;
     }
 
 #ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
@@ -2452,8 +2452,14 @@ static ssize_t cat_socket_internal_peekfrom(
 )
 {
     CAT_SOCKET_INTERNAL_FD_GETTER(isocket, fd, return cat_false);
+    cat_socket_t *socket = isocket->u.socket; CAT_ASSERT(socket != NULL);
     ssize_t nread;
 
+    if (!(socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM)) {
+        if (address_length != NULL) {
+            *address_length = 0;
+        }
+    }
 #ifdef CAT_OS_UNIX_LIKE
     do {
 #endif
@@ -2467,13 +2473,16 @@ static ssize_t cat_socket_internal_peekfrom(
     } while (unlikely(nread < 0 && errno == EINTR));
 #endif
     if (nread < 0) {
-         cat_errno_t error = cat_translate_sys_error(cat_sys_errno);
+        cat_errno_t error = cat_translate_sys_error(cat_sys_errno);
         if (unlikely(error != CAT_EAGAIN && error != CAT_EMSGSIZE)) {
             /* there was an unrecoverable error */
             cat_update_last_error_of_syscall("Socket peek failed");
         } else {
             /* not real error */
             nread = 0;
+        }
+        if (address_length != NULL) {
+            *address_length = 0;
         }
     }
 
