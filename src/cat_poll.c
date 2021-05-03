@@ -91,7 +91,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
 
     cat_debug(EVENT, "poll_one(fd=" CAT_OS_SOCKET_FMT ", events=%d, timeout=" CAT_TIMEOUT_FMT ")", fd, events, timeout);
 
-    if (likely(revents != NULL)) {
+    if (revents != NULL) {
         *revents = 0;
     }
 
@@ -125,16 +125,19 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
         cat_update_last_error_with_previous("Poll wait failed");
         return CAT_RET_ERROR;
     }
-    if (unlikely(ret == CAT_RET_NONE && poll->status < 0)) {
-        if (poll->status == CAT_ECANCELED) {
-            cat_update_last_error(CAT_ECANCELED, "Poll has been canceled");
-        } else {
-            cat_update_last_error(poll->status, "Poll failed");
+    if (ret == CAT_RET_NONE) {
+        if (unlikely(poll->status < 0)) {
+            if (poll->status == CAT_ECANCELED) {
+                cat_update_last_error(CAT_ECANCELED, "Poll has been canceled");
+            } else {
+                cat_update_last_error(poll->status, "Poll failed");
+            }
+            return CAT_RET_ERROR;
         }
-        return CAT_RET_ERROR;
+        ret = CAT_RET_OK;
     }
 
-    if (likely(revents)) {
+    if (revents != NULL) {
         *revents = cat_poll_translate_to_sysno(poll->events);
     }
 
