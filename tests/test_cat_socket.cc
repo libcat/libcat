@@ -1172,13 +1172,8 @@ TEST(cat_socket, peek)
     DEFER(cat_socket_close(&client));
     ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("Hello libcat")));
-    for (int i = 3; i--;) {
-        n = cat_socket_peek(&client, CAT_STRS(buffer));
-        if (n != 0) {
-            break;
-        }
-        cat_time_delay(0);
-    }
+    ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&client), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    n = cat_socket_peek(&client, CAT_STRS(buffer));
     ASSERT_EQ(n, CAT_STRLEN("Hello libcat"));
     ASSERT_EQ(std::string(buffer, n), std::string("Hello libcat"));
     (void) cat_socket_read(&client, buffer, CAT_STRLEN("Hello libcat"));
@@ -1200,15 +1195,9 @@ TEST(cat_socket, peekfrom)
     ASSERT_TRUE(cat_socket_send_to(&client, CAT_STRL("Hello libcat"), echo_udp_server_ip, echo_udp_server_ip_length, echo_udp_server_port));
     {
         cat_sockaddr_union_t address;
-        cat_socklen_t address_length;
-        for (int i = 3; i--;) {
-            address_length = sizeof(address);
-            n = cat_socket_peekfrom(&client, CAT_STRS(buffer), &address.common, &address_length);
-            if (n != 0) {
-                break;
-            }
-            cat_time_delay(0);
-        }
+        cat_socklen_t address_length = sizeof(address);
+        ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&client), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        n = cat_socket_peekfrom(&client, CAT_STRS(buffer), &address.common, &address_length);
         ASSERT_EQ(n, CAT_STRLEN("Hello libcat"));
         ASSERT_EQ(std::string(buffer, n), std::string("Hello libcat"));
         ip_length = sizeof(ip);
@@ -1220,14 +1209,9 @@ TEST(cat_socket, peekfrom)
 
     ASSERT_TRUE(cat_socket_send_to(&client, CAT_STRL("Hello libcat"), echo_udp_server_ip, echo_udp_server_ip_length, echo_udp_server_port));
     {
-        for (int i = 3; i--;) {
-            ip_length = sizeof(ip);
-            n = cat_socket_peek_from(&client, CAT_STRS(buffer), ip, &ip_length, &port);
-            if (n != 0) {
-                break;
-            }
-            cat_time_delay(0);
-        }
+        ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&client), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ip_length = sizeof(ip);
+        n = cat_socket_peek_from(&client, CAT_STRS(buffer), ip, &ip_length, &port);
         ASSERT_EQ(n, CAT_STRLEN("Hello libcat"));
         ASSERT_EQ(std::string(buffer, n), std::string("Hello libcat"));
         ASSERT_EQ(std::string(ip, ip_length), std::string(echo_udp_server_ip, echo_udp_server_ip_length));
