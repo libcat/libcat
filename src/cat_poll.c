@@ -128,7 +128,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
     uv_close(&poll->u.handle, (uv_close_cb) cat_free_function);
 
     switch (ret) {
-        /* cancelled */
+        /* delay cancelled */
         case CAT_RET_NONE: {
             if (unlikely(poll->status < 0)) {
                 if (poll->status == CAT_ECANCELED) {
@@ -137,9 +137,10 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
                     cat_update_last_error(poll->status, "Poll failed");
                 }
                 ret = CAT_RET_ERROR;
+            } else {
+                ret = CAT_RET_OK;
+                *revents = cat_poll_translate_to_sysno(events, poll->revents);
             }
-            ret = CAT_RET_OK;
-            *revents = cat_poll_translate_to_sysno(events, poll->revents);
             break;
         }
         /* timedout */
