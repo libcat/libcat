@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
 
 #include "cat_api.h"
 
@@ -60,9 +61,11 @@
 #ifndef CAT_OS_WIN
 #define TEST_PATH_SEP                      "/"
 #define TEST_PIPE_PATH                     "/tmp/cat_test.sock"
+#define TEST_PIPE_PATH_FMT                 "/tmp/cat_test_%s.sock"
 #else
 #define TEST_PATH_SEP                      "\\"
 #define TEST_PIPE_PATH                     "\\\\?\\pipe\\cat_test"
+#define TEST_PIPE_PATH_FMT                 "\\\\?\\pipe\\cat_test_%s"
 #endif
 #define TEST_SERVER_BACKLOG                8192
 
@@ -131,6 +134,21 @@ namespace testing
     {
         return cat_env_is_true("OFFLINE", cat_false);
     }
+
+    // https://stackoverflow.com/questions/2342162/stdstring-formatting-like-sprintf
+    template <typename... Args>
+    std::string string_format(const char *format, Args... args)
+    {
+        size_t size = (size_t) std::snprintf(nullptr, 0, format, args...) + 1; // Extra space for '\0'
+        CAT_ASSERT(((ssize_t) size) > 0);
+        char *buffer = (char *) cat_malloc(size);
+        CAT_ASSERT(buffer != NULL);
+        DEFER(cat_free(buffer));
+        std::snprintf(buffer, size, format, args...);
+        return std::string(buffer, buffer + size - 1); // We don't want the '\0' inside
+    }
+
+    std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
     cat_coroutine_t *co(std::function<void(void)> function);
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout);

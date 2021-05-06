@@ -41,6 +41,16 @@ namespace testing
     /* TMP_PATH */
     std::string CONFIG_TMP_PATH = "/tmp";
 
+    std::string get_random_bytes(size_t length)
+    {
+        CAT_ASSERT(length > 0);
+        char *buffer = (char *) cat_malloc(length);
+        CAT_ASSERT(buffer != NULL);
+        DEFER(cat_free(buffer));
+        (void) cat_snrand(buffer, length);
+        return std::string(buffer, length);
+    }
+
     cat_coroutine_t *co(std::function<void(void)> function)
     {
         return cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
