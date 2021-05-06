@@ -544,6 +544,20 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
     ASSERT_EQ(cat_fs_opendir(nullptr), nullptr);
     ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
+#ifndef CAT_OS_WIN
+    errno = 0;
+#endif // CAT_OS_WIN
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_opendir("\\/<notexistpath>"), nullptr);
+#ifndef CAT_OS_WIN
+    ASSERT_NE(errno, 0);
+#endif // CAT_OS_WIN
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    errno = 0;
+    cat_clear_last_error();
+    cat_fs_rewinddir(nullptr);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     errno = 0;
     cat_clear_last_error();
     ASSERT_LT(cat_fs_closedir(nullptr), 0);
@@ -1311,8 +1325,13 @@ TEST(cat_fs, cancel){
     CANCEL_TEST(ASSERT_EQ(cat_fs_opendir(dn), nullptr));
     ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
     CANCEL_TEST(ASSERT_EQ(cat_fs_readdir(dir), nullptr));
-    // rewinddir is not blocking(it's not in thread pool)
     ASSERT_EQ(cat_fs_closedir(dir), 0);
+    // windows version rewinddir is not blocking(it's not in thread pool)
+#ifndef CAT_OS_WIN
+    ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
+    CANCEL_TEST(cat_fs_rewinddir(dir));
+    ASSERT_EQ(cat_fs_closedir(dir), 0);
+#endif // CAT_OS_WIN
     ASSERT_NE(dir = cat_fs_opendir(dn), nullptr);
     CANCEL_TEST(ASSERT_LT(cat_fs_closedir(dir), 0));
     // path
