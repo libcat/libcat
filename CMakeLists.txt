@@ -779,6 +779,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_fs.cc
         tests/test_cat_coroutine.cc
         tests/test_cat_event.cc
+        tests/test_cat_poll.cc
         tests/test_cat_time.cc
         tests/test_cat_channel.cc
         tests/test_cat_sync.cc

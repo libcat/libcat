@@ -30,47 +30,52 @@ typedef struct
         uv_poll_t poll;
     } u;
     int status;
-    int events;
+    int revents;
 } cat_poll_one_t;
 
-static cat_always_inline cat_pollfd_events_t cat_poll_translate_to_sysno(int uevents)
+static cat_always_inline cat_pollfd_events_t cat_poll_translate_to_sysno(int ievents, int uv_revents)
 {
-    cat_pollfd_events_t events = 0;
+    cat_pollfd_events_t revents = 0;
 
-    if (uevents & UV_READABLE) {
-        events |= POLLIN;
+    if (uv_revents & UV_READABLE) {
+        if (ievents & POLLIN) {
+            revents |= POLLIN;
+        } else {
+            CAT_ASSERT(ievents & POLLERR);
+            revents |= POLLERR;
+        }
     }
-    if (uevents & UV_WRITABLE) {
-        events |= POLLOUT;
+    if (uv_revents & UV_WRITABLE) {
+        revents |= POLLOUT;
     }
-    if (uevents & UV_DISCONNECT) {
-        events |= POLLIN; /* treat it as readable */
+    if (uv_revents & UV_DISCONNECT) {
+        revents |= POLLHUP;
     }
-    if (uevents & UV_PRIORITIZED) {
-        events |= POLLPRI;
+    if (uv_revents & UV_PRIORITIZED) {
+        revents |= POLLPRI;
     }
 
-    return events;
+    return revents;
 }
 
-static cat_always_inline int cat_poll_translate_from_sysno(int events)
+static cat_always_inline int cat_poll_translate_from_sysno(int ievents)
 {
-    int uevents = 0;
+    int uv_events = 0;
 
-    if (events & POLLIN) {
-        uevents |= UV_READABLE;
+    if ((ievents & (POLLIN | POLLERR))) {
+        uv_events |= UV_READABLE;
     }
-    if (events & POLLOUT) {
-        uevents |= UV_WRITABLE;
+    if (ievents & POLLOUT) {
+        uv_events |= UV_WRITABLE;
     }
-    if (events & POLLERR) {
-        uevents |= UV_DISCONNECT;
+    if (ievents & POLLHUP) {
+        uv_events |= UV_DISCONNECT;
     }
-    if (events & POLLPRI) {
-        uevents |= UV_PRIORITIZED;
+    if (ievents & POLLPRI) {
+        uv_events |= UV_PRIORITIZED;
     }
 
-    return uevents;
+    return uv_events;
 }
 
 static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
@@ -78,7 +83,7 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
     cat_poll_one_t *poll = (cat_poll_one_t *) handle;
 
     poll->status = status;
-    poll->events = events;
+    poll->revents = events;
 
     cat_coroutine_schedule(poll->u.coroutine, EVENT, "Poll one");
 }
@@ -87,13 +92,14 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
 {
     cat_poll_one_t *poll;
     cat_ret_t ret;
-    int error;
+    int error, _revents;
 
     cat_debug(EVENT, "poll_one(fd=" CAT_OS_SOCKET_FMT ", events=%d, timeout=" CAT_TIMEOUT_FMT ")", fd, events, timeout);
 
-    if (revents != NULL) {
-        *revents = 0;
+    if (revents == NULL) {
+        revents = &_revents;
     }
+    *revents = 0;
 
     poll = (cat_poll_one_t *) cat_malloc(sizeof(*poll));;
     if (unlikely(poll == NULL)) {
@@ -114,32 +120,41 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
         return CAT_RET_ERROR;
     }
     poll->status = CAT_ECANCELED;
-    poll->events = 0;
+    poll->revents = 0;
     poll->u.coroutine = CAT_COROUTINE_G(current);
 
     ret = cat_time_delay(timeout);
 
     uv_close(&poll->u.handle, (uv_close_cb) cat_free_function);
 
-    if (unlikely(ret == CAT_RET_ERROR)) {
-        cat_update_last_error_with_previous("Poll wait failed");
-        return CAT_RET_ERROR;
-    }
-    if (ret == CAT_RET_NONE) {
-        if (unlikely(poll->status < 0)) {
-            if (poll->status == CAT_ECANCELED) {
-                cat_update_last_error(CAT_ECANCELED, "Poll has been canceled");
-            } else {
-                cat_update_last_error(poll->status, "Poll failed");
+    switch (ret) {
+        /* cancelled */
+        case CAT_RET_NONE: {
+            if (unlikely(poll->status < 0)) {
+                if (poll->status == CAT_ECANCELED) {
+                    cat_update_last_error(CAT_ECANCELED, "Poll has been canceled");
+                } else {
+                    cat_update_last_error(poll->status, "Poll failed");
+                }
+                ret = CAT_RET_ERROR;
             }
-            return CAT_RET_ERROR;
+            ret = CAT_RET_OK;
+            *revents = cat_poll_translate_to_sysno(events, poll->revents);
+            break;
         }
-        ret = CAT_RET_OK;
+        /* timedout */
+        case CAT_RET_OK:
+            ret = CAT_RET_NONE;
+            break;
+        /* error */
+        case CAT_RET_ERROR:
+            cat_update_last_error_with_previous("Poll wait failed");
+            break;
+        default:
+            CAT_NEVER_HERE("Impossible");
+            break;
     }
-
-    if (revents != NULL) {
-        *revents = cat_poll_translate_to_sysno(poll->events);
-    }
+    cat_debug(EVENT, "poll_one(fd=" CAT_OS_SOCKET_FMT ", *revents=%u) = %d", fd, *revents, ret);
 
     return ret;
 }
@@ -156,7 +171,7 @@ typedef struct {
         uv_poll_t poll;
     } u;
     int status;
-    int events;
+    int revents;
     cat_bool_t is_head;
 } cat_poll_t;
 
@@ -188,13 +203,13 @@ static void cat_poll_done_callback(cat_data_t *data)
     cat_coroutine_schedule(context->coroutine, EVENT, "Poll");
 }
 
-static void cat_poll_callback(uv_poll_t* handle, int status, int events)
+static void cat_poll_callback(uv_poll_t* handle, int status, int revents)
 {
     cat_poll_t *poll = (cat_poll_t *) handle;
     cat_poll_context_t *context = poll->u.context;
 
     poll->status = status;
-    poll->events = events;
+    poll->revents = revents;
 
     if (!context->deferred) {
         if (!cat_event_defer_ex(cat_poll_done_callback, poll, cat_true)) {
@@ -241,7 +256,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
             goto _error;
         }
         poll->status = CAT_ECANCELED;
-        poll->events = 0;
+        poll->revents = 0;
         poll->is_head = cat_false;
         poll->u.context = &context;
     }
@@ -267,11 +282,12 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
                 n++;
             }
         } else {
-            fd->revents = cat_poll_translate_to_sysno(poll->events);
+            fd->revents = cat_poll_translate_to_sysno(fd->events, poll->revents);
             if (fd->revents != POLLNONE) {
                 n++;
             }
         }
+        cat_debug(EVENT, "poll_del(fd=" CAT_OS_SOCKET_FMT ") = %d", fd->fd, fd->revents);
     }
 
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = %zu", fds, (size_t) nfds, timeout, (size_t) n);

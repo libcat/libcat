@@ -16,50 +16,29 @@
   +--------------------------------------------------------------------------+
  */
 
-#ifndef CAT_POLL_H
-#define CAT_POLL_H
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "test.h"
 
-#include "cat.h"
+TEST(cat_poll, init_failed)
+{
+    ASSERT_EQ(cat_poll_one(CAT_OS_INVALID_FD, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
+#ifdef CAT_OS_UNIX_LIKE
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+#else
+    // TODO: ?
+#endif
+}
 
 #ifdef CAT_OS_UNIX_LIKE
-#include <sys/types.h>
-#include <poll.h>
-#endif
-
-#ifndef CAT_OS_WIN
-typedef struct pollfd cat_pollfd_t;
-typedef nfds_t cat_nfds_t;
-typedef int cat_pollfd_events_t;
-#else
-typedef WSAPOLLFD cat_pollfd_t;
-typedef ULONG cat_nfds_t;
-typedef SHORT cat_pollfd_events_t;
-#endif
-
-#ifndef POLLNONE
-#define POLLNONE 0
-#endif
-#ifndef POLLIN
-# define POLLIN      0x0001    /* There is data to read */
-# define POLLPRI     0x0002    /* There is urgent data to read */
-# define POLLOUT     0x0004    /* Writing now will not block */
-# define POLLERR     0x0008    /* Error condition */
-# define POLLHUP     0x0010    /* Hung up */
-# define POLLNVAL    0x0020    /* Invalid request: fd not open */
-#endif
-
-/* OK: events triggered, NONE: timedout, ERROR: error ocurred */
-CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat_timeout_t timeout);
-
-/* same with poll(),
- * returns the number of descriptors that are ready for I/O, or -1 if an error occurred.
- * If the time limit expires, poll() returns 0. */
-CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout);
-
-#ifdef __cplusplus
+TEST(cat_poll, start_failed)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    ASSERT_GT(fd, 0);
+    DEFER(close(fd));
+    co([fd] {
+        ASSERT_TRUE(cat_time_delay(0));
+        ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EEXIST);
+    });
+    ASSERT_EQ(cat_poll_one(fd, POLLERR, nullptr, 1), CAT_RET_NONE);
 }
 #endif
-#endif /* CAT_POLL_H */
