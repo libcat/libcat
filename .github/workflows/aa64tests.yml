@@ -6,7 +6,7 @@ on:
 jobs:
   aa64-tests:
     name: Test on Linux aa64
-    runs-on: [ self-hosted, Linux, ARM64, opi4b ]
+    runs-on: [ self-hosted, Linux, ARM64 ]
     steps:
 
       - name: Checkout libcat sources
