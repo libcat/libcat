@@ -17,8 +17,10 @@
  */
 
 #include "cat_socket.h"
+
 #include "cat_event.h"
 #include "cat_time.h"
+#include "cat_poll.h"
 
 #include "uv-common.h"
 
@@ -613,6 +615,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     size_t isocket_size;
     cat_socket_internal_t *isocket = NULL;
     cat_sa_family_t af = 0;
+    cat_bool_t check_connection = cat_true;
     int error = CAT_EINVAL;
 
 #ifndef CAT_DO_NOT_OPTIMIZE
@@ -679,6 +682,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
                 goto _error;
             }
             type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
+            check_connection = cat_false;
         }
         else
 #endif
@@ -756,10 +760,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 #endif
 
     if (fd != CAT_SOCKET_INVALID_FD) {
-        if (
+        if (check_connection && (
             ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) ||
             cat_socket_getpeername_fast(socket) != NULL
-        ) {
+        )) {
             isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
         }
         if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -1792,13 +1796,12 @@ static ssize_t cat_socket_internal_read_raw(
     }
 
 #ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
-    do {
+    while (1) {
         /* Notice: when IO is low/slow, this is deoptimization,
          * because recv usually returns EAGAIN error,
          * and there is an additional system call overhead */
         cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
         if (support_inline_read) {
-            _recv:
             while (1) {
                 if (!is_dgram) {
                     error = recv(fd, buffer + nread, size - nread, 0);
@@ -1829,7 +1832,20 @@ static ssize_t cat_socket_internal_read_raw(
                 break; /* next call must be EAGAIN */
             }
         }
-    } while (0);
+        if (is_udg) {
+            cat_ret_t poll_ret;
+            poll_ret = cat_poll_one(fd, POLLIN, NULL, timeout);
+            if (poll_ret == CAT_RET_OK) {
+                continue;
+            } else if (poll_ret == CAT_RET_NONE) {
+                error = CAT_ETIMEDOUT;
+                goto _error;
+            } else {
+                goto _wait_error;
+            }
+        }
+        break;
+    }
 #endif
 
     /* async read */
@@ -1839,19 +1855,8 @@ static ssize_t cat_socket_internal_read_raw(
         /* construct context */
         context.once = once;
         context.buffer = buffer;
-#ifdef CAT_OS_UNIX_LIKE
-        if (!is_udg)
-        {
-#endif
-            context.size = size;
-            context.nread = (size_t) nread;
-#ifdef CAT_OS_UNIX_LIKE
-        } else {
-            /* wait for readable (TODO: if one day we use io_uring, we should change it to uv_poll way) */
-            context.size = 0;
-            context.nread = 0;
-        }
-#endif
+        context.size = size;
+        context.nread = (size_t) nread;
         if (is_dgram) {
             context.address = address;
             context.address_length = address_length;
@@ -1884,7 +1889,6 @@ static ssize_t cat_socket_internal_read_raw(
         }
         /* handle error */
         if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Socket read wait failed");
             goto _wait_error;
         }
         nread = context.nread;
@@ -1894,21 +1898,17 @@ static ssize_t cat_socket_internal_read_raw(
         }
     }
 
-#ifdef CAT_OS_UNIX_LIKE
-    if (is_udg) {
-        goto _recv;
-    }
-#endif
-
     return (ssize_t) nread;
 
     _error:
     if (error == CAT_ECANCELED) {
         cat_update_last_error(CAT_ECANCELED, "Socket read has been canceled");
-    } else {
+    } else if (1) {
         cat_update_last_error_with_reason((cat_errno_t) error, "Socket read %s", nread != 0 ? "uncompleted" : "failed");
+    } else {
+        _wait_error:
+        cat_update_last_error_with_previous("Socket read wait failed");
     }
-    _wait_error:
     if (nread != 0) {
         /* for possible data */
         return (ssize_t) nread;
@@ -2056,11 +2056,26 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
 )
 {
     cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
-    cat_bool_t ret = cat_false;
+    cat_queue_t *queue = &isocket->context.io.write.coroutines;
+    cat_bool_t ret = cat_false, queued = !!(isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE);
     ssize_t error;
 
     isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
-    cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
+    cat_queue_push_back(queue, &CAT_COROUTINE_G(current)->waiter.node);
+    if (queued) {
+        cat_bool_t wait_ret;
+        CAT_TIME_WAIT_START() {
+            wait_ret = cat_time_wait(timeout);
+        } CAT_TIME_WAIT_END(timeout);
+        if (unlikely(!wait_ret)) {
+            cat_update_last_error_with_previous("Socket write failed");
+            return cat_false;
+        }
+        if (cat_queue_front_data(queue, cat_coroutine_t, waiter.node) != CAT_COROUTINE_G(current)) {
+            cat_update_last_error(CAT_ECANCELED, "Socket write has been canceled");
+            return cat_false;
+        }
+    }
 
     while (1) {
         struct msghdr msg = { };
@@ -2073,12 +2088,14 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
         } while (error < 0 && CAT_SOCKET_RETRY_ON_WRITE_ERROR(cat_sys_errno));
         if (unlikely(error < 0)) {
             if (CAT_SOCKET_IS_TRANSIENT_WRITE_ERROR(cat_sys_errno)) {
-                // FIXME: wait write and queued (we should support multi write)
-                // FIXME: support timeout
-                if (likely(cat_time_msleep(1) == 0)) {
+                cat_ret_t poll_ret = cat_poll_one(fd, POLLOUT, NULL, timeout);
+                if (poll_ret == CAT_RET_OK) {
                     continue;
+                } else if (poll_ret == CAT_RET_NONE) {
+                    cat_update_last_error_with_reason(CAT_ETIMEDOUT, "Socket poll writable failed");
+                } else {
+                    cat_update_last_error_with_previous("Socket UDG write wait failed");
                 }
-                cat_update_last_error_with_previous("Socket UDG write wait failed");
             } else {
                 cat_update_last_error_with_reason(error, "Socket write failed");
             }
@@ -2089,8 +2106,12 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
     }
 
     cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
-    if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
+    if (cat_queue_empty(queue)) {
         isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
+    } else {
+        /* resume queued coroutines */
+        cat_coroutine_t *waiter = cat_queue_front_data(queue, cat_coroutine_t, waiter.node);
+        cat_coroutine_schedule(waiter, SOCKET, "UDG write");
     }
 
     return ret;
@@ -2157,8 +2178,8 @@ static cat_bool_t cat_socket_internal_write_raw(
     } else {
         request->error = CAT_ECANCELED;
         request->u.coroutine = CAT_COROUTINE_G(current);
-        cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
         isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
+        cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
         ret = cat_time_wait(timeout);
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         request->u.coroutine = NULL;
@@ -2318,13 +2339,13 @@ static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_wr
     /* resolve address (DNS query may be triggered) */
     if (name_length != 0) {
         cat_bool_t ret;
-        cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
         isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
+        cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
         ret  = cat_socket_getaddrbyname(socket, &address_info, name, name_length, port);
+        cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
             isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
         }
-        cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (unlikely(!ret)) {
            cat_update_last_error_with_previous("Socket write failed");
            return cat_false;
