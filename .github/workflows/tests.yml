@@ -54,6 +54,11 @@ jobs:
       - name: Checkout libcat sources
         uses: actions/checkout@v2
 
+      - name: Coverage tests preparation
+        if: matrix.build-type == 'Debug'
+        run: |
+          choco install opencppcoverage codecov
+
       - name: Build and test libcat
         shell: cmd
         run: |
@@ -66,23 +71,23 @@ jobs:
           )
           ECHO ::endgroup::
           ECHO ::group::Create build dir
-          MKDIR build && CD build || goto error
+          MKDIR build || goto error
           ECHO ::endgroup::
           ECHO ::group::Make cmake cache
-          cmake .. ^
+          cmake . -B build ^
             -DASAN=ON ^
             -DCMAKE_C_FLAGS=/WX ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build libcat
-          cmake --build . -j --target cat_tests -- -nologo -p:Configuration=${{ matrix.build-type }} || goto error
+          cmake --build build -j --target cat_tests -- -nologo -p:Configuration=${{ matrix.build-type }} || goto error
           ECHO ::endgroup::
           ECHO ::group::Test libcat
-          REM TODO: make sure this path
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
-          ${{ matrix.build-type }}\cat_tests.exe --gtest_color=yes || goto error
+          ${{ matrix.build-type == 'Debug' && '"C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" --export_type cobertura:coverage.xml --sources include --sources src --excluded_sources deps --excluded_sources tests --cover_children --modules build\Debug\cat_tests.exe -- ' || '' }}build\${{ matrix.build-type}}\cat_tests.exe --gtest_color=yes || goto error
+          ${{ matrix.build-type == 'Debug' && format('codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
           ECHO ::endgroup::
           EXIT /b 0
           REM error condition
