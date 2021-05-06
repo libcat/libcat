@@ -850,7 +850,7 @@ TEST(cat_socket, echo_tcp_client)
     do {
         char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
         char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
-        bool done = false;
+        bool done = false, wait = false;
         ASSERT_NE(read_buffers, nullptr);
         ASSERT_NE(write_buffers, nullptr);
         /* generate write data */
@@ -860,11 +860,15 @@ TEST(cat_socket, echo_tcp_client)
             cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
         }
         /* send requests */
+        cat_coroutine_t *coroutine = cat_coroutine_get_current();
         co([&] {
             for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
                 ASSERT_TRUE(cat_socket_send(&echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
             }
             done = true;
+            if (wait) {
+                ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+            }
         });
         /* recv responses */
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
@@ -880,7 +884,10 @@ TEST(cat_socket, echo_tcp_client)
         }
         cat_free(read_buffers);
         cat_free(write_buffers);
-        ASSERT_TRUE(cat_time_delay(0));
+        if (!done) {
+            wait = true;
+            ASSERT_TRUE(cat_coroutine_yield(nullptr, nullptr));
+        }
         ASSERT_TRUE(done);
     } while (0);
 }
