@@ -21,6 +21,7 @@
 TEST(cat_time, nsec)
 {
     cat_nsec_t s = cat_time_nsec();
+    ASSERT_EQ(usleep(1), 0);
     ASSERT_GT(cat_time_nsec() - s, 0);
 }
 

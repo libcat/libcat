@@ -880,6 +880,7 @@ TEST(cat_socket, echo_tcp_client)
         }
         cat_free(read_buffers);
         cat_free(write_buffers);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_TRUE(done);
     } while (0);
 }
