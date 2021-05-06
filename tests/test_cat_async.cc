@@ -59,11 +59,15 @@ TEST(cat_async, notify_timeout)
 
 TEST(cat_async, cancel)
 {
+    static bool done;
+    done = false;
     cat_async_t *async = cat_async_create(nullptr);
     ASSERT_NE(async, nullptr);
     co([async] {
         ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
-            usleep(1000);
+            while (!done) {
+                usleep(1000);
+            }
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });
@@ -74,6 +78,7 @@ TEST(cat_async, cancel)
     });
     ASSERT_FALSE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    done = true;
 }
 
 TEST(cat_async, fast_end)
