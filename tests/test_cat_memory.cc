@@ -74,16 +74,17 @@ TEST(cat_memory, strdup_function)
     char *src;
     char *dst;
 
-    src = (char *) cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
-    ASSERT_NE(nullptr, src);
-    ASSERT_EQ(src, cat_srand(src, CAT_TEST_DEFAULT_MEMOEY_SIZE));
-    dst = cat_strdup_function(src);
-    ASSERT_NE(nullptr, dst);
-    ASSERT_NE(dst, src);
-    ASSERT_STREQ(dst, src);
-
-    cat_free_function(src);
-    cat_free_function(dst);
+    for (int n = 0; n < 2; n++) {
+        src = (char *) cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+        DEFER(cat_free_function(src));
+        ASSERT_NE(nullptr, src);
+        ASSERT_EQ(src, cat_srand(src, CAT_TEST_DEFAULT_MEMOEY_SIZE));
+        dst = n ? cat_sys_strdup(src) : cat_strdup(src);
+        DEFER(if (n) { cat_sys_free(dst); } else { cat_free(dst); });
+        ASSERT_NE(nullptr, dst);
+        ASSERT_NE(dst, src);
+        ASSERT_STREQ(dst, src);
+    }
 }
 
 TEST(cat_memory, strndup_function)
@@ -91,12 +92,13 @@ TEST(cat_memory, strndup_function)
     char src[] = "abcdef";
     char *dst;
 
-    dst = cat_strndup_function(src, CAT_STRLEN(src) / 2);
-    ASSERT_NE(nullptr, dst);
-    ASSERT_NE(dst, src);
-    ASSERT_EQ(strlen(dst), CAT_STRLEN(src) / 2);
-
-    cat_free_function(dst);
+    for (int n = 0; n < 2; n++) {
+        dst = n ? cat_sys_strndup(src, CAT_STRLEN(src) / 2) : cat_strndup(src, CAT_STRLEN(src) / 2);
+        DEFER(if (n) { cat_sys_free(dst); } else { cat_free(dst); });
+        ASSERT_NE(nullptr, dst);
+        ASSERT_NE(dst, src);
+        ASSERT_EQ(std::string(dst), std::string(src, CAT_STRLEN(src) / 2));
+    }
 }
 
 TEST(cat_memory, getpagesize_function)
