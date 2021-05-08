@@ -1105,7 +1105,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return -1;
     }
     if (NULL == uv_dir->dir) {
-        cat_free(uv_dir);
+        free(uv_dir);
         return 0;
     }
     cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) cat_malloc(sizeof(*data));
@@ -1114,7 +1114,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return -1;
     }
     data->dir = uv_dir->dir;
-    cat_free(uv_dir);
+    free(uv_dir);
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_closedir_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
