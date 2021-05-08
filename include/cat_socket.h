@@ -63,6 +63,8 @@ typedef short cat_sa_family_t;
 typedef unsigned short cat_in_port_t;
 #endif
 
+#define CAT_SOCKADDR_HEADER_LENGTH offsetof(cat_sockaddr_t, sa_data)
+
 typedef struct sockaddr     cat_sockaddr_t;
 typedef struct sockaddr_in  cat_sockaddr_in_t;
 typedef struct sockaddr_in6 cat_sockaddr_in6_t;

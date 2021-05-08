@@ -501,7 +501,7 @@ TEST(cat_socket, cat_sockaddr_check_pipe_error)
     DEFER(unlink(TEST_PIPE_PATH));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
-    ASSERT_FALSE(cat_sockaddr_check(&info->address.common, info->length - 1));
+    ASSERT_FALSE(cat_sockaddr_check(&info->address.common, 0));
     ASSERT_EQ(CAT_EINVAL, cat_get_last_error_code());
     ASSERT_TRUE(cat_sockaddr_check(&info->address.common, info->length));
 }
@@ -1027,8 +1027,9 @@ TEST(cat_socket, echo_udg_client)
             ));
         }
         for (size_t n = TEST_MAX_REQUESTS; n--;) {
-            char read_buffer[TEST_BUFFER_SIZE_STD];
-            char write_buffer[TEST_BUFFER_SIZE_STD];
+            /* TEST_BUFFER_SIZE_STD is too long for MacOS */
+            char read_buffer[1024];
+            char write_buffer[1024];
             /* send request */
             cat_snrand(CAT_STRS(write_buffer));
             if (type == 0) {

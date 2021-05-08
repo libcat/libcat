@@ -39,9 +39,9 @@
 #endif /* CAT_OS_WIN */
 
 #ifdef __linux__
-#define cat_sockaddr_is_linux_abstract_name(path) (path[0] == '\0')
+#define cat_sockaddr_is_linux_abstract_name(path, length) (length > 0 && path[0] == '\0')
 #else
-#define cat_sockaddr_is_linux_abstract_name(path) 0
+#define cat_sockaddr_is_linux_abstract_name(path, length) 0
 #endif
 
 #if defined(__APPLE__)
@@ -115,21 +115,25 @@ CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_s
         }
         case AF_LOCAL: {
             const char *path = ((cat_sockaddr_local_t *) address)->sl_path;
-            size_t length = address_length - offsetof(cat_sockaddr_local_t, sl_path);
-            if (!cat_sockaddr_is_linux_abstract_name(path) && path[length - 1] != '\0') {
-                length += 1; /* musb be zero-termination */
+            size_t length = address_length - CAT_SOCKADDR_HEADER_LENGTH;
+            cat_bool_t is_lan = cat_sockaddr_is_linux_abstract_name(path, length);
+            if (!is_lan) {
+                /* Notice: syscall always add '\0' to the end of path and return length + 1,
+                 * but system also allow user pass arg both with '\0' or without '\0'...
+                 * so we need to check it real length by strnlen here */
+                length = cat_strnlen(path, length);
             }
-            if (unlikely(length > size)) {
+            /* Notice: we need length + 1 to set '\0' for termination */
+            if (unlikely(length + !is_lan > size)) {
                 error = CAT_ENOSPC;
-                *buffer_size = length;
+                *buffer_size = length + !is_lan;
                 break;
-            }
-            if (!cat_sockaddr_is_linux_abstract_name(path)) {
-                length -= 1;
-                buffer[length] = '\0';
             }
             if (length > 0) {
                 memcpy(buffer, path, length);
+            }
+            if (!is_lan) {
+                buffer[length] = '\0';
             }
             *buffer_size = length;
             return cat_true;
@@ -186,25 +190,29 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
     int error;
 
     if (af == AF_LOCAL) {
-        size_t real_length = name_length + !(cat_sockaddr_is_linux_abstract_name(name));
+        cat_socklen_t real_length;
+        cat_bool_t is_lan;
 
         address->sa_family = AF_LOCAL;
-        if (unlikely(real_length > CAT_SOCKADDR_MAX_PATH)) {
+        if (unlikely(name_length > CAT_SOCKADDR_MAX_PATH)) {
             *address_length = 0;
             return CAT_ENAMETOOLONG;
         }
-        real_length += offsetof(cat_sockaddr_t, sa_data);
-        if (unlikely(real_length > (size_t)length)) {
+        is_lan = cat_sockaddr_is_linux_abstract_name(name, name_length);
+        real_length = (cat_socklen_t) (CAT_SOCKADDR_HEADER_LENGTH + name_length);
+        if (unlikely(real_length > length)) {
             *address_length = (cat_socklen_t) real_length;
             return CAT_ENOSPC;
         }
         if (name_length > 0) {
             memcpy(address->sa_data, name, name_length);
+            /* Add the '\0' terminator as much as possible */
+            if (is_lan && real_length + 1 <= length) {
+                address->sa_data[name_length] = '\0';
+                real_length++;
+            }
         }
-        if (!cat_sockaddr_is_linux_abstract_name(name)) {
-            address->sa_data[name_length++] = '\0';
-        }
-        *address_length = (cat_socklen_t) (offsetof(cat_sockaddr_local_t, sl_path) + name_length);
+        *address_length = real_length;
 
         return 0;
     }
@@ -336,18 +344,6 @@ CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen
             min_length, address_length
         );
         return cat_false;
-    }
-    if (address->sa_family == AF_LOCAL) {
-        if (
-            (((char *) address)[address_length - 1]) != '\0'
-#ifdef __linux__
-            && address_length > offsetof(cat_sockaddr_local_t, sl_path)
-            && !cat_sockaddr_is_linux_abstract_name(address->sa_data)
-#endif
-        ) {
-            cat_update_last_error(CAT_EINVAL, "Socket local path must be zero-termination");
-            return cat_false;
-        }
     }
 
     return cat_true;
@@ -1039,11 +1035,12 @@ static cat_bool_t cat_socket__bind(
         }
     } else {
         if (flags == CAT_SOCKET_BIND_FLAG_NONE) {
-            address_length -= offsetof(cat_sockaddr_t, sa_data);
-            if (address_length > 0 && !cat_sockaddr_is_linux_abstract_name(address->sa_data)) {
-                address_length -= 1;
+            const char *name = address->sa_data;
+            size_t name_length = address_length - CAT_SOCKADDR_HEADER_LENGTH;
+            if (!cat_sockaddr_is_linux_abstract_name(name, name_length)) {
+                name_length = cat_strnlen(name, name_length);
             }
-            error = uv_pipe_bind_ex(&isocket->u.pipe, address->sa_data, address_length);
+            error = uv_pipe_bind_ex(&isocket->u.pipe, name, name_length);
         }
     }
     if (unlikely(error != 0)) {
@@ -1243,11 +1240,12 @@ static cat_bool_t cat_socket__connect(
     } else if ((type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) {
         error = uv_udp_connect(&isocket->u.udp, address);
     } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
-        address_length -= offsetof(cat_sockaddr_t, sa_data);
-        if (address_length > 0 && !cat_sockaddr_is_linux_abstract_name(address->sa_data)) {
-            address_length -= 1;
+        const char *name = address->sa_data;
+        size_t name_length = address_length - CAT_SOCKADDR_HEADER_LENGTH;
+        if (!cat_sockaddr_is_linux_abstract_name(name, name_length)) {
+            name_length = cat_strnlen(name, name_length);
         }
-        (void) uv_pipe_connect_ex(request, &isocket->u.pipe, address->sa_data, address_length, cat_socket_connect_callback);
+        (void) uv_pipe_connect_ex(request, &isocket->u.pipe, name, name_length, cat_socket_connect_callback);
     } else {
         error = CAT_EAFNOSUPPORT;
     }
@@ -1541,7 +1539,9 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
     cat_sockaddr_info_t *cache = !is_peer ? isocket->cache.sockname : isocket->cache.peername;
     int error;
 
-    if (cache != NULL) {
+    if (address == NULL || address_length == NULL) {
+        error = CAT_EINVAL;
+    } else if (cache != NULL) {
         /* use cache */
         error = cat_sockaddr_copy(address, address_length, &cache->address.common, cache->length);
     } else {
@@ -1563,24 +1563,21 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
             }
             *address_length = length;
         } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
-            size_t length = *address_length;
-            const size_t offset = offsetof(cat_sockaddr_local_t, sl_path);
-            char *buffer = ((cat_sockaddr_local_t *) address)->sl_path;
-            if (length >= offset) {
-                length -= offset;
-            }
-            address->sa_family = AF_LOCAL;
-            /* Notice: uv_pipe_getname has already considered zero-termination (so we nned not `length += 1` ) */
+            cat_sockaddr_local_t local;
+            size_t length = sizeof(local.sl_path);
             if (!is_peer) {
-                error = uv_pipe_getsockname(&isocket->u.pipe, buffer, &length);
+                error = uv_pipe_getsockname(&isocket->u.pipe, local.sl_path, &length);
             } else {
-                error = uv_pipe_getpeername(&isocket->u.pipe, buffer, &length);
+                error = uv_pipe_getpeername(&isocket->u.pipe, local.sl_path, &length);
             }
-            length += offset;
-            if (error == 0 && !cat_sockaddr_is_linux_abstract_name(buffer)) {
-                length += 1;
+            if (error == 0 || error == CAT_ENOBUFS) {
+                local.sl_family = AF_LOCAL;
+                /* Notice: the returned length no longer includes the terminating null byte,
+                * and the buffer is not null terminated only if it's linux abstract name. */
+                length = CAT_SOCKADDR_HEADER_LENGTH + length + !cat_sockaddr_is_linux_abstract_name(local.sl_path, length);
+                memcpy(address, &local, CAT_MIN(*address_length, length));
+                *address_length = (cat_socklen_t) length;
             }
-            *address_length = (cat_socklen_t) length;
         }
     }
     if (unlikely(error != 0)) {
@@ -2097,7 +2094,7 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
                     cat_update_last_error_with_previous("Socket UDG write wait failed");
                 }
             } else {
-                cat_update_last_error_with_reason(error, "Socket write failed");
+                cat_update_last_error_of_syscall("Socket write failed");
             }
         } else {
             ret = cat_true;
