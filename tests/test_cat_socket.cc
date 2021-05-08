@@ -25,6 +25,38 @@ extern "C"
 
 #include "uv-common.h"
 
+static void echo_stream_server_connection_handler(cat_socket_t *server)
+{
+    while (true) {
+        cat_socket_t *client = cat_socket_accept(server, nullptr);
+        if (client == nullptr) {
+            EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+            break;
+        }
+        co([client] {
+            DEFER(cat_socket_close(client));
+            ASSERT_STREQ(cat_socket_get_role_name(client), "session");
+            while (true) {
+                char read_buffer[TEST_BUFFER_SIZE_STD];
+                ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
+                ASSERT_GE(read_n, 0);
+                if (read_n == 0) {
+                    break;
+                }
+                if (std::string(read_buffer, read_n) == "RESET") {
+                    break;
+                }
+                if (std::string(read_buffer, read_n) == "TIMEOUT") {
+                    ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
+                    break;
+                }
+                ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                continue;
+            }
+        });
+    }
+}
+
 cat_coroutine_t *echo_tcp_server;
 char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 size_t echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip);
@@ -48,34 +80,7 @@ TEST_REQUIREMENT(cat_socket, echo_tcp_server)
         DEFER(echo_tcp_server = nullptr);
         cat_socket_set_read_timeout(&server, -1);
 
-        while (true) {
-            cat_socket_t *client = cat_socket_accept(&server, nullptr);
-            if (client == nullptr) {
-                EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
-                break;
-            }
-            co([client] {
-                DEFER(cat_socket_close(client));
-                ASSERT_STREQ(cat_socket_get_role_name(client), "session");
-                while (true) {
-                    char read_buffer[TEST_BUFFER_SIZE_STD];
-                    ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
-                    ASSERT_GE(read_n, 0);
-                    if (read_n == 0) {
-                        break;
-                    }
-                    if (std::string(read_buffer, read_n) == "RESET") {
-                        break;
-                    }
-                    if (std::string(read_buffer, read_n) == "TIMEOUT") {
-                        ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
-                        break;
-                    }
-                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
-                    continue;
-                }
-            });
-        }
+        echo_stream_server_connection_handler(&server);
     });
     ASSERT_NE(echo_tcp_server, nullptr);
 }
@@ -141,6 +146,36 @@ static std::string get_random_pipe_path(void)
 {
     std::string random_bytes = get_random_bytes(8);
     return string_format(TEST_PIPE_PATH_FMT, random_bytes.c_str());
+}
+
+cat_coroutine_t *echo_pipe_server;
+std::string echo_pipe_server_path;
+
+TEST_REQUIREMENT(cat_socket, echo_pipe_server)
+{
+    co([] {
+        cat_socket_t server;
+
+        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_PIPE), nullptr);
+        DEFER(cat_socket_close(&server));
+        echo_pipe_server_path = get_random_pipe_path();
+        DEFER(echo_pipe_server_path = "");
+        ASSERT_TRUE(cat_socket_bind(&server, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        echo_pipe_server = cat_coroutine_get_current();
+        DEFER(echo_pipe_server = nullptr;);
+        cat_socket_set_read_timeout(&server, -1);
+
+        echo_stream_server_connection_handler(&server);
+    });
+    ASSERT_NE(echo_pipe_server, nullptr);
+}
+
+TEST_REQUIREMENT_DTOR(cat_socket, echo_pipe_server)
+{
+    ASSERT_NE(echo_pipe_server, nullptr);
+    cat_coroutine_resume(echo_pipe_server, nullptr, nullptr);
+    ASSERT_EQ(echo_pipe_server, nullptr);
 }
 
 #ifdef CAT_OS_UNIX_LIKE
@@ -868,23 +903,10 @@ TEST(cat_socket, set_tcp_accept_balance)
     ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
 }
 
-TEST(cat_socket, echo_tcp_client)
+static void echo_stream_client_tests(cat_socket_t *echo_client)
 {
-    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t echo_client;
     size_t n;
     ssize_t ret;
-
-    ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), nullptr);
-    DEFER(cat_socket_close(&echo_client));
-
-    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
-    {
-        char ip[CAT_SOCKET_IP_BUFFER_SIZE];
-        size_t ip_length = sizeof(ip);
-        ASSERT_TRUE(cat_socket_get_peer_address(&echo_client, ip, &ip_length));
-        ASSERT_EQ(std::string(ip, ip_length), std::string(echo_tcp_server_ip, echo_tcp_server_ip_length));
-    }
 
     /* normal loop */
     for (n = TEST_MAX_REQUESTS; n--;) {
@@ -892,9 +914,9 @@ TEST(cat_socket, echo_tcp_client)
         char write_buffer[TEST_BUFFER_SIZE_STD];
         /* send request */
         cat_snrand(CAT_STRS(write_buffer));
-        ASSERT_TRUE(cat_socket_send(&echo_client, CAT_STRS(write_buffer)));
+        ASSERT_TRUE(cat_socket_send(echo_client, CAT_STRS(write_buffer)));
         /* recv response */
-        ret = cat_socket_read(&echo_client, CAT_STRS(read_buffer));
+        ret = cat_socket_read(echo_client, CAT_STRS(read_buffer));
         ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
         read_buffer[sizeof(read_buffer) - 1] = '\0';
         write_buffer[sizeof(write_buffer) - 1] = '\0';
@@ -918,7 +940,7 @@ TEST(cat_socket, echo_tcp_client)
         cat_coroutine_t *coroutine = cat_coroutine_get_current();
         co([&] {
             for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
-                ASSERT_TRUE(cat_socket_send(&echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+                ASSERT_TRUE(cat_socket_send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
             }
             done = true;
             if (wait) {
@@ -929,7 +951,7 @@ TEST(cat_socket, echo_tcp_client)
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(read_buffers[n], nullptr);
-            ret = cat_socket_read(&echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
+            ret = cat_socket_read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
             ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
             read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
             write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
@@ -945,6 +967,25 @@ TEST(cat_socket, echo_tcp_client)
         }
         ASSERT_TRUE(done);
     } while (0);
+}
+
+TEST(cat_socket, echo_tcp_client)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t echo_client;
+
+    ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&echo_client));
+
+    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    {
+        char ip[CAT_SOCKET_IP_BUFFER_SIZE];
+        size_t ip_length = sizeof(ip);
+        ASSERT_TRUE(cat_socket_get_peer_address(&echo_client, ip, &ip_length));
+        ASSERT_EQ(std::string(ip, ip_length), std::string(echo_tcp_server_ip, echo_tcp_server_ip_length));
+    }
+
+    echo_stream_client_tests(&echo_client);
 }
 
 TEST(cat_socket, echo_udp_client)
@@ -1003,6 +1044,25 @@ TEST(cat_socket, echo_udp_client)
             }
         }
     }
+}
+
+TEST(cat_socket, echo_pipe_client)
+{
+    TEST_REQUIRE(echo_pipe_server != nullptr, cat_socket, echo_pipe_server);
+    cat_socket_t echo_client;
+
+    ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_PIPE), nullptr);
+    DEFER(cat_socket_close(&echo_client));
+
+    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
+    {
+        char path[CAT_SOCKADDR_MAX_PATH];
+        size_t path_length = sizeof(path);
+        ASSERT_TRUE(cat_socket_get_peer_address(&echo_client, path, &path_length));
+        ASSERT_EQ(std::string(path, path_length), echo_pipe_server_path);
+    }
+
+    echo_stream_client_tests(&echo_client);
 }
 
 #ifdef CAT_OS_UNIX_LIKE
