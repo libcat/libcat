@@ -16,11 +16,21 @@ jobs:
     steps:
       - name: Fetch vcpkg versions from github
         run: |
+          function fetchmeta{
+            param ($Package)
+            $req = $null
+            try {
+              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/CONTROL"
+            }catch{
+              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/vcpkg.json"
+            }
+            return $req
+          }
           Write-Host "::group::Fetching CONTROL from raw.githubusercontent.com"
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/gtest/CONTROL -UseBasicParsing).Content > ${{github.workspace}}/.vcpkgvers
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/openssl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/curl/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
-          (Invoke-WebRequest https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/zlib/CONTROL -UseBasicParsing).Content >> ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "gtest").Content > ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "openssl").Content >> ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "curl").Content >> ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "zlib").Content >> ${{github.workspace}}/.vcpkgvers
           Write-Host "::endgroup::"
           Write-Host "::group::Show now vers"
           Get-Content ${{github.workspace}}/.vcpkgvers
