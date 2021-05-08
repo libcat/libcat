@@ -53,7 +53,9 @@ CAT_API char *cat_sys_strdup(const char *string)
 
 CAT_API char *cat_sys_strndup(const char *string, size_t length)
 {
-	char *ptr = (char *) malloc(length + 1);
+	char *ptr;
+    length = cat_strnlen(string, length);
+    ptr = (char *) malloc(length + 1);
     if (unlikely(ptr == NULL)) {
         return NULL;
     }
@@ -74,7 +76,9 @@ CAT_API char *cat_strdup(const char *string)
 
 CAT_API char *cat_strndup(const char *string, size_t length)
 {
-	char *ptr = (char *) cat_malloc(length + 1);
+    char *ptr;
+    length = cat_strnlen(string, length);
+	ptr = (char *) cat_malloc(length + 1);
     if (unlikely(ptr == NULL)) {
         return NULL;
     }
