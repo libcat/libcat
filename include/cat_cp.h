@@ -52,42 +52,28 @@ typedef int pid_t;
 #endif
 #endif
 
-CAT_API char *strndup(const char *string, size_t length);
+#ifndef timespec
+#define timespec cat_timespec
+#endif
 
-CAT_API int setenv(const char *name, const char *value, int overwrite);
-
-struct timezone
-{
-    int tz_minuteswest;
-    int tz_dsttime;
-};
-
-struct itimerval
-{
-    struct timeval it_interval; /* next value */
-    struct timeval it_value; /* current value */
-};
-
-#if !defined(timespec) && _MSC_VER < 1900
-struct timespec
-{
+struct cat_timespec {
     time_t   tv_sec;   /* seconds */
     long     tv_nsec;  /* nanoseconds */
 };
+
+#ifndef sleep
+#define sleep     cat_sys_sleep
+#endif
+#ifndef usleep
+#define usleep    cat_sys_usleep
+#endif
+#ifndef nanosleep
+#define nanosleep cat_sys_nanosleep
 #endif
 
-#define ITIMER_REAL    0        /*generates sigalrm */
-#define ITIMER_VIRTUAL 1        /*generates sigvtalrm */
-#define ITIMER_VIRT    1        /*generates sigvtalrm */
-#define ITIMER_PROF    2        /*generates sigprof */
-
-typedef long suseconds_t;
-
-CAT_API int gettimeofday(struct timeval *time_info, struct timezone *timezone_info);
-
-CAT_API unsigned int sleep(unsigned int seconds);
-CAT_API int usleep(unsigned int useconds);
-CAT_API int nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
+CAT_API unsigned int cat_sys_sleep(unsigned int seconds);
+CAT_API int cat_sys_usleep(unsigned int useconds);
+CAT_API int cat_sys_nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
 #endif
 
 #ifndef CAT_OS_WIN
