@@ -72,6 +72,7 @@ static cat_always_inline void cat_string_close(cat_string_t *string)
     }
 }
 
+CAT_API size_t cat_strnlen(const char *p, size_t n);
 CAT_API const char *cat_strlchr(const char *p, const char *last, char c);
 
 CAT_API char *cat_vsprintf(const char *format, va_list args); CAT_FREE

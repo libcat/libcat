@@ -18,6 +18,19 @@
 
 #include "cat.h"
 
+CAT_API size_t cat_strnlen(const char *p, size_t n)
+{
+    size_t i;
+
+    for (i = 0; i < n; i++) {
+        if (p[i] == '\0') {
+            return i;
+        }
+    }
+
+    return n;
+}
+
 /* Searches a string based on the pointer to the beginning and end of the string for a given character.
  * Returns a pointer to the first match of that character. */
 CAT_API const char *cat_strlchr(const char *p, const char *last, char c)
