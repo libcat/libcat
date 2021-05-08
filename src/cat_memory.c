@@ -19,22 +19,24 @@
 #include "cat.h"
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
-cat_allocator_t cat_allocator;
-const cat_allocator_t cat_sys_allocator = { malloc, calloc, realloc, free, strdup, strndup };
+CAT_API cat_allocator_t cat_allocator;
+static const cat_allocator_t cat_sys_allocator = { cat_sys_malloc, cat_sys_calloc, cat_sys_realloc, cat_sys_free };
 
 CAT_API cat_bool_t cat_register_allocator(const cat_allocator_t *allocator)
 {
-    if (
-        allocator->malloc == NULL ||
-        allocator->calloc == NULL ||
-        allocator->realloc == NULL ||
-        allocator->free == NULL ||
-        allocator->strdup == NULL ||
-        allocator->strndup == NULL
-    ) {
-        cat_update_last_error(CAT_EINVAL, "Allocator must be filled");
+    if (allocator != NULL) {
+        if (
+            allocator->malloc == NULL ||
+            allocator->calloc == NULL ||
+            allocator->realloc == NULL ||
+            allocator->free == NULL
+        ) {
+            cat_update_last_error(CAT_EINVAL, "Allocator must be filled");
+        }
+        cat_allocator = *allocator;
+    } else {
+        cat_allocator = cat_sys_allocator;
     }
-    cat_allocator = *allocator;
     return cat_true;
 }
 #endif
