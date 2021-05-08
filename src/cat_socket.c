@@ -189,7 +189,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
     cat_bool_t unspec = af == AF_UNSPEC;
     int error;
 
-    if (unlikely(length < 0)) {
+    if (unlikely(((int) length) < 0)) {
         return CAT_EINVAL;
     }
 
@@ -1543,7 +1543,7 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
     cat_sockaddr_info_t *cache = !is_peer ? isocket->cache.sockname : isocket->cache.peername;
     int error;
 
-    if (address_length != NULL && *address_length < 0) {
+    if (address_length != NULL && ((int) *address_length) < 0) {
         error = CAT_EINVAL;
     } else if (cache != NULL) {
         /* use cache */
