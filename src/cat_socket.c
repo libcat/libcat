@@ -185,15 +185,18 @@ CAT_API cat_bool_t cat_sockaddr_set_port(cat_sockaddr_t *address, int port)
 static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *address_length, const char *name, size_t name_length, int port)
 {
     cat_sa_family_t af = address->sa_family;
-    cat_socklen_t length = *address_length;
+    cat_socklen_t length = address_length != NULL ? *address_length : 0;
     cat_bool_t unspec = af == AF_UNSPEC;
     int error;
+
+    if (unlikely(length < 0)) {
+        return CAT_EINVAL;
+    }
 
     if (af == AF_LOCAL) {
         cat_socklen_t real_length;
         cat_bool_t is_lan;
 
-        address->sa_family = AF_LOCAL;
         if (unlikely(name_length > CAT_SOCKADDR_MAX_PATH)) {
             *address_length = 0;
             return CAT_ENAMETOOLONG;
@@ -204,6 +207,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
             *address_length = (cat_socklen_t) real_length;
             return CAT_ENOSPC;
         }
+        address->sa_family = AF_LOCAL;
         if (name_length > 0) {
             memcpy(address->sa_data, name, name_length);
             /* Add the '\0' terminator as much as possible */
@@ -1539,7 +1543,7 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
     cat_sockaddr_info_t *cache = !is_peer ? isocket->cache.sockname : isocket->cache.peername;
     int error;
 
-    if (address == NULL || address_length == NULL) {
+    if (address_length != NULL && *address_length < 0) {
         error = CAT_EINVAL;
     } else if (cache != NULL) {
         /* use cache */
@@ -1575,7 +1579,7 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
                 /* Notice: the returned length no longer includes the terminating null byte,
                 * and the buffer is not null terminated only if it's linux abstract name. */
                 length = CAT_SOCKADDR_HEADER_LENGTH + length + !cat_sockaddr_is_linux_abstract_name(local.sl_path, length);
-                memcpy(address, &local, CAT_MIN(*address_length, length));
+                memcpy(address, &local, CAT_MIN((size_t) *address_length, length));
                 *address_length = (cat_socklen_t) length;
             }
         }
