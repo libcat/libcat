@@ -18,6 +18,14 @@
 
 #include "test.h"
 
+extern cat_coroutine_t *echo_tcp_server;
+extern char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
+extern size_t echo_tcp_server_ip_length;
+extern int echo_tcp_server_port;
+
+extern TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server);
+extern TEST_REQUIREMENT(cat_socket, echo_tcp_server);
+
 TEST(cat_poll, init_failed)
 {
     ASSERT_EQ(cat_poll_one(CAT_OS_INVALID_FD, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
@@ -31,14 +39,53 @@ TEST(cat_poll, init_failed)
 #ifdef CAT_OS_UNIX_LIKE
 TEST(cat_poll, start_failed)
 {
-    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    ASSERT_GT(fd, 0);
-    DEFER(close(fd));
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t socket;
+    cat_socket_fd_t fd;
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    fd = cat_socket_get_fd_fast(&socket);
+
     co([fd] {
         ASSERT_TRUE(cat_time_delay(0));
         ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
         ASSERT_EQ(cat_get_last_error_code(), CAT_EEXIST);
     });
-    ASSERT_EQ(cat_poll_one(fd, POLLERR, nullptr, 1), CAT_RET_NONE);
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
+
+    co([fd] {
+        cat_pollfd_t pollfd;
+        pollfd.fd = fd;
+        pollfd.events = POLLIN;
+        pollfd.revents = 0;
+        ASSERT_TRUE(cat_time_delay(0));
+        ASSERT_EQ(cat_poll(&pollfd, 1, TEST_IO_TIMEOUT), 1);
+        ASSERT_EQ(pollfd.revents, POLLNONE);
+    });
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
 }
 #endif
+
+TEST(cat_poll, base)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t socket;
+    cat_socket_fd_t fd;
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    fd = cat_socket_get_fd_fast(&socket);
+
+    ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    char buffer[CAT_STRLEN("Hello libcat")];
+    ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_FALSE(cat_socket_check_liveness(&socket));
+}

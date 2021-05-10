@@ -101,10 +101,10 @@
 
 #define TEST_REQUIREMENT(test_suite_name, test_name) \
 TEST_REQUIREMENT_DTOR(test_suite_name, test_name); \
-static void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void)
+void TEST_REQUIREMENT_NAME(test_suite_name, test_name)(void)
 
 #define TEST_REQUIREMENT_DTOR(test_suite_name, test_name) \
-static void TEST_REQUIREMENT_DTOR_NAME(test_suite_name, test_name)(void)
+void TEST_REQUIREMENT_DTOR_NAME(test_suite_name, test_name)(void)
 
 #define TEST_REQUIRE(condition, test_suite_name, test_name) \
     if (!(condition)) { \

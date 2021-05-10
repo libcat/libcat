@@ -761,8 +761,7 @@ TEST(cat_socket, check_liveness)
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_check_liveness(&socket));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
-    /* eq to poll(readable) */
-    ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&socket), POLLERR, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&socket), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECONNRESET);
 }
