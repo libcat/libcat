@@ -1517,6 +1517,7 @@ typedef struct {
     cat_bool_t done; /* new thread finished */
     uv_thread_t tid;
     cat_async_t async;
+    cat_event_task_t *shutdown_task;
 } cat_fs_flock_data_t;
 
 /*
@@ -1724,11 +1725,34 @@ static void cat_fs_flock_data_cleanup(cat_async_t *async)
 {
     cat_fs_flock_data_t *data = cat_container_of(async, cat_fs_flock_data_t, async);
 
-    CAT_ASSERT(data->done);
+    CAT_ASSERT(!data->started || data->done);
+    if (data->shutdown_task != NULL) {
+        cat_event_unregister_runtime_shutdown_task(data->shutdown_task);
+    }
     if (data->started) {
         uv_thread_join(&data->tid); // shell we run it in work()?
     }
     cat_free(data);
+}
+
+static void cat_fs_flock_shutdown(cat_data_t *ptr)
+{
+    cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) ptr;
+
+    while (!data->started) {
+        usleep(1000);
+    }
+    if (!data->done) {
+        // try to kill thread as much as possible
+#ifndef CAT_OS_WIN
+        (void) pthread_kill(data->tid, SIGKILL);
+#else
+        (void) TerminateThread(data->tid, 1);
+#endif
+        // force close
+        data->shutdown_task = NULL;
+        cat_async_close(&data->async, cat_fs_flock_data_cleanup);
+    }
 }
 
 #ifdef FLOCK_HAVE_NB
@@ -1753,6 +1777,7 @@ CAT_API int cat_fs_flock(cat_file_t fd, int op)
     data->started = cat_false;
     data->done = cat_false;
     data->non_blocking = ((data->op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN)) == CAT_LOCK_UN) || (data->op & _CAT_LOCK_NB);
+    data->shutdown_task = NULL;
     if (data->non_blocking) {
         // operation is non-blocking, things done immediately
         if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_orig_flock, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
@@ -1763,13 +1788,14 @@ CAT_API int cat_fs_flock(cat_file_t fd, int op)
             return -1;
         }
         if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_flock_cb, NULL, data, CAT_TIMEOUT_FOREVER)) {
+            data->shutdown_task = cat_event_register_runtime_shutdown_task(cat_fs_flock_shutdown, data);
             cat_async_cleanup(&data->async, cat_fs_flock_data_cleanup);
             return -1;
         }
         if (!cat_async_wait_and_close(&data->async, cat_fs_flock_data_cleanup, CAT_TIMEOUT_FOREVER)) {
+            data->shutdown_task = cat_event_register_runtime_shutdown_task(cat_fs_flock_shutdown, data);
             return -1;
         }
-        CAT_ASSERT(data->done);
     }
     cat_fs_work_check_error(&data->ret.error, "Flock");
     return (int) data->ret.ret.num;
