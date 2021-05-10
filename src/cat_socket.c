@@ -202,7 +202,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
             return CAT_ENAMETOOLONG;
         }
         is_lan = cat_sockaddr_is_linux_abstract_name(name, name_length);
-        real_length = (cat_socklen_t) (CAT_SOCKADDR_HEADER_LENGTH + name_length);
+        real_length = (cat_socklen_t) (CAT_SOCKADDR_HEADER_LENGTH + name_length + !is_lan);
         if (unlikely(real_length > length)) {
             *address_length = (cat_socklen_t) real_length;
             return CAT_ENOSPC;
@@ -211,9 +211,8 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
         if (name_length > 0) {
             memcpy(address->sa_data, name, name_length);
             /* Add the '\0' terminator as much as possible */
-            if (is_lan && real_length + 1 <= length) {
+            if (!is_lan) {
                 address->sa_data[name_length] = '\0';
-                real_length++;
             }
         }
         *address_length = real_length;
