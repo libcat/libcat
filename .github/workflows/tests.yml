@@ -2,6 +2,9 @@ name: tests
 
 on: [push, pull_request]
 
+env:
+  CAT_SLE: 1
+
 jobs:
   win-tests:
     name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
@@ -152,7 +155,7 @@ jobs:
           cmake --build . -j --target cat_tests || exit 1
           echo "::endgroup::"
           echo "::group::Test libcat"
-          ASAN_OPTIONS=log_path=/tmp/asan.log CAT_SLE=1 ./cat_tests --gtest_color=yes || {
+          ASAN_OPTIONS=log_path=/tmp/asan.log ./cat_tests --gtest_color=yes || {
             echo "::warning::Test failed" >&1
             echo "ASan log:" >&1
             cat /tmp/asan.log* >&1
