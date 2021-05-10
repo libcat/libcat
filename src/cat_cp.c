@@ -19,7 +19,6 @@
 #include "cat.h"
 
 #ifdef CAT_OS_WIN
-
 CAT_API unsigned int cat_sys_sleep(unsigned int seconds)
 {
     return SleepEx(seconds * 1000, TRUE);
@@ -40,16 +39,16 @@ CAT_API int cat_sys_usleep(unsigned int useconds)
     return 0;
 }
 
-CAT_API int cat_sys_nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
+CAT_API int cat_sys_nanosleep(const struct cat_timespec *req, struct cat_timespec *rem)
 {
-    if (rqtp->tv_nsec > 999999999) {
+    if (req->tv_nsec > 999999999) {
         /* The time interval specified 1,000,000 or more microseconds. */
         cat_set_sys_errno(WSAEINVAL);
         return -1;
     }
-    rmtp->tv_nsec = 0;
-    rmtp->tv_sec = 0;
-    return usleep((unsigned int) (rqtp->tv_sec * 1000000 + rqtp->tv_nsec / 1000));
+    rem->tv_nsec = 0;
+    rem->tv_sec = 0;
+    return cat_sys_usleep((unsigned int) (req->tv_sec * 1000000 + req->tv_nsec / 1000));
 }
 #endif
 

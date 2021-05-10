@@ -208,17 +208,17 @@ CAT_API int cat_time_usleep(cat_usec_t microseconds)
     return cat_time_msleep((cat_msec_t) (((double) microseconds) / 1000)) == 0 ? 0 : -1;
 }
 
-CAT_API int cat_time_nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
+CAT_API int cat_time_nanosleep(const struct cat_timespec *req, struct cat_timespec *rem)
 {
-    if (unlikely(rqtp->tv_sec < 0 || rqtp->tv_nsec < 0 || rqtp->tv_nsec > 999999999)) {
+    if (unlikely(req->tv_sec < 0 || req->tv_nsec < 0 || req->tv_nsec > 999999999)) {
         cat_update_last_error(CAT_EINVAL, "The value in the tv_nsec field was not in the range 0 to 999999999 or tv_sec was negative");
         return -1;
     } else {
-        cat_msec_t msec = (uint64_t) (rqtp->tv_sec * 1000 + (((double) rqtp->tv_nsec) / (1000 * 1000)));
+        cat_msec_t msec = (uint64_t) (req->tv_sec * 1000 + (((double) req->tv_nsec) / (1000 * 1000)));
         cat_msec_t rmsec = cat_time_msleep(msec);
-        if (rmsec > 0 && rmtp) {
-            rmtp->tv_sec = (rmsec - (rmsec % 1000)) / 1000;
-            rmtp->tv_nsec = (rmsec % 1000) * 1000 * 1000;
+        if (rmsec > 0 && rem) {
+            rem->tv_sec = (rmsec - (rmsec % 1000)) / 1000;
+            rem->tv_nsec = (rmsec % 1000) * 1000 * 1000;
         }
         return rmsec == 0 ? 0 : -1;
     }

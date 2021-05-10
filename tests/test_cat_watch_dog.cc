@@ -32,7 +32,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 10));
+        cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 10));
     });
 
     cat_watch_dog_stop(); // make sure not output error anymore
@@ -59,7 +59,7 @@ TEST(cat_watch_dog, single)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 3));
+    cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 3));
 
     cat_watch_dog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test

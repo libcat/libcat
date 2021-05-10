@@ -26,7 +26,7 @@ TEST(cat_work, base)
     for (int n = 0; n < 10; n++) {
         co([&, n] {
             ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [n] {
-                usleep((n + 1) * 5000); /* 5ms ~ 50ms */
+                cat_sys_usleep((n + 1) * 5000); /* 5ms ~ 50ms */
                 buckets[n] = n;
             }, 500)); /* wait max 500ms */
         });
@@ -53,7 +53,7 @@ TEST(cat_work, base)
 TEST(cat_work, timeout)
 {
     ASSERT_FALSE(work(CAT_WORK_KIND_SLOW_IO, [] {
-        usleep(10 * 1000);
+        cat_sys_usleep(10 * 1000);
     }, 1));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
@@ -62,7 +62,7 @@ TEST(cat_work, cancel)
 {
     cat_coroutine_t *coroutine = co([] {
         bool ret = work(CAT_WORK_KIND_SLOW_IO, [] {
-            usleep(1000); // 1ms
+            cat_sys_usleep(1000); // 1ms
         }, TEST_IO_TIMEOUT);
         ASSERT_FALSE(ret);
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);

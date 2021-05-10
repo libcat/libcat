@@ -36,7 +36,7 @@ TEST(cat_async, notify_later)
     ASSERT_NE(async, nullptr);
     co([async] {
         ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
-            usleep(1000);
+            cat_sys_usleep(1000);
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });
@@ -49,7 +49,7 @@ TEST(cat_async, notify_timeout)
     ASSERT_NE(async, nullptr);
     co([async] {
         ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
-            usleep(1000);
+            cat_sys_usleep(1000);
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });
@@ -66,7 +66,7 @@ TEST(cat_async, cancel)
     co([async] {
         ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
             while (!done) {
-                usleep(1000);
+                cat_sys_usleep(1000);
             }
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
@@ -114,7 +114,7 @@ TEST(cat_async, cleanup_later)
     ASSERT_NE(async, nullptr);
     co([async] {
         ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
-            usleep(1000);
+            cat_sys_usleep(1000);
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });

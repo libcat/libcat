@@ -295,7 +295,7 @@ CAT_API int cat_fs_scandir(const char *path, cat_dirent_t **namelist,
             }
             tmp = _tmp;
         }
-        tmp[cnt].name = strdup(dirent.name);
+        tmp[cnt].name = cat_sys_strdup(dirent.name);
         // printf("%s: %p\n", tmp[cnt].name, tmp[cnt].name);
         tmp[cnt++].type = dirent.type;
     }
@@ -420,7 +420,7 @@ CAT_API char *cat_fs_realpath(const char *_path, char *buf)
     wrappath(_path, path);
     CAT_FS_DO_RESULT_EX({return NULL;}, {
         if (NULL == buf) {
-            return strdup(context->fs.ptr);
+            return cat_sys_strdup(context->fs.ptr);
         }
         strcpy(buf, context->fs.ptr);
         return buf;
@@ -890,7 +890,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->canceled = cat_false;
-    data->path = cat_strdup(path);
+    data->path = cat_sys_strdup(path);
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
         // canceled, tell freer close handle
         data->canceled = cat_true;
@@ -930,7 +930,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         data->ret.error.val.error = errno;
         return;
     }
-    pret->name = strdup(pdirent->d_name);
+    pret->name = cat_sys_strdup(pdirent->d_name);
     if (NULL == pret->name) {
         free(pret);
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
@@ -1030,7 +1030,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     CAT_ASSERT(work_ret->name);
     cat_dirent_t *ret = malloc(sizeof(*ret));
     ret->type = work_ret->type;
-    ret->name = strdup(work_ret->name);
+    ret->name = cat_sys_strdup(work_ret->name);
     return ret;
 }
 
@@ -1236,7 +1236,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
     }
     memset(&data->ret, 0, sizeof(data->ret));
     data->canceled = cat_false;
-    data->path = cat_strdup(path);
+    data->path = cat_sys_strdup(path);
     data->ret.ret.handle = INVALID_HANDLE_VALUE;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_opendir_cb, cat_fs_opendir_free, data, CAT_TIMEOUT_FOREVER)) {
         // canceled, tell freer close handle
@@ -1421,7 +1421,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         FALSE // use default char
     );
     fn_buf[r] = 0;
-    pdirent->name = strdup(fn_buf);
+    pdirent->name = cat_sys_strdup(fn_buf);
 
     // from uv
     if (pfdi->FileAttributes & FILE_ATTRIBUTE_DEVICE) {
@@ -1487,7 +1487,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     pintdir->rewind = data->dir.rewind;
     cat_dirent_t *cbret = data->ret.ret.ptr;
     cat_dirent_t *ret = malloc(sizeof(*ret));
-    ret->name = strdup(cbret->name);
+    ret->name = cat_sys_strdup(cbret->name);
     ret->type = cbret->type;
     return ret;
 }
@@ -1740,7 +1740,7 @@ static void cat_fs_flock_shutdown(cat_data_t *ptr)
     cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) ptr;
 
     while (!data->started) {
-        usleep(1000);
+        cat_sys_usleep(1000);
     }
     if (!data->done) {
         // try to kill thread as much as possible

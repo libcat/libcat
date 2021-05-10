@@ -21,7 +21,7 @@
 TEST(cat_time, nsec)
 {
     cat_nsec_t s = cat_time_nsec();
-    ASSERT_EQ(usleep(1), 0);
+    ASSERT_EQ(cat_sys_usleep(1), 0);
     ASSERT_GT(cat_time_nsec() - s, 0);
 }
 
@@ -51,7 +51,7 @@ TEST(cat_time, usleep)
 TEST(cat_time, nanosleep)
 {
     cat_msec_t s = cat_time_msec();
-    timespec time = { 0, 10 * 1000 * 1000 };
+    cat_timespec time = { 0, 10 * 1000 * 1000 };
     ASSERT_EQ(cat_time_nanosleep(&time, nullptr), 0);
     s = cat_time_msec() - s;
     ASSERT_GE(s, 5);
@@ -143,13 +143,13 @@ TEST(cat_time, usleep_cancel)
 TEST(cat_time, nanosleep_cancel)
 {
     cat_coroutine_t *coroutine = co([] {
-        struct timespec rqtp;
-        struct timespec rmtp;
-        rqtp.tv_sec = 1;
-        rqtp.tv_nsec = 1000 * 1000;
-        ASSERT_EQ(cat_time_nanosleep(&rqtp, &rmtp), -1);
-        ASSERT_EQ(rmtp.tv_sec, 1);
-        ASSERT_EQ(rmtp.tv_nsec, 1000 * 1000);
+        struct cat_timespec req;
+        struct cat_timespec rem;
+        req.tv_sec = 1;
+        req.tv_nsec = 1000 * 1000;
+        ASSERT_EQ(cat_time_nanosleep(&req, &rem), -1);
+        ASSERT_EQ(rem.tv_sec, 1);
+        ASSERT_EQ(rem.tv_nsec, 1000 * 1000);
     });
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
@@ -157,18 +157,18 @@ TEST(cat_time, nanosleep_cancel)
 
 TEST(cat_time, nanosleep_inval)
 {
-    struct timespec rqtp;
-    rqtp.tv_sec = -1;
-    rqtp.tv_nsec = 0;
-    ASSERT_EQ(cat_time_nanosleep(&rqtp, nullptr), -1);
+    struct cat_timespec req;
+    req.tv_sec = -1;
+    req.tv_nsec = 0;
+    ASSERT_EQ(cat_time_nanosleep(&req, nullptr), -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    rqtp.tv_sec = 0;
-    rqtp.tv_nsec = -1;
-    ASSERT_EQ(cat_time_nanosleep(&rqtp, nullptr), -1);
+    req.tv_sec = 0;
+    req.tv_nsec = -1;
+    ASSERT_EQ(cat_time_nanosleep(&req, nullptr), -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    rqtp.tv_sec = 1;
-    rqtp.tv_nsec = 999999999 + 1;
-    ASSERT_EQ(cat_time_nanosleep(&rqtp, nullptr), -1);
+    req.tv_sec = 1;
+    req.tv_nsec = 999999999 + 1;
+    ASSERT_EQ(cat_time_nanosleep(&req, nullptr), -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
@@ -193,7 +193,7 @@ TEST(cat_time, blocking)
         ASSERT_EQ(r, 1);
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
-    usleep(10);
+    cat_sys_usleep(10);
     ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
 }
