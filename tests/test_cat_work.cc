@@ -20,33 +20,23 @@
 
 TEST(cat_work, base)
 {
-    static int buckets[10] = { };
+    cat_coroutine_t *coroutine = cat_coroutine_get_current();
+    uv_sem_t sem;
     bool done = false;
 
-    for (int n = 0; n < 10; n++) {
-        co([&, n] {
-            ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [n] {
-                cat_sys_usleep((n + 1) * 5000); /* 5ms ~ 50ms */
-                buckets[n] = n;
-            }, 500)); /* wait max 500ms */
-        });
-    }
-    ASSERT_EQ(buckets[9], 0);
+    ASSERT_EQ(uv_sem_init(&sem, 0), 0);
+    DEFER(uv_sem_destroy(&sem));
+    co([&] {
+        ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [&] {
+            uv_sem_wait(&sem);
+            done = true;
+        }, TEST_IO_TIMEOUT));
+        ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+    });
 
-    for (int c = 0; c < 5; c++) {
-        cat_time_msleep(100); // 100ms
-        done = ([&] {
-            for (int n = 0; n < 10; n++) {
-                if (buckets[n] != n) {
-                    return false;
-                }
-            }
-            return true;
-        })();
-        if (done) {
-            break;
-        }
-    }
+    ASSERT_FALSE(done);
+    uv_sem_post(&sem);
+    ASSERT_TRUE(cat_coroutine_yield(nullptr, nullptr));
     ASSERT_TRUE(done);
 }
 
