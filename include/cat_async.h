@@ -43,8 +43,11 @@ struct cat_async_s {
 
 CAT_API cat_async_t *cat_async_create(cat_async_t *async);
 CAT_API int cat_async_notify(cat_async_t *async);
+/* eq to wait + cleanup/close */
 CAT_API cat_bool_t cat_async_wait_and_close(cat_async_t *async, cat_async_cleanup_callback cleanup, cat_timeout_t timeout);
+/* clean up callback will be called after async was notified, and async closed */
 CAT_API cat_bool_t cat_async_cleanup(cat_async_t *async, cat_async_cleanup_callback cleanup);
+/* async handle will be closed immediately, clean up callback will be called at the same time  */
 CAT_API cat_bool_t cat_async_close(cat_async_t *async, cat_async_cleanup_callback cleanup);
 
 #ifdef __cplusplus
