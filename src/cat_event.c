@@ -38,6 +38,7 @@ CAT_API cat_bool_t cat_event_module_init(void)
         return cat_false;
     }
 
+    cat_queue_init(&CAT_EVENT_G(runtime_shutdown_tasks));
     cat_queue_init(&CAT_EVENT_G(defer_tasks));
     CAT_EVENT_G(defer_task_count) = 0;
 
@@ -70,6 +71,17 @@ CAT_API cat_bool_t cat_event_runtime_init(void)
 
 CAT_API cat_bool_t cat_event_runtime_shutdown(void)
 {
+    /* call shutdown tasks */
+    do {
+        cat_queue_t *tasks = &CAT_EVENT_G(runtime_shutdown_tasks);
+        cat_event_task_t *task;
+        while ((task = cat_queue_front_data(tasks, cat_event_task_t, node))) {
+            cat_queue_remove(&task->node);
+            task->callback(task->data);
+            cat_free(task);
+        }
+    } while (0);
+
     /* we must call run to close all handles and clear defer tasks */
     cat_event_schedule();
 
@@ -151,6 +163,27 @@ CAT_API cat_coroutine_t *cat_event_scheduler_run(cat_coroutine_t *coroutine)
 CAT_API cat_coroutine_t *cat_event_scheduler_close(void)
 {
     return cat_coroutine_scheduler_close();
+}
+
+CAT_API cat_event_task_t *cat_event_register_runtime_shutdown_task(cat_data_callback_t callback, cat_data_t *data)
+{
+    cat_event_task_t *task = (cat_event_task_t *) cat_malloc(sizeof(*task));
+
+    if (unlikely(task == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for defer task failed");
+        return NULL;
+    }
+    task->callback = callback;
+    task->data = data;
+    cat_queue_push_back(&CAT_EVENT_G(runtime_shutdown_tasks), &task->node);
+
+    return task;
+}
+
+CAT_API void cat_event_unregister_runtime_shutdown_task(cat_event_task_t *task)
+{
+    cat_queue_remove(&task->node);
+    cat_free(task);
 }
 
 CAT_API cat_bool_t cat_event_defer(cat_data_callback_t callback, cat_data_t *data)

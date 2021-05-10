@@ -40,6 +40,19 @@ TEST(cat_event, wait)
     ASSERT_TRUE(done);
 }
 
+TEST(cat_event, runtime_shutdown_function)
+{
+    ASSERT_NE(cat_event_register_runtime_shutdown_task([] (cat_data_t *data) {
+        ASSERT_EQ((int) (intptr_t) data, CAT_MAGIC_NUMBER);
+    }, (cat_data_t *) (intptr_t) CAT_MAGIC_NUMBER), nullptr);
+
+    cat_event_task_t *task;
+    ASSERT_NE((task = cat_event_register_runtime_shutdown_task([] (cat_data_t *data) {
+        ASSERT_TRUE(0 && "never here");
+    }, (cat_data_t *) (intptr_t) CAT_MAGIC_NUMBER)), nullptr);
+    cat_event_unregister_runtime_shutdown_task(task);
+}
+
 #ifdef CAT_OS_UNIX_LIKE
 
 #include <sys/types.h>
