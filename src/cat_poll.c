@@ -75,7 +75,7 @@ static cat_always_inline int cat_poll_translate_from_sysno(int ievents)
     return uv_events;
 }
 
-static cat_always_inline int cat_poll_translate_error_to_revents(int error)
+static cat_always_inline cat_pollfd_events_t cat_poll_translate_error_to_revents(int error)
 {
     switch (error) {
         case CAT_EBADF:
