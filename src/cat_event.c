@@ -71,19 +71,18 @@ CAT_API cat_bool_t cat_event_runtime_init(void)
 
 CAT_API cat_bool_t cat_event_runtime_shutdown(void)
 {
-    /* call shutdown tasks */
+    cat_queue_t *shutdown_tasks = &CAT_EVENT_G(runtime_shutdown_tasks);
     do {
-        cat_queue_t *tasks = &CAT_EVENT_G(runtime_shutdown_tasks);
         cat_event_task_t *task;
-        while ((task = cat_queue_front_data(tasks, cat_event_task_t, node))) {
+        /* call shutdown tasks */
+        while ((task = cat_queue_front_data(shutdown_tasks, cat_event_task_t, node))) {
             cat_queue_remove(&task->node);
             task->callback(task->data);
             cat_free(task);
         }
-    } while (0);
-
-    /* we must call run to close all handles and clear defer tasks */
-    cat_event_schedule();
+        /* we must call run to close all handles and clear defer tasks */
+        cat_event_schedule();
+    } while (!cat_queue_empty(shutdown_tasks));
 
     CAT_ASSERT(cat_queue_empty(&CAT_EVENT_G(defer_tasks)));
     CAT_ASSERT(CAT_EVENT_G(defer_task_count) == 0);
