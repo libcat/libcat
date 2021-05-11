@@ -131,6 +131,9 @@ if(MSVC)
     check_add_cflags(/wd4267 uv_cflags HAVE_MSVC_LINT_wd4267)
     check_add_cflags(/wd4819 uv_cflags HAVE_MSVC_LINT_wd4819)
     # arrange global warnings
+    # for while (0, 0) in FD_SET() at Winsock2.h:
+    # https://developercommunity.visualstudio.com/t/fd-clr-and-fd-set-macros-generate-warning-c4548/172702
+    check_add_cflags_global(/wd4548 HAVE_MSVC_LINT_wd4548)
     check_add_cflags_global(/wd4996 HAVE_MSVC_LINT_wd4996)
     check_add_cflags_global(/utf-8 HAVE_MSVC_UTF8)
     check_add_cflags_global(/we4013 HAVE_MSVC_LINT_we4013)
