@@ -36,17 +36,20 @@ TEST(cat_poll, init_failed)
 #endif
 }
 
+#define PREPARE_TCP_SOCKET(socket) \
+    cat_socket_t socket; \
+    cat_socket_fd_t fd; \
+    \
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP)); \
+    DEFER(cat_socket_close(&socket)); \
+    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port)); \
+    fd = cat_socket_get_fd_fast(&socket);
+
 #ifdef CAT_OS_UNIX_LIKE
 TEST(cat_poll, start_failed)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t socket;
-    cat_socket_fd_t fd;
-
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
-    fd = cat_socket_get_fd_fast(&socket);
+    PREPARE_TCP_SOCKET(socket);
 
     co([fd] {
         ASSERT_TRUE(cat_time_delay(0));
@@ -71,13 +74,7 @@ TEST(cat_poll, start_failed)
 TEST(cat_poll, base)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t socket;
-    cat_socket_fd_t fd;
-
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
-    fd = cat_socket_get_fd_fast(&socket);
+    PREPARE_TCP_SOCKET(socket);
 
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
@@ -87,5 +84,56 @@ TEST(cat_poll, base)
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
     ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_FALSE(cat_socket_check_liveness(&socket));
+}
+
+static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
+{
+	struct timeval timeout = { TEST_IO_TIMEOUT, 0 };
+    fd_set readfds, writefds, exceptfds;
+	FD_ZERO(&readfds);
+	FD_ZERO(&writefds);
+	FD_ZERO(&exceptfds);
+    switch (type) {
+        case 0:
+            FD_SET(fd, &readfds);
+            break;
+        case 1:
+            FD_SET(fd, &writefds);
+            break;
+    }
+    int ret = cat_select(fd + 1, &readfds, &writefds, nullptr, &timeout);
+    if (ret < 0) {
+        return CAT_RET_ERROR;
+    }
+    if (ret == 0) {
+        return CAT_RET_NONE;
+    }
+    switch (type) {
+        case 0:
+            return FD_ISSET(fd, &readfds) ? CAT_RET_OK : CAT_RET_NONE;
+        case 1:
+            return FD_ISSET(fd, &writefds) ? CAT_RET_OK : CAT_RET_NONE;
+    }
+    CAT_NEVER_HERE("Invalid type");
+}
+
+#define select_is_readable(fd) select_is_able(fd, 0)
+#define select_is_writable(fd) select_is_able(fd, 1)
+
+TEST(cat_select, base)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    PREPARE_TCP_SOCKET(socket);
+    SKIP_IF(fd >= FD_SETSIZE);
+
+    ASSERT_TRUE(select_is_writable(fd));
+    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
+    ASSERT_TRUE(select_is_readable(fd));
+    char buffer[CAT_STRLEN("Hello libcat")];
+    ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_TRUE(select_is_writable(fd));
+    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
+    ASSERT_TRUE(select_is_readable(fd));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
 }

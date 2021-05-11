@@ -327,3 +327,95 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     }
     return CAT_RET_ERROR;
 }
+
+#define SAFE_FD_ZERO(set) do { \
+    if (set != NULL) { \
+        FD_ZERO(set); \
+    } \
+} while (0)
+
+#define SAFE_FD_SET(fd, set) do { \
+    CAT_ASSERT(set != NULL); \
+    FD_SET(fd, set); \
+} while (0)
+
+#define SAFE_FD_ISSET(fd, set) (set != NULL && FD_ISSET(fd, set))
+
+CAT_API int cat_select(int max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    cat_pollfd_t *pfds, *pfd;
+    cat_nfds_t nfds = 0, ifds;
+    int fd, ret;
+
+    if (unlikely(max_fd < 0)) {
+        cat_update_last_error(CAT_EINVAL, "Select nfds is negative");
+        return -1;
+    }
+    /* count nfds */
+    for (fd = 0; fd < max_fd; fd++) {
+        if (SAFE_FD_ISSET(fd, readfds) || SAFE_FD_ISSET(fd, writefds) || SAFE_FD_ISSET(fd, exceptfds)) {
+            nfds++;
+        }
+    }
+    /* nothing to do */
+    if (nfds == 0) {
+        return 0;
+    }
+
+    /* malloc for poll fds */
+    pfds = (cat_pollfd_t *) cat_malloc(sizeof(*pfds) * nfds);
+    if (unlikely(pfds == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for poll fds failed");
+        return -1;
+    }
+
+    /* translate from select structure to pollfd structure */
+    ifds = 0;
+    for (fd = 0; fd < max_fd; fd++) {
+        cat_pollfd_events_t events = POLLNONE;
+        if (SAFE_FD_ISSET(fd, readfds)) {
+            events |= POLLIN;
+        }
+        if (SAFE_FD_ISSET(fd, writefds)) {
+            events |= POLLOUT;
+        }
+        if (events == POLLNONE) {
+            continue;
+        }
+        pfd = &pfds[ifds];
+        pfd->fd = fd;
+        pfd->events = events;
+        pfd->revents = POLLNONE;
+        ifds++;
+    }
+    CAT_ASSERT(ifds == nfds);
+
+    ret = cat_poll(pfds, nfds, cat_time_tv2to(timeout));
+
+    if (unlikely(ret < 0)) {
+        goto _out;
+    }
+
+    /* translate from poll structure to select structrue */
+	SAFE_FD_ZERO(readfds);
+	SAFE_FD_ZERO(writefds);
+	SAFE_FD_ZERO(exceptfds);
+    for (ifds = 0; ifds < nfds; ifds++) {
+        pfd = &pfds[ifds];
+        if (pfd->revents & POLLIN) {
+            SAFE_FD_SET(pfd->fd, readfds);
+        }
+        if (pfd->revents & POLLOUT) {
+            SAFE_FD_SET(pfd->fd, writefds);
+        }
+        // ignore errors when event is already processed at IN and OUT handler.
+        if ((pfd->revents & ~(POLLIN | POLLOUT)) != 0 &&
+            !(pfd->revents & (POLLIN | POLLOUT))) {
+            SAFE_FD_SET(pfd->fd, exceptfds);
+        }
+    }
+
+    _out:
+    cat_free(pfds);
+    return ret;
+}

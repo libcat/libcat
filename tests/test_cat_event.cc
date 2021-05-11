@@ -19,6 +19,14 @@
 
 #include "test.h"
 
+#ifndef CAT_OS_WIN
+TEST(cat_event, fork)
+{
+    // it should has not effect for anything
+    cat_event_fork();
+}
+#endif
+
 TEST(cat_event, defer)
 {
     bool done = false;
@@ -59,7 +67,7 @@ TEST(cat_event, runtime_shutdown_function)
 #include <sys/wait.h>
 #include <unistd.h>
 
-TEST(cat_event, fork)
+TEST(cat_event, real_fork)
 {
     cat_socket_t server;
     cat_socket_t dummy, dummy_peer;
