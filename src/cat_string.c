@@ -21,7 +21,7 @@
 CAT_API size_t cat_strnlen(const char *s, size_t n)
 {
     const char *p = memchr(s, 0, n);
-	return p ? p - s : n;
+	return p ? (size_t) (p - s) : n;
 }
 
 /* Searches a string based on the pointer to the beginning and end of the string for a given character.
