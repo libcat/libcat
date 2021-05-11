@@ -237,6 +237,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     cat_poll_context_t context;
     cat_poll_t *polls;
     cat_nfds_t i, n = 0;
+    cat_bool_t has_first = cat_false;
     cat_ret_t ret;
     int error = 0;
 
@@ -257,6 +258,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
         fd->revents = POLLNONE; // clear it
         cat_debug(EVENT, "poll_add(fd=" CAT_OS_SOCKET_FMT ", event=%d)", fd->fd, fd->events);
         poll->initialized = cat_false;
+        polls->is_head = cat_false;
         while (likely(error == 0)) {
             error = uv_poll_init_socket(cat_event_loop, &poll->u.poll, fd->fd);
             if (unlikely(error != 0)) {
@@ -264,6 +266,10 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
                 break;
             }
             poll->initialized = cat_true;
+            if (!has_first) {
+                polls->is_head = cat_true;
+                has_first = true;
+            }
             error = uv_poll_start(&poll->u.poll, cat_poll_translate_from_sysno(fd->events), cat_poll_callback);
             if (unlikely(error != 0)) {
                 poll->status = error;
@@ -273,11 +279,9 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
             break;
         }
         poll->revents = 0;
-        poll->is_head = cat_false;
         poll->u.context = &context;
         i++;
     }
-    polls[0].is_head = cat_true;
 
     if (error == 0) {
         ret = cat_time_delay(timeout);
@@ -314,16 +318,24 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = %zu", fds, (size_t) nfds, timeout, (size_t) n);
 
+    if (!has_first) {
+        cat_free(polls);
+    }
+
     return n;
 
     _error:
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") failed", fds, (size_t) nfds, timeout);
-    for (; i > 0; i--) {
-        cat_poll_t *poll = &polls[i];
-        CAT_ASSERT(!context.deferred);
-        if (poll->initialized) {
-            uv_close(&poll->u.handle, cat_poll_close_function);
+    if (has_first) {
+        for (; i > 0; i--) {
+            cat_poll_t *poll = &polls[i];
+            CAT_ASSERT(!context.deferred);
+            if (poll->initialized) {
+                uv_close(&poll->u.handle, cat_poll_close_function);
+            }
         }
+    } else {
+        cat_free(polls);
     }
     return CAT_RET_ERROR;
 }
