@@ -75,13 +75,18 @@ static cat_always_inline int cat_poll_translate_from_sysno(int ievents)
     return uv_events;
 }
 
-static cat_always_inline cat_pollfd_events_t cat_poll_translate_error_to_revents(int error)
+static cat_pollfd_events_t cat_poll_translate_error_to_revents(cat_pollfd_events_t events, int error)
 {
     switch (error) {
         case CAT_EBADF:
             return POLLNVAL;
         case CAT_EEXIST:
-            return 0; /* can not poll the same fd twice at the same time */
+            /* can not poll the same fd twice at the same time */
+            return 0;
+        case CAT_ENOTSOCK:
+            /* File descriptors associated with regular files shall always select true
+             * for ready to read, ready to write, and error conditions. */
+            return (events & (POLLIN | POLLOUT)) | POLLERR;
         default:
             return POLLERR;
     }
@@ -120,12 +125,14 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll init failed");
         cat_free(poll);
+        *revents = cat_poll_translate_error_to_revents(events, error == CAT_EEXIST ? error : CAT_ENOTSOCK);
         return CAT_RET_ERROR;
     }
     error = uv_poll_start(&poll->u.poll, cat_poll_translate_from_sysno(events), cat_poll_one_callback);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll start failed");
         uv_close(&poll->u.handle, (uv_close_cb) cat_free_function);
+        *revents = cat_poll_translate_error_to_revents(events, error);
         return CAT_RET_ERROR;
     }
     poll->status = CAT_ECANCELED;
@@ -144,7 +151,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, int events, int *revents, cat
                     cat_update_last_error(CAT_ECANCELED, "Poll has been canceled");
                 } else {
                     cat_update_last_error(poll->status, "Poll failed");
-                    *revents = cat_poll_translate_error_to_revents(poll->status);
+                    *revents = cat_poll_translate_error_to_revents(events, poll->status);
                 }
                 ret = CAT_RET_ERROR;
             } else {
@@ -237,7 +244,8 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     cat_poll_context_t context;
     cat_poll_t *polls;
     cat_nfds_t i, n = 0;
-    cat_bool_t has_first = cat_false;
+    cat_bool_t has_head = cat_false;
+    cat_bool_t has_error = cat_false;
     cat_ret_t ret;
     int error = 0;
 
@@ -254,36 +262,41 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     for (i = 0; i < nfds;) {
         cat_pollfd_t *fd = &fds[i];
         cat_poll_t *poll = &polls[i];
-        CAT_ASSERT(fd->fd != CAT_OS_INVALID_SOCKET); // TODO: shall we support negative fd?
         fd->revents = POLLNONE; // clear it
         cat_debug(EVENT, "poll_add(fd=" CAT_OS_SOCKET_FMT ", event=%d)", fd->fd, fd->events);
         poll->initialized = cat_false;
-        polls->is_head = cat_false;
-        while (likely(error == 0)) {
+        poll->is_head = cat_false;
+        poll->revents = 0;
+        poll->u.context = &context;
+        do {
             error = uv_poll_init_socket(cat_event_loop, &poll->u.poll, fd->fd);
             if (unlikely(error != 0)) {
-                poll->status = error;
+                /* ENOTSOCK means it maybe a regular file */
+                poll->status = error == CAT_EEXIST ? error : CAT_ENOTSOCK;
+                has_error = cat_true;
                 break;
             }
             poll->initialized = cat_true;
-            if (!has_first) {
-                polls->is_head = cat_true;
-                has_first = true;
+            if (!has_head) {
+                poll->is_head = cat_true;
+                has_head = true;
+            }
+            if (has_error) {
+                /* fast return without running and waiting */
+                break;
             }
             error = uv_poll_start(&poll->u.poll, cat_poll_translate_from_sysno(fd->events), cat_poll_callback);
             if (unlikely(error != 0)) {
                 poll->status = error;
+                has_error = cat_true;
                 break;
             }
             poll->status = CAT_ECANCELED;
-            break;
-        }
-        poll->revents = 0;
-        poll->u.context = &context;
+        } while (0);
         i++;
     }
 
-    if (error == 0) {
+    if (has_head && !has_error) {
         ret = cat_time_delay(timeout);
         if (unlikely(ret == CAT_RET_ERROR)) {
             cat_update_last_error_with_previous("Poll wait failed");
@@ -304,7 +317,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
             if (poll->status == CAT_ECANCELED) {
                 fd->revents = POLLNONE;
             } else {
-                fd->revents = cat_poll_translate_error_to_revents(poll->status);
+                fd->revents = cat_poll_translate_error_to_revents(fd->events, poll->status);
                 n++;
             }
         } else {
@@ -318,7 +331,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = %zu", fds, (size_t) nfds, timeout, (size_t) n);
 
-    if (!has_first) {
+    if (!has_head) {
         cat_free(polls);
     }
 
@@ -326,7 +339,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 
     _error:
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") failed", fds, (size_t) nfds, timeout);
-    if (has_first) {
+    if (has_head) {
         for (; i > 0; i--) {
             cat_poll_t *poll = &polls[i];
             CAT_ASSERT(!context.deferred);
