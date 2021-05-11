@@ -776,7 +776,6 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_error.cc
         tests/test_cat_log.cc
         tests/test_cat_env.cc
-        tests/test_cat_fs.cc
         tests/test_cat_coroutine.cc
         tests/test_cat_event.cc
         tests/test_cat_poll.cc
@@ -787,6 +786,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_dns.cc
         tests/test_cat_work.cc
         tests/test_cat_buffer.cc
+        tests/test_cat_fs.cc
         tests/test_cat_signal.cc
         tests/test_cat_async.cc
         tests/test_cat_watch_dog.cc
