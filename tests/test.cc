@@ -62,6 +62,16 @@ namespace testing
         }, function_ptr);
     }
 
+    bool defer(std::function<void(void)> function)
+    {
+        std::function<void(void)> *function_ptr = new std::function<void(void)>(function);
+        return cat_event_defer([](cat_data_t *data) {
+            std::function<void(void)> *function = (std::function<void(void)> *) data;
+            (*function)();
+            delete function;
+        }, function_ptr);
+    }
+
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout)
     {
         struct work_context_s {

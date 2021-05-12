@@ -37,6 +37,60 @@ TEST(cat_event, defer)
     ASSERT_TRUE(done);
 }
 
+TEST(cat_event, defer_in_defer)
+{
+    uint64_t round = cat_event_loop->round;
+    bool done1 = false;
+    bool done2 = false;
+    bool done3 = false;
+    ASSERT_TRUE(defer([&] {
+        ASSERT_TRUE(defer([&] {
+            ASSERT_TRUE(defer([&] {
+                ASSERT_EQ(cat_event_loop->round, round + 3);
+                done3 = true;
+            }));
+            ASSERT_EQ(cat_event_loop->round, round + 2);
+            done2 = true;
+        }));
+        ASSERT_EQ(cat_event_loop->round, round + 1);
+        done1 = true;
+    }));
+    cat_time_sleep(0);
+    ASSERT_TRUE(done1);
+    cat_time_sleep(0);
+    ASSERT_TRUE(done2);
+    cat_time_sleep(0);
+    ASSERT_TRUE(done3);
+}
+
+TEST(cat_event, defer_not_blocking)
+{
+    cat_event_wait();
+    ASSERT_TRUE(defer([]{}));
+    cat_event_wait(); // not blocking
+}
+
+// defer tasks should have no affect on backend time
+TEST(cat_event, defer_backend_time)
+{
+    int timeout;
+
+    cat_event_wait();
+    timeout = uv_backend_timeout(cat_event_loop);
+    ASSERT_TRUE(defer([]{}));
+    ASSERT_EQ(uv_backend_timeout(cat_event_loop), timeout);
+
+    cat_event_wait();
+    timeout = uv_backend_timeout(cat_event_loop);
+    co([] {
+        ASSERT_TRUE(cat_time_delay(1));
+    });
+    ASSERT_GT(uv_backend_timeout(cat_event_loop), timeout);
+    timeout = uv_backend_timeout(cat_event_loop);
+    ASSERT_TRUE(defer([]{}));
+    ASSERT_EQ(uv_backend_timeout(cat_event_loop), timeout);
+}
+
 TEST(cat_event, wait)
 {
     bool done = false;

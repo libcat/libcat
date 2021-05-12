@@ -151,6 +151,7 @@ namespace testing
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
     cat_coroutine_t *co(std::function<void(void)> function);
+    bool defer(std::function<void(void)> function);
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout);
 
     void register_shutdown_function(std::function<void(void)> function);
