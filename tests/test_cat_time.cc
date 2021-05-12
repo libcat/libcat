@@ -60,8 +60,8 @@ TEST(cat_time, nanosleep)
 TEST(cat_time, sleep_zero)
 {
     cat_coroutine_round_t round = cat_coroutine_get_current_round();
-    EXPECT_EQ(cat_time_sleep(0), 0);
-    EXPECT_GT(cat_coroutine_get_current_round(), round);
+    ASSERT_EQ(cat_time_sleep(0), 0);
+    ASSERT_GT(cat_coroutine_get_current_round(), round);
 }
 
 static std::string time_format_msec(cat_msec_t msec)
@@ -97,18 +97,18 @@ TEST(cat_time, sleep_cancel)
 {
     cat_coroutine_t *coroutine = co([] {
         ASSERT_EQ(cat_time_sleep(1), 1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
 TEST(cat_time, msleep_cancel)
 {
     cat_coroutine_t *coroutine = co([] {
         ASSERT_EQ(cat_time_msleep(1), 1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
 TEST(cat_time, msleep_cancel2)
@@ -116,28 +116,28 @@ TEST(cat_time, msleep_cancel2)
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     bool done = false;
     co([&] {
-        EXPECT_EQ(cat_time_msleep(10), 0);
+        ASSERT_EQ(cat_time_msleep(10), 0);
+        done = true;
         // cancel the sleep of main
         cat_coroutine_resume(waiter, nullptr, nullptr);
-        done = true;
     });
     cat_msec_t s = cat_time_msec();
-    EXPECT_GT(cat_time_msleep(100), 0);
+    ASSERT_GT(cat_time_msleep(100), 0);
     s = cat_time_msec() - s;
     ASSERT_GE(s, 5);
-    EXPECT_EQ(cat_time_msleep(1), 0);
-    EXPECT_EQ(cat_time_msleep(1), 0);
-    EXPECT_EQ(cat_time_msleep(1), 0);
-    EXPECT_EQ(done, true);
+    ASSERT_EQ(done, true);
+    ASSERT_EQ(cat_time_msleep(1), 0);
+    ASSERT_EQ(cat_time_msleep(1), 0);
+    ASSERT_EQ(cat_time_msleep(1), 0);
 }
 
 TEST(cat_time, usleep_cancel)
 {
     cat_coroutine_t *coroutine = co([] {
         ASSERT_EQ(cat_time_usleep(1000), -1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
 TEST(cat_time, nanosleep_cancel)
@@ -150,9 +150,9 @@ TEST(cat_time, nanosleep_cancel)
         ASSERT_EQ(cat_time_nanosleep(&req, &rem), -1);
         ASSERT_EQ(rem.tv_sec, 1);
         ASSERT_EQ(rem.tv_nsec, 1000 * 1000);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
 TEST(cat_time, nanosleep_inval)
