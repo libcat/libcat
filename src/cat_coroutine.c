@@ -33,7 +33,11 @@
 #ifdef __SANITIZE_ADDRESS__
 // for warning -Wstrict-prototypes/C4255
 #define __sanitizer_acquire_crash_state() __sanitizer_acquire_crash_state(void)
+#ifndef _MSC_VER
 #include <sanitizer/common_interface_defs.h>
+#else // workaround
+#include <../crt/src/sanitizer/common_interface_defs.h>
+#endif
 #endif
 
 /* context */
