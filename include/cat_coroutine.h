@@ -170,6 +170,7 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     /* scheduler */
     cat_coroutine_t *scheduler;
     cat_queue_t waiters;
+    cat_coroutine_count_t waiter_count;
     /* functions */
     cat_coroutine_resume_t resume;
     /* info */

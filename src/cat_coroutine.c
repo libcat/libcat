@@ -139,13 +139,15 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
     /* scheduler */
     CAT_COROUTINE_G(scheduler) = NULL;
     cat_queue_init(&CAT_COROUTINE_G(waiters));
+    CAT_COROUTINE_G(waiter_count) = 0;
 
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void)
 {
-    CAT_ASSERT(cat_queue_empty(&CAT_COROUTINE_G(waiters)) && "Coroutine waiter should be empty");
+    CAT_ASSERT(cat_queue_empty(&CAT_COROUTINE_G(waiters)) && CAT_COROUTINE_G(waiter_count) == 0 &&
+        "Coroutine waiter should be empty");
     CAT_ASSERT(cat_coroutine_get_scheduler() == NULL && "Coroutine scheduler should have been stopped");
     CAT_ASSERT(CAT_COROUTINE_G(count) == 1 && "Coroutine count should be 1");
 
@@ -767,10 +769,12 @@ CAT_API cat_bool_t cat_coroutine_wait(void)
     cat_bool_t ret;
 
     cat_queue_push_back(&CAT_COROUTINE_G(waiters), &CAT_COROUTINE_G(current)->waiter.node);
+    CAT_COROUTINE_G(waiter_count)++;
 
     /* usually, it will be unlocked by event scheduler */
     ret = cat_coroutine_lock();
 
+    CAT_COROUTINE_G(waiter_count)--;
     cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
 
     if (!ret) {
@@ -784,14 +788,13 @@ CAT_API cat_bool_t cat_coroutine_wait(void)
 CAT_API void cat_coroutine_notify_all(void)
 {
     cat_queue_t *waiters = &CAT_COROUTINE_G(waiters);
+    cat_coroutine_count_t count = CAT_COROUTINE_G(waiter_count);
     cat_coroutine_t *coroutine;
-
-    while ((coroutine = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node))) {
-        cat_bool_t ret;
-
-        ret = cat_coroutine_unlock(coroutine);
-
-        if (!ret) {
+    /* Notice: coroutine may re-wait after unlock immediately, so we must record count here,
+     * otherwise it will always be resumed */
+    while (count--) {
+        coroutine = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node);
+        if (!cat_coroutine_unlock(coroutine)) {
             cat_core_error_with_last(COROUTINE, "Notify failed");
         }
     }
