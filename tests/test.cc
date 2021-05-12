@@ -53,11 +53,13 @@ namespace testing
 
     cat_coroutine_t *co(std::function<void(void)> function)
     {
+        std::function<void(void)> *function_ptr = new std::function<void(void)>(function);
         return cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
-            auto function = *((std::function<void(void)> *) data);
-            function();
+            std::function<void(void)> *function = (std::function<void(void)> *) data;
+            (*function)();
+            delete function;
             return nullptr;
-        }, &function);
+        }, function_ptr);
     }
 
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout)
