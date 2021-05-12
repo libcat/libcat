@@ -30,6 +30,10 @@
 #include <valgrind/valgrind.h>
 #endif
 
+#ifdef __SANITIZE_ADDRESS__
+#include <sanitizer/common_interface_defs.h>
+#endif
+
 /* context */
 
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -284,6 +288,9 @@ CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void)
 static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
+#ifdef __SANITIZE_ADDRESS__
+	__sanitizer_finish_switch_fiber(NULL, &coroutine->from->asan_stack, &coroutine->from->asan_stack_size);
+#endif
     if (unlikely(++CAT_COROUTINE_G(count) > CAT_COROUTINE_G(peak_count))) {
         CAT_COROUTINE_G(peak_count) = CAT_COROUTINE_G(count);
     }
@@ -323,20 +330,18 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size)
 {
     cat_coroutine_stack_t *stack, *stack_end;
-    size_t real_stack_size;
     cat_coroutine_context_t context;
 
     /* align stack size */
     stack_size = cat_coroutine_align_stack_size(stack_size);
     /* alloc memory */
-    stack = (cat_coroutine_stack_t *) cat_sys_malloc(stack_size);
+    stack = (cat_coroutine_stack_t *) cat_sys_malloc(stack_size + (coroutine != NULL ? 0 : sizeof(*coroutine)));
     if (unlikely(!stack)) {
         cat_update_last_error_of_syscall("Malloc for stack failed with size %zu", stack_size);
         return NULL;
     }
     /* calculations */
-    real_stack_size = coroutine ? stack_size : (stack_size - sizeof(cat_coroutine_t));
-    stack_end = (cat_coroutine_stack_t *) (((char *) stack) + real_stack_size);
+    stack_end = (cat_coroutine_stack_t *) (((char *) stack) + stack_size);
     /* determine the position of the coroutine */
     if (coroutine == NULL) {
         coroutine = (cat_coroutine_t *) stack_end;
@@ -349,12 +354,12 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         return NULL;
     }
     context.uc_stack.ss_sp = stack;
-    context.uc_stack.ss_size = real_stack_size;
+    context.uc_stack.ss_size = stack_size;
     context.uc_stack.ss_flags = 0;
     context.uc_link = NULL;
     cat_coroutine_context_make(&context, (void (*)(void)) &cat_coroutine_context_function, 1, NULL);
 #else
-    context = cat_coroutine_context_make((void *) stack_end, real_stack_size, cat_coroutine_context_function);
+    context = cat_coroutine_context_make(stack_end, stack_size, cat_coroutine_context_function);
 #endif
     /* protect stack */
 #ifdef CAT_COROUTINE_USE_MPEOTECT
@@ -380,6 +385,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #endif
 #ifdef CAT_HAVE_VALGRIND
     coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_end, stack);
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    coroutine->asan_stack = stack;
+    coroutine->asan_stack_size = stack_size;
 #endif
     cat_debug(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " with stack = %p, stack_size = %zu, function = %p on the %s",
                         coroutine->id, stack, stack_size, function, ((void *) coroutine) == ((void*) stack_end) ? "stack" : "heap");
@@ -447,6 +456,13 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
+#ifdef __SANITIZE_ADDRESS__
+    void* fake_stack_save;
+    __sanitizer_start_switch_fiber(
+        coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &fake_stack_save : NULL,
+        coroutine->asan_stack, coroutine->asan_stack_size
+    );
+#endif
     /* jump */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = data;
@@ -459,6 +475,9 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* handle from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
+#ifdef __SANITIZE_ADDRESS__
+    __sanitizer_finish_switch_fiber(fake_stack_save, &coroutine->asan_stack, &coroutine->asan_stack_size);
+#endif
 #ifndef CAT_COROUTINE_USE_UCONTEXT
     /* update the from context */
     coroutine->context = transfer.from_context;

@@ -147,6 +147,10 @@ struct cat_coroutine_s
 #ifdef CAT_HAVE_VALGRIND
     uint32_t valgrind_stack_id;
 #endif
+#ifdef __SANITIZE_ADDRESS__
+    const void *asan_stack;
+    size_t asan_stack_size;
+#endif
 };
 
 typedef cat_bool_t (*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
