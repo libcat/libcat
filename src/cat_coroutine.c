@@ -31,6 +31,8 @@
 #endif
 
 #ifdef __SANITIZE_ADDRESS__
+// for warning -Wstrict-prototypes/C4255
+#define __sanitizer_acquire_crash_state() __sanitizer_acquire_crash_state(void)
 #include <sanitizer/common_interface_defs.h>
 #endif
 
@@ -459,7 +461,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
 #ifdef __SANITIZE_ADDRESS__
-    void* fake_stack_save;
+    void* fake_stack_save = NULL;
     __sanitizer_start_switch_fiber(
         coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &fake_stack_save : NULL,
         coroutine->asan_stack, coroutine->asan_stack_size

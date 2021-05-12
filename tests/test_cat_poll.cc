@@ -89,8 +89,10 @@ TEST(cat_poll, base)
 
 static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
 {
-	struct timeval timeout = { TEST_IO_TIMEOUT, 0 };
+	struct timeval timeout;
     fd_set readfds, writefds, exceptfds;
+    timeout.tv_sec = (cat_timeval_sec_t) TEST_IO_TIMEOUT;
+    timeout.tv_usec = 0;
 	FD_ZERO(&readfds);
 	FD_ZERO(&writefds);
 	FD_ZERO(&exceptfds);
@@ -102,7 +104,7 @@ static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
             FD_SET(fd, &writefds);
             break;
     }
-    int ret = cat_select(fd + 1, &readfds, &writefds, nullptr, &timeout);
+    int ret = cat_select((int) (fd + 1), &readfds, &writefds, nullptr, &timeout);
     if (ret < 0) {
         return CAT_RET_ERROR;
     }
