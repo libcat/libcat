@@ -419,6 +419,7 @@ TEST(cat_channel_buffered, push_gt_data_size)
 
 TEST(cat_channel_buffered, timeout)
 {
+    cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec();
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 10, sizeof(size_t), nullptr);

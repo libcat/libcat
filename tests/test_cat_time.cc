@@ -21,20 +21,29 @@
 TEST(cat_time, nsec)
 {
     cat_nsec_t s = cat_time_nsec();
-    ASSERT_EQ(cat_sys_usleep(1), 0);
-    ASSERT_GT(cat_time_nsec() - s, 0);
+    ASSERT_EQ(cat_sys_usleep(100), 0);
+    ASSERT_GT(cat_time_nsec() - s, 10);
 }
 
 TEST(cat_time, msec)
 {
+    cat_nsec_t s = cat_time_msec();
+    ASSERT_EQ(cat_sys_usleep(3000), 0);
+    ASSERT_GT(cat_time_msec() - s, 1);
+}
+
+TEST(cat_time, msec_cached)
+{
+    cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec_cached();
     ASSERT_EQ(cat_time_msec_cached() - s, 0);
-    ASSERT_EQ(cat_time_msleep(1), 0);
+    ASSERT_EQ(cat_time_msleep(3), 0);
     ASSERT_GT(cat_time_msec_cached() - s, 0);
 }
 
 TEST(cat_time, msleep)
 {
+    cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec();
     ASSERT_EQ(cat_time_msleep(10), 0);
     s = cat_time_msec() - s;
@@ -43,13 +52,16 @@ TEST(cat_time, msleep)
 
 TEST(cat_time, usleep)
 {
+    cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec();
     ASSERT_EQ(cat_time_usleep(10 * 1000), 0);
+    s = cat_time_msec() - s;
     ASSERT_GE(s, 5);
 }
 
 TEST(cat_time, nanosleep)
 {
+    cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec();
     cat_timespec time = { 0, 10 * 1000 * 1000 };
     ASSERT_EQ(cat_time_nanosleep(&time, nullptr), 0);
@@ -113,6 +125,7 @@ TEST(cat_time, msleep_cancel)
 
 TEST(cat_time, msleep_cancel2)
 {
+    cat_event_wait(); // call it before timing test
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     bool done = false;
     co([&] {
