@@ -665,6 +665,7 @@ int uv_crun(uv_loop_t *loop, uv_defer_callback_t defer) {
 
   r = uv__loop_alive(loop);
   d = 1;
+  uv_update_time(loop);
 
   while (r || d) {
     if (r) {
