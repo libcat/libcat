@@ -32,6 +32,27 @@ TEST(cat_time, msec)
     ASSERT_GT(cat_time_msec() - s, 1);
 }
 
+TEST(cat_time, nsec2)
+{
+    cat_nsec_t s = cat_time_nsec2();
+    ASSERT_EQ(cat_sys_usleep(100), 0);
+    ASSERT_GT(cat_time_nsec2() - s, 10);
+}
+
+TEST(cat_time, msec2)
+{
+    cat_nsec_t s = cat_time_msec2();
+    ASSERT_EQ(cat_sys_usleep(3000), 0);
+    ASSERT_GT(cat_time_msec2() - s, 1);
+}
+
+TEST(cat_time, microtime)
+{
+    double s = cat_microtime();
+    ASSERT_EQ(cat_sys_usleep(3000), 0);
+    ASSERT_GT(cat_microtime() - s, 0.001);
+}
+
 TEST(cat_time, msec_cached)
 {
     cat_event_wait(); // call it before timing test
