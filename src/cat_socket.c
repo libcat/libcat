@@ -22,7 +22,11 @@
 #include "cat_time.h"
 #include "cat_poll.h"
 
+#ifdef CAT_IDE_HELPER
 #include "uv-common.h"
+#else
+#include "../deps/libuv/src/uv-common.h"
+#endif
 
 #ifdef CAT_OS_UNIX_LIKE
 /* For EINTR */

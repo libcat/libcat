@@ -23,7 +23,11 @@ extern "C"
 #include "llhttp.h"
 }
 
+#ifdef CAT_IDE_HELPER
 #include "uv-common.h"
+#else
+#include "../deps/libuv/src/uv-common.h"
+#endif
 
 static void echo_stream_server_connection_handler(cat_socket_t *server)
 {
