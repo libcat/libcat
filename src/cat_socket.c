@@ -1853,7 +1853,11 @@ static ssize_t cat_socket_internal_read_raw(
         }
         if (is_udg) {
             cat_ret_t poll_ret;
+            isocket->context.io.read.coroutine = CAT_COROUTINE_G(current);
+            isocket->io_flags |= CAT_SOCKET_IO_FLAG_READ;
             poll_ret = cat_poll_one(isocket->u.udg.readfd, POLLIN, NULL, timeout);
+            isocket->io_flags ^= CAT_SOCKET_IO_FLAG_READ;
+            isocket->context.io.read.coroutine = NULL;
             if (poll_ret == CAT_RET_OK) {
                 continue;
             } else if (poll_ret == CAT_RET_NONE) {
