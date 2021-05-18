@@ -93,7 +93,7 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
 
-    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
     });
@@ -113,7 +113,7 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_EQ(0, cat_fs_close(fd));
 
     //printf("%s\n",cat_get_last_error_message());
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER(cat_fs_close(fd));
 
     errno = 0;
@@ -140,7 +140,7 @@ TEST(cat_fs, pwrite_pread)
     const char * fn = fnstr.c_str();
     int fd = -1;
     cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
     });
@@ -164,7 +164,7 @@ TEST(cat_fs, pwrite_pread)
     // 0:128=rands, 128:1234=zeros, 1234:1746=rands, 1746:(siz-1024)=zeros, (size-1024):(siz-512)=rands
 
     ASSERT_EQ(0, cat_fs_close(fd));
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     DEFER({cat_fs_close(fd);});
 
     errno = 0;
@@ -204,7 +204,7 @@ TEST(cat_fs, ftruncate)
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ftruncate");
     const char * fn = fnstr.c_str();
     int fd = -1;
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
     DEFER({
         cat_fs_unlink(fn);
     });
@@ -214,7 +214,7 @@ TEST(cat_fs, ftruncate)
     ASSERT_EQ(cat_fs_write(fd, buf, 16), 16);
     ASSERT_EQ(0, cat_fs_close(fd));
 
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR), 0);
     DEFER(cat_fs_close(fd));
     ASSERT_EQ(cat_fs_ftruncate(fd, 8), 0);
 
@@ -222,7 +222,7 @@ TEST(cat_fs, ftruncate)
     ASSERT_EQ(std::string(red, 8), std::string(buf, 8));
 
     cat_fs_close(fd);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY, 0600), 0);
     errno = 0;
     cat_clear_last_error();
     ASSERT_LT(cat_fs_ftruncate(fd, 8), 0);
@@ -246,7 +246,7 @@ TEST(cat_fs, stat_lstat_fstat)
     const char * fn = fnstr.c_str();
     int fd = -1;
     cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
     ASSERT_EQ(cat_fs_write(fd, buf, LSEEK_BUFSIZ), LSEEK_BUFSIZ);
     ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
     ASSERT_EQ(statbuf.st_mode & 0777, 0666);
@@ -370,7 +370,7 @@ TEST(cat_fs, lseek)
     //ASSERT_LT(cat_fs_lseek(-1, -1, -1), 0);
     //ASSERT_NE(cat_get_last_error_code(), 0);
     int fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    ASSERT_GT(fd, 0);
+    ASSERT_GE(fd, 0);
     DEFER({
         ASSERT_EQ(cat_fs_close(fd), 0);
         ASSERT_EQ(cat_fs_unlink(fn), 0);
@@ -402,7 +402,7 @@ TEST(cat_fs, access)
         cat_fs_unlink(fn);
     });
     cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY | O_CREAT, 0400), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY | O_CREAT, 0400), 0);
     ASSERT_EQ(cat_fs_access(fn, R_OK), 0);
     errno = 0;
     cat_clear_last_error();
@@ -412,7 +412,7 @@ TEST(cat_fs, access)
     ASSERT_EQ(cat_fs_close(fd), 0);
 
     cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT, 0700), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR | O_CREAT, 0700), 0);
     ASSERT_EQ(cat_fs_access(fn, W_OK|X_OK|R_OK), 0);
     ASSERT_EQ(cat_fs_close(fd), 0);
 }
@@ -825,7 +825,7 @@ TEST(cat_fs, chmod_fchmod){
     ASSERT_EQ(cat_fs_chmod(fn, 0600), 0);
     ASSERT_EQ(cat_fs_chmod(fn, 0400), 0);
     int fd = -1;
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY), 0);
     ASSERT_EQ(cat_fs_fchmod(fd, 0600), 0);
     ASSERT_EQ(cat_fs_fchmod(fd, 0200), 0);
 }
@@ -849,7 +849,7 @@ TEST(cat_fs, chown_fchown_lchown){
     ASSERT_EQ(cat_fs_chown(fn2, -1, -1), 0);
     ASSERT_EQ(cat_fs_lchown(fn2, -1, -1), 0);
     int fd = -1;
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY), 0);
     ASSERT_EQ(cat_fs_fchown(fd, -1, -1), 0);
 #ifndef CAT_OS_WIN
     errno = 0;
@@ -888,13 +888,13 @@ TEST(cat_fs, copyfile)
     ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
 
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0600), 0);
     cat_srand(buf, 16);
     ASSERT_EQ(cat_fs_write(fd, buf, 16), 16);
     ASSERT_EQ(0, cat_fs_close(fd));
 
     ASSERT_EQ(cat_fs_copyfile(fn, fn2, 0), 0);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDONLY), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDONLY), 0);
     ASSERT_EQ(cat_fs_read(fd, red, 16), 16);
     ASSERT_EQ(std::string(red, 16), std::string(buf, 16));
 }
@@ -939,7 +939,7 @@ TEST(cat_fs, mkdtemp_mkstemp)
     ASSERT_NE(pstr = cat_fs_mkdtemp(fn), nullptr);
     ASSERT_EQ(cat_fs_access(pstr, R_OK | W_OK), 0);
 
-    ASSERT_GT(fd = cat_fs_mkstemp(fn2), 0);
+    ASSERT_GE(fd = cat_fs_mkstemp(fn2), 0);
     cat_stat_t statbuf;
     ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
     ASSERT_EQ(statbuf.st_mode & 0600, 0600);
@@ -980,7 +980,7 @@ TEST(cat_fs, utime_lutime_futime){
     ASSERT_NE(cat_get_last_error_code(), 0);
 
     int fd = -1;
-    ASSERT_GT(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0200), 0);
     ASSERT_EQ(cat_fs_futime(fd, changed_time2, changed_time2), 0);
     ASSERT_EQ(cat_fs_lstat(fn, &statbuf), 0);
     ASSERT_EQ(statbuf.st_atim.tv_sec, 936201600);
@@ -1025,7 +1025,7 @@ TEST(cat_fs, stat_2038)
     const char * fn = fnstr.c_str();
     int fd = -1;
     cat_fs_unlink(fn);
-    ASSERT_GT(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666), 0);
     ASSERT_EQ(cat_fs_write(fd, buf, LSEEK_BUFSIZ), LSEEK_BUFSIZ);
     ASSERT_EQ(cat_fs_close(fd), 0);
     DEFER({
@@ -1261,7 +1261,7 @@ TEST(cat_fs, flock_retval){
     DEFER({cat_fs_unlink(fn);});
     // create file
     int fd;
-    ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT), 0);
 
     ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_SH), 0);
     ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_EX), 0);
@@ -1298,9 +1298,9 @@ TEST(cat_fs, cancel){
 }while(0)
     // fd
     CANCEL_TEST(ASSERT_LT(cat_fs_open(fn, CAT_FS_O_RDWR, 0666), 0));
-    ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
     CANCEL_TEST(ASSERT_LT(cat_fs_close(fd), 0));
-    ASSERT_GT(fd = cat_fs_open(fn, CAT_FS_O_RDONLY, 0666), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDONLY, 0666), 0);
     CANCEL_TEST(ASSERT_LT(cat_fs_read(fd, buf, 4096), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_write(fd, buf, 4096), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_pread(fd, buf, 4096, 0), 0));
