@@ -1441,7 +1441,7 @@ static inline void test_tty(int fd)
     buffer[TEST_BUFFER_SIZE_STD - 1] = '\0';
 
     cat_socket_t *ptr = cat_socket_create(&client, type);
-    if (ptr == nullptr && uv_guess_handle(fh) != UV_TTY) {
+    if (ptr == nullptr) {
         SKIP_IF_(true, msg);
     }
     ASSERT_EQ(ptr, &client);
