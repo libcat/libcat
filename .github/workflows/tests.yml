@@ -99,7 +99,17 @@ jobs:
           ECHO ::group::Test libcat
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
-          ${{ matrix.build-type == 'Debug' && '"C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" --export_type cobertura:coverage.xml --sources include --sources src --excluded_sources deps --excluded_sources tests --cover_children --modules build\Debug\cat_tests.exe -- ' || '' }}build\${{ matrix.build-type}}\cat_tests.exe --gtest_color=yes || goto error
+          IF "Debug" == "${{ matrix.build-type }}" ( "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" ^
+            --export_type cobertura:coverage.xml ^
+            --sources include ^
+            --sources src ^
+            --excluded_sources deps ^
+            --excluded_sources tests ^
+            --cover_children ^
+            --excluded_line_regex "\s*else.*" ^
+            --excluded_line_regex "\s*\}.*" ^
+            --modules build\Debug\cat_tests.exe -- ^
+            build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
           ${{ matrix.build-type == 'Debug' && format('codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
           ECHO ::endgroup::
           EXIT /b 0
