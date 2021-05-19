@@ -1414,22 +1414,18 @@ TEST(cat_socket, peekfrom)
 static inline void test_tty(int fd)
 {
     const char* msg;
-    uv_file fh;
     cat_socket_type_t type;
     switch(fd){
         case 0:
             msg = "stdin is not a tty";
-            fh = STDIN_FILENO;
             type = CAT_SOCKET_TYPE_STDIN;
             break;
         case 1:
             msg = "stdout is not a tty";
-            fh = STDOUT_FILENO;
             type = CAT_SOCKET_TYPE_STDOUT;
             break;
         case 2:
             msg = "stderr is not a tty";
-            fh = STDERR_FILENO;
             type = CAT_SOCKET_TYPE_STDERR;
             break;
         default:
