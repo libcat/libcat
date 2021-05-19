@@ -192,3 +192,12 @@ TEST(cat_event, real_fork)
     }
 }
 #endif
+
+TEST(cat_event, busy)
+{
+    co([] {
+        ASSERT_TRUE(cat_time_delay(1));
+    });
+    ASSERT_FALSE(cat_event_module_shutdown());
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+}

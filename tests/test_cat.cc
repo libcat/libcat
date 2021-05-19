@@ -27,3 +27,19 @@ TEST(cat, string)
     ASSERT_STREQ(name, "libcat v" CAT_VERSION);
     cat_free(name);
 }
+
+TEST(cat_sys, sleep)
+{
+    ASSERT_EQ(cat_sys_sleep(0), 0);
+}
+
+TEST(cat_sys, usleep)
+{
+    ASSERT_EQ(cat_sys_usleep(1), 0);
+}
+
+TEST(cat_sys, nanosleep)
+{
+    cat_timespec time = { 0, 1 };
+    ASSERT_EQ(cat_sys_nanosleep(&time, nullptr), 0);
+}
