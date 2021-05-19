@@ -125,9 +125,8 @@ CAT_API cat_bool_t cat_dns_get_ip_ex(char *buffer, size_t buffer_size, const cha
             error = uv_ip6_name((struct sockaddr_in6 *) response->ai_addr, buffer, buffer_size);
             break;
         default:
-            cat_update_last_error(CAT_EAFNOSUPPORT, "DNS get ip failed due to unknown DNS response family %d returned", response->ai_family);
-            cat_dns_freeaddrinfo(response);
-            return cat_false;
+            error = CAT_EAFNOSUPPORT;
+            break;
     }
     cat_dns_freeaddrinfo(response);
     if (unlikely(error != 0)) {

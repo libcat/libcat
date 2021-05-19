@@ -63,6 +63,12 @@ TEST(cat_dns, get_ip)
     }
 }
 
+TEST(cat_dns, getaddrinfo_invalid)
+{
+    ASSERT_EQ(cat_dns_getaddrinfo(nullptr, nullptr, nullptr), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
 TEST(cat_dns, cancel)
 {
     cat_coroutine_t *current = cat_coroutine_get_current();
@@ -76,4 +82,10 @@ TEST(cat_dns, cancel)
     ret = cat_dns_get_ip(CAT_STRS(ip), TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC);
     ASSERT_EQ(ret, cat_false);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+}
+
+TEST(cat_dns, timeout)
+{
+    ASSERT_FALSE(cat_dns_get_ip_ex(nullptr, 0, TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
