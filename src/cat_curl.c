@@ -160,9 +160,11 @@ static int cat_curl_multi_socket_function(
     if (action != CURL_POLL_REMOVE) {
         if (fd == NULL) {
             fd = (cat_curl_pollfd_t *) cat_malloc(sizeof(*fd));
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
             if (unlikely(fd == NULL)) {
                 return CURLM_OUT_OF_MEMORY;
             }
+#endif
             cat_queue_push_back(&context->fds, &fd->node);
             context->nfds++;
             fd->sockfd = sockfd;
@@ -196,10 +198,11 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
     cat_debug(EXT, "curl_multi_context_create(multi=%p)", multi);
 
     context = (cat_curl_multi_context_t *) cat_malloc(sizeof(*context));
-
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(context == NULL)) {
         return NULL;
     }
+#endif
 
     context->multi = multi;
     context->coroutine = NULL;
@@ -375,10 +378,13 @@ CAT_API CURLM *cat_curl_multi_init(void)
     }
 
     context = cat_curl_multi_create_context(multi);
+
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(context == NULL)) {
         (void) curl_multi_cleanup(multi);
         return NULL;
     }
+#endif
 
     return multi;
 }
@@ -439,10 +445,12 @@ static CURLMcode cat_curl_multi_exec(
         } else {
             cat_nfds_t i;
             fds = (cat_pollfd_t *) cat_malloc(sizeof(*fds) * context->nfds);
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
             if (unlikely(fds == NULL)) {
                 mcode = CURLM_OUT_OF_MEMORY;
                 goto _out;
             }
+#endif
             i = 0;
             CAT_QUEUE_FOREACH_DATA_START(&context->fds, cat_curl_pollfd_t, node, curl_fd) {
                 cat_pollfd_t *fd = &fds[i];

@@ -125,11 +125,12 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
     cat_bool_t ret;
 
     timer = (cat_timer_t *) cat_malloc(sizeof(*timer));;
-
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(timer == NULL)) {
         cat_update_last_error_of_syscall("Malloc for timer failed");
         return NULL;
     }
+#endif
 
     (void) uv_timer_init(cat_event_loop, &timer->timer);
     (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);

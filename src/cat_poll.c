@@ -116,11 +116,13 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
     }
     *revents = POLLNONE;
 
-    poll = (cat_poll_one_t *) cat_malloc(sizeof(*poll));;
+    poll = (cat_poll_one_t *) cat_malloc(sizeof(*poll));
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(poll == NULL)) {
         cat_update_last_error_of_syscall("Malloc for poll failed");
         return CAT_RET_ERROR;
     }
+#endif
 
     error = uv_poll_init_socket(cat_event_loop, &poll->u.poll, fd);
     if (unlikely(error != 0)) {
@@ -249,11 +251,13 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 
     cat_debug(EVENT, "poll(fds=%p, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ")", fds, (size_t) nfds, timeout);
 
-    context = (cat_poll_context_t *) cat_malloc(sizeof(*context) + sizeof(*polls) * nfds);;
+    context = (cat_poll_context_t *) cat_malloc(sizeof(*context) + sizeof(*polls) * nfds);
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(context == NULL)) {
         cat_update_last_error_of_syscall("Malloc for poll failed");
         return CAT_RET_ERROR;
     }
+#endif
     polls = (cat_poll_t *) (((char *) context) + sizeof(*context));
 
     context->coroutine = CAT_COROUTINE_G(current);
@@ -387,10 +391,12 @@ CAT_API int cat_select(int max_fd, fd_set *readfds, fd_set *writefds, fd_set *ex
 
     /* malloc for poll fds */
     pfds = (cat_pollfd_t *) cat_malloc(sizeof(*pfds) * nfds);
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(pfds == NULL)) {
         cat_update_last_error_of_syscall("Malloc for poll fds failed");
         return -1;
     }
+#endif
 
     /* translate from select structure to pollfd structure */
     ifds = 0;
