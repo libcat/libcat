@@ -89,7 +89,7 @@ jobs:
           ECHO ::group::Make cmake cache
           cmake . -B build ^
             -DASAN=ON ^
-            -DCMAKE_C_FLAGS=/WX ^
+            -DCMAKE_C_FLAGS="/WX /DCAT_ALLOC_NEVER_RETURNS_NULL" ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
@@ -159,7 +159,7 @@ jobs:
           cmake .. \
             -DASAN=ON \
             ${{ (runner.os == 'Linux' && '' != secrets.CODECOV_TOKEN) && '-DCODE_COVERAGE=ON' || '' }} \
-            -DCMAKE_C_FLAGS="-Werror" || exit 1
+            -DCMAKE_C_FLAGS="-Werror -DCAT_ALLOC_NEVER_RETURNS_NULL" || exit 1
           echo "::endgroup::"
           echo "::group::Build libcat"
           cmake --build . -j --target cat_tests || exit 1
