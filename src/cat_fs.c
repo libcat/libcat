@@ -939,37 +939,26 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
     }
 
     // from uv
-#ifdef HAVE_DIRENT_TYPES
     int type = 0;
     switch (pdirent->d_type) {
-    case UV__DT_DIR:
-        type = UV_DIRENT_DIR;
-        break;
-    case UV__DT_FILE:
-        type = UV_DIRENT_FILE;
-        break;
-    case UV__DT_LINK:
-        type = UV_DIRENT_LINK;
-        break;
-    case UV__DT_FIFO:
-        type = UV_DIRENT_FIFO;
-        break;
-    case UV__DT_SOCKET:
-        type = UV_DIRENT_SOCKET;
-        break;
-    case UV__DT_CHAR:
-        type = UV_DIRENT_CHAR;
-        break;
-    case UV__DT_BLOCK:
-        type = UV_DIRENT_BLOCK;
-        break;
+#ifdef HAVE_DIRENT_TYPES
+#define __UV_DIRENT_MAP(XX) \
+        XX(DIR) \
+        XX(FILE) \
+        XX(LINK) \
+        XX(FIFO) \
+        XX(SOCKET) \
+        XX(CHAR) \
+        XX(BLOCK)
+#define __UV_DIRENT_GEN(name) case UV__DT_##name: type = UV_DIRENT_##name; break;
+        __UV_DIRENT_MAP(__UV_DIRENT_GEN)
+#undef __UV_DIRENT_GEN
+#undef __UV_DIRENT_MAP
+#endif
     default:
         type = UV_DIRENT_UNKNOWN;
     }
     pret->type = type;
-#else
-    pret->type = UV_DIRENT_UNKNOWN;
-#endif
     data->ret.ret.ptr = pret;
 }
 
