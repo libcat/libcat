@@ -378,8 +378,9 @@ CAT_API CURLM *cat_curl_multi_init(void)
     }
 
     context = cat_curl_multi_create_context(multi);
-
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#ifdef CAT_ALLOC_NEVER_RETURNS_NULL
+    (void) context;
+#else
     if (unlikely(context == NULL)) {
         (void) curl_multi_cleanup(multi);
         return NULL;
