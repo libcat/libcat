@@ -52,12 +52,11 @@ static cat_always_inline cat_bool_t cat_channel__is_available(const cat_channel_
 
 static cat_never_inline void cat_channel__update_last_error(const cat_channel_t *channel)
 {
+    CAT_ASSERT((channel->flags & (CAT_CHANNEL_FLAG_CLOSING | CAT_CHANNEL_FLAG_CLOSED)) && "Unexpected state");
     if (channel->flags & CAT_CHANNEL_FLAG_CLOSING) {
         cat_update_last_error(CAT_ECLOSING, "Channel is closing");
     } else if (channel->flags & CAT_CHANNEL_FLAG_CLOSED) {
         cat_update_last_error(CAT_ECLOSED, "Channel has been closed");
-    } else {
-        CAT_NEVER_HERE("unknown state");
     }
 }
 

@@ -150,6 +150,23 @@ TEST(cat_channel, set_dtor)
     ASSERT_EQ(nullptr, cat_channel_set_dtor(channel, nullptr));
 }
 
+TEST(cat_channel, get_storage)
+{
+    cat_channel_t *channel, _channel;
+
+    ([&] {
+        channel = cat_channel_create(&_channel, 0, sizeof(size_t), nullptr);
+        DEFER(cat_channel_close(channel));
+        ASSERT_EQ(cat_channel_get_storage(channel), nullptr);
+    })();
+
+    ([&] {
+        channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
+        DEFER(cat_channel_close(channel));
+        ASSERT_NE(cat_channel_get_storage(channel), nullptr);
+    })();
+}
+
 TEST(cat_channel, pop_null)
 {
     for (cat_channel_size_t capacity = 0; capacity < 2; capacity++) [=] {
@@ -417,7 +434,21 @@ TEST(cat_channel_buffered, push_gt_data_size)
     ASSERT_STREQ(expect, actual);
 }
 
-TEST(cat_channel_buffered, timeout)
+TEST(cat_channel_buffered, push_timeout)
+{
+    cat_event_wait(); // call it before timing test
+    cat_msec_t s = cat_time_msec();
+    cat_channel_t *channel, _channel;
+    channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
+    size_t n = 1;
+    ASSERT_TRUE(cat_channel_push(channel, &n, 0));
+    ASSERT_FALSE(cat_channel_push(channel, &n, 10));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    s = cat_time_msec() - s;
+    ASSERT_GE(s, 5);
+}
+
+TEST(cat_channel_buffered, pop_timeout)
 {
     cat_event_wait(); // call it before timing test
     cat_msec_t s = cat_time_msec();
@@ -425,6 +456,7 @@ TEST(cat_channel_buffered, timeout)
     channel = cat_channel_create(&_channel, 10, sizeof(size_t), nullptr);
     size_t n;
     ASSERT_FALSE(cat_channel_pop(channel, &n, 10));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
     s = cat_time_msec() - s;
     ASSERT_GE(s, 5);
 }
