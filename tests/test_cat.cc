@@ -40,6 +40,13 @@ TEST(cat_sys, usleep)
 
 TEST(cat_sys, nanosleep)
 {
-    cat_timespec time = { 0, 1 };
-    ASSERT_EQ(cat_sys_nanosleep(&time, nullptr), 0);
+    cat_timespec req = { 0, 1000 };
+    ASSERT_EQ(cat_sys_nanosleep(&req, NULL), 0);
+}
+
+TEST(cat_sys, nanosleep_failed)
+{
+    cat_timespec req = { 0, INT_MAX };
+    ASSERT_EQ(cat_sys_nanosleep(&req, NULL), -1);
+    ASSERT_EQ(cat_translate_sys_error(cat_sys_errno), CAT_EINVAL);
 }
