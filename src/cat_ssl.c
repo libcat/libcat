@@ -69,7 +69,7 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
     /* SSL library initialisation */
 #if OPENSSL_VERSION_NUMBER >= 0x10100003L
     if (OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG | OPENSSL_INIT_SSL_DEFAULT | OPENSSL_INIT_ADD_ALL_CIPHERS, NULL) == 0) {
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_fp(CAT_G(error_log));
         cat_core_error(SSL, "OPENSSL_init_ssl() failed");
     }
 #else
@@ -96,12 +96,12 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
 
     cat_ssl_index = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
     if (cat_ssl_index == -1) {
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_fp(CAT_G(error_log));
         cat_core_error(SSL, "SSL_get_ex_new_index() failed");
     }
     cat_ssl_context_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
     if (cat_ssl_context_index == -1) {
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_fp(CAT_G(error_log));
         cat_core_error(SSL, "SSL_CTX_get_ex_new_index() failed");
     }
 
@@ -1177,7 +1177,7 @@ CAT_API char *cat_ssl_get_error_reason(void)
             } else {
                 errstr2 = cat_sprintf("%s (SSL: %s:%s)", errstr, ERR_error_string(n, NULL), data);
                 if (unlikely(errstr2 == NULL)) {
-                    ERR_print_errors_fp(stderr);
+                    ERR_print_errors_fp(CAT_G(error_log));
                     break;
                 }
                 cat_free(errstr);
@@ -1200,7 +1200,7 @@ CAT_API void cat_ssl_update_last_error(cat_errno_t error, const char *format, ..
     va_end(args);
 
     if (unlikely(message == NULL)) {
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_fp(CAT_G(error_log));
         return;
     }
 

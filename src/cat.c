@@ -55,6 +55,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
 
     CAT_G(log_types) = CAT_LOG_TYPES_DEFAULT;
     CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
+    CAT_G(error_log) = stderr;
 #ifdef CAT_SOURCE_POSITION
     CAT_G(log_source_postion) = cat_false;
 #endif
