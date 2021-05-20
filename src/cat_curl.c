@@ -538,6 +538,7 @@ CAT_API CURLMcode cat_curl_multi_wait(
 
 /* multi context */
 
+#ifdef CAT_CURL_MULTI_CLEANUP_CONTEXT_SUPPORT
 CAT_API void cat_curl_multi_cleanup_context(CURLM *multi)
 {
     cat_curl_multi_close_context(multi);
@@ -551,5 +552,6 @@ CAT_API void cat_curl_multi_cleanup_all_contexts(void)
         cat_curl_multi_context_close(context);
     }
 }
+#endif /* CAT_CURL_MULTI_CLEANUP_CONTEXT_SUPPORT */
 
 #endif /* CAT_CURL */
