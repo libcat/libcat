@@ -127,7 +127,6 @@ TEST(cat_select, base)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     PREPARE_TCP_SOCKET(socket);
-    SKIP_IF(fd >= FD_SETSIZE);
 
     ASSERT_TRUE(select_is_writable(fd));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
