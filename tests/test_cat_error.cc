@@ -18,30 +18,42 @@
 
 #include "test.h"
 
-TEST(cat_error, update_last_error)
-{
-    cat_update_last_error(CAT_EAGAIN, "hello %s", "world");
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
-    ASSERT_EQ(strcmp(cat_get_last_error_message(), "hello world"), 0);
-    cat_update_last_error(CAT_UNKNOWN, nullptr);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_UNKNOWN);
-    cat_update_last_error(CAT_EBADF, nullptr);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
-    ASSERT_EQ(strcmp(cat_get_last_error_message(), cat_strerror(CAT_EBADF)), 0);
-}
-
 TEST(cat_error, strerror)
 {
     std::string output;
 
     output = cat_strerror(CAT_UNKNOWN);
-    ASSERT_EQ(output, "unknown error");
+    ASSERT_EQ(output, "Unknown error");
     output = cat_strerror(CAT_EAGAIN);
-    ASSERT_EQ(output, "resource temporarily unavailable");
+    ASSERT_EQ(output, "Resource temporarily unavailable");
     output = cat_strerror(INT_MAX);
-    ASSERT_EQ(output, "unknown error");
+    ASSERT_EQ(output, "Unknown error");
 }
 
+TEST(cat_error, update_last_error)
+{
+    cat_update_last_error(CAT_EAGAIN, "hello %s", "world");
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+    ASSERT_STREQ(cat_get_last_error_message(), "hello world");
+    cat_update_last_error(CAT_UNKNOWN, nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_UNKNOWN);
+    cat_update_last_error(CAT_EBADF, nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_STREQ(cat_get_last_error_message(), cat_strerror(CAT_EBADF));
+}
+
+TEST(cat_error, update_last_error_with_null_format)
+{
+    cat_update_last_error(CAT_UNKNOWN, NULL);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_UNKNOWN);
+    ASSERT_STREQ(cat_get_last_error_message(), "Unknown error");
+    cat_update_last_error(CAT_EAGAIN, NULL);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+    ASSERT_STREQ(cat_get_last_error_message(), "Resource temporarily unavailable");
+    cat_update_last_error(INT_MAX, NULL);
+    ASSERT_EQ(cat_get_last_error_code(), INT_MAX);
+    ASSERT_STREQ(cat_get_last_error_message(), "Unknown error");
+}
 
 #ifndef E2BIG
 #define E2BIG 7
