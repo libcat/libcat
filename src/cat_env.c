@@ -122,11 +122,24 @@ CAT_API cat_bool_t cat_env_exists(const char *name)
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t default_value)
+CAT_API cat_bool_t cat_env_compare(const char *name, const char *value, cat_env_comparer_t comparer, cat_bool_t default_value)
+{
+    const char *values[1] = { value };
+    return cat_env_compares(name, values, 1, comparer, default_value);
+}
+
+CAT_API cat_bool_t cat_env_compares(const char *name, const char **values, size_t count, cat_env_comparer_t comparer, cat_bool_t default_value)
 {
     char *env, buffer[CAT_ENV_BUFFER_SIZE];
-    size_t size = strlen(value) + 1;
+    size_t n, size = 0;
     int error;
+
+    for (n = 0; n < count; n++) {
+        size_t length = strlen(values[n]) + 1;
+        if (length > size) {
+            size = length;
+        }
+    }
 
     if (likely(size <= sizeof(buffer))) {
         env = buffer;
@@ -143,7 +156,12 @@ CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t de
     error = uv_os_getenv(name, env, &size);
 
     if (error == 0) {
-        default_value = strcmp(env, value) == 0;
+        for (n = 0; n < count; n++) {
+            if (comparer(env, values[n]) == 0) {
+                default_value = cat_true;
+                break;
+            }
+        }
     }
 
     if (unlikely(env != buffer)) {
@@ -153,7 +171,13 @@ CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t de
     return default_value;
 }
 
+CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t default_value)
+{
+    return cat_env_compare(name, value, strcmp, default_value);
+}
+
 CAT_API cat_bool_t cat_env_is_true(const char *name, cat_bool_t default_value)
 {
-    return cat_env_is(name, "1", default_value);
+    const char *values[3] = { "1", "true", "on" };
+    return cat_env_compares(name, values, CAT_ARRAY_SIZE(values), cat_strcasecmp, default_value);
 }
