@@ -108,6 +108,7 @@ jobs:
             --cover_children ^
             --excluded_line_regex "\s*else.*" ^
             --excluded_line_regex "\s*\}.*" ^
+            --excluded_line_regex "\s*\{\s*" ^
             --modules build\Debug\cat_tests.exe -- ^
             build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
           ${{ matrix.build-type == 'Debug' && format('codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
