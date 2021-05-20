@@ -89,3 +89,17 @@ TEST(cat_dns, timeout)
     ASSERT_FALSE(cat_dns_get_ip_ex(nullptr, 0, TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC, 0));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
+
+TEST(cat_dns, nospc)
+{
+    ASSERT_FALSE(cat_dns_get_ip(nullptr, 0, TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_INET));
+    if (cat_get_last_error_code() != CAT_EAI_NONAME) {
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    }
+#ifndef CAT_OS_WIN /* See above for reasons */
+    ASSERT_FALSE(cat_dns_get_ip(nullptr, 0, TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_INET6));
+    if (cat_get_last_error_code() != CAT_EAI_NONAME) {
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    }
+#endif
+}
