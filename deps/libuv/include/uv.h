@@ -163,6 +163,7 @@ extern "C" {
   XX(ENOTTY, "inappropriate ioctl for device")                                \
   XX(EFTYPE, "inappropriate file type or format")                             \
   XX(EILSEQ, "illegal byte sequence")                                         \
+  XX(ESTALE, "stale file handle")                                             \
 
 #define UV_HANDLE_TYPE_MAP(XX)                                                \
   XX(ASYNC, async)                                                            \
