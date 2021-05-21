@@ -198,11 +198,11 @@ TEST(cat_event, busy)
     co([] {
         ASSERT_TRUE(cat_time_delay(0));
     });
-    testing::internal::CaptureStdout();
+    testing::internal::CaptureStderr();
     ASSERT_FALSE(cat_event_module_shutdown());
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
-    std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_NE(output.find("TCP"), std::string::npos);
+    std::string output = testing::internal::GetCapturedStderr();
+    ASSERT_NE(output.find("Event loop close failed, reason: Resource busy or locked"), std::string::npos);
 }
 
 TEST(cat_event, dead_lock)

@@ -132,7 +132,7 @@ CAT_API cat_bool_t cat_env_compares(const char *name, const char **values, size_
 {
     char *env, buffer[CAT_ENV_BUFFER_SIZE];
     size_t n, size = 0;
-    int error;
+    cat_bool_t ret;
 
     for (n = 0; n < count; n++) {
         size_t length = strlen(values[n]) + 1;
@@ -153,22 +153,23 @@ CAT_API cat_bool_t cat_env_compares(const char *name, const char **values, size_
 #endif
     }
 
-    error = uv_os_getenv(name, env, &size);
-
-    if (error == 0) {
+    if (uv_os_getenv(name, env, &size) == 0) {
+        ret = cat_false;
         for (n = 0; n < count; n++) {
             if (comparer(env, values[n]) == 0) {
-                default_value = cat_true;
+                ret = cat_true;
                 break;
             }
         }
+    } else {
+        ret = default_value;
     }
 
     if (unlikely(env != buffer)) {
         cat_free(env);
     }
 
-    return default_value;
+    return ret;
 }
 
 CAT_API cat_bool_t cat_env_is(const char *name, const char *value, cat_bool_t default_value)

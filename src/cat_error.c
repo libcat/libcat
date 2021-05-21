@@ -113,7 +113,7 @@ CAT_API const char *cat_strerror(cat_errno_t error)
         CAT_ERRNO_MAP(CAT_STRERROR_GEN)
     }
 #undef CAT_STRERROR_GEN
-    return "unknown error";
+    return "Unknown error";
 }
 
 #ifndef E2BIG
