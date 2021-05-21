@@ -435,9 +435,9 @@ CAT_API int cat_select(int max_fd, fd_set *readfds, fd_set *writefds, fd_set *ex
     }
 
     /* translate from poll structure to select structrue */
-	SAFE_FD_ZERO(readfds);
-	SAFE_FD_ZERO(writefds);
-	SAFE_FD_ZERO(exceptfds);
+    SAFE_FD_ZERO(readfds);
+    SAFE_FD_ZERO(writefds);
+    SAFE_FD_ZERO(exceptfds);
     for (ifds = 0; ifds < nfds; ifds++) {
         pfd = &pfds[ifds];
         if (pfd->revents & POLLIN) {

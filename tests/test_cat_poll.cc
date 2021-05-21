@@ -89,13 +89,13 @@ TEST(cat_poll, base)
 
 static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
 {
-	struct timeval timeout;
+    struct timeval timeout;
     fd_set readfds, writefds, exceptfds;
     timeout.tv_sec = (cat_timeval_sec_t) TEST_IO_TIMEOUT;
     timeout.tv_usec = 0;
-	FD_ZERO(&readfds);
-	FD_ZERO(&writefds);
-	FD_ZERO(&exceptfds);
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+    FD_ZERO(&exceptfds);
     switch (type) {
         case 0:
             FD_SET(fd, &readfds);
