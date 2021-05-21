@@ -50,3 +50,31 @@ TEST(cat_sys, nanosleep_failed)
     ASSERT_EQ(cat_sys_nanosleep(&req, NULL), -1);
     ASSERT_EQ(cat_translate_sys_error(cat_sys_errno), CAT_EINVAL);
 }
+
+TEST(cat, runtime_init_with_error_log_stdout)
+{
+    FILE *original_error_log = cat_get_error_log();
+    DEFER(cat_set_error_log(original_error_log));
+
+    cat_env_set("CAT_ERROR_LOG", "stdout");
+    cat_runtime_shutdown();
+    cat_runtime_init();
+    testing::internal::CaptureStdout();
+    cat_warn(CORE, "Now error log is stdout");
+    std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_NE(output.find("Now error log is stdout"), std::string::npos);
+}
+
+TEST(cat, runtime_init_with_error_log_stderr)
+{
+    FILE *original_error_log = cat_get_error_log();
+    DEFER(cat_set_error_log(original_error_log));
+
+    cat_env_set("CAT_ERROR_LOG", "stderr");
+    cat_runtime_shutdown();
+    cat_runtime_init();
+    testing::internal::CaptureStderr();
+    cat_warn(CORE, "Now error log is stderr");
+    std::string output = testing::internal::GetCapturedStderr();
+    ASSERT_NE(output.find("Now error log is stderr"), std::string::npos);
+}

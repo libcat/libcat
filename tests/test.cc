@@ -138,6 +138,7 @@ public:
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_init());
 #endif
+        cat_set_error_log(stderr);
 
         cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
 
