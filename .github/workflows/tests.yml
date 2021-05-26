@@ -167,9 +167,9 @@ jobs:
           echo "::endgroup::"
           echo "::group::Test libcat"
           ASAN_OPTIONS=log_path=/tmp/asan.log ./cat_tests --gtest_color=yes || {
-            echo "::warning::Test failed" >&1
-            echo "ASan log:" >&1
-            cat /tmp/asan.log* >&1
+            echo "::warning::Test failed"
+            echo "ASan log:"
+            cat /tmp/asan.log*
             exit 1
           }
           echo "::endgroup::"
