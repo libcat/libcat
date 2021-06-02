@@ -505,7 +505,7 @@ static cat_timeout_t cat_socket_get_dns_timeout_fast(const cat_socket_t *socket)
 static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port, cat_bool_t *is_host_name)
 {
     cat_sockaddr_union_t *address = &address_info->address;
-    cat_sa_family_t af = cat_socket_get_af(socket);;
+    cat_sa_family_t af = cat_socket_get_af(socket);
     int error;
 
     /* for failure */
@@ -521,24 +521,17 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
     if ((socket->type & CAT_SOCKET_TYPE_FLAG_UNSPEC)) {
         if (error == CAT_EINVAL) {
             // try to solve the name
-            struct addrinfo hints;
+            struct addrinfo hints = {0};
             struct addrinfo *response;
-            int sock_type;
-            int protocol;
             cat_bool_t ret;
             if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
-                sock_type = SOCK_STREAM;
-                protocol = IPPROTO_TCP;
+                hints.ai_socktype = SOCK_STREAM;
             } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) {
-                sock_type = SOCK_DGRAM;
-                protocol = IPPROTO_IP;
+                hints.ai_socktype = SOCK_DGRAM;
             } else {
-                sock_type = 0;
-                protocol = IPPROTO_IP;
+                hints.ai_socktype = 0;
             }
             hints.ai_family = af;
-            hints.ai_socktype = sock_type;
-            hints.ai_protocol = protocol;
             hints.ai_flags = 0;
             response = cat_dns_getaddrinfo_ex(name, NULL, &hints, cat_socket_get_dns_timeout_fast(socket));
             if (unlikely(response == NULL)) {
@@ -562,7 +555,7 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
                     address_info->length = sizeof(cat_sockaddr_in6_t);
                     break;
                 default:
-                    CAT_NEVER_HERE("Must be INET");
+                    CAT_NEVER_HERE("Must be AF_INET/AF_INET6");
             }
         }
         switch (address->common.sa_family) {
