@@ -56,7 +56,7 @@
 
 #define TEST_LISTEN_HOST                   "localhost"
 #define TEST_LISTEN_IPV4                   "127.0.0.1"
-#define TEST_LISTEN_IPV6                   "::"
+#define TEST_LISTEN_IPV6                   "::1"
 #define TEST_TMP_PATH                      ::testing::CONFIG_TMP_PATH.c_str()
 #ifndef CAT_OS_WIN
 #define TEST_PATH_SEP                      "/"

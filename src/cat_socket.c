@@ -524,6 +524,8 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
             struct addrinfo hints = {0};
             struct addrinfo *response;
             cat_bool_t ret;
+            hints.ai_family = af;
+            hints.ai_flags = 0;
             if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
                 hints.ai_socktype = SOCK_STREAM;
             } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) {
@@ -531,8 +533,6 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
             } else {
                 hints.ai_socktype = 0;
             }
-            hints.ai_family = af;
-            hints.ai_flags = 0;
             response = cat_dns_getaddrinfo_ex(name, NULL, &hints, cat_socket_get_dns_timeout_fast(socket));
             if (unlikely(response == NULL)) {
                 return cat_false;
@@ -601,6 +601,12 @@ static void cat_socket_tcp_on_open(cat_socket_t *socket)
     }
 }
 
+static CAT_COLD void cat_socket_fail_close_callback(uv_handle_t *handle)
+{
+    cat_socket_internal_t *isocket = cat_container_of(handle, cat_socket_internal_t, u.handle);
+    cat_free(isocket);
+}
+
 CAT_API void cat_socket_init(cat_socket_t *socket)
 {
     socket->type = CAT_SOCKET_TYPE_ANY;
@@ -614,12 +620,23 @@ CAT_API cat_socket_t *cat_socket_create(cat_socket_t *socket, cat_socket_type_t 
 
 CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type_t type, cat_socket_fd_t fd)
 {
-    size_t isocket_size;
+    cat_socket_flags_t flags = CAT_SOCKET_FLAG_NONE;
     cat_socket_internal_t *isocket = NULL;
     cat_sa_family_t af = 0;
     cat_bool_t check_connection = cat_true;
+    size_t isocket_size;
     int error = CAT_EINVAL;
 
+    if (socket == NULL) {
+        socket = (cat_socket_t *) cat_malloc(sizeof(*socket));
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+        if (unlikely(socket == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for socket failed");
+            goto _malloc_error;
+        }
+#endif
+        flags |= CAT_SOCKET_FLAG_ALLOCATED;
+    }
 #ifndef CAT_DO_NOT_OPTIMIZE
     /* dynamic memory allocation so we can save some space */
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -638,23 +655,20 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
         isocket_size = cat_offsize_of(cat_socket_internal_t, u.tty);
     } else {
-        goto _pre_error;
+        goto _type_error;
     }
     /* u must be the last member */
     CAT_STATIC_ASSERT(cat_offsize_of(cat_socket_internal_t, u) == sizeof(*isocket));
 #else
     isocket_size = sizeof(*isocket);
 #endif
-    isocket = (cat_socket_internal_t *) cat_malloc(isocket_size + (socket == NULL ? sizeof(*socket) : 0));
+    isocket = (cat_socket_internal_t *) cat_malloc(isocket_size);
 #ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (unlikely(isocket == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for socket failed");
-        goto _syscall_error;
+        cat_update_last_error_of_syscall("Malloc for socket internal failed");
+        goto _malloc_internal_error;
     }
 #endif
-    if (socket == NULL) {
-        socket = (cat_socket_t *) ((char *) isocket + isocket_size);
-    }
 
     /* solve type and get af */
     if (type & CAT_SOCKET_TYPE_FLAG_SERVER) {
@@ -679,7 +693,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             }
         }
     }
-    /* init handler */
+    /* init handle */
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
         error = uv_tcp_init_ex(cat_event_loop, &isocket->u.tcp, af);
     } else if ((type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) {
@@ -747,11 +761,12 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         }
     }
     if (unlikely(error != 0)) {
-        goto _ext_error;
+        goto _error;
     }
 
     /* init properties of socket */
     socket->type = type;
+    socket->flags = flags;
     socket->internal = isocket;
 
     /* init properties of socket internal */
@@ -786,16 +801,18 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 
     return socket;
 
-    _ext_error:
-    uv_close(&isocket->u.handle, NULL);
     _error:
-    cat_free(isocket);
-#ifndef CAT_DO_NOT_OPTIMIZE
-    _pre_error:
-#endif
-    cat_update_last_error_with_reason(error, "Socket init with type %s failed", cat_socket_type_name(type));
+    uv_close(&isocket->u.handle, cat_socket_fail_close_callback);
+    _type_error:
+    cat_update_last_error_with_reason(error, "Socket create with type %s failed", cat_socket_type_name(type));
 #ifndef CAT_ALLOC_NEVER_RETURNS_NULL
-    _syscall_error:
+    _malloc_internal_error:
+#endif
+    if (flags & CAT_SOCKET_FLAG_ALLOCATED) {
+        cat_free(socket);
+    }
+#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+    _malloc_error:
 #endif
 
     return NULL;
@@ -1320,37 +1337,92 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
 {
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_CONNECT, return cat_false);
     CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
-    cat_sockaddr_info_t address_info;
-    cat_sockaddr_t *address;
-    cat_socklen_t address_length;
-    cat_bool_t is_host_name;
-    cat_bool_t ret;
 
-    /* resolve address (DNS query may be triggered) */
-    /* Notice: address can not be NULL if it's not UDP */
-    if (!(name_length == 0 && ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP))) {
-        cat_bool_t ret;
-        isocket->context.connect.coroutine = CAT_COROUTINE_G(current);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_CONNECT;
-        ret  = cat_socket_getaddrbyname_ex(socket, &address_info, name, name_length, port, &is_host_name);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
-        isocket->context.connect.coroutine = NULL;
-        if (unlikely(!ret)) {
-           cat_update_last_error_with_previous("Socket connect failed");
-           return cat_false;
-        }
-        address = &address_info.address.common;
-        address_length = address_info.length;
-    } else {
-        address = NULL;
-        address_length = 0;
-        is_host_name = cat_false;
+    /* address can be NULL if it's UDP */
+    if (name_length == 0 && ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP)) {
+        return cat_socket__connect(socket, isocket, NULL, 0, timeout);
     }
 
-    ret = cat_socket__connect(socket, isocket, address, address_length, timeout);
+    /* otherwise we resolve address */
+    cat_sa_family_t af = cat_socket_get_af(socket);
+    cat_sockaddr_info_t address_info;
+    cat_bool_t ret = cat_false;
+    int error;
+    address_info.length = sizeof(address_info.address);
+    address_info.address.common.sa_family = af;
+    error = cat_sockaddr__getbyname(&address_info.address.common, &address_info.length, name, name_length, port);
+    if (error == 0) {
+        return cat_socket__connect(socket, isocket, &address_info.address.common, address_info.length, timeout);
+    }
+    if (unlikely(error != CAT_EINVAL)) {
+        cat_update_last_error_with_reason(error, "Socket connect failed, reason: Socket get address by name failed");
+        return cat_false;
+    }
+
+    /* the input addr name is a domain name, do a ns look-up */
+    struct addrinfo *responses, *response;
+    struct addrinfo hints = {0};
+    if (af != AF_UNSPEC) {
+        // the socket is already specified or bound
+        hints.ai_family = af;
+    }
+    if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
+        hints.ai_socktype = SOCK_STREAM;
+    } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) {
+        hints.ai_socktype = SOCK_DGRAM;
+    } else {
+        hints.ai_socktype = 0;
+    }
+    isocket->context.connect.coroutine = CAT_COROUTINE_G(current);
+    isocket->io_flags = CAT_SOCKET_IO_FLAG_CONNECT;
+    responses = cat_dns_getaddrinfo_ex(name, NULL, &hints, cat_socket_get_dns_timeout_fast(socket));
+    isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
+    isocket->context.connect.coroutine = NULL;
+    if (unlikely(responses == NULL)) {
+        cat_update_last_error_with_previous("Socket connect failed");
+        return cat_false;
+    }
+    /* Try to connect to all address results until successful */
+    cat_sa_family_t last_af = responses->ai_family;
+    cat_bool_t is_initialized = cat_socket_internal_get_fd_fast(isocket) != CAT_SOCKET_INVALID_FD;
+    response = responses;
+    do {
+        CAT_ASSERT(((response->ai_addr->sa_family == AF_INET && response->ai_addrlen == sizeof(struct sockaddr_in)) ||
+                   (response->ai_addr->sa_family == AF_INET6 && response->ai_addrlen == sizeof(struct sockaddr_in6))) &&
+                   "GAI should only return inet and inet6 addresses");
+        memcpy(&address_info.address.common, response->ai_addr, response->ai_addrlen);
+        if (response->ai_addr->sa_family == AF_INET) {
+            address_info.address.in.sin_port = htons((uint16_t) port);
+        } else if (response->ai_addr->sa_family == AF_INET6) {
+            address_info.address.in6.sin6_port = htons((uint16_t) port);
+        } else {
+            continue; // should never here
+        }
+        if (response->ai_family != last_af) {
+            CAT_ASSERT(af == AF_UNSPEC);
+            // af changed and socket has not been initialized yet, recreate isocket
+            cat_socket_internal_close(isocket);
+            ret = cat_socket_create(socket, socket->type) != NULL;
+            if (!ret) {
+                cat_update_last_error_with_previous("Socket connect recreate failed");
+                break;
+            }
+            isocket = socket->internal;
+        }
+        ret = cat_socket__connect(
+            socket, isocket,
+            &address_info.address.common,
+            (cat_socklen_t) response->ai_addrlen,
+            timeout
+        );
+        if (ret || is_initialized || !cat_socket_is_available(socket)) {
+            break;
+        }
+    } while ((response = response->ai_next));
+    cat_dns_freeaddrinfo(responses);
 
 #ifdef CAT_SSL
-    if (ret && is_host_name) {
+    if (ret) {
         isocket->ssl_peer_name = cat_strndup(name, name_length);
     }
 #endif
@@ -2648,6 +2720,10 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
     }
 
     cat_socket_internal_close(isocket);
+
+    if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
+        cat_free(socket);
+    }
 
     return cat_true;
 }
