@@ -21,21 +21,36 @@
 
 TEST(cat_dns, getaddrinfo)
 {
-    struct addrinfo hints;
-    struct addrinfo *response;
+    struct addrinfo *response, *presponse;
+    const struct addrinfo hints = { /* .ai_flags = */ AI_ALL };
 
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = 0;
-    hints.ai_family = AF_INET;
+    const char *domains[] = {
+        TEST_REMOTE_IPV6_HTTP_SERVER_HOST,
+        TEST_REMOTE_HTTP_SERVER_HOST,
+        TEST_REMOTE_HTTPS_SERVER_HOST,
+        "localhost"
+    };
 
-    response = cat_dns_getaddrinfo(TEST_REMOTE_IPV6_HTTP_SERVER_HOST, nullptr, &hints);
-    if (response == nullptr && cat_get_last_error_code() == CAT_EAI_NONAME) {
-        return;
+    for (int i = 0; i < CAT_ARRAY_SIZE(domains); i++) {
+        response = cat_dns_getaddrinfo(domains[i], nullptr, &hints);
+        if (response == nullptr && cat_get_last_error_code() == CAT_EAI_NONAME) {
+            break;
+        }
+        ASSERT_NE(nullptr, response);
+        for (presponse = response; presponse; presponse = presponse->ai_next) {
+            switch (presponse->ai_addr->sa_family) {
+                case AF_INET: {
+                    ASSERT_EQ(presponse->ai_addrlen, sizeof(struct sockaddr_in));
+                    break;
+                }
+                case AF_INET6: {
+                    ASSERT_EQ(presponse->ai_addrlen, sizeof(struct sockaddr_in6));
+                    break;
+                }
+            }
+        }
+        cat_dns_freeaddrinfo(response);
     }
-    ASSERT_NE(nullptr, response);
-
-    cat_dns_freeaddrinfo(response);
 }
 
 TEST(cat_dns, get_ip)
