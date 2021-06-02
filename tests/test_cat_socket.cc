@@ -991,6 +991,31 @@ TEST(cat_socket, echo_tcp_client)
     echo_stream_client_tests(&echo_client);
 }
 
+TEST(cat_socket, echo_tcp_client_localhost)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t echo_client_v6, echo_client_localhost;
+
+    ASSERT_NE(cat_socket_create(&echo_client_v6, CAT_SOCKET_TYPE_FLAG_UNSPEC | CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&echo_client_v6));
+    ASSERT_NE(cat_socket_create(&echo_client_localhost, CAT_SOCKET_TYPE_FLAG_UNSPEC | CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&echo_client_localhost));
+
+    // ::1 is not bound
+    ASSERT_FALSE(cat_socket_connect(&echo_client_v6, CAT_STRL("::1"), echo_tcp_server_port));
+    // localhost should work
+    // try ::1 first, then 127.0.0.1
+    ASSERT_TRUE(cat_socket_connect(&echo_client_localhost, CAT_STRL("localhost"), echo_tcp_server_port));
+    {
+        char ip[CAT_SOCKET_IP_BUFFER_SIZE];
+        size_t ip_length = sizeof(ip);
+        ASSERT_TRUE(cat_socket_get_peer_address(&echo_client_localhost, ip, &ip_length));
+        ASSERT_EQ(std::string(ip, ip_length), std::string(echo_tcp_server_ip, echo_tcp_server_ip_length));
+    }
+
+    echo_stream_client_tests(&echo_client_localhost);
+}
+
 TEST(cat_socket, echo_udp_client)
 {
     TEST_REQUIRE(echo_udp_server != nullptr, cat_socket, echo_udp_server);

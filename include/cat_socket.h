@@ -278,6 +278,20 @@ typedef enum
 
 typedef uint32_t cat_socket_type_t;
 
+/* 0 ~ 8 */
+#define CAT_SOCKET_FLAG_MAP(XX) \
+    XX(NONE, 0)           \
+    XX(ALLOCATED, 1 << 0) \
+
+typedef enum
+{
+#define CAT_SOCKET_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_FLAG_, name, value)
+    CAT_SOCKET_FLAG_MAP(CAT_SOCKET_FLAG_GEN)
+#undef CAT_SOCKET_FLAG_GEN
+} cat_socket_flag_t;
+
+typedef uint8_t cat_socket_flags_t;
+
 typedef enum
 {
     CAT_SOCKET_INTERNAL_FLAG_NONE = 0,
@@ -293,7 +307,7 @@ typedef uint32_t cat_socket_internal_flags_t;
     XX(RDWR,      CAT_SOCKET_IO_FLAG_READ | CAT_SOCKET_IO_FLAG_WRITE) \
     XX(BIND,      1 << 2 | CAT_SOCKET_IO_FLAG_RDWR) \
     XX(ACCEPT,    1 << 3 | CAT_SOCKET_IO_FLAG_RDWR) \
-    XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR) \
+    XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR)
 
 typedef enum
 {
@@ -420,6 +434,7 @@ struct cat_socket_internal_s
 struct cat_socket_s
 {
     cat_socket_type_t type;
+    cat_socket_flags_t flags;
     cat_socket_internal_t *internal;
 };
 
