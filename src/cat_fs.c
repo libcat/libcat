@@ -540,7 +540,7 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e)
 #endif // CAT_OS_WIN
         case CAT_FS_ERROR_CAT_ERRNO:
             errno = cat_orig_errno(e->val.cat_errno);
-            return cat_translate_sys_error(errno);
+            return e->val.cat_errno;
         case CAT_FS_ERROR_NONE:
         default:
             // never here
