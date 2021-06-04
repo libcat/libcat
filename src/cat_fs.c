@@ -1546,15 +1546,17 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
 #ifdef CAT_OS_WIN
     // Windows implement
     int op_type = op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
-    HANDLE hFile = (HANDLE) _get_osfhandle(fd);
-    if (INVALID_HANDLE_VALUE == hFile) {
+    DWORD le;
+    HANDLE hFile;
+    OVERLAPPED overlapped = { 0 };
+    if (INVALID_HANDLE_VALUE == (hFile = (HANDLE) _get_osfhandle(fd))) {
+        // bad fd, return error
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EBADF;
         data->ret.ret.num = -1;
         goto _done;
     }
 
-    OVERLAPPED overlapped = { 0 };
     // mock unix-like behavier: if we already have a lock,
     // flock only update the lock to specified type (shared or exclusive)
     // so we unlock first, then re-lock it
@@ -1566,75 +1568,73 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
             MAXDWORD,
             &overlapped
         )) &&
-        GetLastError() != ERROR_NOT_LOCKED // not an error
+        (le = GetLastError()) != ERROR_NOT_LOCKED // not an error
     ) {
+        // unlock failed
         // printf("u failed\n");
         // printf("le %08x\n", errno, GetLastError());
         data->ret.error.type = CAT_FS_ERROR_WIN32;
-        data->ret.error.val.le = GetLastError();
+        data->ret.error.val.le = le;
         data->ret.ret.num = -1;
         goto _done;
     }
+
     if (CAT_LOCK_UN == op_type) {
-        // already unlocked
+        // request unlock and already unlocked
         // printf("u end\n");
         data->ret.ret.num = 0;
         goto _done;
     }
 
-    if (CAT_LOCK_EX == op_type || CAT_LOCK_SH == op_type) {
-        DWORD flags = 0;
-        if (CAT_LOCK_EX == op_type) {
-            flags |= LOCKFILE_EXCLUSIVE_LOCK;
-        }
-        if ((CAT_LOCK_NB & op) == CAT_LOCK_NB) {
-            flags |= LOCKFILE_FAIL_IMMEDIATELY;
-        }
-        if (!LockFileEx(
-            hFile,
-            flags,
-            0,
-            MAXDWORD,
-            MAXDWORD,
-            &overlapped
-        )) {
-            // if LOCK_NB is set, but we donot get lock
-            // we should unlock it after it was done (cancelling lock behavior)
-            if ((CAT_LOCK_NB & op) == CAT_LOCK_NB) {
-                // printf("nb wait\n");
-                data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
-                data->ret.error.val.le = CAT_EAGAIN;
-                data->ret.ret.num = -1;
-                DWORD dummy;
-                // BOOL done =
-                GetOverlappedResult(hFile, &overlapped, &dummy, 1);
-                // printf("nb wait done\n");
-                UnlockFileEx(
-                    hFile,
-                    0,
-                    MAXDWORD,
-                    MAXDWORD,
-                    &overlapped
-                );
-                // assert(done);
-                goto _done;
-            }
-            // printf("b done\n");
-            data->ret.error.type = CAT_FS_ERROR_WIN32;
-            data->ret.error.val.le = GetLastError();
-            data->ret.ret.num = -1;
-            goto _done;
-        }
-        // printf("nb done\n");
+    if (LockFileEx(
+        hFile,
+        (
+            ((CAT_LOCK_NB & op) ? LOCKFILE_FAIL_IMMEDIATELY : 0) |
+            ((CAT_LOCK_EX == op_type) ? LOCKFILE_EXCLUSIVE_LOCK : 0)
+        ),
+        0,
+        MAXDWORD,
+        MAXDWORD,
+        &overlapped
+    )) {
+        // lock success
         data->ret.ret.num = 0;
         goto _done;
-    } else {
-        // printf("not supported\n");
+    }
+
+    if ((CAT_LOCK_NB & op) != CAT_LOCK_NB) {
+        // blocking lock failed
+        // printf("b done\n");
         data->ret.error.type = CAT_FS_ERROR_WIN32;
-        data->ret.error.val.le = ERROR_INVALID_PARAMETER;
+        data->ret.error.val.le = GetLastError();
         data->ret.ret.num = -1;
         goto _done;
     }
+
+    // if LOCK_NB is set, but we donot get lock
+    // we should unlock it after it was done (cancelling lock behavior)
+    // printf("nb wait\n");
+    data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
+    data->ret.error.val.le = CAT_EAGAIN;
+    data->ret.ret.num = -1;
+
+    // tell calling thread return
+    data->done = cat_true;
+    cat_async_notify(&data->async);
+
+    DWORD dummy;
+    // BOOL done =
+    GetOverlappedResult(hFile, &overlapped, &dummy, 1);
+    // printf("nb wait done\n");
+    UnlockFileEx(
+        hFile,
+        0,
+        MAXDWORD,
+        MAXDWORD,
+        &overlapped
+    );
+    return;
+
 #elif defined(LOCK_EX) && defined(LOCK_SH) && defined(LOCK_UN)
     // Linux / BSDs / macOS implement with flock(2)
     int operation = 0;
@@ -1781,6 +1781,14 @@ static void cat_fs_flock_shutdown(cat_data_t *ptr)
 */
 CAT_API int cat_fs_flock(cat_file_t fd, int op)
 {
+    int op_type = (CAT_LOCK_UN | CAT_LOCK_EX | CAT_LOCK_SH) & op;
+    if (
+        (op & (~(CAT_LOCK_NB | CAT_LOCK_UN | CAT_LOCK_EX | CAT_LOCK_SH))) ||
+        (CAT_LOCK_UN != op_type && CAT_LOCK_EX != op_type && CAT_LOCK_SH != op_type)
+    ) {
+        cat_update_last_error_with_reason(CAT_EINVAL, "Flock failed");
+        return -1;
+    }
     cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) cat_malloc(sizeof(*data));
 #ifndef CAT_ALLOC_NEVER_RETURNS_NULL
     if (data == NULL) {
