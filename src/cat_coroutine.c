@@ -795,11 +795,10 @@ CAT_API void cat_coroutine_notify_all(void)
 {
     cat_queue_t *waiters = &CAT_COROUTINE_G(waiters);
     cat_coroutine_count_t count = CAT_COROUTINE_G(waiter_count);
-    cat_coroutine_t *coroutine;
     /* Notice: coroutine may re-wait after unlock immediately, so we must record count here,
      * otherwise it will always be resumed */
     while (count--) {
-        coroutine = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node);
+        cat_coroutine_t *coroutine = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node);
         if (!cat_coroutine_unlock(coroutine)) {
             cat_core_error_with_last(COROUTINE, "Notify failed");
         }
