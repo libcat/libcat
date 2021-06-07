@@ -994,11 +994,12 @@ TEST(cat_socket, echo_tcp_client)
 TEST(cat_socket, echo_tcp_client_localhost)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    SKIP_IF(std::string(echo_tcp_server_ip, echo_tcp_server_ip_length) != "127.0.0.1");
     cat_socket_t echo_client_v6, echo_client_localhost;
 
-    ASSERT_NE(cat_socket_create(&echo_client_v6, CAT_SOCKET_TYPE_FLAG_UNSPEC | CAT_SOCKET_TYPE_TCP), nullptr);
+    ASSERT_NE(cat_socket_create(&echo_client_v6, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&echo_client_v6));
-    ASSERT_NE(cat_socket_create(&echo_client_localhost, CAT_SOCKET_TYPE_FLAG_UNSPEC | CAT_SOCKET_TYPE_TCP), nullptr);
+    ASSERT_NE(cat_socket_create(&echo_client_localhost, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&echo_client_localhost));
 
     // ::1 is not bound
@@ -1202,6 +1203,38 @@ TEST(cat_socket, send_yield)
     cat_free(write_buffer);
 }
 
+TEST(cat_socket, cross_close_when_connecting_local)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
+    DEFER(cat_socket_close(socket));
+    bool exited = false;
+    co([&] {
+        DEFER(exited = true);
+        ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    });
+    ASSERT_FALSE(exited);
+    cat_socket_close(socket);
+    ASSERT_FALSE(exited);
+}
+
+TEST(cat_socket, cancel_connect_local)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
+    DEFER(cat_socket_close(socket));
+    bool exited = false;
+    cat_coroutine_t *coroutine = co([&] {
+        DEFER(exited = true);
+        ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    });
+    ASSERT_FALSE(exited);
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+    ASSERT_TRUE(exited);
+}
+
 TEST(cat_socket, query_remote_http_server)
 {
     SKIP_IF_OFFLINE();
@@ -1308,7 +1341,7 @@ TEST(cat_socket, get_test_remote_http_server_ip)
     test_remote_http_server_ip = ip;
 }
 
-TEST(cat_socket, cross_close_when_connecting)
+TEST(cat_socket, cross_close_when_connecting_remote)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
     bool exited = false;
@@ -1324,12 +1357,11 @@ TEST(cat_socket, cross_close_when_connecting)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
 }
 
-TEST(cat_socket, cancel_connect)
+TEST(cat_socket, cancel_connect_remote)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
     cat_coroutine_t *waiter = cat_coroutine_get_current();
-    bool exited;
-    exited = false;
+    bool exited = false;
     DEFER(exited = true);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
