@@ -149,7 +149,7 @@ do { \
         path = NULL; \
         break; \
     } \
-    const size_t lenpath = strnlen(_path, 32767); \
+    const size_t lenpath = cat_strnlen(_path, 32767); \
     if ( \
         !( /* not  \\?\-ed */ \
             '\\' == _path[0] && \
@@ -405,7 +405,7 @@ CAT_API int cat_fs_readlink(const char *_path, char *buf, size_t len)
 {
     wrappath(_path, path);
     CAT_FS_DO_RESULT_EX({return (int)-1;}, {
-        size_t ret = strnlen(context->fs.ptr, PATH_MAX);
+        size_t ret = cat_strnlen(context->fs.ptr, PATH_MAX);
         if (ret > len) {
             // will truncate
             ret = len;
