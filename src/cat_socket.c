@@ -2716,6 +2716,9 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
         /* we do not update the last error here
          * because the only reason for close failure is
          * it has been closed */
+#ifdef CAT_DEBUG
+        cat_update_last_error(CAT_EBADF, NULL);
+#endif
         return cat_false;
     }
 
