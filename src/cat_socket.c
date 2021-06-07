@@ -491,6 +491,16 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
     } \
 } while (0)
 
+#define CAT_SOCKET_CHECK_INPUT_ADDRESS_REQUIRED(_address, _address_length, failure) do { \
+    if (_address == NULL || _address_length == 0) { \
+        cat_update_last_error(CAT_EINVAL, "Socket input address can not be empty"); \
+        failure; \
+    } \
+    if (unlikely(!cat_sockaddr_check(_address, _address_length))) { \
+        failure; \
+    } \
+} while (0)
+
 static void cat_socket_internal_close(cat_socket_internal_t *isocket);
 
 #ifdef CAT_OS_UNIX_LIKE
@@ -558,16 +568,6 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
                     CAT_NEVER_HERE("Must be AF_INET/AF_INET6");
             }
         }
-        switch (address->common.sa_family) {
-            case AF_INET:
-                socket->type |= CAT_SOCKET_TYPE_FLAG_IPV4;
-                break;
-            case AF_INET6:
-                socket->type |= CAT_SOCKET_TYPE_FLAG_IPV6;
-                break;
-            default:
-                CAT_NEVER_HERE("Unknown destination family");
-        }
 
         return cat_true;
     }
@@ -585,10 +585,13 @@ static cat_always_inline cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socke
     return cat_socket_getaddrbyname_ex(socket, address_info, name, name_length, port, NULL);
 }
 
-static cat_always_inline void cat_socket_on_open(cat_socket_t *socket)
+static void cat_socket_detect_family(cat_socket_t *socket, cat_sa_family_t family)
 {
-    if ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-        cat_socket_tcp_on_open(socket);
+    CAT_ASSERT(family == AF_INET || family == AF_INET6);
+    if (family == AF_INET) {
+        socket->type |= CAT_SOCKET_TYPE_FLAG_IPV4;
+    } else if (family == AF_INET6) {
+        socket->type |= CAT_SOCKET_TYPE_FLAG_IPV6;
     }
 }
 
@@ -605,6 +608,16 @@ static void cat_socket_tcp_on_open(cat_socket_t *socket)
     }
     if (socket->type & CAT_SOCKET_TYPE_FLAG_TCP_KEEPALIVE) {
         (void) uv_tcp_keepalive(&isocket->u.tcp, 1, CAT_SOCKET_G(options.tcp_keepalive_delay));
+    }
+}
+
+static cat_always_inline void cat_socket_on_open(cat_socket_t *socket, cat_sa_family_t family)
+{
+    if ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
+        cat_socket_tcp_on_open(socket);
+    }
+    if (family != AF_UNSPEC && (socket->type & CAT_SOCKET_TYPE_FLAG_INET)) {
+        cat_socket_detect_family(socket, family);
     }
 }
 
@@ -795,13 +808,14 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 #endif
 
     if (fd != CAT_SOCKET_INVALID_FD) {
+        const cat_sockaddr_info_t *address_info = NULL;
         if (check_connection && (
             ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) ||
-            cat_socket_getpeername_fast(socket) != NULL
+            (address_info = cat_socket_getpeername_fast(socket)) != NULL
         )) {
             isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
         }
-        cat_socket_on_open(socket);
+        cat_socket_on_open(socket, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
     }
 
     return socket;
@@ -1032,7 +1046,7 @@ static cat_bool_t cat_socket__bind(
     cat_socket_bind_flags_t flags
 )
 {
-    CAT_SOCKET_CHECK_INPUT_ADDRESS(address, address_length, return cat_false);
+    CAT_SOCKET_CHECK_INPUT_ADDRESS_REQUIRED(address, address_length, return cat_false);
     cat_socket_type_t type = socket->type;
     int error = CAT_EINVAL;
 
@@ -1089,7 +1103,7 @@ static cat_bool_t cat_socket__bind(
         return cat_false;
     }
     /* bind done successfully, we can do something here before transfer data */
-    cat_socket_on_open(socket);
+    cat_socket_on_open(socket, address->sa_family);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.sockname)) {
         cat_free(isocket->cache.sockname);
@@ -1197,7 +1211,7 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
             iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
             /* TODO: socket_extends() ? */
             memcpy(&iclient->options, &iserver->options, sizeof(iclient->options));
-            cat_socket_on_open(client);
+            cat_socket_on_open(client, AF_UNSPEC);
             return client;
         }
         if (unlikely(error != CAT_EAGAIN)) {
@@ -1250,7 +1264,7 @@ static cat_bool_t cat_socket__connect(
     cat_timeout_t timeout
 )
 {
-    CAT_SOCKET_CHECK_INPUT_ADDRESS(address, address_length, return cat_false);
+    CAT_SOCKET_CHECK_INPUT_ADDRESS_REQUIRED(address, address_length, return cat_false);
     cat_socket_type_t type = socket->type;
     uv_connect_t *request;
     int error = 0;
@@ -1316,7 +1330,7 @@ static cat_bool_t cat_socket__connect(
     /* connect done successfully, we can do something here before transfer data */
     socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
     isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
-    cat_socket_on_open(socket);
+    cat_socket_on_open(socket, address->sa_family);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.peername)) {
         cat_free(isocket->cache.peername);
