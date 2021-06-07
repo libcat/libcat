@@ -585,6 +585,13 @@ static cat_always_inline cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socke
     return cat_socket_getaddrbyname_ex(socket, address_info, name, name_length, port, NULL);
 }
 
+static cat_always_inline void cat_socket_on_open(cat_socket_t *socket)
+{
+    if ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
+        cat_socket_tcp_on_open(socket);
+    }
+}
+
 static void cat_socket_tcp_on_open(cat_socket_t *socket)
 {
     cat_socket_internal_t *isocket = socket->internal;
@@ -794,9 +801,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         )) {
             isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
         }
-        if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-            cat_socket_tcp_on_open(socket);
-        }
+        cat_socket_on_open(socket);
     }
 
     return socket;
@@ -1084,9 +1089,7 @@ static cat_bool_t cat_socket__bind(
         return cat_false;
     }
     /* bind done successfully, we can do something here before transfer data */
-    if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-        cat_socket_tcp_on_open(socket);
-    }
+    cat_socket_on_open(socket);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.sockname)) {
         cat_free(isocket->cache.sockname);
@@ -1194,10 +1197,7 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
             iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
             /* TODO: socket_extends() ? */
             memcpy(&iclient->options, &iserver->options, sizeof(iclient->options));
-            /* TODO: socket_on_open() ? */
-            if ((client->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-                cat_socket_tcp_on_open(client);
-            }
+            cat_socket_on_open(client);
             return client;
         }
         if (unlikely(error != CAT_EAGAIN)) {
@@ -1316,9 +1316,7 @@ static cat_bool_t cat_socket__connect(
     /* connect done successfully, we can do something here before transfer data */
     socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
     isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
-    if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP){
-        cat_socket_tcp_on_open(socket);
-    }
+    cat_socket_on_open(socket);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.peername)) {
         cat_free(isocket->cache.peername);
