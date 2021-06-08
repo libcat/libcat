@@ -731,7 +731,7 @@ static void cat_fs_read_cb(cat_data_t *ptr)
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buf, size_t size)
 {
     cat_fs_read_data_t *data = (cat_fs_read_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs read failed");
         return -1;
@@ -768,7 +768,7 @@ static void cat_fs_write_cb(cat_data_t *ptr)
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buf, size_t length)
 {
     cat_fs_write_data_t *data = (cat_fs_write_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs write failed");
         return -1;
@@ -805,7 +805,7 @@ static void cat_fs_lseek_cb(cat_data_t *ptr)
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
 {
     cat_fs_lseek_data_t *data = (cat_fs_lseek_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs lseek failed");
         return -1;
@@ -832,7 +832,7 @@ static void cat_fs_dir_async_close(void *ptr)
     }
     dir->dir = ptr;
     cat_fs_context_t *context = (cat_fs_context_t *) cat_malloc(sizeof(*context));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (context == NULL) {
         goto _malloc_context_error;
     }
@@ -844,7 +844,7 @@ static void cat_fs_dir_async_close(void *ptr)
     return;
     _closedir_error:
     cat_free(context);
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     _malloc_context_error:
 #endif
     free(dir);
@@ -894,7 +894,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
         return NULL;
     }
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs opendir failed");
         return NULL;
@@ -1012,7 +1012,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs readdir failed");
         return NULL;
@@ -1074,7 +1074,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
         return;
     }
     cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs rewinddir failed");
         return;
@@ -1116,7 +1116,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return 0;
     }
     cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs closedir failed");
         return -1;
@@ -1239,7 +1239,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
         return NULL;
     }
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs opendir failed");
         return NULL;
@@ -1304,7 +1304,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return 0;
     }
     cat_fs_closedir_data_t *data = (cat_fs_closedir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs closedir failed");
         return -1;
@@ -1479,7 +1479,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs readdir failed");
         return NULL;
@@ -1790,7 +1790,7 @@ CAT_API int cat_fs_flock(cat_file_t fd, int op)
         return -1;
     }
     cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) cat_malloc(sizeof(*data));
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs flock failed");
         return -1;

@@ -48,7 +48,7 @@ CAT_API char *cat_vsprintf(const char *format, va_list args)
     size = vsnprintf(NULL, 0, format, _args) + 1;
     va_end(_args);
     string = (char *) cat_malloc(size);
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(string == NULL)) {
         return NULL;
     }
@@ -82,7 +82,7 @@ CAT_API char *cat_hexprint(const char *data, size_t length)
     int n;
 
     buffer = (char *) cat_malloc(size + 1);
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(buffer == NULL)) {
         return NULL;
     }
@@ -118,7 +118,7 @@ CAT_API char *cat_snrand(char *buffer, size_t count)
 
     if (buffer == NULL) {
         buffer = (char *) cat_malloc(count);
-#ifndef CAT_ALLOC_NEVER_RETURNS_NULL
+#if CAT_ALLOC_HANDLE_ERRORS
         if (unlikely(buffer == NULL)) {
             return NULL;
         }
