@@ -1395,7 +1395,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
         return cat_false;
     }
     /* Try to connect to all address results until successful */
-    cat_sa_family_t last_af = responses->ai_family;
+    cat_sa_family_t last_af = responses->ai_addr->sa_family;
     cat_bool_t is_initialized = cat_socket_internal_get_fd_fast(isocket) != CAT_SOCKET_INVALID_FD;
     response = responses;
     do {
