@@ -174,4 +174,70 @@ namespace testing
     extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
     /* TMP_PATH */
     extern std::string CONFIG_TMP_PATH;
+
+    class wait_group
+    {
+    protected:
+        cat_sync_wait_group_t wg;
+
+    public:
+
+        wait_group(ssize_t delta = 0)
+        {
+            (void) cat_sync_wait_group_create(&wg);
+            if (!cat_sync_wait_group_add(&wg, delta)) {
+                throw cat_get_last_error_message();
+            }
+        }
+
+        ~wait_group()
+        {
+            cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT);
+        }
+
+        wait_group &operator++() // front
+        {
+            if (!cat_sync_wait_group_add(&wg, 1)) {
+                throw cat_get_last_error_message();
+            }
+            return *this;
+        }
+
+        wait_group &operator++(int o) // back
+        {
+            if (!cat_sync_wait_group_add(&wg, 1)) {
+                throw cat_get_last_error_message();
+            }
+            return *this;
+        }
+
+        wait_group &operator--() // front
+        {
+            if (!cat_sync_wait_group_done(&wg)) {
+                throw cat_get_last_error_message();
+            }
+            return *this;
+        }
+
+        wait_group &operator--(int o) // back
+        {
+            if (!cat_sync_wait_group_done(&wg)) {
+                throw cat_get_last_error_message();
+            }
+            return *this;
+        }
+
+        wait_group &operator+(int delta)
+        {
+            if (!cat_sync_wait_group_add(&wg, delta)) {
+                throw cat_get_last_error_message();
+            }
+            return *this;
+        }
+
+        bool operator()(cat_timeout_t timeout = TEST_IO_TIMEOUT)
+        {
+            return cat_sync_wait_group_wait(&wg, timeout);
+        }
+    };
 }

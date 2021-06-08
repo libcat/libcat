@@ -260,6 +260,26 @@ TEST(test, defer)
     foo = true;
 }
 
+
+TEST(test, wait_group)
+{
+    bool done[10] = { false };
+    {
+        wait_group wg;
+        for (int n = 0; n < 10; n++) {
+            co([&, n] {
+                wg++;
+                DEFER(wg--);
+                ASSERT_TRUE(cat_time_delay(n));
+                done[n] = true;
+            });
+        }
+    }
+    for (int n = 0; n < 10; n++) {
+        ASSERT_TRUE(done[n]);
+    }
+}
+
 extern "C"
 {
     void __ubsan_on_report()
