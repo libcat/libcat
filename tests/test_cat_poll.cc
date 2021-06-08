@@ -50,24 +50,30 @@ TEST(cat_poll, start_failed)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     PREPARE_TCP_SOCKET(socket);
-
-    co([fd] {
-        ASSERT_TRUE(cat_time_delay(0));
+    {
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
+        });
         ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
         ASSERT_EQ(cat_get_last_error_code(), CAT_EEXIST);
-    });
-    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
-
-    co([fd] {
+    }
+    {
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
+        });
         cat_pollfd_t pollfd;
         pollfd.fd = fd;
         pollfd.events = POLLIN;
         pollfd.revents = 0;
-        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_EQ(cat_poll(&pollfd, 1, TEST_IO_TIMEOUT), 1);
         ASSERT_EQ(pollfd.revents, POLLNONE);
-    });
-    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, 1), CAT_RET_NONE);
+    }
 }
 #endif
 

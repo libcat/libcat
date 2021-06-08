@@ -1207,19 +1207,15 @@ TEST(cat_socket, cross_close_when_connecting_local)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
     bool exited = false;
     DEFER({
         ASSERT_TRUE(cat_socket_close(socket));
-        ASSERT_FALSE(exited);
-        ASSERT_TRUE(cat_coroutine_yield(nullptr ,nullptr));
         ASSERT_TRUE(exited);
     });
     co([&] {
         ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
         exited = true;
-        ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
     });
     ASSERT_FALSE(exited);
 }
@@ -1248,16 +1244,20 @@ TEST(cat_socket, query_remote_http_server)
     ASSERT_NE(cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&socket));
 
-    /* invalid connect */
-    cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
-        cat_socket_t *socket = (cat_socket_t *) data;
-        EXPECT_TRUE(cat_time_delay(0));
-        EXPECT_FALSE(cat_socket_connect(socket, CAT_STRL("8.8.8.8"), 12345));
-        EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
-        return nullptr;
-    }, &socket);
-
-    ASSERT_TRUE(cat_socket_connect(&socket, TEST_REMOTE_HTTP_SERVER));
+    // test connect
+    {
+        wait_group wg;
+        co ([&] {
+            wg++;
+            DEFER(wg--);
+            ASSERT_TRUE(cat_socket_connect(&socket, TEST_REMOTE_HTTP_SERVER));
+        });
+        {
+            /* invalid connect */
+            ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("8.8.8.8"), 12345));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+        }
+    }
 
     char *request = cat_sprintf(
         "GET / HTTP/1.1\r\n"
@@ -1271,69 +1271,68 @@ TEST(cat_socket, query_remote_http_server)
     DEFER(cat_free(request));
     ASSERT_TRUE(cat_socket_send(&socket, request, strlen(request)));
 
-    /* invalid read */
-    cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
-        cat_socket_t *socket = (cat_socket_t *) data;
-        char read_buffer[1];
-        EXPECT_TRUE(cat_time_delay(0));
-        EXPECT_EQ(cat_socket_recv(socket, CAT_STRS(read_buffer)), -1);
-        EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
-        return nullptr;
-    }, &socket);
+    // test recv
+    {
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            do {
+                llhttp_t parser;
+                llhttp_settings_t settings;
+                size_t total_bytes = 0;
 
-    do {
-        llhttp_t parser;
-        llhttp_settings_t settings;
-        size_t total_bytes = 0;
+                llhttp_settings_init(&settings);
+                settings.on_message_complete = [](llhttp_t *parser) {
+                    parser->data = (void *) 1;
+                    return 0;
+                };
+                llhttp_init(&parser, HTTP_RESPONSE, &settings);
+                parser.data = nullptr;
 
-        llhttp_settings_init(&settings);
-        settings.on_message_complete = [](llhttp_t *parser) {
-            parser->data = (void *) 1;
-            return 0;
-        };
-        llhttp_init(&parser, HTTP_RESPONSE, &settings);
-        parser.data = nullptr;
+                do {
+                    char read_buffer[TEST_BUFFER_SIZE_STD];
+                    ssize_t n;
+                    enum llhttp_errno error;
 
-        do {
-            char read_buffer[TEST_BUFFER_SIZE_STD];
-            ssize_t n;
-            enum llhttp_errno error;
+                    n = cat_socket_recv(&socket, CAT_STRS(read_buffer));
+                    ASSERT_GT(n, 0);
+                    total_bytes += (size_t) n;
 
-            n = cat_socket_recv(&socket, CAT_STRS(read_buffer));
-            ASSERT_GT(n, 0);
-            total_bytes += (size_t) n;
+                    error = llhttp_execute(&parser, read_buffer, n);
+                    ASSERT_EQ(error, HPE_OK);
 
-            error = llhttp_execute(&parser, read_buffer, n);
-            ASSERT_EQ(error, HPE_OK);
+                    cat_debug(SOCKET, "Data[%zd]: %.*s", n, (int) n, read_buffer);
 
-            cat_debug(SOCKET, "Data[%zd]: %.*s", n, (int) n, read_buffer);
+                    if (parser.data != nullptr) {
+                        break;
+                    }
+                } while (true);
 
-            if (parser.data != nullptr) {
-                break;
-            }
-        } while (true);
+                EXPECT_TRUE(parser.status_code == TEST_HTTP_STATUS_CODE_OK);
 
-        EXPECT_TRUE(parser.status_code == TEST_HTTP_STATUS_CODE_OK);
-
-        cat_debug(SOCKET, "total_bytes: %zu", total_bytes);
-    } while (0);
+                cat_debug(SOCKET, "total_bytes: %zu", total_bytes);
+            } while (0);
+        });
+        {
+            /* invalid read */
+            char read_buffer[1];
+            ASSERT_EQ(cat_socket_recv(&socket, CAT_STRS(read_buffer)), -1);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+        }
+    }
 }
 
 TEST(cat_socket, cross_close_when_dns_resolve)
 {
     SKIP_IF_OFFLINE();
-    bool exited = false;
-    DEFER(exited = true);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
-    DEFER(cat_socket_close(socket));
+    ASSERT_EQ(socket, &_socket);
     co([&] {
-        ASSERT_TRUE(cat_time_delay(0));
-        if (!exited) {
-            cat_socket_close(socket);
-        }
+        ASSERT_FALSE(cat_socket_connect(socket, TEST_REMOTE_HTTP_SERVER));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
-    ASSERT_FALSE(cat_socket_connect(socket, TEST_REMOTE_HTTP_SERVER));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    cat_socket_close(socket);
 }
 
 static const char *test_remote_http_server_ip;
@@ -1350,33 +1349,32 @@ TEST(cat_socket, cross_close_when_connecting_remote)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
     bool exited = false;
-    DEFER(exited = true);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
     co([&] {
-        ASSERT_TRUE(cat_time_delay(0));
-        ASSERT_FALSE(exited);
-        cat_socket_close(socket);
+        DEFER(exited = true);
+        ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
-    ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    ASSERT_FALSE(exited);
+    cat_socket_close(socket);
+    ASSERT_TRUE(exited);
 }
 
 TEST(cat_socket, cancel_connect_remote)
 {
     SKIP_IF(test_remote_http_server_ip == nullptr);
-    cat_coroutine_t *waiter = cat_coroutine_get_current();
     bool exited = false;
-    DEFER(exited = true);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
-    co([&] {
-        ASSERT_TRUE(cat_time_delay(0));
-        ASSERT_FALSE(exited);
-        cat_coroutine_resume(waiter, nullptr, nullptr);
+    cat_coroutine_t *coroutine = co([&] {
+        DEFER(exited = true);
+        ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
-    ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    ASSERT_FALSE(exited);
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+    ASSERT_TRUE(exited);
 }
 
 TEST(cat_socket, connreset)

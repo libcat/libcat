@@ -99,15 +99,12 @@ TEST(cat_curl, concurrency)
 
 TEST(cat_curl, cancel)
 {
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
-    std::string response;
-
-    co([coroutine] {
-        ASSERT_TRUE(cat_time_delay(0));
-        cat_coroutine_resume(coroutine, nullptr, nullptr);
+    cat_coroutine_t *coroutine = co([] {
+        std::string response;
+        ASSERT_NE(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
+        ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
     });
-    ASSERT_NE(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
-    ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
 }
 
 TEST(cat_curl, timeout)
@@ -120,14 +117,12 @@ TEST(cat_curl, timeout)
 TEST(cat_curl, busy)
 {
     CURL *ch;
-    std::string response;
-
-    co([&ch] {
-        ASSERT_TRUE(cat_time_delay(0));
-        ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
+    co([&] {
+        std::string response;
+        ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);
+        ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
     });
-    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);
-    ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
+    ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
 }
 
 TEST(cat_curl_multi, base)

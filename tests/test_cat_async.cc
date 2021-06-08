@@ -71,13 +71,11 @@ TEST(cat_async, cancel)
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
-    co([&] {
-        ASSERT_TRUE(cat_time_delay(0));
-        ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+    cat_coroutine_t *coroutine = co([&] {
+        ASSERT_FALSE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
-    ASSERT_FALSE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
     done = true;
 }
 

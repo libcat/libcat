@@ -27,40 +27,43 @@ TEST(cat_signal, wait)
 {
     const std::array<int, 4> signals{ CAT_SIGINT, CAT_SIGTERM, CAT_SIGUSR1, CAT_SIGUSR2 };
     bool killed, wait_done;
+    wait_group wg;
+    DEFER({
+        wg();
+        ASSERT_TRUE(wait_done);
+    });
 
     for (int signum : signals) {
         killed = wait_done = false;
 
         co([&, signum] {
-            ASSERT_TRUE(cat_time_delay(0));
-            EXPECT_TRUE(cat_kill(cat_getpid(), signum));
-            EXPECT_FALSE(wait_done);
-            killed = true;
+            wg++;
+            DEFER(wg--);
+            ASSERT_TRUE(cat_signal_wait(signum, TEST_IO_TIMEOUT));
+            ASSERT_TRUE(killed);
+            wait_done = true;
         });
 
-        EXPECT_TRUE(cat_signal_wait(signum, TEST_IO_TIMEOUT));
-        EXPECT_TRUE(killed);
-        wait_done = true;
+        ASSERT_TRUE(cat_kill(cat_getpid(), signum));
+        killed = true;
+        ASSERT_FALSE(wait_done);
     }
 }
 
 TEST(cat_signal, wait_multi)
 {
     cat_coroutine_t *coroutine = cat_coroutine_get_current();
-    size_t count = 0;
+    wait_group wg;
 
     for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
         co([&] {
-            EXPECT_TRUE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
-            if (++count == TEST_MAX_CONCURRENCY) {
-                cat_coroutine_resume(coroutine, nullptr, nullptr);
-            }
+            wg++;
+            DEFER(wg--);
+            ASSERT_TRUE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
         });
     }
 
-    EXPECT_TRUE(cat_kill(cat_getpid(), CAT_SIGUSR1));
-    EXPECT_TRUE(cat_time_wait(TEST_IO_TIMEOUT));
-    EXPECT_EQ(TEST_MAX_CONCURRENCY, count);
+    ASSERT_TRUE(cat_kill(cat_getpid(), CAT_SIGUSR1));
 }
 
 TEST(cat_signal, invalid_kill)
@@ -81,13 +84,11 @@ TEST(cat_signal, timeout)
 
 TEST(cat_signal, cancel)
 {
-    cat_coroutine_t *waiter = cat_coroutine_get_current();
-    co([&] {
-        ASSERT_TRUE(cat_time_delay(0));
-        cat_coroutine_resume(waiter, nullptr, nullptr);
+    cat_coroutine_t *coroutine = co([&] {
+        ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
+        ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
     });
-    ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
-    ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
 }
 
 #endif

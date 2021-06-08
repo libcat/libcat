@@ -201,38 +201,33 @@ TEST(cat_channel, pop_null)
 
 TEST(cat_channel, cancel)
 {
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
-
     for (cat_channel_size_t capacity = 0; capacity < 2; capacity++) [=] {
-        cat_channel_t *channel, _channel;
-        char data[] = "x";
+        cat_coroutine_t *coroutine = co([=] {
+            cat_channel_t *channel, _channel;
+            char data[] = "x";
 
-        channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
-        DEFER(cat_channel_close(channel));
-
-        co([=] {
-            for (size_t n = 2; n--;) {
-                /* switch to main coroutine */
-                ASSERT_TRUE(cat_time_delay(0));
-                /* cancel the timeout of the main coroutine with resume instead of pop channnel */
-                cat_coroutine_resume(coroutine, nullptr, nullptr);
+            channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
+            DEFER(cat_channel_close(channel));
+            if (capacity == 1) {
+                ASSERT_TRUE(cat_channel_push(channel, &data, -1));
             }
+            /* main coroutine try to push data but blocking */
+            ASSERT_FALSE(cat_channel_push(channel, &data, -1));
+            /* cancel main coroutine */
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+            if (capacity == 1) {
+                ASSERT_TRUE(cat_channel_pop(channel, &data, -1));
+            }
+            /* main coroutine try to pop data but blocking */
+            ASSERT_FALSE(cat_channel_pop(channel, &data, -1));
+            /* cancel main coroutine */
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
         });
 
-        if (capacity == 1) {
-            ASSERT_TRUE(cat_channel_push(channel, &data, -1));
+        for (size_t n = 2; n--;) {
+            /* cancel the timeout of the coroutine with resume instead of pop channnel */
+            cat_coroutine_resume(coroutine, nullptr, nullptr);
         }
-        /* main coroutine try to push data but blocking */
-        ASSERT_FALSE(cat_channel_push(channel, &data, -1));
-        /* cancel main coroutine */
-        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
-        if (capacity == 1) {
-            ASSERT_TRUE(cat_channel_pop(channel, &data, -1));
-        }
-        /* main coroutine try to pop data but blocking */
-        ASSERT_FALSE(cat_channel_pop(channel, &data, -1));
-        /* cancel main coroutine */
-        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     }();
 }
 
