@@ -724,7 +724,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             fd = socket_create(AF_UNIX, SOCK_DGRAM, IPPROTO_IP);
             if (unlikely(fd < 0)) {
                 error = cat_translate_sys_error(errno);
-                goto _error;
+                goto _init_error;
             }
             type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
             check_connection = cat_false;
@@ -735,7 +735,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 #endif
         if (unlikely((type & CAT_SOCKET_TYPE_PIPE) != CAT_SOCKET_TYPE_PIPE)) {
             error = CAT_ENOTSUP;
-            goto _error;
+            goto _init_error;
         }
         error = uv_pipe_init(cat_event_loop, &isocket->u.pipe, !!(type & CAT_SOCKET_TYPE_FLAG_IPC));
     } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
@@ -764,7 +764,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         error = uv_tty_init(cat_event_loop, &isocket->u.tty, os_fd, 0);
     }
     if (unlikely(error != 0)) {
-        goto _error;
+        goto _init_error;
     }
     if (fd != CAT_SOCKET_INVALID_FD) {
         if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -779,9 +779,9 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         } else {
             error = CAT_EINVAL;
         }
-    }
-    if (unlikely(error != 0)) {
-        goto _error;
+        if (unlikely(error != 0)) {
+            goto _open_error;
+        }
     }
 
     /* init properties of socket */
@@ -820,8 +820,13 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 
     return socket;
 
-    _error:
-    uv_close(&isocket->u.handle, cat_socket_fail_close_callback);
+    if (0 && "isocket should be free in close callback after handle has been initialized") {
+        _open_error:
+        uv_close(&isocket->u.handle, cat_socket_fail_close_callback);
+    } else {
+        _init_error:
+        cat_free(isocket);
+    }
     _type_error:
     cat_update_last_error_with_reason(error, "Socket create with type %s failed", cat_socket_type_name(type));
 #ifndef CAT_ALLOC_NEVER_RETURNS_NULL
