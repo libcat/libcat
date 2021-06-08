@@ -205,6 +205,12 @@ TEST(cat_coroutine, get_count_not_in_main)
     }, nullptr);
 }
 
+TEST(cat_coroutine, get_real_count)
+{
+    SKIP_IF(cat_coroutine_get_scheduler() == nullptr);
+    ASSERT_EQ(cat_coroutine_get_real_count(), cat_coroutine_get_count() + 1);
+}
+
 TEST(cat_coroutine, get_peak_count_in_main)
 {
     cat_coroutine_count_t peak_count;
@@ -601,4 +607,47 @@ TEST(cat_coroutine, dead_lock)
     ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "Dead lock");
 
     cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type);
+}
+
+TEST(cat_coroutine, get_by_index)
+{
+    cat_event_wait();
+    ASSERT_EQ(cat_coroutine_get_by_index((cat_coroutine_count_t) -1), nullptr);
+    cat_coroutine_t *coroutine0 = cat_coroutine_get_previous(cat_coroutine_get_current());
+    if (coroutine0 != nullptr) {
+        co([=] {
+            ASSERT_EQ(cat_coroutine_get_by_index(0), coroutine0);
+        });
+    }
+    cat_coroutine_t *coroutine1 = cat_coroutine_get_current();
+    co([=] {
+        ASSERT_EQ(cat_coroutine_get_by_index(coroutine0 ? 1 : 0), coroutine1);
+    });
+}
+
+TEST(cat_coroutine, get_root)
+{
+    SKIP_IF(cat_coroutine_get_scheduler() == nullptr);
+    ASSERT_EQ(cat_coroutine_get_root(), cat_coroutine_get_scheduler());
+}
+
+TEST(cat_coroutine, no_where_to_go)
+{
+    defer([] {
+        ASSERT_FALSE(cat_coroutine_yield(nullptr, nullptr));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+    });
+}
+
+TEST(cat_coroutine, get_role_name)
+{
+    defer([] {
+        ASSERT_STREQ(cat_coroutine_get_current_role_name(), "scheduler");
+    });
+    ASSERT_STREQ(cat_coroutine_get_current_role_name(), "main");
+
+    cat_coroutine_t *current_coroutine = cat_coroutine_get_current();
+    CAT_COROUTINE_G(current) = nullptr;
+    ASSERT_STREQ(cat_coroutine_get_current_role_name(), "main");
+    CAT_COROUTINE_G(current) = current_coroutine;
 }
