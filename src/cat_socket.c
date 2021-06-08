@@ -2662,27 +2662,6 @@ static void cat_socket_close_callback(uv_handle_t *handle)
 {
     cat_socket_internal_t *isocket = cat_container_of(handle, cat_socket_internal_t, u.handle);
 
-    if (isocket->io_flags == CAT_SOCKET_IO_FLAG_BIND) {
-        cat_socket_cancel_io(isocket->context.bind.coroutine, "bind");
-    } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_ACCEPT) {
-        cat_socket_cancel_io(isocket->context.accept.coroutine, "accept");
-    } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_CONNECT) {
-        cat_socket_cancel_io(isocket->context.connect.coroutine, "connect");
-    } else {
-        /* Notice: we cancel write first */
-        if (isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE) {
-            cat_queue_t *write_coroutines = &isocket->context.io.write.coroutines;
-            cat_coroutine_t *write_coroutine;
-            while ((write_coroutine = cat_queue_front_data(write_coroutines, cat_coroutine_t, waiter.node))) {
-                cat_socket_cancel_io(write_coroutine, "write");
-            }
-            CAT_ASSERT(cat_queue_empty(write_coroutines));
-        }
-        if (isocket->io_flags & CAT_SOCKET_IO_FLAG_READ) {
-            cat_socket_cancel_io(isocket->context.io.read.coroutine, "read");
-        }
-    }
-
 #ifdef CAT_SSL
     if (isocket->ssl_peer_name != NULL) {
         cat_free(isocket->ssl_peer_name);
@@ -2710,11 +2689,16 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
     if (socket == NULL) {
         return;
     }
+
+    /* unbind */
     socket->internal = NULL;
     isocket->u.socket = NULL;
+
+    /* unref in listen (references are idempotent) */
     if (unlikely(cat_socket_is_server(socket))) {
-        uv_ref(&isocket->u.handle); /* unref in listen (references are idempotent) */
+        uv_ref(&isocket->u.handle);
     }
+
 #ifdef CAT_OS_UNIX_LIKE
     /* TODO: move to callback? but we can not detect socket type in internal callback now */
     if ((socket->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) {
@@ -2722,31 +2706,53 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
         (void) uv__close(isocket->u.udg.writefd);
     }
 #endif
+
+    /* cancel all IO operations */
+    if (isocket->io_flags == CAT_SOCKET_IO_FLAG_BIND) {
+        cat_socket_cancel_io(isocket->context.bind.coroutine, "bind");
+    } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_ACCEPT) {
+        cat_socket_cancel_io(isocket->context.accept.coroutine, "accept");
+    } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_CONNECT) {
+        cat_socket_cancel_io(isocket->context.connect.coroutine, "connect");
+    } else {
+        /* Notice: we cancel write first */
+        if (isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE) {
+            cat_queue_t *write_coroutines = &isocket->context.io.write.coroutines;
+            cat_coroutine_t *write_coroutine;
+            while ((write_coroutine = cat_queue_front_data(write_coroutines, cat_coroutine_t, waiter.node))) {
+                cat_socket_cancel_io(write_coroutine, "write");
+            }
+            CAT_ASSERT(cat_queue_empty(write_coroutines));
+        }
+        if (isocket->io_flags & CAT_SOCKET_IO_FLAG_READ) {
+            cat_socket_cancel_io(isocket->context.io.read.coroutine, "read");
+        }
+    }
+
     uv_close(&isocket->u.handle, cat_socket_close_callback);
 }
 
 CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 {
     cat_socket_internal_t *isocket = socket->internal;
-    cat_bool_t ret = cat_true;
 
     if (isocket == NULL) {
+        CAT_ASSERT(!(socket->flags & CAT_SOCKET_FLAG_ALLOCATED));
         /* we do not update the last error here
          * because the only reason for close failure is
          * it has been closed */
 #ifdef CAT_DEBUG
         cat_update_last_error(CAT_EBADF, NULL);
 #endif
-        ret = cat_false;
-    } else {
-        cat_socket_internal_close(isocket);
+        return cat_false;
     }
 
+    cat_socket_internal_close(isocket);
     if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
         cat_free(socket);
     }
 
-    return ret;
+    return cat_true;
 }
 
 /* getter / status / options */
