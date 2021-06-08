@@ -224,22 +224,22 @@ CAT_API cat_coroutine_id_t cat_coroutine_get_current_id(void)
 CAT_API cat_coroutine_t *cat_coroutine_get_by_index(cat_coroutine_count_t index)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
-    cat_coroutine_count_t count = 0;
+    cat_coroutine_count_t max_index = 0;
 
     while (coroutine->previous != NULL) {
-        count++;
+        max_index++;
         coroutine = coroutine->previous;
     }
 
     if (index != 0) {
         /* overflow */
-        if (index > count) {
+        if (index > max_index) {
             return NULL;
         }
         /* re-loop */
         coroutine = CAT_COROUTINE_G(current);
-        count -= index;
-        while (count--) {
+        max_index -= index;
+        while (max_index--) {
             coroutine = coroutine->previous;
         }
     }
