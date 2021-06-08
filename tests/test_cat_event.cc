@@ -33,7 +33,7 @@ TEST(cat_event, defer)
     ASSERT_TRUE(cat_event_defer([](cat_data_t *data) {
         *((bool *) data) = true;
     }, &done));
-    cat_time_sleep(0);
+    ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(done);
 }
 
@@ -55,11 +55,11 @@ TEST(cat_event, defer_in_defer)
         ASSERT_EQ(cat_event_loop->round, round + 1);
         done1 = true;
     }));
-    cat_time_sleep(0);
+    ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(done1);
-    cat_time_sleep(0);
+    ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(done2);
-    cat_time_sleep(0);
+    ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(done3);
 }
 

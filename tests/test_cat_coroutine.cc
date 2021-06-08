@@ -421,7 +421,7 @@ TEST(cat_coroutine, wait_for)
         cat_coroutine_t *from_coroutine = (cat_coroutine_t *) data;
 
         /* switch to from_coroutine */
-        cat_time_sleep(0);
+        EXPECT_TRUE(cat_time_delay(0));
 
         cat_coroutine_resume(from_coroutine, nullptr, nullptr);
 

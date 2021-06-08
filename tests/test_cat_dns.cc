@@ -91,7 +91,7 @@ TEST(cat_dns, cancel)
     bool ret;
 
     co([&] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         cat_coroutine_resume(current, nullptr, nullptr);
     });
     ret = cat_dns_get_ip(CAT_STRS(ip), TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC);

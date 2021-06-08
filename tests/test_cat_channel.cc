@@ -213,7 +213,7 @@ TEST(cat_channel, cancel)
         co([=] {
             for (size_t n = 2; n--;) {
                 /* switch to main coroutine */
-                cat_time_sleep(0);
+                ASSERT_TRUE(cat_time_delay(0));
                 /* cancel the timeout of the main coroutine with resume instead of pop channnel */
                 cat_coroutine_resume(coroutine, nullptr, nullptr);
             }
@@ -610,7 +610,7 @@ TEST(cat_channel_select, unbuffered)
         co([&]() {
             cat_bool_t data = cat_true;
             if (!read_channel_first) {
-                cat_time_sleep(0);
+                ASSERT_TRUE(cat_time_delay(0));
             }
             ASSERT_TRUE(cat_channel_push(&read_channel, &data, -1));
             push_over = true;
@@ -618,7 +618,7 @@ TEST(cat_channel_select, unbuffered)
         co([&]() {
             cat_bool_t data = false;
             if (read_channel_first) {
-                cat_time_sleep(0);
+                ASSERT_TRUE(cat_time_delay(0));
             }
             ASSERT_TRUE(cat_channel_pop(&write_channel, &data, -1));
             ASSERT_TRUE(data);
@@ -641,7 +641,7 @@ TEST(cat_channel_select, unbuffered)
         cat_channel_close(&read_channel);
         cat_channel_close(&write_channel);
         /* we should yield to the sub coroutine and let them released the channel */
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_TRUE(push_over);
         ASSERT_TRUE(pop_over);
     }
@@ -680,7 +680,7 @@ TEST(cat_channel_select, cancel)
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
 
     co([=] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
 
@@ -692,7 +692,7 @@ TEST(cat_channel_select, cancel)
     } while (0);
 
     co([=] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
 

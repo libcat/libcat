@@ -1251,7 +1251,7 @@ TEST(cat_socket, query_remote_http_server)
     /* invaild connect */
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
-        cat_time_sleep(0);
+        EXPECT_TRUE(cat_time_delay(0));
         EXPECT_FALSE(cat_socket_connect(socket, CAT_STRL("8.8.8.8"), 12345));
         EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
         return nullptr;
@@ -1275,7 +1275,7 @@ TEST(cat_socket, query_remote_http_server)
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
         char read_buffer[1];
-        cat_time_sleep(0);
+        EXPECT_TRUE(cat_time_delay(0));
         EXPECT_EQ(cat_socket_recv(socket, CAT_STRS(read_buffer)), -1);
         EXPECT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
         return nullptr;
@@ -1327,7 +1327,7 @@ TEST(cat_socket, cross_close_when_dns_resolve)
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
     co([&] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         if (!exited) {
             cat_socket_close(socket);
         }
@@ -1354,7 +1354,7 @@ TEST(cat_socket, cross_close_when_connecting_remote)
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
     co([&] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_FALSE(exited);
         cat_socket_close(socket);
     });
@@ -1371,7 +1371,7 @@ TEST(cat_socket, cancel_connect_remote)
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     DEFER(cat_socket_close(socket));
     co([&] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_FALSE(exited);
         cat_coroutine_resume(waiter, nullptr, nullptr);
     });

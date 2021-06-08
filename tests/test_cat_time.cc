@@ -93,7 +93,7 @@ TEST(cat_time, nanosleep)
 TEST(cat_time, sleep_zero)
 {
     cat_coroutine_round_t round = cat_coroutine_get_current_round();
-    ASSERT_EQ(cat_time_sleep(0), 0);
+    ASSERT_TRUE(cat_time_delay(0));
     ASSERT_GT(cat_coroutine_get_current_round(), round);
 }
 

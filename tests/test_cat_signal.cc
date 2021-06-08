@@ -32,7 +32,7 @@ TEST(cat_signal, wait)
         killed = wait_done = false;
 
         co([&, signum] {
-            cat_time_sleep(0);
+            ASSERT_TRUE(cat_time_delay(0));
             EXPECT_TRUE(cat_kill(cat_getpid(), signum));
             EXPECT_FALSE(wait_done);
             killed = true;
@@ -83,7 +83,7 @@ TEST(cat_signal, cancel)
 {
     cat_coroutine_t *waiter = cat_coroutine_get_current();
     co([&] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         cat_coroutine_resume(waiter, nullptr, nullptr);
     });
     ASSERT_FALSE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));

@@ -103,7 +103,7 @@ TEST(cat_curl, cancel)
     std::string response;
 
     co([coroutine] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         cat_coroutine_resume(coroutine, nullptr, nullptr);
     });
     ASSERT_NE(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
@@ -123,7 +123,7 @@ TEST(cat_curl, busy)
     std::string response;
 
     co([&ch] {
-        cat_time_sleep(0);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
     });
     ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);

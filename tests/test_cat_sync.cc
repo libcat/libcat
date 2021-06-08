@@ -28,14 +28,14 @@ TEST(cat_sync_wait_group, base)
 
     ASSERT_TRUE(cat_sync_wait_group_add(wg, 1));
     co([wg, &done] {
-        ASSERT_EQ(cat_time_sleep(0), 0);
+        ASSERT_TRUE(cat_time_delay(0));
         done++;
         ASSERT_TRUE(cat_sync_wait_group_done(wg));
     });
 
     co([wg, &done] {
         ASSERT_TRUE(cat_sync_wait_group_add(wg, 1));
-        ASSERT_EQ(cat_time_sleep(0), 0);
+        ASSERT_TRUE(cat_time_delay(0));
         done++;
         ASSERT_TRUE(cat_sync_wait_group_done(wg));
     });
@@ -43,7 +43,7 @@ TEST(cat_sync_wait_group, base)
     ASSERT_TRUE(cat_sync_wait_group_add(wg, 8));
     for (size_t n = 8; n--;) {
         co([wg, &done] {
-            ASSERT_EQ(cat_time_sleep(0), 0);
+            ASSERT_TRUE(cat_time_delay(0));
             done++;
             ASSERT_TRUE(cat_sync_wait_group_done(wg));
         });
@@ -68,7 +68,7 @@ TEST(cat_sync_wait_group, error)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
 
     co([wg] {
-        ASSERT_EQ(cat_time_sleep(0), 0);
+        ASSERT_TRUE(cat_time_delay(0));
         // add during waiting
         ASSERT_FALSE(cat_sync_wait_group_add(wg, 1));
         ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
@@ -89,7 +89,7 @@ TEST(cat_sync_wait_group, error)
     // wait has been canceled
     cat_coroutine_t *coroutine = cat_coroutine_get_current();
     co([coroutine] {
-        ASSERT_EQ(cat_time_sleep(0), 0);
+        ASSERT_TRUE(cat_time_delay(0));
         ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
     });
     ASSERT_TRUE(cat_sync_wait_group_add(wg, 1));
