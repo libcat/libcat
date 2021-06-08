@@ -1207,15 +1207,20 @@ TEST(cat_socket, cross_close_when_connecting_local)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
-    DEFER(cat_socket_close(socket));
+    cat_coroutine_t *coroutine = cat_coroutine_get_current();
     bool exited = false;
+    DEFER({
+        ASSERT_TRUE(cat_socket_close(socket));
+        ASSERT_FALSE(exited);
+        ASSERT_TRUE(cat_coroutine_yield(nullptr ,nullptr));
+        ASSERT_TRUE(exited);
+    });
     co([&] {
-        DEFER(exited = true);
         ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+        exited = true;
+        ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
     });
-    ASSERT_FALSE(exited);
-    cat_socket_close(socket);
     ASSERT_FALSE(exited);
 }
 
