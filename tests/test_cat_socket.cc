@@ -1248,7 +1248,7 @@ TEST(cat_socket, query_remote_http_server)
     ASSERT_NE(cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&socket));
 
-    /* invaild connect */
+    /* invalid connect */
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
         EXPECT_TRUE(cat_time_delay(0));
@@ -1271,7 +1271,7 @@ TEST(cat_socket, query_remote_http_server)
     DEFER(cat_free(request));
     ASSERT_TRUE(cat_socket_send(&socket, request, strlen(request)));
 
-    /* invaild read */
+    /* invalid read */
     cat_coroutine_run(nullptr, [](cat_data_t *data)->cat_data_t* {
         cat_socket_t *socket = (cat_socket_t *) data;
         char read_buffer[1];
