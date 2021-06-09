@@ -52,9 +52,7 @@ TEST(cat_signal, wait)
 
 TEST(cat_signal, wait_multi)
 {
-    cat_coroutine_t *coroutine = cat_coroutine_get_current();
     wait_group wg;
-
     for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
         co([&] {
             wg++;
@@ -62,7 +60,6 @@ TEST(cat_signal, wait_multi)
             ASSERT_TRUE(cat_signal_wait(CAT_SIGUSR1, TEST_IO_TIMEOUT));
         });
     }
-
     ASSERT_TRUE(cat_kill(cat_getpid(), CAT_SIGUSR1));
 }
 

@@ -78,3 +78,16 @@ TEST(cat, runtime_init_with_error_log_stderr)
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_NE(output.find("Now error log is stderr"), std::string::npos);
 }
+
+#ifdef CAT_DEBUG
+TEST(cat, enable_debug_mode)
+{
+    cat_log_types_t log_types = CAT_G(log_types);
+    cat_module_types_t module_types = CAT_G(log_module_types);
+    cat_enable_debug_mode();
+    ASSERT_EQ(CAT_G(log_types), CAT_LOG_TYPES_ALL);
+    ASSERT_EQ(CAT_G(log_module_types), CAT_MODULE_TYPES_ALL);
+    CAT_G(log_module_types) = module_types;
+    CAT_G(log_types) = log_types;
+}
+#endif
