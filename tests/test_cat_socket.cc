@@ -31,13 +31,16 @@ extern "C"
 
 static void echo_stream_server_connection_handler(cat_socket_t *server)
 {
+    wait_group wg;
     while (true) {
         cat_socket_t *client = cat_socket_accept(server, nullptr);
         if (client == nullptr) {
             EXPECT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
             break;
         }
-        co([client] {
+        co([client, &wg] {
+            wg++;
+            DEFER(wg--);
             DEFER(cat_socket_close(client));
             ASSERT_STREQ(cat_socket_get_role_name(client), "session");
             while (true) {
@@ -62,6 +65,7 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
 }
 
 cat_coroutine_t *echo_tcp_server;
+wait_group echo_tcp_server_wg;
 char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 size_t echo_tcp_server_ip_length = sizeof(echo_tcp_server_ip);
 int echo_tcp_server_port;
@@ -69,8 +73,10 @@ int echo_tcp_server_port;
 TEST_REQUIREMENT(cat_socket, echo_tcp_server)
 {
     co([] {
-        cat_socket_t server;
+        echo_tcp_server_wg++;
+        DEFER(echo_tcp_server_wg--);
 
+        cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
         DEFER(cat_socket_close(&server));
         ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
@@ -93,10 +99,12 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server)
 {
     ASSERT_NE(echo_tcp_server, nullptr);
     cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
+    echo_tcp_server_wg();
     ASSERT_EQ(echo_tcp_server, nullptr);
 }
 
 cat_coroutine_t *echo_udp_server;
+wait_group echo_udp_server_wg;
 char echo_udp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 size_t echo_udp_server_ip_length = CAT_SOCKET_IPV6_BUFFER_SIZE;
 int echo_udp_server_port;
@@ -104,8 +112,10 @@ int echo_udp_server_port;
 TEST_REQUIREMENT(cat_socket, echo_udp_server)
 {
     co([] {
-        cat_socket_t server;
+        echo_udp_server_wg++;
+        DEFER(echo_udp_server_wg--);
 
+        cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_UDP), nullptr);
         DEFER(cat_socket_close(&server));
         ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
@@ -143,6 +153,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_udp_server)
 {
     ASSERT_NE(echo_udp_server, nullptr);
     cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
+    echo_udp_server_wg();
     ASSERT_EQ(echo_udp_server, nullptr);
 }
 
@@ -153,13 +164,16 @@ static std::string get_random_pipe_path(void)
 }
 
 cat_coroutine_t *echo_pipe_server;
+wait_group echo_pipe_server_wg;
 std::string echo_pipe_server_path;
 
 TEST_REQUIREMENT(cat_socket, echo_pipe_server)
 {
     co([] {
-        cat_socket_t server;
+        echo_pipe_server_wg++;
+        DEFER(echo_pipe_server_wg--);
 
+        cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_PIPE), nullptr);
         DEFER(cat_socket_close(&server));
         echo_pipe_server_path = get_random_pipe_path();
@@ -179,18 +193,22 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_pipe_server)
 {
     ASSERT_NE(echo_pipe_server, nullptr);
     cat_coroutine_resume(echo_pipe_server, nullptr, nullptr);
+    echo_pipe_server_wg();
     ASSERT_EQ(echo_pipe_server, nullptr);
 }
 
 #ifdef CAT_OS_UNIX_LIKE
 cat_coroutine_t *echo_udg_server;
+wait_group echo_udg_server_wg;
 std::string echo_udg_server_path;
 
 TEST_REQUIREMENT(cat_socket, echo_udg_server)
 {
     co([] {
-        cat_socket_t server;
+        echo_udg_server_wg++;
+        DEFER(echo_udg_server_wg--);
 
+        cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_UDG), nullptr);
         DEFER(cat_socket_close(&server));
         echo_udg_server_path = get_random_pipe_path();
@@ -226,6 +244,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_udg_server)
 {
     ASSERT_NE(echo_udg_server, nullptr);
     cat_coroutine_resume(echo_udg_server, nullptr, nullptr);
+    echo_udg_server_wg();
     ASSERT_EQ(echo_udg_server, nullptr);
 }
 #endif
@@ -927,49 +946,43 @@ static void echo_stream_client_tests(cat_socket_t *echo_client)
     }
 
     /* pipeline */
-    do {
-        char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
-        char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
-        bool done = false, wait = false;
-        ASSERT_NE(read_buffers, nullptr);
-        ASSERT_NE(write_buffers, nullptr);
-        /* generate write data */
-        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
-            write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
-            ASSERT_NE(write_buffers[n], nullptr);
-            cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
+    char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
+    char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
+    ASSERT_NE(read_buffers, nullptr);
+    ASSERT_NE(write_buffers, nullptr);
+    /* generate write data */
+    for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+        write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+        ASSERT_NE(write_buffers[n], nullptr);
+        cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
+    }
+    /* send requests */
+    bool done = false;
+    wait_group wg;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
+            ASSERT_TRUE(cat_socket_send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
         }
-        /* send requests */
-        cat_coroutine_t *coroutine = cat_coroutine_get_current();
-        co([&] {
-            for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
-                ASSERT_TRUE(cat_socket_send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
-            }
-            done = true;
-            if (wait) {
-                ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-            }
-        });
-        /* recv responses */
-        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
-            read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
-            ASSERT_NE(read_buffers[n], nullptr);
-            ret = cat_socket_read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
-            ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
-            read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-            write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-            ASSERT_STREQ(read_buffers[n], write_buffers[n]);
-            cat_free(read_buffers[n]);
-            cat_free(write_buffers[n]);
-        }
-        cat_free(read_buffers);
-        cat_free(write_buffers);
-        if (!done) {
-            wait = true;
-            ASSERT_TRUE(cat_coroutine_yield(nullptr, nullptr));
-        }
-        ASSERT_TRUE(done);
-    } while (0);
+        done = true;
+    });
+    /* recv responses */
+    for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+        read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+        ASSERT_NE(read_buffers[n], nullptr);
+        ret = cat_socket_read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
+        ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
+        read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+        write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+        ASSERT_STREQ(read_buffers[n], write_buffers[n]);
+        cat_free(read_buffers[n]);
+        cat_free(write_buffers[n]);
+    }
+    cat_free(read_buffers);
+    cat_free(write_buffers);
+    wg();
+    ASSERT_TRUE(done);
 }
 
 TEST(cat_socket, echo_tcp_client)
