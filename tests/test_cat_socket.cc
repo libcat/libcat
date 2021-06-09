@@ -1520,6 +1520,46 @@ TEST(cat_socket, tty_stderr)
     ASSERT_NO_FATAL_FAILURE(test_tty(2));
 }
 
+TEST(cat_socket, send_handle)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+
+    std::string pipe_path = get_random_pipe_path();
+
+    cat_socket_t main_socket;
+    ASSERT_EQ(cat_socket_create(&main_socket, CAT_SOCKET_TYPE_IPCC), &main_socket);
+    DEFER(cat_socket_close(&main_socket));
+
+    cat_socket_t main_client;
+    ASSERT_NE(cat_socket_create(&main_client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&main_client));
+    ASSERT_TRUE(cat_socket_connect(&main_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+
+    cat_socket_t worker_socket;
+    ASSERT_EQ(cat_socket_create(&worker_socket, CAT_SOCKET_TYPE_PIPE), &worker_socket);
+    DEFER(cat_socket_close(&worker_socket));
+    ASSERT_TRUE(cat_socket_bind(&worker_socket, pipe_path.c_str(), pipe_path.length(), 0));
+    ASSERT_TRUE(cat_socket_listen(&worker_socket, TEST_SERVER_BACKLOG));
+
+    cat_socket_t worker_channel;
+    wait_group wg;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_TRUE(cat_socket_connect(&main_socket, pipe_path.c_str(), pipe_path.length(), 0));
+    });
+    ASSERT_EQ(cat_socket_accept_typed(&worker_socket, &worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
+    DEFER(cat_socket_close(&worker_channel));
+    wg();
+
+    cat_socket_t worker_client;
+    ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
+    ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
+    DEFER(cat_socket_close(&worker_client));
+
+    echo_stream_client_tests(&worker_client);
+}
+
 TEST(cat_socket, dump_all_and_close_all)
 {
     bool closed_all = false;

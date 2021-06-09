@@ -242,6 +242,7 @@ typedef enum
     XX(TCP4,   CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV4) \
     XX(TCP6,   CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV6) \
     XX(PIPE,   1 << 25 | CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_LOCAL) \
+    XX(IPCC,   CAT_SOCKET_TYPE_PIPE | CAT_SOCKET_TYPE_FLAG_IPC) /* IPC channel */ \
     XX(TTY,    1 << 26 | CAT_SOCKET_TYPE_FLAG_STREAM) \
     XX(STDIN,  CAT_SOCKET_TYPE_TTY | CAT_SOCKET_TYPE_FLAG_STDIN) \
     XX(STDOUT, CAT_SOCKET_TYPE_TTY | CAT_SOCKET_TYPE_FLAG_STDOUT) \
@@ -383,13 +384,16 @@ typedef struct
 typedef struct cat_socket_s cat_socket_t;
 typedef struct cat_socket_internal_s cat_socket_internal_t;
 
+typedef struct
+{
+    cat_socket_timeout_options_t timeout;
+} cat_socket_internal_options_t;
+
 struct cat_socket_internal_s
 {
     /* === public === */
     /* options */
-    struct {
-        cat_socket_timeout_options_t timeout;
-    } options;
+    cat_socket_internal_options_t options;
     /* === private === */
     /* internal bits */
     cat_socket_internal_flags_t flags;
@@ -437,6 +441,12 @@ struct cat_socket_s
     cat_socket_flags_t flags;
     cat_socket_internal_t *internal;
 };
+
+typedef struct
+{
+    cat_socket_type_t type;
+    cat_socket_internal_options_t options;
+} cat_socket_inheritance_info_t;
 
 /* globals */
 
@@ -510,6 +520,8 @@ CAT_API cat_bool_t cat_socket_bind_to_ex(cat_socket_t *socket, const cat_sockadd
 CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog);
 CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *client);
 CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout);
+CAT_API cat_socket_t *cat_socket_accept_typed(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type);
+CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, size_t name_length, int port);
 CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout);
@@ -573,6 +585,11 @@ CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffe
 CAT_API ssize_t cat_socket_peek(const cat_socket_t *socket, char *buffer, size_t size);
 CAT_API ssize_t cat_socket_peekfrom(const cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length);
 CAT_API ssize_t cat_socket_peek_from(const cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port);
+
+CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *handle);
+CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout);
+CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t *handle);
+CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket);
 
