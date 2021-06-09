@@ -2719,7 +2719,7 @@ CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t 
 CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
 {
     CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
-    CAT_SOCKET_IPC_CHECK(socket, return cat_false);
+    CAT_SOCKET_IPC_CHECK(socket, return NULL);
     cat_socket_inheritance_info_t handle_info;
     ssize_t nread;
 
