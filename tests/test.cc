@@ -50,7 +50,7 @@ namespace testing
     bool has_debugger(void)
     {
 #ifdef CAT_OS_WIN
-        PBOOL debugger_present;
+        BOOL debugger_present = FALSE;
         CheckRemoteDebuggerPresent(GetCurrentProcess(), &debugger_present);
         return debugger_present == TRUE;
 #else
