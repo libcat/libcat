@@ -25,6 +25,7 @@
 
 TEST(cat_signal, wait)
 {
+    SKIP_IF(has_debugger() && !cat_env_is_true("TEST_SIGNAL", cat_false));
     const std::array<int, 4> signals{ CAT_SIGINT, CAT_SIGTERM, CAT_SIGUSR1, CAT_SIGUSR2 };
     bool killed, wait_done;
     wait_group wg;
@@ -52,6 +53,7 @@ TEST(cat_signal, wait)
 
 TEST(cat_signal, wait_multi)
 {
+    SKIP_IF(has_debugger() && !cat_env_is_true("TEST_SIGNAL", cat_false));
     wait_group wg;
     for (size_t n = TEST_MAX_CONCURRENCY; n--;) {
         co([&] {

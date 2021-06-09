@@ -148,6 +148,9 @@ namespace testing
         return std::string(buffer, buffer + size - 1); // We don't want the '\0' inside
     }
 
+    bool has_debugger(void);
+    const char *get_debugger_name(void);
+
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
     cat_coroutine_t *co(std::function<void(void)> function);

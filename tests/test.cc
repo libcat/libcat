@@ -20,7 +20,13 @@
 
 #include "test.h"
 
+#ifdef CAT_OS_UNIX_LIKE
+#include <sys/types.h>
+#include <sys/ptrace.h>
+#endif
+
 #include <list>
+#include <fstream>
 
 namespace testing
 {
@@ -40,6 +46,37 @@ namespace testing
     std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = "www.taobao.com";
     /* TMP_PATH */
     std::string CONFIG_TMP_PATH = "/tmp";
+
+    bool has_debugger(void)
+    {
+#ifdef CAT_OS_WIN
+        PBOOL debugger_present;
+        CheckRemoteDebuggerPresent(GetCurrentProcess(), &debugger_present);
+        return debugger_present == TRUE;
+#else
+        return get_debugger_name() != nullptr;
+#endif
+    }
+
+    const char *get_debugger_name(void)
+    {
+#ifdef CAT_OS_LINUX
+        std::string proc_path = string_format("/proc/%d/status", getppid());
+        std::ifstream proc_file(proc_path);
+        if (proc_file.good()) {
+            std::string line;
+            getline(proc_file, line);
+            if (line.find("gdb") != std::string::npos) {
+                return "gdb";
+            } else if (line.find("ltrace") != std::string::npos) {
+                return "ltrace";
+            } else if (line.find("strace") != std::string::npos) {
+                return "strace";
+            }
+        }
+#endif
+        return nullptr;
+    }
 
     std::string get_random_bytes(size_t length)
     {
