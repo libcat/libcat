@@ -2834,7 +2834,6 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
     cat_socket_internal_t *isocket = socket->internal;
 
     if (isocket == NULL) {
-        CAT_ASSERT(!(socket->flags & CAT_SOCKET_FLAG_ALLOCATED));
         /* we do not update the last error here
          * because the only reason for close failure is
          * it has been closed */
