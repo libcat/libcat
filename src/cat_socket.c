@@ -2693,8 +2693,12 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
     CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
     CAT_SOCKET_IPC_CHECK(socket, return cat_false);
 
-    if (unlikely(!cat_socket_is_available(handle) || !cat_socket_can_be_transfer_by_ipc(handle))) {
-        cat_update_last_error(CAT_EINVAL, "Socket can not send unavailble or non-stream handle");
+    if (unlikely(!cat_socket_is_available(handle))) {
+        cat_update_last_error(CAT_EINVAL, "Socket can not send unavailble handle");
+        return cat_false;
+    }
+    if (unlikely(!cat_socket_can_be_transfer_by_ipc(handle))) {
+        cat_update_last_error(CAT_EINVAL, "Socket can only send TCP or PIPE handle");
         return cat_false;
     }
 

@@ -1536,17 +1536,13 @@ TEST(cat_socket, tty_stderr)
 TEST(cat_socket, send_handle)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    TEST_REQUIRE(echo_pipe_server != nullptr, cat_socket, echo_pipe_server);
 
     std::string pipe_path = get_random_pipe_path();
 
     cat_socket_t main_socket;
     ASSERT_EQ(cat_socket_create(&main_socket, CAT_SOCKET_TYPE_IPCC), &main_socket);
     DEFER(cat_socket_close(&main_socket));
-
-    cat_socket_t main_client;
-    ASSERT_NE(cat_socket_create(&main_client, CAT_SOCKET_TYPE_TCP), nullptr);
-    DEFER(cat_socket_close(&main_client));
-    ASSERT_TRUE(cat_socket_connect(&main_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
 
     cat_socket_t worker_socket;
     ASSERT_EQ(cat_socket_create(&worker_socket, CAT_SOCKET_TYPE_PIPE), &worker_socket);
@@ -1565,12 +1561,55 @@ TEST(cat_socket, send_handle)
     DEFER(cat_socket_close(&worker_channel));
     wg();
 
-    cat_socket_t worker_client;
-    ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
-    ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
-    DEFER(cat_socket_close(&worker_client));
+    for (int round = 0; round < 2; round++) {
+        cat_socket_type_t type = round == 0 ? CAT_SOCKET_TYPE_TCP : CAT_SOCKET_TYPE_PIPE;
+        const char *server_ip = round == 0 ? echo_tcp_server_ip : echo_pipe_server_path.c_str();
+        size_t server_ip_length = round == 0 ? echo_tcp_server_ip_length : echo_pipe_server_path.length();
+        int server_port = round == 0 ? echo_tcp_server_port : 0;
 
-    echo_stream_client_tests(&worker_client);
+        cat_socket_t main_client;
+        ASSERT_NE(cat_socket_create(&main_client, type), nullptr);
+        DEFER(cat_socket_close(&main_client));
+        ASSERT_TRUE(cat_socket_connect(&main_client, server_ip, server_ip_length, server_port));
+
+        cat_socket_t worker_client;
+        ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
+        ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
+        DEFER(cat_socket_close(&worker_client));
+        ASSERT_EQ((worker_client.type & type), type);
+
+        // invalid handle
+        {
+            cat_socket_t unavailable_socket;
+            DEFER(if (cat_socket_is_available(&unavailable_socket)) { cat_socket_close(&unavailable_socket); } );
+            ASSERT_EQ(cat_socket_create(&unavailable_socket, CAT_SOCKET_TYPE_UDP), &unavailable_socket);
+            ASSERT_FALSE(cat_socket_send_handle(&main_socket, &unavailable_socket));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+            ASSERT_TRUE(cat_socket_close(&unavailable_socket));
+            ASSERT_FALSE(cat_socket_send_handle(&main_socket, &unavailable_socket));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        }
+
+        echo_stream_client_tests(&worker_client);
+
+        // send handle after shutdown
+#ifdef CAT_OS_UNIX_LIKE
+        if (round != 1) {
+            break;
+        }
+        // TODO: cat_socket_shutdown()
+        if (shutdown(cat_socket_get_fd(&main_socket), SHUT_WR) == 0) {
+            wait_group wg;
+            co([&] {
+                wg++;
+                (void) cat_signal_wait(CAT_SIGPIPE, 0);
+                wg--;
+            });
+            ASSERT_FALSE(cat_socket_send_handle(&main_socket, &main_client));
+            // ASSERT_EQ(cat_get_last_error_code(), CAT_EPIPE);
+        }
+#endif
+    }
 }
 
 TEST(cat_socket, dump_all_and_close_all)
