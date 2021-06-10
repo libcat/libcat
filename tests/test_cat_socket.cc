@@ -1533,6 +1533,12 @@ TEST(cat_socket, tty_stderr)
     ASSERT_NO_FATAL_FAILURE(test_tty(2));
 }
 
+#ifdef CAT_OS_WIN
+#define TEST_SEND_HANDLE_ROUND 1 /* Windows not support send pipe */
+#else
+#define TEST_SEND_HANDLE_ROUND 2
+#endif
+
 TEST(cat_socket, send_handle)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
@@ -1561,7 +1567,7 @@ TEST(cat_socket, send_handle)
     DEFER(cat_socket_close(&worker_channel));
     wg();
 
-    for (int round = 0; round < 2; round++) {
+    for (int round = 0; round < TEST_SEND_HANDLE_ROUND; round++) {
         cat_socket_type_t type = round == 0 ? CAT_SOCKET_TYPE_TCP : CAT_SOCKET_TYPE_PIPE;
         const char *server_ip = round == 0 ? echo_tcp_server_ip : echo_pipe_server_path.c_str();
         size_t server_ip_length = round == 0 ? echo_tcp_server_ip_length : echo_pipe_server_path.length();
@@ -1594,7 +1600,7 @@ TEST(cat_socket, send_handle)
 
         // send handle after shutdown
 #ifdef CAT_OS_UNIX_LIKE
-        if (round != 1) {
+        if (round != TEST_SEND_HANDLE_ROUND - 1) {
             break;
         }
         // TODO: cat_socket_shutdown()
