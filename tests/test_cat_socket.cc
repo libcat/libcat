@@ -881,6 +881,13 @@ TEST(cat_socket, buffer_size)
     ASSERT_LE(cat_socket_get_send_buffer_size(&socket), (int) (cat_getpagesize() * 2));
 }
 
+#ifndef CAT_OS_WIN
+#define TEST_EFDCLOSED CAT_EBADF
+#else
+#define TEST_EFDCLOSED CAT_ENOTSOCK
+#endif
+
+
 TEST(cat_socket, set_tcp_nodelay)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
@@ -896,6 +903,15 @@ TEST(cat_socket, set_tcp_nodelay)
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_false));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, 0);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
+    ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_false));
+    ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_false, 0));
+#ifndef CAT_OS_WIN
+    close(cat_socket_get_fd(&socket));
+#else
+    closesocket(cat_socket_get_fd(&socket));
+#endif
+    ASSERT_FALSE(cat_socket_set_tcp_nodelay(&socket, cat_true));
+    ASSERT_EQ(cat_get_last_error_code(), TEST_EFDCLOSED);
 }
 
 TEST(cat_socket, set_tcp_keepalive)
@@ -914,6 +930,15 @@ TEST(cat_socket, set_tcp_keepalive)
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, 0);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 30));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, UV_HANDLE_TCP_KEEPALIVE);
+    ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_false, 0));
+#ifndef CAT_OS_WIN
+    close(cat_socket_get_fd(&socket));
+#else
+    closesocket(cat_socket_get_fd(&socket));
+#endif
+    ASSERT_FALSE(cat_socket_set_tcp_keepalive(&socket, cat_true, 30));
+    ASSERT_EQ(cat_get_last_error_code(), TEST_EFDCLOSED);
+
 }
 
 TEST(cat_socket, set_tcp_accept_balance)
@@ -923,6 +948,21 @@ TEST(cat_socket, set_tcp_accept_balance)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
+}
+
+TEST(cat_socket, set_tcp_accept_balance_failed)
+{
+#ifdef CAT_OS_UNIX_LIKE
+    SKIP_IF_(1, "Always success on Linux");
+#endif
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t socket;
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_FALSE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
 static void echo_stream_client_tests(cat_socket_t *echo_client)
