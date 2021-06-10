@@ -1579,11 +1579,11 @@ TEST(cat_socket, send_handle)
         ASSERT_TRUE(cat_socket_connect(&main_client, server_ip, server_ip_length, server_port));
 
         // invalid operations on main IPPC
-        {
-            ASSERT_FALSE(cat_socket_send(&main_socket, CAT_STRL("foo")));
+        for (auto socket : std::array<cat_socket_t *, 2>{ &main_socket, &worker_channel })  {
+            ASSERT_FALSE(cat_socket_send(socket, CAT_STRL("foo")));
             ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
             char buffer[1];
-            ASSERT_LT(cat_socket_read(&main_socket, CAT_STRS(buffer)), 0);
+            ASSERT_LT(cat_socket_read(socket, CAT_STRS(buffer)), 0);
             ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
         }
 

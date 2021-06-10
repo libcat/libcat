@@ -21,8 +21,6 @@
 // FIXME: How to watch signal on Windows?
 #ifndef CAT_OS_WIN
 
-#include <array>
-
 TEST(cat_signal, wait)
 {
     SKIP_IF(has_debugger() && !cat_env_is_true("TEST_SIGNAL", cat_false));

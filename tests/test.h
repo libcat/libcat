@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <string>
+#include <array>
 
 #include "cat_api.h"
 

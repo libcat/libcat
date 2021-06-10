@@ -19,8 +19,6 @@
 
 #include "test.h"
 
-#include <array>
-
 TEST(cat_channel, base)
 {
     for (cat_channel_size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
