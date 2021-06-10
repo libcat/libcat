@@ -25,7 +25,7 @@
 
 #ifdef CAT_CURL
 
-typedef struct {
+typedef struct cat_curl_easy_context_s {
     CURLM *multi;
     cat_coroutine_t *coroutine;
     curl_socket_t sockfd;
@@ -33,7 +33,7 @@ typedef struct {
     long timeout;
 } cat_curl_easy_context_t;
 
-typedef struct {
+typedef struct cat_curl_multi_context_s {
     cat_queue_node_t node;
     CURLM *multi;
     cat_coroutine_t *coroutine;
@@ -42,7 +42,7 @@ typedef struct {
     long timeout;
 } cat_curl_multi_context_t;
 
-typedef struct {
+typedef struct cat_curl_pollfd_s {
     cat_queue_node_t node;
     curl_socket_t sockfd;
     int action;

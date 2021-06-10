@@ -189,7 +189,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
     return ret;
 }
 
-typedef struct {
+typedef struct cat_poll_context_s {
     cat_coroutine_t *coroutine;
     cat_bool_t done;
     cat_bool_t deferred_done_callback;

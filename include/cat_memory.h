@@ -66,8 +66,7 @@ typedef void *(*cat_calloc_function_t)(size_t count, size_t size);
 typedef void *(*cat_realloc_function_t)(void *ptr, size_t size);
 typedef void (*cat_free_function_t)(void *ptr);
 
-typedef struct
-{
+typedef struct cat_allocator_s {
     cat_malloc_function_t malloc;
     cat_calloc_function_t calloc;
     cat_realloc_function_t realloc;

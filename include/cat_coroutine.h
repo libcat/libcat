@@ -252,7 +252,7 @@ CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *corouti
 /* scheduler */
 typedef void (*cat_coroutine_schedule_function_t)(void);
 typedef void (*cat_coroutine_dead_lock_function_t)(void);
-typedef struct {
+typedef struct cat_coroutine_scheduler_s {
     cat_coroutine_schedule_function_t schedule;
     cat_coroutine_dead_lock_function_t dead_lock;
 } cat_coroutine_scheduler_t;

@@ -166,8 +166,7 @@ typedef enum
 
 typedef uint32_t cat_http_parser_events_t;
 
-typedef struct
-{
+typedef struct cat_http_parser_s {
     /* private: handle */
     llhttp_t llhttp;
     /* private: which events will return from execute */

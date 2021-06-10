@@ -23,7 +23,7 @@
 #define CAT_TO_STR_NAKED(str)    #str
 #define CAT_TO_STR(str)          CAT_TO_STR_NAKED(str)
 
-typedef struct {
+typedef struct cat_const_string_s {
     const char *data;
     size_t length;
 } cat_const_string_t;
@@ -42,7 +42,7 @@ static cat_always_inline void cat_const_string_create(cat_const_string_t *string
     string->length = length;
 }
 
-typedef struct {
+typedef struct cat_string_s {
     char *value;
     size_t length;
 } cat_string_t;

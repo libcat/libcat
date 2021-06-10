@@ -711,7 +711,7 @@ typedef unsigned int cat_fs_read_size_t;
 typedef unsigned int cat_fs_write_size_t;
 #endif // CAT_OS_WIN
 
-typedef struct {
+typedef struct cat_fs_read_data_s {
     cat_fs_work_ret_t ret;
     int fd;
     void *buf;
@@ -748,7 +748,7 @@ CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buf, size_t size)
     return data->ret.ret.num;
 }
 
-typedef struct {
+typedef struct cat_fs_write_data_s {
     cat_fs_work_ret_t ret;
     int fd;
     const void* buf;
@@ -785,7 +785,7 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buf, size_t length)
     return (ssize_t) data->ret.ret.num;
 }
 
-typedef struct {
+typedef struct cat_fs_lseek_data_s {
     cat_fs_work_ret_t ret;
     int fd;
     off_t offset;
@@ -850,7 +850,7 @@ static void cat_fs_dir_async_close(void *ptr)
     free(dir);
 }
 
-typedef struct {
+typedef struct cat_fs_opendir_data_s {
     cat_fs_work_ret_t ret;
     char *path;
     cat_bool_t canceled;
@@ -920,7 +920,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
     return pdir;
 }
 
-typedef struct {
+typedef struct cat_fs_readdir_data_s {
     cat_fs_work_ret_t ret;
     DIR *dir;
     cat_bool_t canceled;
@@ -1039,7 +1039,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     return ret;
 }
 
-typedef struct {
+typedef struct cat_fs_rewinddir_data_s {
     DIR *dir;
     cat_bool_t canceled;
 } cat_fs_rewinddir_data_t;
@@ -1088,7 +1088,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
     }
 }
 
-typedef struct {
+typedef struct cat_fs_closedir_data_s {
     DIR *dir;
 } cat_fs_closedir_data_t;
 
@@ -1131,7 +1131,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
 }
 #else
 // use NtQueryDirectoryFile to mock readdir,rewinddir behavior.
-typedef struct {
+typedef struct cat_dir_int_s {
     HANDLE dir;
     cat_bool_t rewind;
 } cat_dir_int_t;
@@ -1183,7 +1183,7 @@ static const char *cat_fs_nt_strerror(NTSTATUS status)
 }
 */
 
-typedef struct {
+typedef struct cat_fs_opendir_data_s {
     cat_fs_work_ret_t ret;
     const char *path;
     cat_bool_t canceled;
@@ -1267,7 +1267,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
     return pdir;
 }
 
-typedef struct {
+typedef struct cat_fs_closedir_data_s {
     cat_fs_work_ret_t ret;
     HANDLE handle;
 } cat_fs_closedir_data_t;
@@ -1338,7 +1338,7 @@ typedef struct _CAT_FILE_DIRECTORY_INFORMATION {
   WCHAR         FileName[1];
 } CAT_FILE_DIRECTORY_INFORMATION, *CAT_PFILE_DIRECTORY_INFORMATION;
 
-typedef struct {
+typedef struct cat_fs_readdir_data_s {
     cat_fs_work_ret_t ret;
     cat_dir_int_t dir;
 } cat_fs_readdir_data_t;
@@ -1523,7 +1523,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
 }
 #endif // CAT_OS_WIN
 
-typedef struct {
+typedef struct cat_fs_flock_data_s {
     cat_fs_work_ret_t ret;
     cat_file_t fd;
     int op;

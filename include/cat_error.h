@@ -20,8 +20,7 @@ typedef int cat_errno_t;
 #define CAT_ERRNO_FMT "%d"
 #define CAT_ERRNO_FMT_SPEC "d"
 
-typedef struct
-{
+typedef struct cat_error_s {
     cat_errno_t code;
     char *message;
 } cat_error_t;

@@ -1822,8 +1822,7 @@ CAT_API const cat_sockaddr_info_t *cat_socket_getpeername_fast(cat_socket_t *soc
     return cat_socket_getname_fast(socket, cat_true);
 }
 
-typedef struct
-{
+typedef struct cat_socket_read_context_s {
     cat_bool_t once;
     char *buffer;
     size_t size;

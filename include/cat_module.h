@@ -88,8 +88,7 @@ typedef enum
 
 // TODO: load module and check dependencies
 
-typedef struct
-{
+typedef struct cat_module_info_s {
     cat_module_type_t type;
     const char *name;
     cat_bool_t registered;

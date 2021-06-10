@@ -125,8 +125,7 @@ typedef SSL_CTX cat_ssl_context_t;
 typedef SSL     cat_ssl_connection_t;
 typedef BIO     cat_ssl_bio_t;
 
-typedef struct
-{
+typedef struct cat_ssl_s {
     cat_ssl_flags_t flags;
     cat_ssl_context_t *context;
     cat_ssl_connection_t *connection;

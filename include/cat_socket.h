@@ -68,8 +68,7 @@ typedef unsigned short cat_in_port_t;
 typedef struct sockaddr     cat_sockaddr_t;
 typedef struct sockaddr_in  cat_sockaddr_in_t;
 typedef struct sockaddr_in6 cat_sockaddr_in6_t;
-typedef struct
-{
+typedef struct cat_sockaddr_local_s {
 #ifndef _MSC_VER
     char __sl_pad1[offsetof(cat_sockaddr_t, sa_family)];
 #endif
@@ -97,14 +96,12 @@ typedef union
     cat_sockaddr_storage_t storage;
 } cat_sockaddr_union_t;
 
-typedef struct
-{
+typedef struct cat_sockaddr_inet_info_s {
     cat_socklen_t length;
     cat_sockaddr_inet_union_t address;
 } cat_sockaddr_inet_info_t;
 
-typedef struct
-{
+typedef struct cat_sockaddr_info_s {
     cat_socklen_t length;
     cat_sockaddr_union_t address;
 } cat_sockaddr_info_t;
@@ -164,15 +161,14 @@ typedef ULONG cat_socket_vector_length_t;
 
 #ifndef CAT_OS_WIN
 /* Note: May be cast to struct iovec. See writev(2). */
-typedef struct
-{
+typedef struct cat_socket_write_vector_s {
     const char *base;
     cat_socket_vector_length_t length;
 } cat_socket_write_vector_t;
 #else
 /* Note: May be cast to WSABUF[]
  * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx */
-typedef struct {
+typedef struct cat_socket_write_vector_s {
     cat_socket_vector_length_t length;
     const char* base;
 } cat_socket_write_vector_t;
@@ -346,8 +342,7 @@ typedef int32_t cat_socket_timeout_storage_t;
 #define CAT_SOCKET_TIMEOUT_STORAGE_MAX      INT32_MAX
 #define CAT_SOCKET_TIMEOUT_STORAGE_DEFAULT  -CAT_MAGIC_NUMBER
 
-typedef struct
-{
+typedef struct cat_socket_timeout_options_s {
     cat_socket_timeout_storage_t dns;
     cat_socket_timeout_storage_t accept;
     cat_socket_timeout_storage_t connect;
@@ -367,14 +362,12 @@ typedef struct
     cat_coroutine_t *coroutine;
 } cat_socket_context_t;
 
-typedef struct
-{
+typedef struct cat_socket_write_context_s {
     cat_queue_t coroutines;
 } cat_socket_write_context_t;
 
 #ifdef CAT_OS_UNIX_LIKE
-typedef struct
-{
+typedef struct uv_udg_s {
     uv_pipe_t pipe;
     int readfd;
     int writefd;
@@ -384,8 +377,7 @@ typedef struct
 typedef struct cat_socket_s cat_socket_t;
 typedef struct cat_socket_internal_s cat_socket_internal_t;
 
-typedef struct
-{
+typedef struct cat_socket_internal_options_s {
     cat_socket_timeout_options_t timeout;
 } cat_socket_internal_options_t;
 
@@ -442,8 +434,7 @@ struct cat_socket_s
     cat_socket_internal_t *internal;
 };
 
-typedef struct
-{
+typedef struct cat_socket_inheritance_info_s {
     cat_socket_type_t type;
     cat_socket_internal_options_t options;
 } cat_socket_inheritance_info_t;
@@ -531,8 +522,7 @@ CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sock
 #ifdef CAT_SSL
 typedef cat_ssl_context_t cat_socket_crypto_context_t;
 
-typedef struct
-{
+typedef struct cat_socket_crypto_options_s {
     cat_const_string_t peer_name;
     cat_bool_t verify_peer;
     cat_bool_t verify_peer_name;

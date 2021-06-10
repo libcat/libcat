@@ -43,8 +43,7 @@
 /* context */
 
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-typedef struct
-{
+typedef struct cat_coroutine_transfer_s {
     cat_data_t *data;
 } cat_coroutine_transfer_t;
 
@@ -59,8 +58,7 @@ typedef struct
 
 #else
 
-typedef struct
-{
+typedef struct cat_coroutine_transfer_s {
     cat_coroutine_context_t from_context;
     cat_data_t *data;
 } cat_coroutine_transfer_t;
