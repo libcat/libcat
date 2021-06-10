@@ -2437,13 +2437,22 @@ static cat_always_inline cat_bool_t cat_socket_internal_write(
     return cat_socket_internal_write_raw(isocket, vector, vector_count, address, address_length, NULL, timeout);
 }
 
-#define CAT_SOCKET_IO_CHECK(_socket, _isocket, _io_flag, _failure) \
+#define CAT_SOCKET_IO_CHECK_RAW(_socket, _isocket, _io_flag, _failure) \
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flag, _failure); \
     do { \
         if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
             CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure); \
         } \
     } while (0)
+
+#define CAT_SOCKET_IO_CHECK(_socket, _isocket, _io_flag, _failure) \
+        CAT_SOCKET_IO_CHECK_RAW(_socket, _isocket, _io_flag, _failure); \
+        do { \
+            if (unlikely((_socket->type & CAT_SOCKET_TYPE_IPCC) == CAT_SOCKET_TYPE_IPCC)) { \
+                cat_update_last_error(CAT_EMISUSE, "Socket IPC channel can not transfer user data"); \
+                _failure; \
+            } \
+        } while (0)
 
 static cat_always_inline ssize_t cat_socket__read(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout, cat_bool_t once)
 {
@@ -2707,10 +2716,11 @@ CAT_API ssize_t cat_socket_peek_from(const cat_socket_t *socket, char *buffer, s
     return nread;
 }
 
-#define CAT_SOCKET_IPC_CHECK(socket, failure) \
-    if (unlikely(!((socket->type & CAT_SOCKET_TYPE_IPCC) == CAT_SOCKET_TYPE_IPCC))) { \
+#define CAT_SOCKET_IPCC_CHECK(_socket, _isocket, _io_flags, _failure) \
+    CAT_SOCKET_IO_CHECK_RAW(_socket, _isocket, _io_flags, _failure); \
+    if (unlikely(!((_socket->type & CAT_SOCKET_TYPE_IPCC) == CAT_SOCKET_TYPE_IPCC))) { \
         cat_update_last_error(CAT_EINVAL, "Socket must be named pipe with IPC enabled"); \
-        failure; \
+        _failure; \
     }
 
 CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *handle)
@@ -2720,8 +2730,7 @@ CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *ha
 
 CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
-    CAT_SOCKET_IPC_CHECK(socket, return cat_false);
+    CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
 
     if (unlikely(!cat_socket_is_available(handle))) {
         cat_update_last_error(CAT_EINVAL, "Socket can not send unavailble handle");
@@ -2752,8 +2761,7 @@ CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t 
 
 CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
-    CAT_SOCKET_IPC_CHECK(socket, return NULL);
+    CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
     cat_socket_inheritance_info_t handle_info;
     ssize_t nread;
 

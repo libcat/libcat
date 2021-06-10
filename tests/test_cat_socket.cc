@@ -1578,6 +1578,15 @@ TEST(cat_socket, send_handle)
         DEFER(cat_socket_close(&main_client));
         ASSERT_TRUE(cat_socket_connect(&main_client, server_ip, server_ip_length, server_port));
 
+        // invalid operations on main IPPC
+        {
+            ASSERT_FALSE(cat_socket_send(&main_socket, CAT_STRL("foo")));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+            char buffer[1];
+            ASSERT_LT(cat_socket_read(&main_socket, CAT_STRS(buffer)), 0);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+        }
+
         cat_socket_t worker_client;
         ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
         ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
