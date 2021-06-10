@@ -32,7 +32,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 10));
+        cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 100));
     });
 
     cat_watch_dog_stop(); // make sure not output error anymore
@@ -46,7 +46,6 @@ TEST(cat_watch_dog, base)
          pos += keyword.length();
     }
     ASSERT_GT(count, 0);
-    ASSERT_LT(count, 50);
 }
 
 TEST(cat_watch_dog, single)
