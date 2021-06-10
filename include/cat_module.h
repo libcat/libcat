@@ -60,8 +60,7 @@
     CAT_MODULE_BUILTIN_TYPE_MAP(XX) \
     CAT_MODULE_USR_TYPE_MAP(XX)
 
-typedef enum
-{
+typedef enum cat_module_type_e {
 #define CAT_MODULE_TYPE_GEN(name, value) CAT_ENUM_GEN(CAT_MODULE_TYPE_, name, value)
     CAT_MODULE_TYPE_MAP(CAT_MODULE_TYPE_GEN)
 #undef CAT_MODULE_TYPE_GEN
@@ -79,8 +78,7 @@ typedef uint32_t cat_module_types_t;
     XX(USR,     CAT_MODULE_TYPES_USR_VALUE) \
     XX(ALL,     CAT_MODULE_TYPES_BUILTIN_VALUE | CAT_MODULE_TYPES_USR_VALUE) \
 
-typedef enum
-{
+typedef enum cat_module_union_types_e {
 #define CAT_MODULE_UNION_TYPE_GEN(name, value) CAT_ENUM_GEN(CAT_MODULE_TYPES_, name, value)
     CAT_MODULE_UNION_TYPE_MAP(CAT_MODULE_UNION_TYPE_GEN)
 #undef CAT_MODULE_UNION_TYPE_GEN

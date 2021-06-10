@@ -53,23 +53,20 @@ typedef struct cat_error_s {
     /* certificate verify error */ \
     XX(ECERT, "Certificate verify error") \
 
-typedef enum
-{
+typedef enum uv_errno_ext_e {
     UV__EEXT = -9764,
 #define CAT_ERRNO_EXT_GEN(code, unused) UV_ ## code,
     CAT_ERRNO_EXT_MAP(CAT_ERRNO_EXT_GEN)
 #undef CAT_ERRNO_EXT_GEN
 } uv_errno_ext_t;
 
-typedef enum
-{
+typedef enum cat_errnos_e {
 #define CAT_ERRNO_GEN(code, unused) CAT_ ## code = UV_ ## code,
     CAT_ERRNO_MAP(CAT_ERRNO_GEN)
 #undef CAT_ERRNO_GEN
 } cat_errnos_t;
 
-typedef enum
-{
+typedef enum cat_ret_e {
     CAT_RET_ERROR    = -1,
     CAT_RET_NONE     = 0,
     CAT_RET_OK       = 1,

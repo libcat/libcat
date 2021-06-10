@@ -25,8 +25,7 @@ extern "C" {
 #include "cat.h"
 #include "cat_queue.h"
 
-typedef enum
-{
+typedef enum cat_channel_flag_e {
     CAT_CHANNEL_FLAG_NONE    = 0,
     CAT_CHANNEL_FLAG_CLOSING = 1 << 0,
     CAT_CHANNEL_FLAG_CLOSED  = 1 << 1,
@@ -88,8 +87,7 @@ CAT_API void cat_channel_close(cat_channel_t *channel);
 
 /* select */
 
-typedef enum
-{
+typedef enum cat_channel_opcode_e {
     CAT_CHANNEL_OPCODE_PUSH,
     CAT_CHANNEL_OPCODE_POP,
 } cat_channel_opcode_t;

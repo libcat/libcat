@@ -224,8 +224,7 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
 
 #define CAT_SOCKET_TYPE_FLAG_MAP(XX) CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
-typedef enum
-{
+typedef enum cat_socket_type_flag_e {
 #define CAT_SOCKET_TYPE_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_TYPE_FLAG_, name, value)
     CAT_SOCKET_TYPE_FLAG_MAP(CAT_SOCKET_TYPE_FLAG_GEN)
 #undef CAT_SOCKET_TYPE_FLAG_GEN
@@ -258,15 +257,13 @@ typedef enum
 #define CAT_SOCKET_TYPE_MAP(XX) CAT_SOCKET_TYPE_MAP_EX(XX, CAT_SOCKET_UNIX_ENUM_GEN(XX))
 
 /* 24 ~ 31 */
-typedef enum
-{
+typedef enum cat_socket_common_type_e {
 #define CAT_SOCKET_TYPE_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_TYPE_, name, value)
     CAT_SOCKET_TYPE_MAP(CAT_SOCKET_TYPE_GEN)
 #undef CAT_SOCKET_TYPE_GEN
 } cat_socket_common_type_t;
 
-typedef enum
-{
+typedef enum cat_socket_union_type_flags_e {
     CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS =
         CAT_SOCKET_TYPE_FLAG_SERVER |
         CAT_SOCKET_TYPE_FLAG_CLIENT |
@@ -280,8 +277,7 @@ typedef uint32_t cat_socket_type_t;
     XX(NONE, 0)           \
     XX(ALLOCATED, 1 << 0) \
 
-typedef enum
-{
+typedef enum cat_socket_flag_e {
 #define CAT_SOCKET_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_FLAG_, name, value)
     CAT_SOCKET_FLAG_MAP(CAT_SOCKET_FLAG_GEN)
 #undef CAT_SOCKET_FLAG_GEN
@@ -289,8 +285,7 @@ typedef enum
 
 typedef uint8_t cat_socket_flags_t;
 
-typedef enum
-{
+typedef enum cat_socket_internal_flag_e {
     CAT_SOCKET_INTERNAL_FLAG_NONE = 0,
     CAT_SOCKET_INTERNAL_FLAG_CONNECTED = 1 << 0,
 } cat_socket_internal_flag_t;
@@ -306,8 +301,7 @@ typedef uint32_t cat_socket_internal_flags_t;
     XX(ACCEPT,    1 << 3 | CAT_SOCKET_IO_FLAG_RDWR) \
     XX(CONNECT,   1 << 4 | CAT_SOCKET_IO_FLAG_RDWR)
 
-typedef enum
-{
+typedef enum cat_socket_io_flag_e {
 #define CAT_SOCKET_IO_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_IO_FLAG_, name, value)
     CAT_SOCKET_IO_FLAG_MAP(CAT_SOCKET_IO_FLAG_GEN)
 #undef CAT_SOCKET_IO_FLAG_GEN
@@ -321,8 +315,7 @@ typedef uint8_t cat_socket_io_flags_t;
     XX(REUSEADDR, 1 << 1) \
     XX(REUSEPORT, 1 << 2) \
 
-typedef enum
-{
+typedef enum cat_socket_bind_flag_e {
 #define CAT_SOCKET_BIND_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_BIND_FLAG_, name, value)
     CAT_SOCKET_BIND_FLAG_MAP(CAT_SOCKET_BIND_FLAG_GEN)
 #undef CAT_SOCKET_BIND_FLAG_GEN
@@ -330,8 +323,7 @@ typedef enum
 
 typedef uint8_t cat_socket_bind_flags_t;
 
-typedef enum
-{
+typedef enum cat_socket_bind_union_flags_e {
     CAT_SOCKET_BIND_FLAGS_ALL = CAT_SOCKET_BIND_FLAG_IPV6ONLY | CAT_SOCKET_BIND_FLAG_REUSEADDR
 } cat_socket_bind_union_flags_t;
 

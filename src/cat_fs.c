@@ -27,7 +27,7 @@
 # include <winternl.h>
 #endif // CAT_OS_WIN
 
-typedef enum {
+typedef enum cat_fs_error_type_e {
     CAT_FS_ERROR_NONE = 0, // no error
     CAT_FS_ERROR_ERRNO, // is errno
     CAT_FS_ERROR_CAT_ERRNO, // is cat_errno_t
@@ -37,7 +37,7 @@ typedef enum {
 #endif // CAT_OS_WIN
 } cat_fs_error_type_t;
 
-typedef enum {
+typedef enum cat_fs_freer_type_e {
     CAT_FS_FREER_NONE = 0, // do not free
     CAT_FS_FREER_FREE, // free(x)
     CAT_FS_FREER_CAT_FREE, // cat_free(x)
