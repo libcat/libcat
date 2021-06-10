@@ -1644,11 +1644,12 @@ TEST(cat_socket, dump_all_and_close_all)
     ASSERT_NE(nullptr, pipe_socket);
     DEFER(if (!closed_all) { cat_socket_close(pipe_socket); });
 
+    cat_socket_t *tty_socket = nullptr;
     if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
         cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
         ASSERT_NE(nullptr, tty_socket);
-        DEFER(if (!closed_all) { cat_socket_close(tty_socket); });
     }
+    DEFER(if (tty_socket != nullptr && !closed_all) { cat_socket_close(tty_socket); });
 
     /* test dump all */
     {
