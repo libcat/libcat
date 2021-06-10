@@ -511,6 +511,7 @@ static int socket_create(int domain, int type, int protocol)
 #endif
 
 static cat_timeout_t cat_socket_get_dns_timeout_fast(const cat_socket_t *socket);
+static const cat_sockaddr_info_t *cat_socket_internal_getname_fast(cat_socket_internal_t *isocket, cat_bool_t is_peer, int *error_ptr);
 
 static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port, cat_bool_t *is_host_name)
 {
@@ -819,7 +820,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             cat_bool_t is_connected = cat_false;
             if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
                 is_connected = cat_true;
-            } else if ((address_info = cat_socket_getpeername_fast(socket)) != NULL) {
+            } else if ((address_info = cat_socket_internal_getname_fast(isocket, cat_true, NULL)) != NULL) {
                 is_connected = cat_true;
             }
             if (is_connected) {
@@ -1670,9 +1671,9 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
 }
 #endif
 
-CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_bool_t is_peer)
+static int cat_socket_internal_getname(const cat_socket_internal_t *isocket, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_bool_t is_peer)
 {
-    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
+    cat_socket_t *socket = isocket->u.socket;
     cat_socket_type_t type = socket->type;
     cat_sockaddr_info_t *cache = !is_peer ? isocket->cache.sockname : isocket->cache.peername;
     int error;
@@ -1718,6 +1719,66 @@ CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t
             }
         }
     }
+
+    return error;
+}
+
+static const cat_sockaddr_info_t *cat_socket_internal_getname_fast(cat_socket_internal_t *isocket, cat_bool_t is_peer, int *error_ptr)
+{
+    cat_sockaddr_info_t *cache, **cache_ptr;
+    cat_sockaddr_info_t tmp;
+    size_t size;
+    int error = 0;
+
+    if (!is_peer) {
+        cache_ptr = &isocket->cache.sockname;
+    } else {
+        cache_ptr = &isocket->cache.peername;
+    }
+    cache = *cache_ptr;
+    if (cache != NULL) {
+        goto _out;
+    }
+    tmp.length = sizeof(tmp.address);
+    error = cat_socket_internal_getname(isocket, &tmp.address.common, &tmp.length, is_peer);
+    if (unlikely(error != 0 && error != CAT_ENOSPC)) {
+        goto _out;
+    }
+    size = offsetof(cat_sockaddr_info_t, address) + tmp.length;
+    cache = (cat_sockaddr_info_t *) cat_malloc(size);
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (unlikely(cache == NULL)) {
+        error = cat_translate_sys_error(cat_sys_errno);
+        goto _out;
+    }
+#endif
+    if (error != 0) {
+        /* ENOSPC, retry now */
+        error = cat_socket_internal_getname(isocket, &cache->address.common, &cache->length, is_peer);
+        if (unlikely(error != 0)) {
+            /* almost impossible */
+            cat_free(cache);
+            goto _out;
+        }
+    } else {
+        memcpy(cache, &tmp, size);
+    }
+    *cache_ptr = cache;
+
+    _out:
+    if (error_ptr != NULL) {
+        *error_ptr = error;
+    }
+    return cache;
+}
+
+CAT_API cat_bool_t cat_socket_getname(const cat_socket_t *socket, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_bool_t is_peer)
+{
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
+    int error;
+
+    error = cat_socket_internal_getname(isocket, address, address_length, is_peer);
+
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Socket get%sname failed", !is_peer ? "sock" : "peer");
         return cat_false;
@@ -1739,45 +1800,14 @@ CAT_API cat_bool_t cat_socket_getpeername(const cat_socket_t *socket, cat_sockad
 CAT_API const cat_sockaddr_info_t *cat_socket_getname_fast(cat_socket_t *socket, cat_bool_t is_peer)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return NULL);
-    cat_sockaddr_info_t *cache, **cache_ptr;
-    cat_sockaddr_info_t tmp;
-    size_t size;
-    cat_bool_t ret;
+    const cat_sockaddr_info_t *cache;
+    int error;
 
-    if (!is_peer) {
-        cache_ptr = &isocket->cache.sockname;
-    } else {
-        cache_ptr = &isocket->cache.peername;
+    cache = cat_socket_internal_getname_fast(isocket, is_peer, &error);
+
+    if (cache == NULL) {
+        cat_update_last_error_with_reason(error, "Socket get%sname fast failed", !is_peer ? "sock" : "peer");
     }
-    cache = *cache_ptr;
-    if (cache != NULL) {
-        return cache;
-    }
-    tmp.length = sizeof(tmp.address);
-    ret = cat_socket_getname(socket, &tmp.address.common, &tmp.length, is_peer);
-    if (unlikely(!ret && cat_get_last_error_code() != CAT_ENOSPC)) {
-        return NULL;
-    }
-    size = offsetof(cat_sockaddr_info_t, address) + tmp.length;
-    cache = (cat_sockaddr_info_t *) cat_malloc(size);
-#if CAT_ALLOC_HANDLE_ERRORS
-    if (unlikely(cache == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for socket address info failed with size %zu", size);
-        return NULL;
-    }
-#endif
-    if (!ret) {
-        /* ENOSPC, retry now */
-        ret = cat_socket_getname(socket, &cache->address.common, &cache->length, is_peer);
-        if (unlikely(!ret)) {
-            /* almost impossible */
-            cat_free(cache);
-            return NULL;
-        }
-    } else {
-        memcpy(cache, &tmp, size);
-    }
-    *cache_ptr = cache;
 
     return cache;
 }
