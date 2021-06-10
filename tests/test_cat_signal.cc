@@ -88,4 +88,25 @@ TEST(cat_signal, cancel)
     cat_coroutine_resume(coroutine, nullptr, nullptr);
 }
 
+#include <fstream>
+
+TEST(cat_signal, send_failed)
+{
+    ASSERT_FALSE(cat_kill(INT_MAX, CAT_SIGTERM));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESRCH);
+    ASSERT_FALSE(cat_kill(cat_getpid(), INT_MAX));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+#ifdef CAT_OS_LINUX
+    std::ifstream proc_file("/proc/1/status");
+    if (proc_file.good()) {
+        std::string line;
+        getline(proc_file, line);
+        if (line.find("systemd") != std::string::npos) {
+            ASSERT_FALSE(cat_kill(1, CAT_SIGTERM));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+        }
+    }
+#endif
+}
+
 #endif
