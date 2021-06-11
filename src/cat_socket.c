@@ -3359,3 +3359,19 @@ CAT_API void cat_socket_close_all(void)
 {
     uv_walk(cat_event_loop, cat_socket_close_by_handle_callback, NULL);
 }
+
+/* pipe */
+
+CAT_API cat_bool_t cat_pipe(cat_os_fd_t fds[2], cat_pipe_flags read_flags, cat_pipe_flags write_flags)
+{
+    int error;
+
+    error = uv_pipe(fds, read_flags, write_flags);
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Pipe create failed");
+        return cat_false;
+    }
+
+    return cat_true;
+}

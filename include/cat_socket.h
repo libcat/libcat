@@ -620,6 +620,17 @@ CAT_API int cat_socket_get_local_free_port(void);
 CAT_API void cat_socket_dump_all(void);
 CAT_API void cat_socket_close_all(void);
 
+/* pipe */
+
+typedef enum cat_pipe_flag_e {
+    CAT_PIPE_FLAG_NONE = 0,
+    CAT_PIPE_FLAG_NONBLOCK = UV_NONBLOCK_PIPE,
+} cat_pipe_flag_t;
+
+typedef int cat_pipe_flags;
+
+CAT_API cat_bool_t cat_pipe(cat_os_fd_t fds[2], cat_pipe_flags read_flags, cat_pipe_flags write_flags);
+
 #ifdef __cplusplus
 }
 #endif
