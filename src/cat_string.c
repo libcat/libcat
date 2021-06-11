@@ -50,6 +50,9 @@ CAT_API char *cat_vsprintf(const char *format, va_list args)
     string = (char *) cat_malloc(size);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(string == NULL)) {
+        /* no need to update error message, we even have no mem to sprintf,
+           so we may also have no mem to update error message */
+        cat_update_last_error(cat_translate_sys_error(cat_sys_errno), NULL);
         return NULL;
     }
 #endif
@@ -120,6 +123,7 @@ CAT_API char *cat_snrand(char *buffer, size_t count)
         buffer = (char *) cat_malloc(count);
 #if CAT_ALLOC_HANDLE_ERRORS
         if (unlikely(buffer == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for random string failed");
             return NULL;
         }
 #endif
