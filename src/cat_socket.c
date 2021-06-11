@@ -598,8 +598,14 @@ static void cat_socket_detect_family(cat_socket_t *socket, cat_sa_family_t af)
 
 static cat_always_inline cat_bool_t cat_socket_can_be_transfer_by_ipc(cat_socket_t *socket)
 {
-    return ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) ||
-            ((socket->type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE);
+    return
+            ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) ||
+#ifndef CAT_OS_WIN
+            ((socket->type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE) ||
+            ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) ||
+            ((socket->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) ||
+#endif
+            0;
 }
 
 static void cat_socket_tcp_on_open(cat_socket_t *socket)
@@ -2722,6 +2728,12 @@ CAT_API ssize_t cat_socket_peek_from(const cat_socket_t *socket, char *buffer, s
         _failure; \
     }
 
+#ifndef CAT_OS_WIN
+#define CAT_SOCKET_IPCC_SUPPORTS "TCP, PIPE, UDP and UDG"
+#else
+#define CAT_SOCKET_IPCC_SUPPORTS "TCP"
+#endif
+
 CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *handle)
 {
     return cat_socket_send_handle_ex(socket, handle, cat_socket_get_write_timeout_fast(socket));
@@ -2736,7 +2748,7 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
         return cat_false;
     }
     if (unlikely(!cat_socket_can_be_transfer_by_ipc(handle))) {
-        cat_update_last_error(CAT_EINVAL, "Socket can only send TCP or PIPE handle");
+        cat_update_last_error(CAT_EINVAL, "Socket can only send " CAT_SOCKET_IPCC_SUPPORTS "handle");
         return cat_false;
     }
 
