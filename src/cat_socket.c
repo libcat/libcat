@@ -511,7 +511,6 @@ static int socket_create(int domain, int type, int protocol)
 #endif
 
 static cat_timeout_t cat_socket_get_dns_timeout_fast(const cat_socket_t *socket);
-static const cat_sockaddr_info_t *cat_socket_internal_getname_fast(cat_socket_internal_t *isocket, cat_bool_t is_peer, int *error_ptr);
 
 static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port, cat_bool_t *is_host_name)
 {
@@ -845,7 +844,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             cat_bool_t is_connected = cat_false;
             if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
                 is_connected = cat_true;
-            } else if ((address_info = cat_socket_internal_getname_fast(isocket, cat_true, NULL)) != NULL) {
+            } else if (isocket->u.handle.flags & (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE)) {
                 is_connected = cat_true;
             }
             if (is_connected) {
