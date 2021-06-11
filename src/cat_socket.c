@@ -409,11 +409,10 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
     }} while (0)
 
 #define CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure) \
-    cat_socket_internal_t *_isocket = _socket->internal;\
-    do { if (_isocket == NULL) { \
-        cat_update_last_error(CAT_EBADF, "Socket has been closed"); \
-        _failure; \
-    }} while (0)
+        CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(_socket, _isocket, { \
+            cat_update_last_error(CAT_EBADF, "Socket has been closed"); \
+            _failure; \
+        })
 
 #define CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flags, _failure) \
     CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure); \
@@ -426,11 +425,17 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
         _failure; \
     }} while (0)
 
-#define CAT_SOCKET_INTERNAL_FD_GETTER(_isocket, _fd, _failure) \
+#define CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(_isocket, _fd, _failure) \
     cat_socket_fd_t _fd = cat_socket_internal_get_fd(isocket); \
     do { if (unlikely(_fd == CAT_SOCKET_INVALID_FD)) { \
         _failure; \
     }} while (0)
+
+#define CAT_SOCKET_INTERNAL_FD_GETTER(_isocket, _fd, _failure) \
+        CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(_isocket, _fd, { \
+            cat_update_last_error(CAT_EBADF, "Socket file descriptor is bad"); \
+            _failure; \
+        })
 
 static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socket_internal_t *isocket)
 {
@@ -3016,10 +3021,8 @@ CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket)
     return "none";
 }
 
-CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
+static cat_errno_t cat_socket_check_liveness_by_fd(cat_socket_fd_t fd)
 {
-    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
-    CAT_SOCKET_INTERNAL_FD_GETTER(isocket, fd, return cat_false);
     char buffer;
     ssize_t error;
 
@@ -3040,8 +3043,31 @@ CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
         error = 0;
     }
     if (unlikely(error != 0 && error != CAT_EAGAIN && error != CAT_EMSGSIZE)) {
+        return (cat_errno_t) error;
+    }
+
+    return 0;
+}
+
+CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(socket, isocket, return CAT_EBADF);
+    CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(isocket, fd, return CAT_EBADF);
+
+    return cat_socket_check_liveness_by_fd(fd);
+}
+
+CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
+    CAT_SOCKET_INTERNAL_FD_GETTER(isocket, fd, return cat_false);
+    cat_errno_t error;
+
+    error = cat_socket_check_liveness_by_fd(fd);
+
+    if (unlikely(error != 0)) {
         /* there was an unrecoverable error */
-        cat_update_last_error((cat_errno_t) error, "Socket connection is unavailable");
+        cat_update_last_error_with_reason(error, "Socket connection is unavailable");
         return cat_false;
     }
 
