@@ -196,6 +196,30 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
 #undef TCP_KEEPALIVE
 #endif
 
+typedef enum cat_socket_creation_flag_e {
+    CAT_SOCKET_CREATION_FLAG_NONE        = 0,
+    CAT_SOCKET_CREATION_FLAG_OPEN_FD     = 1 << 0,
+    CAT_SOCKET_CREATION_FLAG_OPEN_SOCKET = 1 << 1,
+    CAT_SOCKET_CREATION_FLAG_OPEN_HANDLE = 1 << 2,
+} cat_socket_creation_flag_t;
+
+typedef enum cat_socket_creation_union_flags_e {
+    CAT_SOCKET_CREATION_OPEN_FLAGS = CAT_SOCKET_CREATION_FLAG_OPEN_FD |
+                                     CAT_SOCKET_CREATION_FLAG_OPEN_SOCKET |
+                                     CAT_SOCKET_CREATION_FLAG_OPEN_HANDLE,
+} cat_socket_creation_union_flags_t;
+
+typedef uint32_t cat_socket_creation_flags_t;
+
+typedef struct cat_socket_creation_options_s {
+    cat_socket_creation_flags_t flags;
+    union {
+        cat_os_fd_t fd;
+        cat_os_socket_t socket;
+        cat_os_handle_t handle;
+    } o;
+} cat_socket_creation_options_t;
+
 /* 0 ~ 23 */
 #define CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, SS) \
     /* 0 - 3 (sock) */ \
@@ -361,8 +385,8 @@ typedef struct cat_socket_write_context_s {
 #ifdef CAT_OS_UNIX_LIKE
 typedef struct uv_udg_s {
     uv_pipe_t pipe;
-    int readfd;
-    int writefd;
+    cat_socket_fd_t readfd;
+    cat_socket_fd_t writefd;
 } uv_udg_t;
 #endif
 
@@ -457,7 +481,10 @@ CAT_API cat_bool_t cat_socket_runtime_init(void);
 
 CAT_API void cat_socket_init(cat_socket_t *socket);
 CAT_API cat_socket_t *cat_socket_create(cat_socket_t *socket, cat_socket_type_t type);
-CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type_t type, cat_socket_fd_t fd);
+CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type_t type, const cat_socket_creation_options_t *options);
+
+CAT_API cat_socket_t *cat_socket_open_os_fd(cat_socket_t *socket, cat_socket_type_t type, cat_os_fd_t os_fd);
+CAT_API cat_socket_t *cat_socket_open_os_socket(cat_socket_t *socket, cat_socket_type_t type, cat_os_socket_t os_socket);
 
 CAT_API const char *cat_socket_type_name(cat_socket_type_t type);
 CAT_API const char *cat_socket_get_type_name(const cat_socket_t *socket);
