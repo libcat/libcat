@@ -708,7 +708,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     }
 #endif
     if (options == NULL) {
-        ioptions.flags = CAT_SOCKET_CREATION_FLAG_NONE;
+        memset(&ioptions, 0, sizeof(ioptions));
     } else {
         ioptions = *options;
     }
