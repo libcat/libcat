@@ -91,3 +91,55 @@ TEST(cat, enable_debug_mode)
     CAT_G(log_types) = log_types;
 }
 #endif
+
+TEST(cat, setup_args)
+{
+    ASSERT_DEATH_IF_SUPPORTED(cat_setup_args(0, nullptr), "misuse");
+}
+
+TEST(cat, exepath)
+{
+    {
+        char *buffer = cat_exepath(nullptr, nullptr);
+        ASSERT_NE(buffer, nullptr);
+        cat_free(buffer);
+    }
+    {
+        size_t buffer_size = CAT_BUFFER_DEFAULT_SIZE;
+        char _buffer[CAT_BUFFER_DEFAULT_SIZE], *buffer = cat_exepath(_buffer, &buffer_size);
+        ASSERT_EQ(buffer, _buffer);
+        ASSERT_GT(buffer_size, 0);
+    }
+#ifdef CAT_OS_LINUX
+    {
+        char _buffer[1], *buffer = cat_exepath(_buffer, NULL);
+        ASSERT_EQ(buffer, nullptr);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    }
+#endif
+}
+
+TEST(cat, getpid)
+{
+    ASSERT_GT(cat_getpid(), 0);
+}
+
+TEST(cat, getppid)
+{
+    ASSERT_GT(cat_getppid(), 0);
+}
+
+TEST(cat, process_title)
+{
+    const std::string custom_title = "cat_test";
+    bool titled = cat_set_process_title(custom_title.c_str());
+    char *process_title;
+
+    process_title = cat_get_process_title(NULL, 0);
+    ASSERT_NE(process_title, nullptr);
+    DEFER(cat_free(process_title));
+
+    if (titled) {
+        ASSERT_EQ(custom_title, std::string(process_title));
+    }
+}
