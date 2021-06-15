@@ -90,7 +90,8 @@
 #define PP_CAT_II(p, res) res
 #define UNIQUE_NAME(base) PP_CAT(base, __LINE__)
 
-#define DEFER(X) std::shared_ptr<void> UNIQUE_NAME(defer)(nullptr, [&](...){ X; })
+#define DEFER(X)     std::shared_ptr<void> UNIQUE_NAME(defer)(nullptr, [&](...){ X; })
+#define DEFER2(X, N) std::shared_ptr<void> __DEFER__##N(nullptr, [&](...){ X; })
 
 /* test dependency management */
 
@@ -151,6 +152,8 @@ namespace testing
 
     bool has_debugger(void);
     const char *get_debugger_name(void);
+
+    bool file_exists(const char *filename);
 
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
