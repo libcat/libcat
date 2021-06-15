@@ -60,8 +60,6 @@ extern "C" {
 
 typedef uv_stat_t cat_stat_t;
 typedef uv_statfs_t cat_statfs_t;
-typedef uv_uid_t cat_uid_t;
-typedef uv_gid_t cat_gid_t;
 typedef uv_file cat_file_t;
 
 #define CAT_DIRENT_UNKNOWN    UV_DIRENT_UNKNOWN
