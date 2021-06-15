@@ -794,6 +794,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_signal.cc
         tests/test_cat_async.cc
         tests/test_cat_watch_dog.cc
+        tests/test_cat_process.cc
         tests/test_cat_http.cc
     )
     if (LIBCAT_ENABLE_OPENSSL)
