@@ -91,6 +91,16 @@ CAT_API cat_bool_t cat_module_shutdown(void);
 CAT_API cat_bool_t cat_runtime_init(void);
 CAT_API cat_bool_t cat_runtime_shutdown(void);
 
+/* it may take ownership of the memory that argv points to */
+CAT_API char **cat_setup_args(int argc, char** argv);
+
+CAT_API char *cat_exepath(char *buffer, size_t *size); CAT_MAY_FREE
+
+#define CAT_PROCESS_TITLE_BUFFER_SIZE 512
+/* we must call setup_args() before using title releated APIs  */
+CAT_API char *cat_get_process_title(char* buffer, size_t size); CAT_MAY_FREE
+CAT_API cat_bool_t cat_set_process_title(const char* title);
+
 #ifdef __cplusplus
 }
 #endif

@@ -22,6 +22,8 @@ CAT_API CAT_GLOBALS_DECLARE(cat)
 
 CAT_GLOBALS_CTOR_DECLARE_SZ(cat)
 
+static cat_bool_t cat_args_registered = cat_false;
+
 CAT_API cat_bool_t cat_module_init(void)
 {
     cat_log = cat_log_standard;
@@ -104,6 +106,105 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
     cat_clear_last_error();
 
     CAT_G(runtime) = cat_false;
+
+    return cat_true;
+}
+
+CAT_API char **cat_setup_args(int argc, char** argv)
+{
+    if (cat_args_registered) {
+        cat_core_error(PROCESS, "API misuse: setup_args() should be called only once");
+    }
+    cat_args_registered = cat_true;
+
+    return uv_setup_args(argc, argv);
+}
+
+#ifndef CAT_OS_WIN
+#define CAT_EXEPATH_MAX (PATH_MAX + PATH_MAX + 1)
+#else
+#define CAT_EXEPATH_MAX 32768
+#endif
+
+CAT_API char *cat_exepath(char *buffer, size_t *size)
+{
+    size_t buffer_size;
+    cat_bool_t allocated = cat_false;
+    int error;
+
+    if (buffer == NULL) {
+        buffer = (char *) cat_malloc(CAT_EXEPATH_MAX);
+#if CAT_ALLOC_HANDLE_ERRORS
+        if (unlikely(buffer == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for exepath failed");
+            return NULL;
+        }
+#endif
+        buffer_size = CAT_EXEPATH_MAX;
+        allocated = cat_true;
+    } else if (size != NULL) {
+        buffer_size = *size;
+    } else {
+        buffer_size = 0;
+    }
+
+    error = uv_exepath(buffer, &buffer_size);
+
+    if (size != NULL) {
+        *size = buffer_size;
+    }
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Executable path get failed");
+        if (allocated) {
+            cat_free(buffer);
+        }
+        return NULL;
+    }
+
+    return buffer;
+}
+
+CAT_API char *cat_get_process_title(char* buffer, size_t size)
+{
+    cat_bool_t allocated = cat_false;
+    int error;
+
+    if (buffer == NULL) {
+        if (size == 0) {
+            size = CAT_PROCESS_TITLE_BUFFER_SIZE;
+        }
+        buffer = (char *) cat_malloc(size);
+        if (unlikely(buffer == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for process title failed");
+            return NULL;
+        }
+        allocated = cat_true;
+    }
+
+    error = uv_get_process_title(buffer, size);
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Process get title failed");
+        if (allocated) {
+            cat_free(buffer);
+        }
+        return NULL;
+    }
+
+    return buffer;
+}
+
+CAT_API cat_bool_t cat_set_process_title(const char* title)
+{
+    int error;
+
+    error = uv_set_process_title(title);
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Process set title failed");
+        return cat_false;
+    }
 
     return cat_true;
 }
