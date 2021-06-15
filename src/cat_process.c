@@ -20,11 +20,16 @@
 
 #include "cat_event.h"
 
-#define CAT_PROCESS_CHECK(_process, _failure) \
+#define CAT_PROCESS_CHECK_SILENT(_process, _failure) \
     if (unlikely(_process->exited)) { \
-        cat_update_last_error(CAT_ESRCH, "Process has already exited"); \
         _failure; \
     }
+
+#define CAT_PROCESS_CHECK(_process, _failure) \
+        CAT_PROCESS_CHECK_SILENT(_process, { \
+            cat_update_last_error(CAT_ESRCH, "Process has already exited"); \
+            _failure; \
+        })
 
 static void cat_process_close_callback(uv_handle_t *handle)
 {
@@ -73,9 +78,18 @@ static int cat_process_update_stdio(uv_stdio_container_t *stdio)
 
 CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
 {
-    cat_process_t *process;
+    cat_process_t *process = NULL;
     uv_process_options_t uoptions = *((uv_process_options_t *) options);
     int n, error = 0;
+
+    /* check options */
+    uoptions.exit_cb = cat_process_exit_callback;
+    for (n = 0; n < uoptions.stdio_count; n++) {
+        error = cat_process_check_stdio(&uoptions.stdio[n]);
+        if (unlikely(error != 0)) {
+            goto _error;
+        }
+    }
 
     process = (cat_process_t *) cat_malloc(sizeof(*process));
 #if CAT_ALLOC_HANDLE_ERRORS
@@ -88,15 +102,6 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
     process->exit_status = 0;
     process->term_signal = 0;
     cat_queue_init(&process->waiters);
-
-    /* check options */
-    uoptions.exit_cb = cat_process_exit_callback;
-    for (n = 0; n < uoptions.stdio_count; n++) {
-        error = cat_process_check_stdio(&uoptions.stdio[n]);
-        if (unlikely(error != 0)) {
-            goto _error;
-        }
-    }
 
     /* call spawn() to start process */
     error = uv_spawn(cat_event_loop, &process->u.process, &uoptions);
@@ -113,7 +118,9 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
 
     _error:
     cat_update_last_error_with_reason(error, "Process run failed");
-    cat_free(process);
+    if (process != NULL) {
+        cat_process_close(process);
+    }
     return NULL;
 }
 
@@ -124,7 +131,7 @@ CAT_API cat_bool_t cat_process_wait(cat_process_t *process)
 
 CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t timeout)
 {
-    CAT_PROCESS_CHECK(process, return cat_false);
+    CAT_PROCESS_CHECK_SILENT(process, return cat_true);
     cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
     cat_bool_t ret;
 
@@ -134,6 +141,7 @@ CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t tim
         cat_update_last_error_with_previous("Process wait failed");
     } else if (!process->exited) {
         cat_update_last_error(CAT_ECANCELED, "Process wait has been canceled");
+        ret = cat_false;
     }
     cat_queue_remove(waiter);
 
