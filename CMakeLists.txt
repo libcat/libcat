@@ -253,6 +253,7 @@ set(cat_sources
     src/cat_signal.c
     src/cat_async.c
     src/cat_watch_dog.c
+    src/cat_process.c
     src/cat_http.c
     src/cat_websocket.c
 )
