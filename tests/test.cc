@@ -78,6 +78,12 @@ namespace testing
         return nullptr;
     }
 
+    bool file_exists(const char *filename)
+    {
+        std::ifstream file(filename);
+        return file.good();
+    }
+
     std::string get_random_bytes(size_t length)
     {
         CAT_ASSERT(length > 0);
@@ -281,6 +287,9 @@ public:
 
 int main(int argc, char *argv[])
 {
+    /* it may take ownership of the memory that argv points to */
+    argv = cat_setup_args(argc, argv);
+
     ::testing::InitGoogleTest(&argc, argv);
 #if GTEST_HAS_DEATH_TEST
     ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
