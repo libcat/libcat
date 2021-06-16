@@ -99,24 +99,11 @@ TEST(cat, setup_args)
 
 TEST(cat, exepath)
 {
-    {
-        char *buffer = cat_exepath(nullptr, nullptr);
-        ASSERT_NE(buffer, nullptr);
-        cat_free(buffer);
-    }
-    {
-        size_t buffer_size = CAT_BUFFER_DEFAULT_SIZE;
-        char _buffer[CAT_BUFFER_DEFAULT_SIZE], *buffer = cat_exepath(_buffer, &buffer_size);
-        ASSERT_EQ(buffer, _buffer);
-        ASSERT_GT(buffer_size, 0);
-    }
-#ifdef CAT_OS_LINUX
-    {
-        char _buffer[1], *buffer = cat_exepath(_buffer, NULL);
-        ASSERT_EQ(buffer, nullptr);
-        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    }
-#endif
+    const cat_const_string_t *exepath = cat_exepath();
+    ASSERT_NE(exepath, nullptr);
+    const cat_const_string_t *exepath2 = cat_exepath();
+    ASSERT_NE(exepath2, nullptr);
+    ASSERT_EQ(exepath, exepath2);
 }
 
 TEST(cat, getpid)

@@ -91,22 +91,19 @@ TEST(test_suite_name, test_name) { \
     SKIP_IF(!cat_env_set("TEST_CAT_PROCESS_IS_CHILD", "1")); \
     DEFER2(cat_env_unset("TEST_CAT_PROCESS_IS_CHILD"), 0); \
     \
-    size_t exepath_length; \
-    char *exepath; \
-    \
-    ASSERT_NE(exepath = cat_exepath(nullptr, &exepath_length), nullptr); \
-    DEFER2(cat_free(exepath), 1); \
+    const cat_const_string_t *exepath; \
+    ASSERT_NE(exepath = cat_exepath(), nullptr); \
     \
     cat_socket_t *pipe; \
     ASSERT_NE(pipe = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE), nullptr); \
-    DEFER2(cat_socket_close(pipe), 2); \
+    DEFER2(cat_socket_close(pipe), 1); \
     \
     cat_process_t *process; \
     cat_process_options_t options = { nullptr }; \
-    const char *args[] = { exepath, "--gtest_filter=cat_process." #test_name, NULL }; \
+    const char *args[] = { exepath->data, "--gtest_filter=cat_process." #test_name, NULL }; \
     cat_process_stdio_container_t stdio[3] = { 0 }; \
     \
-    options.file = exepath; \
+    options.file = args[0]; \
     options.args = args; \
     \
     stdio[0].flags = CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | \
@@ -118,7 +115,7 @@ TEST(test_suite_name, test_name) { \
     options.stdio_count = CAT_ARRAY_SIZE(stdio); \
     \
     ASSERT_NE((process = cat_process_run(&options)), nullptr); \
-    DEFER2(cat_process_close(process), 3); \
+    DEFER2(cat_process_close(process), 2); \
 
 #define TEST_PROCESS_END() \
 }
