@@ -2314,11 +2314,14 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
     }
 
     while (1) {
-        struct msghdr msg = { };
+        struct msghdr msg;
         msg.msg_name = (struct sockaddr *) address;
         msg.msg_namelen = address_length;
         msg.msg_iov = (struct iovec *) vector;
         msg.msg_iovlen = vector_count;
+        msg.msg_control = NULL;
+        msg.msg_controllen = 0;
+        msg.msg_flags = 0;
         do {
             error = sendmsg(fd, &msg, 0);
         } while (error < 0 && CAT_SOCKET_RETRY_ON_WRITE_ERROR(cat_sys_errno));
