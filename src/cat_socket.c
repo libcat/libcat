@@ -3455,6 +3455,23 @@ CAT_API void cat_socket_close_all(void)
     uv_walk(cat_event_loop, cat_socket_close_by_handle_callback, NULL);
 }
 
+CAT_API cat_bool_t cat_socket_move(cat_socket_t *from, cat_socket_t *to)
+{
+    if (from->internal != NULL && from->internal->io_flags != CAT_SOCKET_IO_FLAG_NONE) {
+        // TODO: make it work
+        cat_update_last_error(CAT_EMISUSE, "Socket is immovable during IO operations");
+        return cat_false;
+    }
+
+    *to = *from;
+    if (from->internal != NULL) {
+        from->internal = NULL;
+        to->internal->u.socket = to;
+    }
+
+    return cat_true;
+}
+
 /* pipe */
 
 CAT_API cat_bool_t cat_pipe(cat_os_fd_t fds[2], cat_pipe_flags read_flags, cat_pipe_flags write_flags)
