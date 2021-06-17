@@ -141,7 +141,7 @@ TEST(cat_fs, fread_fwrite)
     cat_fs_unlink(fn);
     SKIP_IF_(cat_fs_access(fn, F_OK) == 0, "Cannot remove test file");
 
-    ASSERT_GT(fd = cat_fs_open(fn, O_CREAT | O_WRONLY), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_WRONLY), 0);
     DEFER({
         if(fd > 0){
             cat_fs_close(fd);
@@ -494,6 +494,44 @@ TEST(cat_fs, fseek_ftell)
     ASSERT_EQ(cat_fs_fread(red, 1, LSEEK_BUFSIZ, stream), LSEEK_BUFSIZ);
     ASSERT_EQ(std::string(buf, LSEEK_BUFSIZ), std::string(red, LSEEK_BUFSIZ));
 #undef FILE_SEEK
+}
+
+TEST(cat_fs, fflush){
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_fflush");
+    const char * fn = fnstr.c_str();
+    cat_fs_unlink(fn);
+    SKIP_IF_(cat_fs_access(fn, F_OK) == 0, "Cannot remove test file");
+
+    int fd = -1;
+    FILE *stream = nullptr;
+    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_RDWR), 0);
+    DEFER({
+        if(fd > 0){
+            cat_fs_close(fd);
+        }
+    });
+    // fdopen is a POSIX function, but it also usable in Windows
+    ASSERT_NE(stream = fdopen(fd, "w+"), nullptr);
+    DEFER({
+        if(stream){
+            fclose(stream);
+            // this will also close backing fd
+            fd = -1;
+        }
+    });
+
+    char buffer[4096], red[4096];
+    ASSERT_EQ(setvbuf(stream, buffer, _IOFBF, 4096), 0);
+
+#define TEST_STR "nihaoshijie!"
+    ASSERT_EQ(cat_fs_fwrite(TEST_STR, 1, sizeof(TEST_STR), stream), sizeof(TEST_STR));
+#undef TEST_STR
+    cat_stat_t statbuf;
+    ASSERT_EQ(cat_fs_fstat(fd, &statbuf), 0);
+    ASSERT_EQ(statbuf.st_size, 0);
+    ASSERT_EQ(cat_fs_read(fd, red, 4096), 0);
 }
 
 TEST(cat_fs, access)
@@ -1416,6 +1454,7 @@ TEST(cat_fs, cancel){
     CANCEL_TEST(ASSERT_EQ(cat_fs_fwrite(buf, 1, 4096, stream), 0));
     CANCEL_TEST(ASSERT_NE(cat_fs_fseek(stream, 0, SEEK_SET), 0));
     CANCEL_TEST(ASSERT_NE(cat_fs_ftell(stream), 0));
+    CANCEL_TEST(ASSERT_NE(cat_fs_fflush(stream), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_lseek(fd, 0, SEEK_SET), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_fsync(fd), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_fdatasync(fd), 0));

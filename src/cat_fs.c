@@ -982,6 +982,39 @@ CAT_API off_t cat_fs_ftell(FILE *stream)
     return (long) data->ret.ret.num;
 }
 
+typedef struct cat_fs_fflush_data_s {
+    cat_fs_work_ret_t ret;
+    FILE *stream;
+} cat_fs_fflush_data_t;
+
+static void cat_fs_fflush_cb(cat_data_t *ptr)
+{
+    cat_fs_fflush_data_t *data = (cat_fs_fflush_data_t *) ptr;
+    data->ret.ret.num = fflush(data->stream);
+    if (0 != data->ret.ret.num) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API int cat_fs_fflush(FILE *stream)
+{
+    cat_fs_fflush_data_t *data = (cat_fs_fflush_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs fflush failed");
+        return -1;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->stream = stream;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fflush_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return -1;
+    }
+    cat_fs_work_check_error(&data->ret.error, "fflush");
+    return (long) data->ret.ret.num;
+}
+
 // platform-specific cat_work wrapped fs functions
 #ifndef CAT_OS_WIN
 
