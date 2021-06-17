@@ -161,6 +161,7 @@ static cat_always_inline void cat_http_parser__init(cat_http_parser_t *parser)
     parser->llhttp.method = CAT_HTTP_METHOD_UNKNOWN;
     parser->data = NULL;
     parser->data_length = 0;
+    parser->parsed_length = 0;
     parser->keep_alive = cat_false;
 }
 
@@ -227,23 +228,29 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
     llhttp_resume(&parser->llhttp);
     error = llhttp_execute(&parser->llhttp, data, length);
-    if (unlikely(error != HPE_OK)) {
+    if (error != HPE_OK) {
+        parser->parsed_length = llhttp_get_error_pos(&parser->llhttp) - data;
         if (unlikely(error != HPE_PAUSED)) {
             if (unlikely(error != HPE_PAUSED_UPGRADE)) {
                 goto _error;
             }
-        } else if (unlikely(parser->event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE)) {
-            llhttp_resume(&parser->llhttp);
-            error = llhttp_execute(&parser->llhttp, NULL, 0);
-            if (unlikely(error != HPE_OK && error != HPE_PAUSED_UPGRADE)) {
-                goto _error;
+        } else {
+            if (unlikely(parser->event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE)) {
+                llhttp_resume(&parser->llhttp);
+                error = llhttp_execute(&parser->llhttp, NULL, 0);
+                if (unlikely(error != HPE_OK && error != HPE_PAUSED_UPGRADE)) {
+                    goto _error;
+                }
             }
         }
+    } else {
+        parser->parsed_length = 0;
     }
 
     return cat_true;
 
     _error:
+    parser->parsed_length = 0;
     cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_errno_name(error));
     return cat_false;
 }
@@ -318,9 +325,14 @@ CAT_API const char *cat_http_parser_get_current_pos(const cat_http_parser_t *par
     return llhttp_get_error_pos(&parser->llhttp);
 }
 
-CAT_API size_t cat_http_parser_get_parsed_length(cat_http_parser_t *parser, const char *data)
+CAT_API size_t cat_http_parser_get_parsed_length(const cat_http_parser_t *parser)
 {
-    const char *p = cat_http_parser_get_current_pos(parser);
+    return parser->parsed_length;
+}
+
+CAT_API size_t cat_http_parser_get_parsed_offset(const cat_http_parser_t *parser, const char *data)
+{
+    const char *p = llhttp_get_error_pos(&parser->llhttp);
 
     if (p == NULL) {
         return 0;

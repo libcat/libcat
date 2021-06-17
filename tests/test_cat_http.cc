@@ -223,7 +223,7 @@ TEST(cat_http_parser, get_error_message)
 TEST(cat_http_parser, get_parsed_length)
 {
     cat_http_parser_t *parser, _parser;
-    size_t parsed_length;
+    size_t parsed_length = 0;
 
     parser = cat_http_parser_create(&_parser);
     cat_http_parser_set_events(parser, CAT_HTTP_PARSER_EVENTS_ALL);
@@ -233,9 +233,9 @@ TEST(cat_http_parser, get_parsed_length)
 
     while (true) {
         ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
+        parsed_length += cat_http_parser_get_parsed_length(parser);
 
         if (cat_http_parser_is_completed(parser)) {
-            parsed_length = cat_http_parser_get_parsed_length(parser, request_get.data);
             ASSERT_EQ(request_get.length, parsed_length);
             break;
         }
@@ -244,7 +244,7 @@ TEST(cat_http_parser, get_parsed_length)
     }
 }
 
-TEST(cat_http_parser, get_parsed_length_zero)
+TEST(cat_http_parser, get_parsed_length2)
 {
     cat_http_parser_t *parser, _parser;
     size_t parsed_length;
@@ -257,8 +257,8 @@ TEST(cat_http_parser, get_parsed_length_zero)
 
     ASSERT_TRUE(cat_http_parser_is_completed(parser));
 
-    parsed_length = cat_http_parser_get_parsed_length(parser, request_get.data);
-    ASSERT_EQ(0, parsed_length);
+    parsed_length = cat_http_parser_get_parsed_offset(parser, request_get.data);
+    ASSERT_EQ(request_get.length, parsed_length);
 }
 
 TEST(cat_http_parser, get_protocol_version)
@@ -281,7 +281,7 @@ TEST(cat_http_parser, get_protocol_version)
         ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
 
         if (cat_http_parser_is_completed(parser)) {
-            parsed_length = cat_http_parser_get_parsed_length(parser, request_101.data);
+            parsed_length = cat_http_parser_get_parsed_offset(parser, request_101.data);
             ASSERT_EQ(request_101.length, parsed_length);
             break;
         }
@@ -313,7 +313,7 @@ TEST(cat_http_parser, get_protocol_version_unknown)
         ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
 
         if (cat_http_parser_is_completed(parser)) {
-            parsed_length = cat_http_parser_get_parsed_length(parser, request_unknown.data);
+            parsed_length = cat_http_parser_get_parsed_offset(parser, request_unknown.data);
             ASSERT_EQ(request_unknown.length, parsed_length);
             break;
         }
@@ -364,7 +364,7 @@ TEST(cat_http_parser, get_content_length)
         if (event == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE) {
             ASSERT_EQ(7, cat_http_parser_get_content_length(parser));
         } else if (event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
-            size_t parsed_length = cat_http_parser_get_parsed_length(parser, request_post.data);
+            size_t parsed_length = cat_http_parser_get_parsed_offset(parser, request_post.data);
             ASSERT_EQ(request_post.length, parsed_length);
             break;
         }
