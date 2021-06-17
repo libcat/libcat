@@ -120,18 +120,20 @@ static int cat_http_parser_on_##name(llhttp_t *llhttp) \
 
 CAT_HTTP_PARSER_ON_EVENT(message_begin,         MESSAGE_BEGIN        )
 CAT_HTTP_PARSER_ON_DATA (url,                   URL                  )
-CAT_HTTP_PARSER_ON_EVENT(url_complete,          URL_COMPLETE         )
 CAT_HTTP_PARSER_ON_DATA (status,                STATUS               )
-CAT_HTTP_PARSER_ON_EVENT(status_complete,       STATUS_COMPLETE      )
 CAT_HTTP_PARSER_ON_DATA (header_field,          HEADER_FIELD         )
 CAT_HTTP_PARSER_ON_DATA (header_value,          HEADER_VALUE         )
-CAT_HTTP_PARSER_ON_EVENT(header_field_complete, HEADER_FIELD_COMPLETE)
-CAT_HTTP_PARSER_ON_EVENT(header_value_complete, HEADER_VALUE_COMPLETE)
 CAT_HTTP_PARSER_ON_HDONE(headers_complete,      HEADERS_COMPLETE     )
 CAT_HTTP_PARSER_ON_DATA (body,                  BODY                 )
 CAT_HTTP_PARSER_ON_EVENT(chunk_header,          CHUNK_HEADER         )
 CAT_HTTP_PARSER_ON_EVENT(chunk_complete,        CHUNK_COMPLETE       )
 CAT_HTTP_PARSER_ON_DONE (message_complete,      MESSAGE_COMPLETE     )
+#if 0
+CAT_HTTP_PARSER_ON_EVENT(url_complete,          URL_COMPLETE         )
+CAT_HTTP_PARSER_ON_EVENT(status_complete,       STATUS_COMPLETE      )
+CAT_HTTP_PARSER_ON_EVENT(header_field_complete, HEADER_FIELD_COMPLETE)
+CAT_HTTP_PARSER_ON_EVENT(header_value_complete, HEADER_VALUE_COMPLETE)
+#endif
 
 const llhttp_settings_t cat_http_parser_settings = {
     cat_http_parser_on_message_begin,
@@ -144,10 +146,14 @@ const llhttp_settings_t cat_http_parser_settings = {
     cat_http_parser_on_message_complete,
     cat_http_parser_on_chunk_header,
     cat_http_parser_on_chunk_complete,
+#if 0
     cat_http_parser_on_url_complete,
     cat_http_parser_on_status_complete,
     cat_http_parser_on_header_field_complete,
     cat_http_parser_on_header_value_complete,
+#else
+    NULL, NULL, NULL, NULL,
+#endif
 };
 
 static cat_always_inline void cat_http_parser__init(cat_http_parser_t *parser)
