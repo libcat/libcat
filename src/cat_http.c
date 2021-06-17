@@ -108,11 +108,9 @@ static int cat_http_parser_on_##name(llhttp_t *llhttp) \
     cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp); \
     \
     if (parser->event != CAT_HTTP_PARSER_EVENT_##NAME) { \
-        /* first execute, may paused */ \
+        /* first execute, always paused to update current pos */ \
         parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
-        if ((cat_http_parser_event_t) (parser->events & parser->event) == parser->event) { \
-            return HPE_PAUSED; \
-        } \
+        return HPE_PAUSED; \
     } \
     \
     return HPE_OK; \
