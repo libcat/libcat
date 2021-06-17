@@ -690,7 +690,7 @@ static inline void cat_fs_error_msg_free(cat_fs_error_t *e)
 #define cat_fs_work_check_error(error, fmt) do { \
     cat_fs_error_t *_error = error; \
     if (_error->type != CAT_FS_ERROR_NONE) { \
-        cat_fs_work_error(_error, fmt " failed: %s"); \
+        cat_fs_work_error(_error, "File-System " fmt " failed: %s"); \
     } \
 } while (0)
 
@@ -744,7 +744,7 @@ CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buf, size_t size)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_read_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
-    cat_fs_work_check_error(&data->ret.error, "Read");
+    cat_fs_work_check_error(&data->ret.error, "read");
     return data->ret.ret.num;
 }
 
@@ -781,7 +781,7 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buf, size_t length)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_write_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
-    cat_fs_work_check_error(&data->ret.error, "Write");
+    cat_fs_work_check_error(&data->ret.error, "write");
     return (ssize_t) data->ret.ret.num;
 }
 
@@ -818,10 +818,11 @@ CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_lseek_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
-    cat_fs_work_check_error(&data->ret.error, "Calling lseek");
+    cat_fs_work_check_error(&data->ret.error, "lseek");
     return (off_t) data->ret.ret.num;
 }
 
+// platform-specific cat_work wrapped fs functions
 #ifndef CAT_OS_WIN
 
 static void cat_fs_dir_async_close(void *ptr)
@@ -890,7 +891,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid path (NULL)"
         };
-        cat_fs_work_check_error(&error, "Opendir");
+        cat_fs_work_check_error(&error, "opendir");
         return NULL;
     }
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) cat_malloc(sizeof(*data));
@@ -908,7 +909,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *path)
         data->canceled = cat_true;
         return NULL;
     }
-    cat_fs_work_check_error(&data->ret.error, "Opendir");
+    cat_fs_work_check_error(&data->ret.error, "opendir");
     if (CAT_FS_ERROR_NONE != data->ret.error.type) {
         return NULL;
     }
@@ -1008,7 +1009,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Readdir");
+        cat_fs_work_check_error(&error, "readdir");
         return NULL;
     }
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) cat_malloc(sizeof(*data));
@@ -1026,7 +1027,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         data->canceled = cat_true;
         return NULL;
     }
-    cat_fs_work_check_error(&data->ret.error, "Readdir");
+    cat_fs_work_check_error(&data->ret.error, "readdir");
     if (CAT_FS_ERROR_NONE != data->ret.error.type) {
         return NULL;
     }
@@ -1070,7 +1071,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Rewinddir");
+        cat_fs_work_check_error(&error, "rewinddir");
         return;
     }
     cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) cat_malloc(sizeof(*data));
@@ -1108,7 +1109,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Closedir");
+        cat_fs_work_check_error(&error, "closedir");
         return -1;
     }
     if (NULL == uv_dir->dir) {
@@ -1235,7 +1236,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid path (NULL)"
         };
-        cat_fs_work_check_error(&error, "Opendir");
+        cat_fs_work_check_error(&error, "opendir");
         return NULL;
     }
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) cat_malloc(sizeof(*data));
@@ -1254,7 +1255,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
         data->canceled = cat_true;
         return NULL;
     }
-    cat_fs_work_check_error(&data->ret.error, "Opendir");
+    cat_fs_work_check_error(&data->ret.error, "opendir");
     if(CAT_FS_ERROR_NONE != data->ret.error.type){
         return NULL;
     }
@@ -1296,7 +1297,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Closedir");
+        cat_fs_work_check_error(&error, "closedir");
         return -1;
     }
     if (INVALID_HANDLE_VALUE == ((cat_dir_int_t*)dir)->dir) {
@@ -1317,7 +1318,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
     if (!ret) {
         return -1;
     }
-    cat_fs_work_check_error(&data->ret.error, "Closedir");
+    cat_fs_work_check_error(&data->ret.error, "closedir");
     if(CAT_FS_ERROR_NONE != data->ret.error.type){
         return -1;
     }
@@ -1475,7 +1476,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Closedir");
+        cat_fs_work_check_error(&error, "closedir");
         return NULL;
     }
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) cat_malloc(sizeof(*data));
@@ -1494,7 +1495,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         pintdir->dir = INVALID_HANDLE_VALUE;
         return NULL;
     }
-    cat_fs_work_check_error(&data->ret.error, "Readdir");
+    cat_fs_work_check_error(&data->ret.error, "readdir");
     if(data->ret.error.type != CAT_FS_ERROR_NONE){
         return NULL;
     }
@@ -1516,7 +1517,7 @@ CAT_API void cat_fs_rewinddir(cat_dir_t *dir)
             .msg_free = CAT_FS_FREER_NONE,
             .msg = "Invalid dir handle"
         };
-        cat_fs_work_check_error(&error, "Closedir");
+        cat_fs_work_check_error(&error, "rewinddir");
         return;
     }
     ((cat_dir_int_t *) dir)->rewind = cat_true;
@@ -1822,7 +1823,7 @@ CAT_API int cat_fs_flock(cat_file_t fd, int op)
             return -1;
         }
     }
-    cat_fs_work_check_error(&data->ret.error, "Flock");
+    cat_fs_work_check_error(&data->ret.error, "flock");
     return (int) data->ret.ret.num;
 }
 
