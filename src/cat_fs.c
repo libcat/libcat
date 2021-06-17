@@ -27,6 +27,16 @@
 # include <winternl.h>
 #endif // CAT_OS_WIN
 
+#ifdef CAT_OS_WIN
+# ifdef _WIN64
+#  define fseeko _fseeki64
+#  define ftello _ftelli64
+# else
+#  define fseeko fseek
+#  define ftello ftell
+# endif // _WIN64
+#endif // CAT_OS_WIN
+
 typedef enum cat_fs_error_type_e {
     CAT_FS_ERROR_NONE = 0, // no error
     CAT_FS_ERROR_ERRNO, // is errno
@@ -820,6 +830,156 @@ CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
     }
     cat_fs_work_check_error(&data->ret.error, "lseek");
     return (off_t) data->ret.ret.num;
+}
+
+typedef struct cat_fs_fread_data_s {
+    cat_fs_work_ret_t ret;
+    void *ptr;
+    size_t size;
+    size_t nmemb;
+    FILE *stream;
+} cat_fs_fread_data_t;
+
+static void cat_fs_fread_cb(cat_data_t *ptr)
+{
+    cat_fs_fread_data_t *data = (cat_fs_fread_data_t *) ptr;
+    errno = 0;
+    data->ret.ret.num = fread(data->ptr, data->size, data->nmemb, data->stream);
+    if (0 != errno) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API size_t cat_fs_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+    cat_fs_fread_data_t *data = (cat_fs_fread_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs fread failed");
+        return 0;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->ptr = ptr;
+    data->size = size;
+    data->nmemb = nmemb;
+    data->stream = stream;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fread_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return 0;
+    }
+    cat_fs_work_check_error(&data->ret.error, "fread");
+    return (size_t) data->ret.ret.num;
+}
+
+typedef struct cat_fs_fwrite_data_s {
+    cat_fs_work_ret_t ret;
+    const void *ptr;
+    size_t size;
+    size_t nmemb;
+    FILE *stream;
+} cat_fs_fwrite_data_t;
+
+static void cat_fs_fwrite_cb(cat_data_t *ptr)
+{
+    cat_fs_fwrite_data_t *data = (cat_fs_fwrite_data_t *) ptr;
+    errno = 0;
+    data->ret.ret.num = fwrite(data->ptr, data->size, data->nmemb, data->stream);
+    if (0 != errno) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API size_t cat_fs_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+    cat_fs_fwrite_data_t *data = (cat_fs_fwrite_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs fwrite failed");
+        return 0;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->ptr = ptr;
+    data->size = size;
+    data->nmemb = nmemb;
+    data->stream = stream;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fwrite_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return 0;
+    }
+    cat_fs_work_check_error(&data->ret.error, "fwrite");
+    return (size_t) data->ret.ret.num;
+}
+
+typedef struct cat_fs_fseek_data_s {
+    cat_fs_work_ret_t ret;
+    FILE *stream;
+    off_t offset;
+    int whence;
+} cat_fs_fseek_data_t;
+
+static void cat_fs_fseek_cb(cat_data_t *ptr)
+{
+    cat_fs_fseek_data_t *data = (cat_fs_fseek_data_t *) ptr;
+    data->ret.ret.num = fseeko(data->stream, data->offset, data->whence);
+    if (0 != data->ret.ret.num) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API int cat_fs_fseek(FILE *stream, off_t offset, int whence)
+{
+    cat_fs_fseek_data_t *data = (cat_fs_fseek_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs fseek failed");
+        return -1;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->stream = stream;
+    data->offset = offset;
+    data->whence = whence;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fseek_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return -1;
+    }
+    cat_fs_work_check_error(&data->ret.error, "fseek");
+    return (int) data->ret.ret.num;
+}
+
+typedef struct cat_fs_ftell_data_s {
+    cat_fs_work_ret_t ret;
+    FILE *stream;
+} cat_fs_ftell_data_t;
+
+static void cat_fs_ftell_cb(cat_data_t *ptr)
+{
+    cat_fs_ftell_data_t *data = (cat_fs_ftell_data_t *) ptr;
+    data->ret.ret.num = ftello(data->stream);
+    if (0 != data->ret.ret.num) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API off_t cat_fs_ftell(FILE *stream)
+{
+    cat_fs_ftell_data_t *data = (cat_fs_ftell_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs ftell failed");
+        return -1;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->stream = stream;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_ftell_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return -1;
+    }
+    cat_fs_work_check_error(&data->ret.error, "ftell");
+    return (long) data->ret.ret.num;
 }
 
 // platform-specific cat_work wrapped fs functions

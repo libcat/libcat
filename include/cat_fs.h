@@ -99,6 +99,10 @@ CAT_API ssize_t cat_fs_pread(cat_file_t fd, void *buffer, size_t size, off_t off
 CAT_API ssize_t cat_fs_pwrite(cat_file_t fd, const void *buffer, size_t length, off_t offset);
 CAT_API ssize_t cat_fs_read(cat_file_t fd, void *buffer, size_t size);
 CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buffer, size_t length);
+CAT_API size_t cat_fs_fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+CAT_API size_t cat_fs_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
+CAT_API int cat_fs_fseek(FILE *stream, off_t offset, int whence);
+CAT_API off_t cat_fs_ftell(FILE *stream);
 CAT_API int cat_fs_close(cat_file_t fd);
 CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence);
 CAT_API int cat_fs_fsync(cat_file_t fd);
