@@ -1413,7 +1413,7 @@ static void cat_fs_opendir_free(cat_fs_opendir_data_t *data)
     if (data->canceled && INVALID_HANDLE_VALUE != data->ret.ret.handle) {
         CloseHandle(data->ret.ret.handle);
     }
-    if(data->path){
+    if (data->path) {
         cat_free((void*)data->path);
     }
     cat_free(data);
@@ -1449,7 +1449,7 @@ CAT_API cat_dir_t *cat_fs_opendir(const char *_path)
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "opendir");
-    if(CAT_FS_ERROR_NONE != data->ret.error.type){
+    if (CAT_FS_ERROR_NONE != data->ret.error.type) {
         return NULL;
     }
     // if no error occured, ret handle must be assigned
@@ -1512,7 +1512,7 @@ CAT_API int cat_fs_closedir(cat_dir_t *dir)
         return -1;
     }
     cat_fs_work_check_error(&data->ret.error, "closedir");
-    if(CAT_FS_ERROR_NONE != data->ret.error.type){
+    if (CAT_FS_ERROR_NONE != data->ret.error.type) {
         return -1;
     }
     return 0;
@@ -1647,8 +1647,8 @@ static void cat_fs_readdir_free(cat_data_t *ptr)
 {
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t*)ptr;
     cat_dirent_t *dirent = data->ret.ret.ptr;
-    if(dirent){
-        if(dirent->name){
+    if (dirent) {
+        if (dirent->name) {
             free((void*)dirent->name);
         }
         free(dirent);
@@ -1689,7 +1689,7 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "readdir");
-    if(data->ret.error.type != CAT_FS_ERROR_NONE){
+    if (data->ret.error.type != CAT_FS_ERROR_NONE) {
         return NULL;
     }
     CAT_ASSERT(data->ret.ret.ptr);
