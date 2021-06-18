@@ -127,7 +127,7 @@ typedef struct cat_process_options_s {
      * Note that on windows file descriptors greater than 2 are available to the
      * child process only if the child processes uses the MSVCRT runtime. */
     int stdio_count;
-    cat_process_stdio_container_t* stdio;
+    const cat_process_stdio_container_t* stdio;
     /* Libcat can change the child process' user/group id. This happens only when
      * the appropriate bits are set in the flags fields. This is not supported on
      * windows; uv_spawn() will fail and set the error to CAT_ENOTSUP. */

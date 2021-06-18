@@ -80,22 +80,37 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
 {
     cat_process_t *process = NULL;
     uv_process_options_t uoptions = *((uv_process_options_t *) options);
+    uv_stdio_container_t *ustdio = NULL;
     int n, error = 0;
 
-    /* check options */
+    /* set callback */
     uoptions.exit_cb = cat_process_exit_callback;
+
+    /* check stdio */
+    if (uoptions.stdio_count > 0) {
+        ustdio = (uv_stdio_container_t *) cat_malloc(sizeof(*ustdio) * uoptions.stdio_count);
+#if CAT_ALLOC_HANDLE_ERRORS
+        if (unlikely(ustdio == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for process stdio failed");
+            goto _out;
+        }
+#endif
+    }
+    memcpy(ustdio, uoptions.stdio, sizeof(*ustdio) * uoptions.stdio_count);
     for (n = 0; n < uoptions.stdio_count; n++) {
-        error = cat_process_check_stdio(&uoptions.stdio[n]);
+        error = cat_process_check_stdio(&ustdio[n]);
         if (unlikely(error != 0)) {
-            goto _error;
+            goto _out;
         }
     }
+    uoptions.stdio = ustdio;
 
+    /* init process structure */
     process = (cat_process_t *) cat_malloc(sizeof(*process));
 #if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(process == NULL)) {
         cat_update_last_error_of_syscall("Malloc for process failed");
-        return NULL;
+        goto _out;
     }
 #endif
     process->exited = cat_false;
@@ -107,21 +122,27 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
     error = uv_spawn(cat_event_loop, &process->u.process, &uoptions);
 
     if (unlikely(error != 0)) {
-        goto _error;
+        goto _out;
     }
 
+    /* update stdio */
     for (n = 0; n < uoptions.stdio_count; n++) {
         cat_process_update_stdio(&uoptions.stdio[n]);
     }
 
-    return process;
-
-    _error:
-    cat_update_last_error_with_reason(error, "Process run failed");
-    if (process != NULL) {
-        cat_process_close(process);
+    _out:
+    if (ustdio != NULL) {
+        cat_free(ustdio);
     }
-    return NULL;
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Process run failed");
+        if (process != NULL) {
+            cat_process_close(process);
+        }
+        return NULL;
+    }
+
+    return process;
 }
 
 CAT_API cat_bool_t cat_process_wait(cat_process_t *process)
