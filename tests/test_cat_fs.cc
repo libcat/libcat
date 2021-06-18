@@ -130,34 +130,52 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_NE(cat_get_last_error_code(), 0);
 }
 
-TEST(cat_fs, fread_fwrite)
+TEST(cat_fs, fopen_fclose_fread_fwrite)
 {
     SKIP_IF_(no_tmp(), "Temp dir not writable");
 
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_frw");
     const char * fn = fnstr.c_str();
-    char buf[4096] = { 0 };
-    int fd = -1;
     cat_fs_unlink(fn);
     SKIP_IF_(cat_fs_access(fn, F_OK) == 0, "Cannot remove test file");
-
-    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_WRONLY), 0);
+    char buf[4096] = { 0 };
+    int fd = -1;
     DEFER({
         if(fd > 0){
             cat_fs_close(fd);
         }
+        cat_fs_unlink(fn);
     });
     FILE *stream = nullptr, *rstream = nullptr;
     DEFER({
         if(stream){
-            fclose(stream);
+            cat_fs_fclose(stream);
             // this will also close backing fd
             fd = -1;
         }
         if(rstream){
-            fclose(rstream);
+            cat_fs_fclose(rstream);
         }
     });
+
+    ASSERT_EQ(cat_fs_close(cat_fs_open(fn, O_CREAT | O_RDWR, 0666)), 0);
+    ASSERT_NE(stream = fopen(fn, "r"), nullptr);
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_fclose(stream), 0);
+    ASSERT_EQ(errno, 0);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
+
+    errno = 0;
+    cat_clear_last_error();
+    ASSERT_NE(cat_fs_fclose(NULL), 0);
+    ASSERT_NE(errno, 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+
+    cat_fs_unlink(fn);
+    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_WRONLY, 0666), 0);
+
     // fdopen is a POSIX function, but it also usable in Windows
     ASSERT_NE(stream = fdopen(fd, "w"), nullptr);
 
@@ -178,7 +196,7 @@ TEST(cat_fs, fread_fwrite)
     ASSERT_NE(cat_get_last_error_code(), 0);
 
     // create new read only stream
-    ASSERT_EQ(fclose(stream), 0);
+    ASSERT_EQ(cat_fs_fclose(stream), 0);
     stream = nullptr;
     fd = -1;
     ASSERT_EQ(cat_fs_unlink(fn), 0);
@@ -475,7 +493,7 @@ TEST(cat_fs, fseek_ftell)
     FILE *stream = fopen(fn, "w+");
     DEFER({
         if(stream){
-            fclose(stream);
+            cat_fs_fclose(stream);
         }
     });
 
@@ -516,7 +534,7 @@ TEST(cat_fs, fflush){
     ASSERT_NE(stream = fdopen(fd, "w+"), nullptr);
     DEFER({
         if(stream){
-            fclose(stream);
+            cat_fs_fclose(stream);
             // this will also close backing fd
             fd = -1;
         }
@@ -1420,8 +1438,14 @@ TEST(cat_fs, cancel){
 
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_cancel");
     const char * fn = fnstr.c_str();
+    std::string fn2str = path_join(TEST_TMP_PATH, "cat_tests_cancel2");
+    const char * fn2 = fn2str.c_str();
     cat_fs_unlink(fn);
-    DEFER({cat_fs_unlink(fn);});
+    cat_fs_unlink(fn2);
+    DEFER({
+        cat_fs_unlink(fn);
+        cat_fs_unlink(fn2);
+    });
     std::string dnstr = path_join(TEST_TMP_PATH, "cat_tests_cancel_dir");
     const char * dn = dnstr.c_str();
     cat_fs_rmdir(dn);
@@ -1445,16 +1469,10 @@ TEST(cat_fs, cancel){
     ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
     CANCEL_TEST(ASSERT_LT(cat_fs_close(fd), 0));
     ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDONLY, 0666), 0);
-    ASSERT_NE(stream = fdopen(fd, "r"), nullptr);
     CANCEL_TEST(ASSERT_LT(cat_fs_read(fd, buf, 4096), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_write(fd, buf, 4096), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_pread(fd, buf, 4096, 0), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_pwrite(fd, buf, 4096, 0), 0));
-    CANCEL_TEST(ASSERT_EQ(cat_fs_fread(buf, 1, 4096, stream), 0));
-    CANCEL_TEST(ASSERT_EQ(cat_fs_fwrite(buf, 1, 4096, stream), 0));
-    CANCEL_TEST(ASSERT_NE(cat_fs_fseek(stream, 0, SEEK_SET), 0));
-    CANCEL_TEST(ASSERT_NE(cat_fs_ftell(stream), 0));
-    CANCEL_TEST(ASSERT_NE(cat_fs_fflush(stream), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_lseek(fd, 0, SEEK_SET), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_fsync(fd), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_fdatasync(fd), 0));
@@ -1469,7 +1487,17 @@ TEST(cat_fs, cancel){
     CANCEL_TEST(ASSERT_LT(cat_fs_fchmod(fd, 0666), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_fchown(fd, -1, -1), 0));
     CANCEL_TEST(ASSERT_LT(cat_fs_flock(fd, CAT_LOCK_UN), 0));
-    ASSERT_EQ(fclose(stream), 0);
+    ASSERT_EQ(cat_fs_close(fd), 0);
+    // C stream
+    ASSERT_NE(stream = fopen(fn2, "w+"), nullptr);
+    CANCEL_TEST(ASSERT_NE(cat_fs_fclose(stream), 0));
+    ASSERT_NE(stream = fopen(fn2, "w+"), nullptr);
+    CANCEL_TEST(ASSERT_EQ(cat_fs_fread(buf, 1, 4096, stream), 0));
+    CANCEL_TEST(ASSERT_EQ(cat_fs_fwrite(buf, 1, 4096, stream), 0));
+    CANCEL_TEST(ASSERT_NE(cat_fs_fseek(stream, 0, SEEK_SET), 0));
+    CANCEL_TEST(ASSERT_NE(cat_fs_ftell(stream), 0));
+    CANCEL_TEST(ASSERT_NE(cat_fs_fflush(stream), 0));
+    ASSERT_EQ(cat_fs_fclose(stream), 0);
     // dir
     ASSERT_EQ(cat_fs_mkdir(dn, 0777), 0);
     CANCEL_TEST(ASSERT_EQ(cat_fs_opendir(dn), nullptr));

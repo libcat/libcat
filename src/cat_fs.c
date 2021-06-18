@@ -832,6 +832,48 @@ CAT_API off_t cat_fs_lseek(cat_file_t fd, off_t offset, int whence)
     return (off_t) data->ret.ret.num;
 }
 
+// TODO: fopen wrapper
+
+typedef struct cat_fs_fclose_data_s {
+    cat_fs_work_ret_t ret;
+    FILE* stream;
+} cat_fs_fclose_data_t;
+
+static void cat_fs_fclose_cb(cat_data_t *ptr)
+{
+    cat_fs_fclose_data_t *data = (cat_fs_fclose_data_t *) ptr;
+    data->ret.ret.num = fclose(data->stream);
+    if (0 != data->ret.ret.num) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    }
+}
+
+CAT_API int cat_fs_fclose(FILE *stream)
+{
+    if (stream == NULL) {
+        cat_fs_error_t error = { 0 };
+        error.type = CAT_FS_ERROR_ERRNO;
+        error.val.error = EINVAL;
+        cat_fs_work_error(&error, "File-System fclose failed: %s");
+        return -1;
+    }
+    cat_fs_fclose_data_t *data = (cat_fs_fclose_data_t *) cat_malloc(sizeof(*data));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (data == NULL) {
+        cat_update_last_error_of_syscall("Malloc for fs fclose failed");
+        return -1;
+    }
+#endif
+    memset(&data->ret, 0, sizeof(data->ret));
+    data->stream = stream;
+    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fclose_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+        return -1;
+    }
+    cat_fs_work_check_error(&data->ret.error, "fclose");
+    return (int) data->ret.ret.num;
+}
+
 typedef struct cat_fs_fread_data_s {
     cat_fs_work_ret_t ret;
     void *ptr;
