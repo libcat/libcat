@@ -524,7 +524,7 @@ TEST(cat_fs, fflush){
 
     int fd = -1;
     FILE *stream = nullptr;
-    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_RDWR), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, O_CREAT | O_RDWR, 0666), 0);
     DEFER({
         if(fd > 0){
             cat_fs_close(fd);
@@ -1422,7 +1422,7 @@ TEST(cat_fs, flock_retval){
     DEFER({cat_fs_unlink(fn);});
     // create file
     int fd;
-    ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT), 0);
+    ASSERT_GE(fd = cat_fs_open(fn, CAT_FS_O_RDWR | CAT_FS_O_CREAT, 0666), 0);
 
     ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_SH), 0);
     ASSERT_EQ(cat_fs_flock(fd, CAT_LOCK_EX), 0);
