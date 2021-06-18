@@ -1018,7 +1018,7 @@ CAT_API int cat_fs_fflush(FILE *stream)
 // platform-specific cat_work wrapped fs functions
 #ifndef CAT_OS_WIN
 
-static void cat_fs_dir_async_close(void *ptr)
+static void cat_fs_async_closedir(void *ptr)
 {
     uv_dir_t *dir = (uv_dir_t *) calloc(1, sizeof(*dir));
     if (dir == NULL) {
@@ -1069,7 +1069,7 @@ static void cat_fs_opendir_free(cat_data_t *ptr)
     cat_fs_opendir_data_t *data = (cat_fs_opendir_data_t *) ptr;
 
     if (data->canceled && NULL != data->ret.ret.ptr) {
-        cat_fs_dir_async_close(data->ret.ret.ptr);
+        cat_fs_async_closedir(data->ret.ret.ptr);
     }
     cat_free(data->path);
     cat_free(data);
@@ -1176,7 +1176,7 @@ static void cat_fs_readdir_free(cat_data_t *ptr)
 
     if (data->canceled) {
         // if canceled, tell freer to free things
-        cat_fs_dir_async_close(data->dir);
+        cat_fs_async_closedir(data->dir);
     }
     if (data->ret.ret.ptr) {
         cat_dirent_t *dirent = data->ret.ret.ptr;
@@ -1249,7 +1249,7 @@ static void cat_fs_rewinddir_free(cat_data_t *ptr)
     cat_fs_rewinddir_data_t *data = (cat_fs_rewinddir_data_t *) ptr;
     if (data->canceled) {
         // if canceled, tell freer to free things
-        cat_fs_dir_async_close(data->dir);
+        cat_fs_async_closedir(data->dir);
     }
     cat_free(data);
 }
