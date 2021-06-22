@@ -31,7 +31,7 @@ TEST(cat_dns, getaddrinfo)
         "localhost"
     };
 
-    for (int i = 0; i < CAT_ARRAY_SIZE(domains); i++) {
+    for (size_t i = 0; i < CAT_ARRAY_SIZE(domains); i++) {
         response = cat_dns_getaddrinfo(domains[i], nullptr, &hints);
         if (response == nullptr && cat_get_last_error_code() == CAT_EAI_NONAME) {
             break;
