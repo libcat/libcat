@@ -112,18 +112,18 @@ CAT_API CAT_NORETURN void cat_abort(void);
 /* sys error */
 
 #ifndef CAT_OS_WIN
-#define cat_sys_errno               ((cat_errno_t) errno)
-#define cat_socket_errno            ((cat_errno_t) errno)
-#define cat_set_sys_errno(error)    errno = error
-#define cat_set_socket_errno(error) errno = error
+#define cat_sys_errno                  ((cat_errno_t) errno)
+#define cat_socket_errno               ((cat_errno_t) errno)
+#define cat_set_sys_errno(error)       errno = error
+#define cat_set_socket_errno(error)    errno = error
+#define cat_translate_sys_error(error) ((cat_errno_t) (-(error)))
 #else
-#define cat_sys_errno               ((cat_errno_t) GetLastError())
-#define cat_socket_errno            ((cat_errno_t) WSAGetLastError())
-#define cat_set_sys_errno(error)    SetLastError(error)
-#define cat_set_socket_errno(error) WSASetLastError(error)
+#define cat_sys_errno                   ((cat_errno_t) GetLastError())
+#define cat_socket_errno                ((cat_errno_t) WSAGetLastError())
+#define cat_set_sys_errno(error)        SetLastError(error)
+#define cat_set_socket_errno(error)     WSASetLastError(error)
+#define cat_translate_sys_error(error)  ((cat_errno_t) uv_translate_sys_error(error))
 #endif
-
-#define cat_translate_sys_error(error) ((cat_errno_t) uv_translate_sys_error(error))
 
 CAT_API const char *cat_strerror(cat_errno_t error);
 CAT_API int cat_orig_errno(cat_errno_t error);
