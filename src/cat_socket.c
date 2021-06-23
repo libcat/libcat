@@ -2032,12 +2032,12 @@ static ssize_t cat_socket_internal_read_raw(
     }
 
 #ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
-    while (1) {
-        /* Notice: when IO is low/slow, this is deoptimization,
-         * because recv usually returns EAGAIN error,
-         * and there is an additional system call overhead */
+    /* Notice: when IO is low/slow, this is deoptimization,
+     * because recv usually returns EAGAIN error,
+     * and there is an additional system call overhead */
+    if (support_inline_read) {
         cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
-        if (support_inline_read) {
+        while (1) {
             while (1) {
                 if (!is_dgram) {
                     error = recv(fd, buffer + nread, size - nread, 0);
@@ -2067,20 +2067,20 @@ static ssize_t cat_socket_internal_read_raw(
                 }
                 break; /* next call must be EAGAIN */
             }
-        }
-        if (is_udg) {
-            error = cat_socket_internal_udg_wait_readable(isocket, fd, timeout);
-            if (unlikely(error != 0)) {
-                if (error != CAT_EPREV) {
-                    goto _error;
+            if (is_udg) {
+                error = cat_socket_internal_udg_wait_readable(isocket, fd, timeout);
+                if (unlikely(error != 0)) {
+                    if (error != CAT_EPREV) {
+                        goto _error;
+                    } else {
+                        goto _wait_error;
+                    }
                 } else {
-                    goto _wait_error;
+                    continue;
                 }
-            } else {
-                continue;
             }
+            break;
         }
-        break;
     }
 #endif
 
