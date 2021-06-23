@@ -2972,7 +2972,16 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 
     cat_socket_internal_close(isocket);
     if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
+#if !defined(_MSC_VER)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
+        /* FIXME: maybe a bug of GCC-7.5.0
+         * inlined from socket_get_local_free_port() */
         cat_free(socket);
+#if !defined(_MSC_VER)
+#pragma GCC diagnostic pop
+#endif
     }
 
     return cat_true;
