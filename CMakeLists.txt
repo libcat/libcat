@@ -640,7 +640,7 @@ if (NOT WIN32)
 	find_package(Valgrind QUIET)
 	cmake_dependent_option(LIBCAT_WITH_VALGRIND
 		"Build with valgrind by default if build type is Debug and found Valgrind" ON
-		"${CAT_DEBUG}; ${VALGRIND_FOUND}" OFF)
+		"CAT_DEBUG; VALGRIND_FOUND" OFF)
 	if (LIBCAT_WITH_VALGRIND)
 		if (NOT VALGRIND_FOUND)
 		    message(FATAL_ERROR "Require Valgrind but not found")
