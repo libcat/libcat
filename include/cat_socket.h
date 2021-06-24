@@ -382,6 +382,15 @@ typedef struct cat_socket_write_context_s {
     cat_queue_t coroutines;
 } cat_socket_write_context_t;
 
+typedef struct cat_socket_write_request_s {
+    int error;
+    union {
+        cat_coroutine_t *coroutine;
+        uv_write_t stream;
+        uv_udp_send_t udp;
+    } u;
+} cat_socket_write_request_t;
+
 #ifdef CAT_OS_UNIX_LIKE
 typedef struct uv_udg_s {
     uv_pipe_t pipe;
@@ -418,6 +427,7 @@ struct cat_socket_internal_s
     } context;
     /* cache */
     struct {
+        cat_socket_write_request_t *write_request;
         cat_sockaddr_info_t *sockname;
         cat_sockaddr_info_t *peername;
         int recv_buffer_size;

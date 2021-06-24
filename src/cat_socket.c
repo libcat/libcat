@@ -832,6 +832,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     memset(&isocket->context.io.read, 0, sizeof(isocket->context.io.read));
     cat_queue_init(&isocket->context.io.write.coroutines);
     /* part of cache */
+    isocket->cache.write_request = NULL;
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
     isocket->cache.recv_buffer_size = -1;
@@ -2241,18 +2242,6 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
     return cat_io_vector_length((const cat_io_vector_t *) vector, vector_count);
 }
 
-typedef struct {
-    int error;
-    union {
-        cat_coroutine_t *coroutine;
-        uv_write_t stream;
-        uv_udp_send_t udp;
-    } u;
-} cat_socket_write_request_t;
-
-/* u is variable-length */
-CAT_STATIC_ASSERT(cat_offsize_of(cat_socket_write_request_t, u) == sizeof(cat_socket_write_request_t));
-
 /* IOCP/io_uring may not support wait writable */
 static cat_always_inline void cat_socket_internal_write_callback(cat_socket_internal_t *isocket, cat_socket_write_request_t *request, int status)
 {
@@ -2266,7 +2255,9 @@ static cat_always_inline void cat_socket_internal_write_callback(cat_socket_inte
         cat_coroutine_schedule(coroutine, SOCKET, "Write");
     }
 
-    cat_free(request);
+    if (request != isocket->cache.write_request) {
+        cat_free(request);
+    }
 }
 
 static void cat_socket_write_callback(uv_write_t *request, int status)
@@ -2393,19 +2384,29 @@ static cat_bool_t cat_socket_internal_write_raw(
     }
 #endif
 
-    /* why we do not try write: on high-traffic scenarios, try_write will instead lead to performance */
-    if (!is_udp) {
-        context_size = cat_offsize_of(cat_socket_write_request_t, u.stream);
+    if (!(isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE)) {
+        request = isocket->cache.write_request;
     } else {
-        context_size = cat_offsize_of(cat_socket_write_request_t, u.udp);
+        request = NULL;
     }
-    request = (cat_socket_write_request_t *) cat_malloc(context_size);
-#if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(request == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for write reuqest failed");
-        goto _out;
-    }
+        /* why we do not try write: on high-traffic scenarios, try_write will instead lead to performance */
+        if (!is_udp) {
+            context_size = cat_offsize_of(cat_socket_write_request_t, u.stream);
+        } else {
+            context_size = cat_offsize_of(cat_socket_write_request_t, u.udp);
+        }
+        request = (cat_socket_write_request_t *) cat_malloc(context_size);
+#if CAT_ALLOC_HANDLE_ERRORS
+        if (unlikely(request == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for write request failed");
+            goto _out;
+        }
 #endif
+        if (!(isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE)) {
+            isocket->cache.write_request = request;
+        }
+    }
     if (!is_dgram) {
         error = uv_write2(
             &request->u.stream, &isocket->u.stream,
@@ -2420,9 +2421,7 @@ static cat_bool_t cat_socket_internal_write_raw(
             cat_socket_udp_send_callback
         );
     }
-    if (unlikely(error != 0)) {
-        cat_free(request);
-    } else {
+    if (likely(error == 0)) {
         request->error = CAT_ECANCELED;
         request->u.coroutine = CAT_COROUTINE_G(current);
         isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
@@ -2430,10 +2429,12 @@ static cat_bool_t cat_socket_internal_write_raw(
         ret = cat_time_wait(timeout);
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         request->u.coroutine = NULL;
+        error = request->error;
         if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
             isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
         }
-        if (request->error == CAT_ECANCELED) {
+        /* handle error */
+        if (unlikely(!ret || request->error == CAT_ECANCELED)) {
             /* write request is in progress, we must cancel it by close */
             cat_socket_internal_close(isocket);
 #if 0
@@ -2445,7 +2446,6 @@ static cat_bool_t cat_socket_internal_write_raw(
             cat_update_last_error_with_previous("Socket write wait failed");
             goto _out;
         }
-        error = request->error;
     }
     ret = error == 0;
     if (unlikely(!ret)) {
@@ -2891,6 +2891,9 @@ static void cat_socket_close_callback(uv_handle_t *handle)
     }
 #endif
 
+    if (isocket->cache.write_request != NULL) {
+        cat_free(isocket->cache.write_request);
+    }
     if (isocket->cache.sockname != NULL) {
         cat_free(isocket->cache.sockname);
     }
