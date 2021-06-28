@@ -1675,6 +1675,22 @@ TEST(cat_socket, send_handle)
     }
 }
 
+TEST(cat_socket, open_os_socket)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t echo_client;
+    cat_socket_t echo_client2;
+
+    ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
+    DEFER(cat_socket_close(&echo_client));
+    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+
+    ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
+    DEFER(cat_socket_close(&echo_client2));
+
+    echo_stream_client_tests(&echo_client2);
+}
+
 TEST(cat_socket, dump_all_and_close_all)
 {
     bool closed_all = false;

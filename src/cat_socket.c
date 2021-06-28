@@ -838,7 +838,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     isocket->ssl_peer_name = NULL;
 #endif
 
-    if (ioptions.flags & CAT_SOCKET_CREATION_FLAG_OPEN_FD) {
+    if (ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) {
         const cat_sockaddr_info_t *address_info = NULL;
         if (check_connection) {
             cat_bool_t is_connected = cat_false;
