@@ -427,6 +427,7 @@ struct cat_socket_internal_s
     } context;
     /* cache */
     struct {
+        cat_socket_fd_t fd;
         cat_socket_write_request_t *write_request;
         cat_sockaddr_info_t *sockname;
         cat_sockaddr_info_t *peername;

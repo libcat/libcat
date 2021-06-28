@@ -612,26 +612,19 @@ static cat_always_inline cat_bool_t cat_socket_can_be_transfer_by_ipc(cat_socket
             0;
 }
 
-static void cat_socket_tcp_on_open(cat_socket_t *socket)
-{
-    cat_socket_internal_t *isocket = socket->internal;
-
-    CAT_ASSERT(isocket != NULL);
-    CAT_ASSERT((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP);
-
-    if (!(socket->type & CAT_SOCKET_TYPE_FLAG_TCP_DELAY)) {
-        /* TCP always nodelay by default */
-        (void) uv_tcp_nodelay(&isocket->u.tcp, 1);
-    }
-    if (socket->type & CAT_SOCKET_TYPE_FLAG_TCP_KEEPALIVE) {
-        (void) uv_tcp_keepalive(&isocket->u.tcp, 1, CAT_SOCKET_G(options.tcp_keepalive_delay));
-    }
-}
-
 static cat_always_inline void cat_socket_on_open(cat_socket_t *socket, cat_sa_family_t af)
 {
+    cat_socket_internal_t *isocket = socket->internal;
+    CAT_ASSERT(isocket != NULL);
+
     if ((socket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-        cat_socket_tcp_on_open(socket);
+        if (!(socket->type & CAT_SOCKET_TYPE_FLAG_TCP_DELAY)) {
+            /* TCP always nodelay by default */
+            (void) uv_tcp_nodelay(&isocket->u.tcp, 1);
+        }
+        if (socket->type & CAT_SOCKET_TYPE_FLAG_TCP_KEEPALIVE) {
+            (void) uv_tcp_keepalive(&isocket->u.tcp, 1, CAT_SOCKET_G(options.tcp_keepalive_delay));
+        }
     }
     if (af != AF_UNSPEC && (socket->type & CAT_SOCKET_TYPE_FLAG_INET)) {
         cat_socket_detect_family(socket, af);
@@ -832,6 +825,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     memset(&isocket->context.io.read, 0, sizeof(isocket->context.io.read));
     cat_queue_init(&isocket->context.io.write.coroutines);
     /* part of cache */
+    isocket->cache.fd = CAT_SOCKET_INVALID_FD;
     isocket->cache.write_request = NULL;
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
@@ -967,13 +961,25 @@ CAT_API cat_sa_family_t cat_socket_get_af(const cat_socket_t *socket)
     return cat_socket_get_af_of_type(socket->type);
 }
 
-static cat_socket_fd_t cat_socket_internal_get_fd_fast(const cat_socket_internal_t *isocket)
+static cat_never_inline cat_socket_fd_t cat_socket_internal_get_fd_slow(const cat_socket_internal_t *isocket)
 {
     cat_os_handle_t fd = CAT_OS_INVALID_HANDLE;
 
     (void) uv_fileno(&isocket->u.handle, &fd);
 
     return (cat_socket_fd_t) fd;
+}
+
+static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(cat_socket_internal_t *isocket)
+{
+    cat_socket_fd_t fd = isocket->cache.fd;
+
+    if (unlikely(fd == CAT_SOCKET_INVALID_FD)) {
+        fd = cat_socket_internal_get_fd_slow(isocket);
+        isocket->cache.fd = fd;
+    }
+
+    return fd;
 }
 
 CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket)
@@ -2033,12 +2039,14 @@ static ssize_t cat_socket_internal_read_raw(
     }
 
 #ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
-    /* Notice: when IO is low/slow, this is deoptimization,
+    /* Notice: when IO is low/slow, this is de-optimization,
      * because recv usually returns EAGAIN error,
      * and there is an additional system call overhead */
     if (support_inline_read) {
         cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
-        while (1) {
+        if (unlikely(fd == CAT_SOCKET_INVALID_FD)) {
+            CAT_ASSERT(is_dgram && "only dgram fd creation is lazy");
+        } else while (1) {
             while (1) {
                 if (!is_dgram) {
                     error = recv(fd, buffer + nread, size - nread, 0);
