@@ -86,7 +86,7 @@ CAT_HTTP_PARSER_ON_DATA (status,                 STATUS          )
 CAT_HTTP_PARSER_ON_DATA (header_field,           HEADER_FIELD    )
 CAT_HTTP_PARSER_ON_DATA (header_value,           HEADER_VALUE    )
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
-    parser->keep_alive = llhttp_should_keep_alive(&parser->llhttp);
+    parser->keep_alive = !!llhttp_should_keep_alive(&parser->llhttp);
 } CAT_HTTP_PARSER_ON_EVENT_END()
 CAT_HTTP_PARSER_ON_DATA (body,                   BODY            )
 CAT_HTTP_PARSER_ON_EVENT(chunk_header,           CHUNK_HEADER    )
