@@ -2020,7 +2020,9 @@ static ssize_t cat_socket_internal_read_raw(
     cat_bool_t is_udp = ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP);
 #ifdef CAT_OS_UNIX_LIKE
     cat_bool_t is_udg = (socket->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG;
-    cat_bool_t support_inline_read = isocket->u.handle.type != UV_TTY && !(isocket->u.handle.type == UV_NAMED_PIPE && isocket->u.pipe.ipc);
+    cat_bool_t support_inline_read =
+                isocket->u.handle.type != UV_TTY &&
+                !(isocket->u.handle.type == UV_NAMED_PIPE && isocket->u.pipe.ipc);
 #endif
     size_t nread = 0;
     ssize_t error;
@@ -2038,7 +2040,7 @@ static ssize_t cat_socket_internal_read_raw(
         once = cat_true;
     }
 
-#ifdef CAT_OS_UNIX_LIKE /* (TODO: io_uring way) do not inline read on WIN, proactor way is faster */
+#ifdef CAT_OS_UNIX_LIKE /* Do not inline read on WIN, proactor way is faster */
     /* Notice: when IO is low/slow, this is de-optimization,
      * because recv usually returns EAGAIN error,
      * and there is an additional system call overhead */
