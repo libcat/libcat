@@ -62,6 +62,12 @@ extern "C" {
 /* env */
 #include "cat_env.h"
 
+#ifndef CAT_USE_BUG_DETECTOR
+# if defined(CAT_OS_UNIX_LIKE) && defined(SIGSEGV) && !defined(__SANITIZE_ADDRESS__)
+# define CAT_USE_BUG_DETECTOR 1 /* report segment fault for user */
+# endif
+#endif
+
 #ifndef CAT_OS_WIN
 #define CAT_EXEPATH_MAX (PATH_MAX + PATH_MAX + 1)
 #else

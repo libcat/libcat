@@ -130,3 +130,13 @@ TEST(cat, process_title)
         ASSERT_EQ(custom_title, std::string(process_title));
     }
 }
+
+#if CAT_USE_BUG_DETECTOR
+TEST(cat_event, bug_detection)
+{
+    ASSERT_DEATH_IF_SUPPORTED(([] {
+        char *foo = nullptr;
+        foo[0] = 'x';
+    })(), "bug occurred");
+}
+#endif

@@ -24,6 +24,23 @@ CAT_GLOBALS_CTOR_DECLARE_SZ(cat)
 
 static cat_bool_t cat_args_registered = cat_false;
 
+#if CAT_USE_BUG_DETECTOR
+void cat_bug_detector_callback(int signum)
+{
+    (void) signum;
+#ifndef CAT_BUG_REPORT
+#define CAT_BUG_REPORT \
+    "A bug occurred in libcat-v" CAT_VERSION ", please report it.\n" \
+    "The libcat developers probably don't know about it,\n" \
+    "and unless you report it, chances are it won't be fixed.\n" \
+    "You can read How to report a bug doc before submitting any bug reports:\n" \
+    ">> https://github.com/libcat/libcat/blob/master/.github/ISSUE.md \n"
+#endif
+    fprintf(CAT_G(error_log), CAT_BUG_REPORT);
+    abort();
+}
+#endif
+
 CAT_API cat_bool_t cat_module_init(void)
 {
     cat_log = cat_log_standard;
@@ -42,6 +59,12 @@ CAT_API cat_bool_t cat_module_init(void)
 #endif
 
     CAT_GLOBALS_REGISTER(cat, CAT_GLOBALS_CTOR(cat), NULL);
+
+#if CAT_USE_BUG_DETECTOR
+    if (cat_env_is_true("CAT_BUG_DETECTOR", cat_true)) {
+        (void) signal(SIGSEGV, cat_bug_detector_callback);
+    }
+#endif
 
     return cat_true;
 }
