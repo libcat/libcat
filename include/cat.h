@@ -61,6 +61,8 @@ extern "C" {
 #include "cat_debug.h"
 /* env */
 #include "cat_env.h"
+/* helper */
+#include "cat_helper.h"
 
 #ifndef CAT_USE_BUG_DETECTOR
 # if defined(CAT_OS_UNIX_LIKE) && defined(SIGSEGV) && !defined(__SANITIZE_ADDRESS__)
