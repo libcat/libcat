@@ -2056,13 +2056,13 @@ static ssize_t cat_socket_internal_read_raw(
                     error = recvfrom(fd, buffer, size, 0, address, address_length);
                 }
                 if (error < 0) {
-                    error = cat_translate_sys_error(cat_sys_errno);
-                    if (likely(error == CAT_EAGAIN)) {
+                    if (likely(cat_sys_errno == EAGAIN)) {
                         break;
                     }
-                    if (unlikely(error == CAT_EINTR)) {
+                    if (unlikely(cat_sys_errno == EINTR)) {
                         continue;
                     }
+                    error = cat_translate_sys_error(cat_sys_errno);
                     goto _error;
                 }
                 if (once) {
