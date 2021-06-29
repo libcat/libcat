@@ -402,37 +402,43 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
     return cat_true;
 }
 
-#define CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(_socket, _isocket, _failure) \
+#define CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, _failure) \
     cat_socket_internal_t *_isocket = _socket->internal;\
     do { if (_isocket == NULL) { \
         _failure; \
     }} while (0)
 
 #define CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure) \
-        CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(_socket, _isocket, { \
+        CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, { \
             cat_update_last_error(CAT_EBADF, "Socket has been closed"); \
             _failure; \
         })
 
+#define CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, _io_flags, _failure) do { \
+    if (unlikely(_isocket->io_flags & _io_flags)) { \
+        _failure; \
+    }
+} while (0)
+
 #define CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flags, _failure) \
     CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure); \
-    do { if (unlikely(_isocket->io_flags & _io_flags)) { \
+    CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, { \
         cat_update_last_error( \
             CAT_ELOCKED, "Socket is %s now, unable to %s", \
             cat_socket_io_state_naming(_isocket->io_flags), \
             cat_socket_io_state_name(_io_flags) \
         ); \
         _failure; \
-    }} while (0)
+    })
 
-#define CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(_isocket, _fd, _failure) \
+#define CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(_isocket, _fd, _failure) \
     cat_socket_fd_t _fd = cat_socket_internal_get_fd(isocket); \
     do { if (unlikely(_fd == CAT_SOCKET_INVALID_FD)) { \
         _failure; \
     }} while (0)
 
 #define CAT_SOCKET_INTERNAL_FD_GETTER(_isocket, _fd, _failure) \
-        CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(_isocket, _fd, { \
+        CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(_isocket, _fd, { \
             cat_update_last_error(CAT_EBADF, "Socket file descriptor is bad"); \
             _failure; \
         })
@@ -984,7 +990,7 @@ static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(cat_soc
 
 CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket)
 {
-    CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(socket, isocket, return CAT_SOCKET_INVALID_FD);
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_SOCKET_INVALID_FD);
 
     return cat_socket_internal_get_fd_fast(isocket);
 }
@@ -1079,7 +1085,7 @@ static cat_always_inline CAT_ATTRIBUTE_UNUSED cat_timeout_t cat_socket_internal_
 \
 static cat_always_inline CAT_ATTRIBUTE_UNUSED cat_timeout_t cat_socket_get_##type##_timeout_fast(const cat_socket_t *socket) \
 { \
-    CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(socket, isocket, return CAT_TIMEOUT_INVALID); \
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_TIMEOUT_INVALID); \
     \
     return cat_socket_internal_get_##type##_timeout(isocket); \
 } \
@@ -3076,8 +3082,8 @@ static cat_errno_t cat_socket_check_liveness_by_fd(cat_socket_fd_t fd)
 
 CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket)
 {
-    CAT_SOCKET_INTERNAL_GETTER_WITHOUT_ERROR(socket, isocket, return CAT_EBADF);
-    CAT_SOCKET_INTERNAL_FD_GETTER_WITHOUT_ERROR(isocket, fd, return CAT_EBADF);
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_EBADF);
+    CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(isocket, fd, return CAT_EBADF);
 
     return cat_socket_check_liveness_by_fd(fd);
 }
