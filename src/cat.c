@@ -24,12 +24,6 @@ CAT_GLOBALS_CTOR_DECLARE_SZ(cat)
 
 static cat_bool_t cat_args_registered = cat_false;
 
-#ifndef CAT_OS_WIN
-#define CAT_EXEPATH_MAX (PATH_MAX + PATH_MAX + 1)
-#else
-#define CAT_EXEPATH_MAX 32768
-#endif
-
 CAT_API cat_bool_t cat_module_init(void)
 {
     cat_log = cat_log_standard;

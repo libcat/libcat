@@ -62,6 +62,12 @@ extern "C" {
 /* env */
 #include "cat_env.h"
 
+#ifndef CAT_OS_WIN
+#define CAT_EXEPATH_MAX (PATH_MAX + PATH_MAX + 1)
+#else
+#define CAT_EXEPATH_MAX 32768
+#endif
+
 /* global */
 
 CAT_GLOBALS_STRUCT_BEGIN(cat)
