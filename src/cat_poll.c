@@ -22,6 +22,19 @@
 #include "cat_event.h"
 #include "cat_time.h"
 
+/* poll event will never be triggered if timeout is 0 on Windows,
+ * because uv__poll() treats 0 timeout specially.
+ * TODO: could we fix it in libuv?  */
+#ifndef CAT_OS_WIN
+#define CAT_POLL_CHECK_TIMEOUT(timeout)
+#else
+#define CAT_POLL_CHECK_TIMEOUT(timeout) do { \
+    if (timeout == 0) { \
+        timeout = 1; \
+    } \
+} while (0)
+#endif
+
 /* TODO: support poll same fd multi times? */
 
 typedef struct
@@ -113,6 +126,7 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
 
 CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
 {
+    CAT_POLL_CHECK_TIMEOUT(timeout);
     cat_poll_one_t *poll;
     cat_pollfd_events_t _revents;
     cat_ret_t ret;
@@ -252,6 +266,7 @@ static void cat_poll_callback(uv_poll_t* handle, int status, int revents)
 
 CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 {
+    CAT_POLL_CHECK_TIMEOUT(timeout);
     cat_poll_context_t *context;
     cat_poll_t *polls;
     cat_nfds_t i, n = 0, e = 0;
