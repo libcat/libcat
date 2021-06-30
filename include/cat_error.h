@@ -103,7 +103,7 @@ CAT_API CAT_NORETURN void cat_abort(void);
     _last_error->message = NULL; /* prevent free */ \
 
 #define CAT_PROTECT_LAST_ERROR_END() \
-    if (_last_error->message != NULL) { \
+    if (unlikely(_last_error->message != NULL)) { \
         cat_free(_last_error->message); /* discard */ \
     } \
     *_last_error = __last_error; /* recover */ \
