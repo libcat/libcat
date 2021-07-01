@@ -42,9 +42,38 @@ static cat_timeout_t cat_watch_dog_align_threshold(cat_timeout_t threshold)
     return threshold;
 }
 
+#ifdef CAT_OS_WIN
+// in default, Windows timer slice is about 15.6ms
+// this function will try reduce it
+static void cat_improve_timer_resolution(void)
+{
+    static NTSTATUS (NTAPI *NtSetTimerResolution)(
+        IN ULONG                DesiredResolution,
+        IN BOOLEAN              SetResolution,
+        OUT PULONG              CurrentResolution
+    ) = NULL;
+    // prove NtSetTimerResolution
+    if (!NtSetTimerResolution) {
+        if (!(NtSetTimerResolution =
+            (NTSTATUS (NTAPI *)(ULONG, BOOLEAN, PULONG)) GetProcAddress(
+                GetModuleHandleW(L"ntdll.dll"), "NtSetTimerResolution"))) {
+            return;
+        }
+    }
+    // TODO: get current at first called, record it, then recover it
+    ULONG dummy;
+    NtSetTimerResolution(1 /* 1us, will be upscaled to minimum */, TRUE, &dummy);
+    // we donot check its result
+}
+#endif
+
 static void cat_watch_dog_loop(void* arg)
 {
     cat_watch_dog_t *watch_dog = (cat_watch_dog_t *) arg;
+
+#ifdef CAT_OS_WIN
+    cat_improve_timer_resolution();
+#endif
 
     uv_sem_post(watch_dog->sem);
 

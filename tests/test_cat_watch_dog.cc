@@ -20,6 +20,13 @@
 
 const std::string keyword = "Watch-Dog";
 
+static inline void _sys_nanosleep(cat_nsec_t ns_total){
+    cat_timespec ts;
+    ts.tv_sec = ns_total / (1000 * 1000 * 1000);
+    ts.tv_nsec = ns_total % (1000 * 1000 * 1000);
+    while(cat_sys_nanosleep(&ts, &ts));
+}
+
 TEST(cat_watch_dog, base)
 {
     testing::internal::CaptureStderr();
@@ -32,7 +39,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 100));
+        _sys_nanosleep(cat_watch_dog_get_quantum() * 100);
     });
 
     cat_watch_dog_stop(); // make sure not output error anymore
@@ -58,7 +65,7 @@ TEST(cat_watch_dog, single)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    cat_sys_usleep((unsigned int) ((cat_watch_dog_get_quantum() / 1000) * 3));
+    _sys_nanosleep(cat_watch_dog_get_quantum() * 3);
 
     cat_watch_dog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
@@ -75,7 +82,7 @@ TEST(cat_watch_dog, scheduler_blocking)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    cat_time_usleep((cat_watch_dog_get_quantum() / 1000) * 3);
+    _sys_nanosleep(cat_watch_dog_get_quantum() * 3);
 
     cat_watch_dog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
@@ -92,10 +99,10 @@ TEST(cat_watch_dog, nothing)
     DEFER(cat_watch_dog_stop());
 
     auto sleeper = [=] {
-        cat_nsec_t nsec = ((cat_watch_dog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
+        cat_timeout_t usec = ((cat_watch_dog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
         size_t n = TEST_MAX_REQUESTS;
         while (n--) {
-            cat_time_usleep(nsec);
+            cat_time_usleep(usec);
         }
     };
 
