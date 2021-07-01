@@ -968,7 +968,6 @@ CAT_API cat_bool_t cat_ssl_encrypt(
 
     *vout_count = 0;
 
-    buffer = ssl->write_buffer.value;
     size = cat_ssl_encrypted_size(vin_length);
     if (unlikely(size >  ssl->write_buffer.size)) {
         buffer = (char *) cat_malloc(size);
@@ -979,6 +978,7 @@ CAT_API cat_bool_t cat_ssl_encrypt(
         }
 #endif
     } else {
+        buffer = ssl->write_buffer.value;
         size = ssl->write_buffer.size;
     }
 
