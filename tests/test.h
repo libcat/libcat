@@ -199,7 +199,7 @@ namespace testing
 
         ~wait_group()
         {
-            cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT);
+            cat_sync_wait_group_wait(&wg, CAT_TIMEOUT_FOREVER);
         }
 
         wait_group &operator++() // front
@@ -242,7 +242,7 @@ namespace testing
             return *this;
         }
 
-        bool operator()(cat_timeout_t timeout = TEST_IO_TIMEOUT)
+        bool operator()(cat_timeout_t timeout = CAT_TIMEOUT_FOREVER)
         {
             return cat_sync_wait_group_wait(&wg, timeout);
         }
