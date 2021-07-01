@@ -2978,6 +2978,7 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
 CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 {
     cat_socket_internal_t *isocket = socket->internal;
+    cat_bool_t ret = cat_true;
 
     if (isocket == NULL) {
         /* we do not update the last error here
@@ -2986,10 +2987,11 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 #ifdef CAT_DEBUG
         cat_update_last_error(CAT_EBADF, NULL);
 #endif
-        return cat_false;
+        ret = cat_false;
+    } else {
+        cat_socket_internal_close(isocket);
     }
 
-    cat_socket_internal_close(isocket);
     if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
 #if !defined(_MSC_VER) && !defined(__clang__)
 #pragma GCC diagnostic push
@@ -3003,7 +3005,7 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 #endif
     }
 
-    return cat_true;
+    return ret;
 }
 
 /* getter / status / options */
