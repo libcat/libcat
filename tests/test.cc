@@ -183,8 +183,6 @@ public:
 #endif
         cat_set_error_log(stderr);
 
-        cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
-
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
         ASSERT_NE(cat_coroutine_get_current(), nullptr);
 
@@ -194,6 +192,7 @@ public:
             testing::CONFIG_IO_TIMEOUT = atoi(timeout);
             cat_free(timeout);
         }
+        cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
         /* MAX_REQUEST */
         if (cat_env_exists("TEST_MAX_REQUESTS")) {
             char *n = cat_env_get("TEST_MAX_REQUESTS");
