@@ -332,6 +332,30 @@ CAT_API int cat_sockaddr_copy(cat_sockaddr_t *to, cat_socklen_t *to_length, cons
     return error;
 }
 
+CAT_API cat_errno_t cat_sockaddr_check_silent(const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    cat_socklen_t min_length;
+
+    switch (address->sa_family) {
+        case AF_INET:
+            min_length = sizeof(cat_sockaddr_in_t);
+            break;
+        case AF_INET6:
+            min_length = sizeof(cat_sockaddr_in6_t);
+            break;
+        case AF_LOCAL:
+            min_length = offsetof(cat_sockaddr_local_t, sl_path);
+            break;
+        default:
+            return CAT_EAFNOSUPPORT;
+    }
+    if (unlikely(address_length < min_length)) {
+        return CAT_EINVAL;
+    }
+
+    return 0;
+}
+
 CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
     cat_socklen_t min_length;
@@ -405,26 +429,32 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
 #define CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, _failure) \
     cat_socket_internal_t *_isocket = _socket->internal;\
     do { if (_isocket == NULL) { \
+        cat_errno_t error = CAT_EBADF; (void) error; \
         _failure; \
     }} while (0)
 
 #define CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure) \
         CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, { \
-            cat_update_last_error(CAT_EBADF, "Socket has been closed"); \
+            cat_update_last_error(error, "Socket has been closed"); \
             _failure; \
         })
 
-#define CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, _io_flags, _failure) do { \
+#define CAT_SOCKET_INTERNAL_CHECK_IO_SILENT(_socket, _isocket, _io_flags, _failure) do { \
     if (unlikely(_isocket->io_flags & _io_flags)) { \
+        cat_errno_t error = CAT_ELOCKED; \
         _failure; \
-    }
+    } \
 } while (0)
+
+#define CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, _io_flags, _failure) \
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, _failure); \
+    CAT_SOCKET_INTERNAL_CHECK_IO_SILENT(_socket, _isocket, _io_flags, _failure)
 
 #define CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flags, _failure) \
     CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure); \
-    CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, { \
+    CAT_SOCKET_INTERNAL_CHECK_IO_SILENT(_socket, _isocket, _io_flags, { \
         cat_update_last_error( \
-            CAT_ELOCKED, "Socket is %s now, unable to %s", \
+            error, "Socket is %s now, unable to %s", \
             cat_socket_io_state_naming(_isocket->io_flags), \
             cat_socket_io_state_name(_io_flags) \
         ); \
@@ -457,12 +487,18 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
     return cat_true;
 }
 
-#define CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure) do { \
+#define CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY_SILENT(_isocket, _failure) do { \
     if (unlikely(!cat_socket_internal_is_established(_isocket))) { \
-        cat_update_last_error(CAT_ENOTCONN, "Socket has not been established"); \
+        cat_errno_t error = CAT_ENOTCONN; \
         _failure; \
     } \
 } while (0)
+
+#define CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure) \
+        CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY_SILENT(_isocket, { \
+            cat_update_last_error(error, "Socket has not been established"); \
+            _failure; \
+        })
 
 #define CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(_isocket, _failure) do { \
     if (cat_socket_internal_is_established(_isocket)) { \
@@ -497,6 +533,15 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
 #define CAT_SOCKET_CHECK_INPUT_ADDRESS(_address, _address_length, failure) do { \
     if (_address != NULL && _address_length > 0) { \
         if (unlikely(!cat_sockaddr_check(_address, _address_length))) { \
+            failure; \
+        } \
+    } \
+} while (0)
+
+#define CAT_SOCKET_CHECK_INPUT_ADDRESS_SILENT(_address, _address_length, failure) do { \
+    if (_address != NULL && _address_length > 0) { \
+        cat_errno_t error = cat_sockaddr_check_silent(_address, _address_length); \
+        if (unlikely(error != 0)) { \
             failure; \
         } \
     } \
@@ -976,13 +1021,13 @@ static cat_never_inline cat_socket_fd_t cat_socket_internal_get_fd_slow(const ca
     return (cat_socket_fd_t) fd;
 }
 
-static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(cat_socket_internal_t *isocket)
+static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(const cat_socket_internal_t *isocket)
 {
     cat_socket_fd_t fd = isocket->cache.fd;
 
     if (unlikely(fd == CAT_SOCKET_INVALID_FD)) {
         fd = cat_socket_internal_get_fd_slow(isocket);
-        isocket->cache.fd = fd;
+        ((cat_socket_internal_t *) isocket)->cache.fd = fd;
     }
 
     return fd;
@@ -2013,6 +2058,12 @@ static int cat_socket_internal_udg_wait_readable(cat_socket_internal_t *isocket,
 }
 #endif
 
+static cat_always_inline cat_bool_t cat_socket_internal_support_inline_read(const cat_socket_internal_t *isocket)
+{
+    return isocket->u.handle.type != UV_TTY &&
+           !(isocket->u.handle.type == UV_NAMED_PIPE && isocket->u.pipe.ipc);
+}
+
 static ssize_t cat_socket_internal_read_raw(
     cat_socket_internal_t *isocket,
     char *buffer, size_t size,
@@ -2026,9 +2077,6 @@ static ssize_t cat_socket_internal_read_raw(
     cat_bool_t is_udp = ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP);
 #ifdef CAT_OS_UNIX_LIKE
     cat_bool_t is_udg = (socket->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG;
-    cat_bool_t support_inline_read =
-                isocket->u.handle.type != UV_TTY &&
-                !(isocket->u.handle.type == UV_NAMED_PIPE && isocket->u.pipe.ipc);
 #endif
     size_t nread = 0;
     ssize_t error;
@@ -2050,7 +2098,7 @@ static ssize_t cat_socket_internal_read_raw(
     /* Notice: when IO is low/slow, this is de-optimization,
      * because recv usually returns EAGAIN error,
      * and there is an additional system call overhead */
-    if (support_inline_read) {
+    if (likely(cat_socket_internal_support_inline_read(isocket))) {
         cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
         if (unlikely(fd == CAT_SOCKET_INVALID_FD)) {
             CAT_ASSERT(is_dgram && "only dgram fd creation is lazy");
@@ -2173,6 +2221,43 @@ static ssize_t cat_socket_internal_read_raw(
     }
 }
 
+static ssize_t cat_socket_internal_try_recv_raw(
+    cat_socket_internal_t *isocket,
+    char *buffer, size_t size,
+    cat_sockaddr_t *address, cat_socklen_t *address_length
+)
+{
+    cat_socket_t *socket = isocket->u.socket; CAT_ASSERT(socket != NULL);
+    cat_socket_fd_t fd;
+    ssize_t nread;
+
+    if (unlikely(!cat_socket_internal_support_inline_read(isocket))) {
+        return CAT_EMISUSE;
+    }
+    fd = cat_socket_internal_get_fd_fast(isocket);
+    if (unlikely(fd == CAT_SOCKET_INVALID_FD)) {
+        return CAT_EBADF;
+    }
+
+    while (1) {
+        nread = recvfrom(
+            fd, buffer, (cat_socket_recv_length_t) size, 0,
+            address, address_length
+        );
+        if (nread < 0) {
+#ifdef CAT_OS_UNIX_LIKE
+            if (unlikely(cat_sys_errno == EINTR)) {
+                continue;
+            }
+#endif
+            return cat_translate_sys_error(cat_sys_errno);
+        }
+        break;
+    }
+
+    return nread;
+}
+
 #ifdef CAT_SSL
 static ssize_t cat_socket_internal_read_decrypted(
     cat_socket_internal_t *isocket,
@@ -2231,6 +2316,50 @@ static ssize_t cat_socket_internal_read_decrypted(
     }
     return (ssize_t) nread;
 }
+
+static ssize_t cat_socket_internal_try_recv_decrypted(
+    cat_socket_internal_t *isocket,
+    char *buffer, size_t size,
+    cat_sockaddr_t *address, cat_socklen_t *address_length
+)
+{
+    cat_ssl_t *ssl = isocket->ssl; CAT_ASSERT(ssl != NULL);
+    cat_buffer_t *read_buffer = &ssl->read_buffer;
+
+    while (1) {
+        size_t out_length = size;
+        ssize_t nread;
+        cat_errno_t error;
+        cat_bool_t decrypted;
+
+        CAT_PROTECT_LAST_ERROR_START() {
+            decrypted = cat_ssl_decrypt(ssl, buffer, &out_length);
+            if (!decrypted) {
+                error = cat_get_last_error_code();
+            }
+        } CAT_PROTECT_LAST_ERROR_END();
+        if (!decrypted) {
+            return error;
+        }
+
+        if (out_length > 0) {
+            return out_length;
+        }
+
+        nread = cat_socket_internal_try_recv_raw(
+            isocket,
+            read_buffer->value + read_buffer->length,
+            read_buffer->size - read_buffer->length,
+            address, address_length
+        );
+
+        if (unlikely(nread <= 0)) {
+            return nread;
+        }
+
+        read_buffer->length += nread;
+    }
+}
 #endif
 
 static cat_always_inline ssize_t cat_socket_internal_read(
@@ -2247,6 +2376,20 @@ static cat_always_inline ssize_t cat_socket_internal_read(
     }
 #endif
     return cat_socket_internal_read_raw(isocket, buffer, size, address, address_length, timeout, once);
+}
+
+static cat_always_inline ssize_t cat_socket_internal_try_recv(
+    cat_socket_internal_t *isocket,
+    char *buffer, size_t size,
+    cat_sockaddr_t *address, cat_socklen_t *address_length
+)
+{
+#ifdef CAT_SSL
+    if (isocket->ssl != NULL) {
+        return cat_socket_internal_try_recv_decrypted(isocket, buffer, size, address, address_length);
+    }
+#endif
+    return cat_socket_internal_try_recv_raw(isocket, buffer, size, address, address_length);
 }
 
 CAT_STATIC_ASSERT(sizeof(cat_socket_write_vector_t) == sizeof(uv_buf_t));
@@ -2389,7 +2532,7 @@ static cat_bool_t cat_socket_internal_write_raw(
     ssize_t error;
 
 #ifdef CAT_OS_UNIX_LIKE
-    /* libuv does not support dymanic address length */
+    /* libuv does not support dynamic address length */
     CAT_ASSERT(
         (!is_udp || address == NULL || address->sa_family != AF_UNIX || address_length >= sizeof(struct sockaddr_un)) &&
         "Socket does not support variable size UNIX address on UDP"
@@ -2476,6 +2619,75 @@ static cat_bool_t cat_socket_internal_write_raw(
     return ret;
 }
 
+#ifdef CAT_OS_UNIX_LIKE
+static cat_never_inline ssize_t cat_socket_internal_udg_try_write(
+    cat_socket_internal_t *isocket,
+    const cat_socket_write_vector_t *vector, unsigned int vector_count,
+    const cat_sockaddr_t *address, cat_socklen_t address_length
+)
+{
+    cat_socket_fd_t fd;
+    struct msghdr msg;
+    ssize_t nwrite;
+
+    if (!!(isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE)) {
+        return CAT_EAGAIN;
+    }
+
+    fd = cat_socket_internal_get_fd_fast(isocket);
+    msg.msg_name = (struct sockaddr *) address;
+    msg.msg_namelen = address_length;
+    msg.msg_iov = (struct iovec *) vector;
+    msg.msg_iovlen = vector_count;
+    msg.msg_control = NULL;
+    msg.msg_controllen = 0;
+    msg.msg_flags = 0;
+    do {
+        nwrite = sendmsg(fd, &msg, 0);
+    } while (nwrite < 0 && CAT_SOCKET_RETRY_ON_WRITE_ERROR(cat_sys_errno));
+
+    if (unlikely(nwrite < 0)) {
+        return cat_translate_sys_error(cat_sys_errno);
+    }
+    return nwrite;
+}
+#endif
+
+static ssize_t cat_socket_internal_try_write_raw(
+    cat_socket_internal_t *isocket,
+    const cat_socket_write_vector_t *vector, unsigned int vector_count,
+    const cat_sockaddr_t *address, cat_socklen_t address_length
+)
+{
+    CAT_SOCKET_CHECK_INPUT_ADDRESS_SILENT(address, address_length, return cat_false);
+    cat_socket_t *socket = isocket->u.socket; CAT_ASSERT(socket != NULL);
+    cat_bool_t is_dgram = (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM);
+
+#ifdef CAT_OS_UNIX_LIKE
+    cat_bool_t is_udp = ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP);
+    /* libuv does not support dynamic address length */
+    CAT_ASSERT(
+        (!is_udp || address == NULL || address->sa_family != AF_UNIX || address_length >= sizeof(struct sockaddr_un)) &&
+        "Socket does not support variable size UNIX address on UDP"
+    );
+    if (is_dgram && !is_udp) {
+        return cat_socket_internal_udg_try_write(isocket, vector, vector_count, address, address_length);
+    }
+#endif
+    if (!is_dgram) {
+        return uv_try_write(
+            &isocket->u.stream,
+            (const uv_buf_t *) vector, vector_count
+        );
+    } else {
+        return uv_udp_try_send(
+            &isocket->u.udp,
+            (const uv_buf_t *) vector, vector_count,
+            address
+        );
+    }
+}
+
 #ifdef CAT_SSL
 static cat_bool_t cat_socket_internal_write_encrypted(
     cat_socket_internal_t *isocket,
@@ -2511,6 +2723,111 @@ static cat_bool_t cat_socket_internal_write_encrypted(
 
     return ret;
 }
+
+static ssize_t cat_socket_internal_try_write_encrypted(
+    cat_socket_internal_t *isocket,
+    const cat_socket_write_vector_t *vector, unsigned int vector_count,
+    const cat_sockaddr_t *address, cat_socklen_t address_length
+)
+{
+    cat_ssl_t *ssl = isocket->ssl; CAT_ASSERT(ssl != NULL);
+    cat_io_vector_t ssl_vector[8];
+    unsigned int ssl_vector_count;
+    ssize_t nwrite;
+    cat_bool_t send_buffered_data, has_buffered_data;
+
+    _retry:
+    has_buffered_data = cat_false;
+    if (unlikely(ssl->write_buffer.length == 0)) {
+        cat_bool_t encrypted;
+        cat_errno_t error;
+        /* Notice: we must encrypt all buffers at once,
+         * otherwise we will not be able to support queued writes. */
+        ssl_vector_count = CAT_ARRAY_SIZE(ssl_vector);
+        CAT_PROTECT_LAST_ERROR_START() {
+            encrypted = cat_ssl_encrypt(
+                isocket->ssl,
+                (const cat_io_vector_t *) vector, vector_count,
+                ssl_vector, &ssl_vector_count
+            );
+            if (unlikely(!encrypted)) {
+                error = cat_get_last_error_code();
+            }
+        } CAT_PROTECT_LAST_ERROR_END();
+        if (unlikely(!encrypted)) {
+            return error;
+        }
+        send_buffered_data = cat_false;
+    } else {
+        /** We have some data has not sent in buffer, just retry to send it first.  */
+        ssl_vector[0].base = ssl->write_buffer.value;
+        ssl_vector[0].length = (cat_io_vector_length_t) ssl->write_buffer.length;
+        ssl_vector_count = 1;
+        send_buffered_data = cat_true;
+    }
+
+    nwrite = cat_socket_internal_try_write_raw(
+        isocket,
+        (cat_socket_write_vector_t *) ssl_vector, ssl_vector_count,
+        address, address_length
+    );
+
+    if (unlikely(nwrite >= 0)) {
+        if (send_buffered_data) {
+            /* TODO: add offset here to make it more performance? */
+            cat_buffer_truncate(&ssl->write_buffer, nwrite, 0);
+            /* if all of the buffered data has been sent,
+             * we can retry to send users' data here immediately. */
+            if (ssl->write_buffer.length == 0) {
+                goto _retry;
+            }
+            nwrite = CAT_EAGAIN;
+            has_buffered_data = cat_true;
+        } else {
+            /* Well, this could be confusing. if we can not send all encrypted data at once,
+             * we really can not know how many bytes of raw data has been sent,
+             * so the only thing we can do is to store the remaining data to buffer and
+             * try again in the next call. */
+            size_t encrypted_length = cat_io_vector_length(ssl_vector, ssl_vector_count);
+            if (unlikely((size_t) nwrite != encrypted_length)) {
+                size_t _nwrite = nwrite;
+                cat_io_vector_t *ssl_vector_current = ssl_vector;
+                cat_io_vector_t *ssl_vector_eof = ssl_vector + ssl_vector_count;
+                size_t ssl_vector_base_offset = 0;
+                do {
+                    if (ssl_vector_current->length < _nwrite) {
+                        ssl_vector_current++;
+                    } else {
+                        ssl_vector_base_offset = ssl_vector_current->length - _nwrite;
+                    }
+                    _nwrite -= ssl_vector_current->length;
+                } while (_nwrite > 0);
+                do {
+                    if (ssl_vector_current->base == ssl->write_buffer.value) {
+                        cat_buffer_truncate(&ssl->write_buffer, ssl_vector_base_offset, 0);
+                    } else {
+                        cat_buffer_clear(&ssl->write_buffer);
+                        cat_buffer_append(&ssl->write_buffer,
+                            ssl_vector_current->base + ssl_vector_base_offset,
+                            ssl_vector_current->length - ssl_vector_base_offset
+                        );
+                    }
+                } while (++ssl_vector_current < ssl_vector_eof);
+                /* We tell caller all data has been sent, but actually they are in buffered,
+                 * it's ok, just like syscall write() did. */
+                nwrite = cat_io_vector_length((const cat_io_vector_t *) vector, vector_count);
+                has_buffered_data = cat_true;
+            }
+        }
+    }
+
+    if (!has_buffered_data) {
+        cat_buffer_clear(&ssl->write_buffer);
+    }
+    cat_ssl_encrypted_vector_free(ssl, ssl_vector, ssl_vector_count);
+
+    return nwrite;
+}
 #endif
 
 static cat_always_inline cat_bool_t cat_socket_internal_write(
@@ -2528,13 +2845,35 @@ static cat_always_inline cat_bool_t cat_socket_internal_write(
     return cat_socket_internal_write_raw(isocket, vector, vector_count, address, address_length, NULL, timeout);
 }
 
+static cat_always_inline ssize_t cat_socket_internal_try_write(
+    cat_socket_internal_t *isocket,
+    const cat_socket_write_vector_t *vector, unsigned int vector_count,
+    const cat_sockaddr_t *address, cat_socklen_t address_length
+)
+{
+#ifdef CAT_SSL
+    if (isocket->ssl != NULL) {
+        return cat_socket_internal_try_write_encrypted(isocket, vector, vector_count, address, address_length);
+    }
+#endif
+    return cat_socket_internal_try_write_raw(isocket, vector, vector_count, address, address_length);
+}
+
+#define CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM_SILENT(_socket, _isocket, _failure) do { \
+    if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
+        CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY_SILENT(_isocket, _failure); \
+    } \
+} while (0)
+
+#define CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM(_socket, _isocket, _failure) do { \
+    if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
+        CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure); \
+    } \
+} while (0)
+
 #define CAT_SOCKET_IO_CHECK_RAW(_socket, _isocket, _io_flag, _failure) \
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(_socket, _isocket, _io_flag, _failure); \
-    do { \
-        if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
-            CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure); \
-        } \
-    } while (0)
+    CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM(_socket, _isocket, _failure) \
 
 #define CAT_SOCKET_IO_CHECK(_socket, _isocket, _io_flag, _failure) \
         CAT_SOCKET_IO_CHECK_RAW(_socket, _isocket, _io_flag, _failure); \
@@ -2545,10 +2884,20 @@ static cat_always_inline cat_bool_t cat_socket_internal_write(
             } \
         } while (0)
 
+#define CAT_SOCKET_TRY_IO_CHECK(_socket, _isocket, _io_flag, _failure) \
+        CAT_SOCKET_INTERNAL_GETTER_WITH_IO_SILENT(_socket, _isocket, _io_flag, _failure); \
+        CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM_SILENT(_socket, _isocket, _failure) \
+
 static cat_always_inline ssize_t cat_socket__read(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout, cat_bool_t once)
 {
     CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return -1);
     return cat_socket_internal_read(isocket, buffer, size, address, address_length, timeout, once);
+}
+
+static cat_always_inline ssize_t cat_socket__try_recv(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
+{
+    CAT_SOCKET_TRY_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return error);
+    return cat_socket_internal_try_recv(isocket, buffer, size, address, address_length);
 }
 
 static cat_always_inline cat_bool_t cat_socket__write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
@@ -2557,10 +2906,22 @@ static cat_always_inline cat_bool_t cat_socket__write(cat_socket_t *socket, cons
     return cat_socket_internal_write(isocket, vector, vector_count, address, address_length, timeout);
 }
 
+static cat_always_inline ssize_t cat_socket__try_write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    CAT_SOCKET_TRY_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_WRITE, return error == CAT_ELOCKED ? CAT_EAGAIN : error);
+    return cat_socket_internal_try_write(isocket, vector, vector_count, address, address_length);
+}
+
 static cat_always_inline cat_bool_t cat_socket__send(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
     cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
     return cat_socket__write(socket, &vector, 1, address, address_length, timeout);
+}
+
+static cat_always_inline ssize_t cat_socket__try_send(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket__try_write(socket, &vector, 1, address, address_length);
 }
 
 #define CAT_SOCKET_READ_ADDRESS_CONTEXT(_address, _name, _name_length, _port) \
@@ -2658,6 +3019,11 @@ CAT_API cat_bool_t cat_socket_write_ex(cat_socket_t *socket, const cat_socket_wr
     return cat_socket__write(socket, vector, vector_count, NULL, 0, timeout);
 }
 
+CAT_API ssize_t cat_socket_try_write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count)
+{
+    return cat_socket__try_write(socket, vector, vector_count, NULL, 0);
+}
+
 CAT_API ssize_t cat_socket_read_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
 {
     return cat_socket__read_from(socket, buffer, size, name, name_length, port, cat_socket_get_read_timeout_fast(socket));
@@ -2676,6 +3042,11 @@ CAT_API cat_bool_t cat_socket_writeto(cat_socket_t *socket, const cat_socket_wri
 CAT_API cat_bool_t cat_socket_writeto_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
     return cat_socket__write(socket, vector, vector_count, address, address_length, timeout);
+}
+
+CAT_API ssize_t cat_socket_try_writeto(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    return cat_socket__try_write(socket, vector, vector_count, address, address_length);
 }
 
 CAT_API cat_bool_t cat_socket_write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port)
@@ -2698,6 +3069,11 @@ CAT_API ssize_t cat_socket_recv_ex(cat_socket_t *socket, char *buffer, size_t si
     return cat_socket__read(socket, buffer, size, 0, NULL, timeout, cat_true);
 }
 
+CAT_API ssize_t cat_socket_try_recv(cat_socket_t *socket, char *buffer, size_t size)
+{
+    return cat_socket__try_recv(socket, buffer, size, NULL, NULL);
+}
+
 CAT_API ssize_t cat_socket_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
 {
     return cat_socket__read(socket, buffer, size, address, address_length, cat_socket_get_read_timeout_fast(socket), cat_true);
@@ -2706,6 +3082,11 @@ CAT_API ssize_t cat_socket_recvfrom(cat_socket_t *socket, char *buffer, size_t s
 CAT_API ssize_t cat_socket_recvfrom_ex(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout)
 {
     return cat_socket__read(socket, buffer, size, address, address_length, timeout, cat_true);
+}
+
+CAT_API ssize_t cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
+{
+    return cat_socket__try_recv(socket, buffer, size, address, address_length);
 }
 
 CAT_API cat_bool_t cat_socket_send(cat_socket_t *socket, const char *buffer, size_t length)
@@ -2718,6 +3099,11 @@ CAT_API cat_bool_t cat_socket_send_ex(cat_socket_t *socket, const char *buffer, 
     return cat_socket__send(socket, buffer, length, NULL, 0, timeout);
 }
 
+CAT_API ssize_t cat_socket_try_send(cat_socket_t *socket, const char *buffer, size_t length)
+{
+    return cat_socket__try_send(socket, buffer, length, NULL, 0);
+}
+
 CAT_API cat_bool_t cat_socket_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
     return cat_socket__send(socket, buffer, length, address, address_length, cat_socket_get_write_timeout_fast(socket));
@@ -2726,6 +3112,11 @@ CAT_API cat_bool_t cat_socket_sendto(cat_socket_t *socket, const char *buffer, s
 CAT_API cat_bool_t cat_socket_sendto_ex(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
     return cat_socket__send(socket, buffer, length, address, address_length, timeout);
+}
+
+CAT_API ssize_t cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    return cat_socket__try_send(socket, buffer, length, address, address_length);
 }
 
 CAT_API cat_bool_t cat_socket_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)

@@ -122,6 +122,7 @@ CAT_API cat_bool_t cat_sockaddr_to_name(const cat_sockaddr_t *address, cat_sockl
 
 /* Notice: it can handle empty "to" internally */
 CAT_API int cat_sockaddr_copy(cat_sockaddr_t *to, cat_socklen_t *to_length, const cat_sockaddr_t *from, cat_socklen_t from_length);
+CAT_API cat_errno_t cat_sockaddr_check_silent(const cat_sockaddr_t *address, cat_socklen_t address_length);
 CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen_t address_length);
 
 /* socket fd */
@@ -601,6 +602,14 @@ CAT_API cat_bool_t cat_socket_sendto(cat_socket_t *socket, const char *buffer, s
 CAT_API cat_bool_t cat_socket_sendto_ex(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_socket_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port);
 CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout);
+
+/* try_* APIs will return read/write bytes immediately, if error occurred, it returns E* errno */
+CAT_API ssize_t cat_socket_try_recv(cat_socket_t *socket, char *buffer, size_t size);
+CAT_API ssize_t cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length);
+CAT_API ssize_t cat_socket_try_send(cat_socket_t *socket, const char *buffer, size_t length);
+CAT_API ssize_t cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length);
+CAT_API ssize_t cat_socket_try_write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count);
+CAT_API ssize_t cat_socket_try_writeto(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length);
 
 CAT_API ssize_t cat_socket_peek(const cat_socket_t *socket, char *buffer, size_t size);
 CAT_API ssize_t cat_socket_peekfrom(const cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length);
