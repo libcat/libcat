@@ -2323,7 +2323,7 @@ static ssize_t cat_socket_internal_try_recv_decrypted(
     while (1) {
         size_t out_length = size;
         ssize_t nread;
-        cat_errno_t error;
+        cat_errno_t error = 0;
         cat_bool_t decrypted;
 
         CAT_PROTECT_LAST_ERROR_START() {
@@ -2734,7 +2734,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
     has_buffered_data = cat_false;
     if (unlikely(ssl->write_buffer.length == 0)) {
         cat_bool_t encrypted;
-        cat_errno_t error;
+        cat_errno_t error = 0;
         /* Notice: we must encrypt all buffers at once,
          * otherwise we will not be able to support queued writes. */
         ssl_vector_count = CAT_ARRAY_SIZE(ssl_vector);
