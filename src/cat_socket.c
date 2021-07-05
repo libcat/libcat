@@ -462,7 +462,7 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
     })
 
 #define CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(_isocket, _fd, _failure) \
-    cat_socket_fd_t _fd = cat_socket_internal_get_fd(isocket); \
+    cat_socket_fd_t _fd = cat_socket_internal_get_fd_fast(isocket); \
     do { if (unlikely(_fd == CAT_SOCKET_INVALID_FD)) { \
         _failure; \
     }} while (0)
@@ -1040,8 +1040,9 @@ CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket)
     return cat_socket_internal_get_fd_fast(isocket);
 }
 
-static cat_socket_fd_t cat_socket_internal_get_fd(const cat_socket_internal_t *isocket)
+CAT_API cat_socket_fd_t cat_socket_get_fd(const cat_socket_t *socket)
 {
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return CAT_SOCKET_INVALID_FD);
     cat_os_handle_t fd = CAT_OS_INVALID_HANDLE;
     int error;
 
@@ -1051,13 +1052,6 @@ static cat_socket_fd_t cat_socket_internal_get_fd(const cat_socket_internal_t *i
     }
 
     return (cat_socket_fd_t) fd;
-}
-
-CAT_API cat_socket_fd_t cat_socket_get_fd(const cat_socket_t *socket)
-{
-    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return CAT_SOCKET_INVALID_FD);
-
-    return cat_socket_internal_get_fd(isocket);
 }
 
 static cat_always_inline cat_socket_timeout_storage_t cat_socket_align_global_timeout(cat_timeout_t timeout)
