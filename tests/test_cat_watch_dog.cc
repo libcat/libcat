@@ -20,11 +20,12 @@
 
 const std::string keyword = "Watch-Dog";
 
-static inline void _sys_nanosleep(cat_nsec_t ns_total){
+static void test_sys_nanosleep_nocancel(cat_nsec_t ns_total)
+{
     cat_timespec ts;
     ts.tv_sec = ns_total / (1000 * 1000 * 1000);
     ts.tv_nsec = ns_total % (1000 * 1000 * 1000);
-    while(cat_sys_nanosleep(&ts, &ts));
+    while (cat_sys_nanosleep(&ts, &ts) != 0);
 }
 
 TEST(cat_watch_dog, base)
@@ -39,7 +40,7 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(cat_watch_dog_get_threshold(), 0);
 
     co([=] {
-        _sys_nanosleep(cat_watch_dog_get_quantum() * 100);
+        test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 100);
     });
 
     cat_watch_dog_stop(); // make sure not output error anymore
@@ -65,7 +66,7 @@ TEST(cat_watch_dog, single)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    _sys_nanosleep(cat_watch_dog_get_quantum() * 3);
+    test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 3);
 
     cat_watch_dog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
@@ -82,7 +83,7 @@ TEST(cat_watch_dog, scheduler_blocking)
     ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
     DEFER(cat_watch_dog_stop());
 
-    _sys_nanosleep(cat_watch_dog_get_quantum() * 3);
+    test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 3);
 
     cat_watch_dog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test

@@ -53,8 +53,8 @@ static void cat_improve_timer_resolution(void)
         OUT PULONG              CurrentResolution
     ) = NULL;
     // prove NtSetTimerResolution
-    if (!NtSetTimerResolution) {
-        if (!(NtSetTimerResolution =
+    if (NULL == NtSetTimerResolution) {
+        if (NULL == (NtSetTimerResolution =
             (NTSTATUS (NTAPI *)(ULONG, BOOLEAN, PULONG)) GetProcAddress(
                 GetModuleHandleW(L"ntdll.dll"), "NtSetTimerResolution"))) {
             return;
@@ -62,8 +62,7 @@ static void cat_improve_timer_resolution(void)
     }
     // TODO: get current at first called, record it, then recover it
     ULONG dummy;
-    NtSetTimerResolution(1 /* 1us, will be upscaled to minimum */, TRUE, &dummy);
-    // we donot check its result
+    (void) NtSetTimerResolution(1 /* 1us, will be upscaled to minimum */, TRUE, &dummy);
 }
 #endif
 
