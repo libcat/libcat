@@ -85,11 +85,9 @@ CAT_GLOBALS_STRUCT_BEGIN(cat)
     cat_error_t last_error;
     FILE *error_log;
     cat_const_string_t exepath;
+    cat_bool_t show_last_error;
 #ifdef CAT_SOURCE_POSITION
     cat_bool_t log_source_postion;
-#endif
-#ifdef CAT_DEBUG
-    cat_bool_t show_last_error;
 #endif
 CAT_GLOBALS_STRUCT_END(cat)
 

@@ -81,12 +81,10 @@ CAT_API cat_bool_t cat_runtime_init(void)
     CAT_G(log_types) = CAT_LOG_TYPES_DEFAULT;
     CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
     CAT_G(error_log) = stderr;
+    CAT_G(show_last_error) = cat_false;
     cat_const_string_init(&CAT_G(exepath));
 #ifdef CAT_SOURCE_POSITION
     CAT_G(log_source_postion) = cat_false;
-#endif
-#ifdef CAT_DEBUG
-    CAT_G(show_last_error) = cat_false;
 #endif
     memset(&CAT_G(last_error), 0, sizeof(CAT_G(last_error)));
 
@@ -99,6 +97,10 @@ CAT_API cat_bool_t cat_runtime_init(void)
             CAT_G(error_log) = stderr;
         }  /* TODO: log file support */
         cat_free(error_log);
+    }
+    /* show last error */
+    if (cat_env_is_true("CAT_SLE", cat_false)) {
+        CAT_G(show_last_error) = cat_true;
     }
 #ifdef CAT_DEBUG
 do {
@@ -113,10 +115,6 @@ do {
         CAT_G(log_source_postion) = cat_true;
     }
 #endif
-    /* show last error */
-    if (cat_env_is_true("CAT_SLE", cat_false)) {
-        CAT_G(show_last_error) = cat_true;
-    }
 } while (0);
 #endif
 
