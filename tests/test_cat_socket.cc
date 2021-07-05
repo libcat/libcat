@@ -1034,7 +1034,7 @@ static const test_cat_socket_io_functions_t test_cat_socket_non_blocking_io_func
 
 static const test_cat_socket_io_functions_t test_cat_socket_io_functions[] = {
     test_cat_socket_blocking_io_functions,
-    // test_cat_socket_non_blocking_io_functions,
+    test_cat_socket_non_blocking_io_functions,
 };
 
 static void echo_stream_client_tests(cat_socket_t *echo_client)
