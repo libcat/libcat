@@ -1060,15 +1060,28 @@ static void echo_stream_client_tests(cat_socket_t *echo_client)
 
         /* pipeline */
         char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
-        DEFER(cat_free(read_buffers));
+        size_t read_buffer_count = 0;
         ASSERT_NE(read_buffers, nullptr);
+        DEFER(cat_free(read_buffers));
+        DEFER({
+            while (read_buffer_count--) {
+                cat_free(read_buffers[read_buffer_count]);
+            }
+        });
         char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
+        size_t write_buffer_count = 0;
         ASSERT_NE(write_buffers, nullptr);
         DEFER(cat_free(write_buffers););
+        DEFER({
+            while (write_buffer_count--) {
+                cat_free(write_buffers[write_buffer_count]);
+            }
+        });
         /* generate write data */
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(write_buffers[n], nullptr);
+            write_buffer_count++;
             cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
         }
         /* send requests */
@@ -1086,13 +1099,12 @@ static void echo_stream_client_tests(cat_socket_t *echo_client)
         for (n = 0; n < TEST_MAX_REQUESTS; n++) {
             read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
             ASSERT_NE(read_buffers[n], nullptr);
+            read_buffer_count++;
             ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
             ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
             read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
             write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
             ASSERT_STREQ(read_buffers[n], write_buffers[n]);
-            cat_free(read_buffers[n]);
-            cat_free(write_buffers[n]);
         }
         wg();
         ASSERT_TRUE(done);
