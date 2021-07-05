@@ -29,6 +29,8 @@ extern "C"
 #include "../deps/libuv/src/uv-common.h"
 #endif
 
+#include <vector>
+
 static void echo_stream_server_connection_handler(cat_socket_t *server)
 {
     wait_group wg;
@@ -1032,14 +1034,18 @@ static const test_cat_socket_io_functions_t test_cat_socket_non_blocking_io_func
     test_cat_socket_try_recv_all, test_cat_socket_try_send_all,
 };
 
-static const test_cat_socket_io_functions_t test_cat_socket_io_functions[] = {
+static const std::vector<test_cat_socket_io_functions_t> test_cat_socket_io_functions_all = {
     test_cat_socket_blocking_io_functions,
-    test_cat_socket_non_blocking_io_functions,
+    test_cat_socket_non_blocking_io_functions
 };
 
-static void echo_stream_client_tests(cat_socket_t *echo_client)
+static const std::vector<test_cat_socket_io_functions_t> test_cat_socket_io_functions_normal = {
+    test_cat_socket_blocking_io_functions,
+};
+
+static void echo_stream_client_tests(cat_socket_t *echo_client, const std::vector<test_cat_socket_io_functions_t> io_functions_list = test_cat_socket_io_functions_all)
 {
-    for (auto io_functions : test_cat_socket_io_functions) {
+    for (auto io_functions : io_functions_list) {
         size_t n;
         ssize_t ret;
 
@@ -1230,7 +1236,12 @@ TEST(cat_socket, echo_pipe_client)
         ASSERT_EQ(std::string(path, path_length), echo_pipe_server_path);
     }
 
+#ifndef CAT_OS_WIN
     echo_stream_client_tests(&echo_client);
+#else
+    /* Unable to poll(PIPE) on Windows */
+    echo_stream_client_tests(&echo_client, test_cat_socket_io_functions_normal);
+#endif
 }
 
 #ifdef CAT_OS_UNIX_LIKE
