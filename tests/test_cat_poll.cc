@@ -93,6 +93,22 @@ TEST(cat_poll, base)
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
 }
 
+TEST(cat_poll, duplicate)
+{
+    SKIP_IF_(!cat_os_is_windows(), "Only work for Windows");
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    PREPARE_TCP_SOCKET(socket);
+
+    wait_group wg;
+    for (size_t n = 10; n--;) {
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        });
+    }
+}
+
 static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
 {
     struct timeval timeout;
