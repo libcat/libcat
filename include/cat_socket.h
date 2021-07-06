@@ -111,6 +111,8 @@ CAT_API const char* cat_sockaddr_af_name(cat_sa_family_t af);
 /* Notice: input buffer_size is size of buffer (not length)
  * and if ENOSPC, *buffer_size will be the minimum required buffer **size**, otherwise, *buffer_size will be strlen(buffer)
  * buffer is always zero-termination */
+CAT_API cat_errno_t cat_sockaddr_get_address_silent(const cat_sockaddr_t *address, cat_socklen_t address_length, char *buffer, size_t *buffer_size);
+CAT_API int cat_sockaddr_get_port_silent(const cat_sockaddr_t *address);
 CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_socklen_t address_length, char *buffer, size_t *buffer_size);
 CAT_API int cat_sockaddr_get_port(const cat_sockaddr_t *address);
 CAT_API cat_bool_t cat_sockaddr_set_port(cat_sockaddr_t *address, int port);
@@ -118,6 +120,7 @@ CAT_API cat_bool_t cat_sockaddr_set_port(cat_sockaddr_t *address, int port);
 /* Notice: do not forget to init address->sa_family and address_length */
 CAT_API cat_bool_t cat_sockaddr_getbyname(cat_sockaddr_t *address, cat_socklen_t *address_length, const char *name, size_t name_length, int port);
 /* Notice: it can handle empty case internally, but address must be valid or empty */
+CAT_API cat_errno_t cat_sockaddr_to_name_silent(const cat_sockaddr_t *address, cat_socklen_t address_length, char *name, size_t *name_length, int *port);
 CAT_API cat_bool_t cat_sockaddr_to_name(const cat_sockaddr_t *address, cat_socklen_t address_length, char *name, size_t *name_length, int *port);
 
 /* Notice: it can handle empty "to" internally */

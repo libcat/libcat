@@ -90,7 +90,7 @@ CAT_API const char* cat_sockaddr_af_name(cat_sa_family_t af)
     return "UNKNOWN";
 }
 
-CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_socklen_t address_length, char *buffer, size_t *buffer_size)
+CAT_API cat_errno_t cat_sockaddr_get_address_silent(const cat_sockaddr_t *address, cat_socklen_t address_length, char *buffer, size_t *buffer_size)
 {
     size_t size = *buffer_size;
     int error;
@@ -110,7 +110,7 @@ CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_s
                 break;
             }
             *buffer_size = strlen(buffer);
-            return cat_true;
+            return 0;
         }
         case AF_INET6: {
             error = uv_ip6_name((const cat_sockaddr_in6_t *) address, buffer, size);
@@ -121,7 +121,7 @@ CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_s
                 break;
             }
             *buffer_size = strlen(buffer);
-            return cat_true;
+            return 0;
         }
         case AF_LOCAL: {
             const char *path = ((cat_sockaddr_local_t *) address)->sl_path;
@@ -146,19 +146,17 @@ CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_s
                 buffer[length] = '\0';
             }
             *buffer_size = length;
-            return cat_true;
+            return 0;
         }
         default: {
-            cat_update_last_error(CAT_EAFNOSUPPORT, "Socket address family %d is unknown", address->sa_family);
-            return cat_false;
+            return CAT_EAFNOSUPPORT;
         }
     }
 
-    cat_update_last_error_with_reason(error, "Socket convert address to name failed");
-    return cat_false;
+    return error;
 }
 
-CAT_API int cat_sockaddr_get_port(const cat_sockaddr_t *address)
+CAT_API int cat_sockaddr_get_port_silent(const cat_sockaddr_t *address)
 {
     switch (address->sa_family)
     {
@@ -169,10 +167,36 @@ CAT_API int cat_sockaddr_get_port(const cat_sockaddr_t *address)
         case AF_LOCAL:
             return 0;
         default:
-            cat_update_last_error(CAT_EAFNOSUPPORT, "Socket address family %d does not belong to INET", address->sa_family);
+            return CAT_EAFNOSUPPORT;
+    }
+}
+
+CAT_API cat_bool_t cat_sockaddr_get_address(const cat_sockaddr_t *address, cat_socklen_t address_length, char *buffer, size_t *buffer_size)
+{
+    cat_errno_t error = cat_sockaddr_get_address_silent(address, address_length, buffer, buffer_size);
+
+    if (unlikely(error != 0)) {
+        if (error == CAT_EAFNOSUPPORT) {
+            cat_update_last_error(CAT_EAFNOSUPPORT, "Socket address family %d is unknown", address->sa_family);
+        } else {
+            cat_update_last_error_with_reason(error, "Socket convert address to name failed");
+        }
+        return cat_false;
     }
 
-    return -1;
+    return cat_true;
+}
+
+CAT_API int cat_sockaddr_get_port(const cat_sockaddr_t *address)
+{
+    int port = cat_sockaddr_get_port_silent(address);
+
+    if (unlikely(port == CAT_EAFNOSUPPORT)) {
+        cat_update_last_error(CAT_EAFNOSUPPORT, "Socket address family %d does not belong to INET", address->sa_family);
+        return -1;
+    }
+
+    return port;
 }
 
 CAT_API cat_bool_t cat_sockaddr_set_port(cat_sockaddr_t *address, int port)
@@ -283,6 +307,37 @@ CAT_API cat_bool_t cat_sockaddr_getbyname(cat_sockaddr_t *address, cat_socklen_t
     return cat_true;
 }
 
+static cat_always_inline void cat_sockaddr_zero_name(char *name, size_t *name_length, int *port)
+{
+    if (likely(name != NULL && name_length != NULL)) {
+        if (*name_length > 0) {
+            name[0] = '\0';
+        }
+        *name_length = 0;
+    }
+    if (port != NULL) {
+        *port = 0;
+    }
+}
+
+CAT_API cat_errno_t cat_sockaddr_to_name_silent(const cat_sockaddr_t *address, cat_socklen_t address_length, char *name, size_t *name_length, int *port)
+{
+    cat_errno_t ret = 0;
+
+    if (address_length > 0) {
+        if (likely(name != NULL && name_length != NULL)) {
+            ret = cat_sockaddr_get_address_silent(address, address_length, name, name_length);
+        }
+        if (port != NULL) {
+            *port = cat_sockaddr_get_port_silent(address);
+        }
+    } else {
+        cat_sockaddr_zero_name(name, name_length, port);
+    }
+
+    return ret;
+}
+
 CAT_API cat_bool_t cat_sockaddr_to_name(const cat_sockaddr_t *address, cat_socklen_t address_length, char *name, size_t *name_length, int *port)
 {
     cat_bool_t ret = cat_true;
@@ -295,15 +350,7 @@ CAT_API cat_bool_t cat_sockaddr_to_name(const cat_sockaddr_t *address, cat_sockl
             *port = cat_sockaddr_get_port(address);
         }
     } else {
-        if (likely(name != NULL && name_length != NULL)) {
-            if (*name_length > 0) {
-                name[0] = '\0';
-            }
-            *name_length = 0;
-        }
-        if (port != NULL) {
-            *port = 0;
-        }
+        cat_sockaddr_zero_name(name, name_length, port);
     }
 
     return ret;
@@ -2934,14 +2981,13 @@ static cat_always_inline ssize_t cat_socket__try_send(cat_socket_t *socket, cons
     } \
 } while (0)
 
-#define CAT_SOCKET_READ_ADDRESS_TO_NAME(_address, _name, _name_length, _port) \
-CAT_PROTECT_LAST_ERROR_START() { \
+#define CAT_SOCKET_READ_ADDRESS_TO_NAME(_address, _name, _name_length, _port) do { \
     if (unlikely(_address##_info.length > sizeof(_address##_info.address))) { \
         _address##_info.length = 0; /* address is imcomplete, just discard it */ \
     } \
     /* always call this (it can handle empty case internally) */ \
-    cat_sockaddr_to_name(_address, _address##_info.length, _name, _name_length, _port); \
-} CAT_PROTECT_LAST_ERROR_END()
+    (void) cat_sockaddr_to_name_silent(_address, _address##_info.length, _name, _name_length, _port); \
+} while (0)
 
 static ssize_t cat_socket__read_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
