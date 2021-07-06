@@ -3002,41 +3002,87 @@ static ssize_t cat_socket__recv_from(cat_socket_t *socket, char *buffer, size_t 
     return ret;
 }
 
-static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port, cat_timeout_t timeout)
+static ssize_t cat_socket__try_recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
 {
-    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
-    cat_sockaddr_info_t address_info;
-    cat_sockaddr_t *address;
-    cat_socklen_t address_length;
+    CAT_SOCKET_TRY_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return error);
+    CAT_SOCKET_READ_ADDRESS_CONTEXT(address, name, name_length, port);
+    ssize_t ret;
 
+    ret = cat_socket_internal_try_recv(isocket, buffer, size, address, address_length);
+
+    CAT_SOCKET_READ_ADDRESS_TO_NAME(address, name, name_length, port);
+
+    return ret;
+}
+
+#define CAT_SOCKET_SOLVE_WRITE_TO_ADDRESS(socket, isocket, name, name_length, port, address, address_length, _failure) \
+    cat_sockaddr_info_t address_info; \
+    cat_sockaddr_t *address; \
+    cat_socklen_t address_length; \
+    do { \
+        cat_ret_t ret = cat_socket_solve_write_to_address(socket, isocket, name, name_length, port, &address_info); \
+        if (ret == CAT_RET_ERROR) { \
+            _failure; \
+        } else if (ret == CAT_RET_NONE) { \
+            address = NULL; \
+            address_length = 0; \
+        } else { \
+            address = &address_info.address.common; \
+            address_length = address_info.length; \
+        } \
+    } while (0)
+
+static cat_always_inline cat_ret_t cat_socket_solve_write_to_address(
+    cat_socket_t *socket, cat_socket_internal_t *isocket,
+    const char *name, size_t name_length, int port,
+    cat_sockaddr_info_t *address_info
+) {
     /* resolve address (DNS query may be triggered) */
     if (name_length != 0) {
         cat_bool_t ret;
         isocket->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
         cat_queue_push_back(&isocket->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
-        ret  = cat_socket_getaddrbyname(socket, &address_info, name, name_length, port);
+        ret  = cat_socket_getaddrbyname(socket, address_info, name, name_length, port);
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (cat_queue_empty(&isocket->context.io.write.coroutines)) {
             isocket->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
         }
         if (unlikely(!ret)) {
            cat_update_last_error_with_previous("Socket write failed");
-           return cat_false;
+           return CAT_RET_ERROR;
         }
-        address = &address_info.address.common;
-        address_length = address_info.length;
+        return CAT_RET_OK;
     } else {
-        address = NULL;
-        address_length = 0;
+        return CAT_RET_NONE;
     }
+}
+
+static cat_bool_t cat_socket__write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port, cat_timeout_t timeout)
+{
+    CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
+    CAT_SOCKET_SOLVE_WRITE_TO_ADDRESS(socket, isocket, name, name_length, port, address, address_length, return cat_false);
 
     return cat_socket_internal_write(isocket, vector, vector_count, address, address_length, timeout);
+}
+
+static ssize_t cat_socket__try_write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port)
+{
+    CAT_SOCKET_TRY_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_WRITE, return error == CAT_ELOCKED ? CAT_EAGAIN : error);
+    CAT_SOCKET_SOLVE_WRITE_TO_ADDRESS(socket, isocket, name, name_length, port, address, address_length, return cat_false);
+
+    return cat_socket_internal_try_write(isocket, vector, vector_count, address, address_length);
 }
 
 static cat_always_inline cat_bool_t cat_socket__send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
     cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
     return cat_socket__write_to(socket, &vector, 1, name, name_length, port, timeout);
+}
+
+static cat_always_inline ssize_t cat_socket__try_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
+{
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket__try_write_to(socket, &vector, 1, name, name_length, port);
 }
 
 CAT_API ssize_t cat_socket_read(cat_socket_t *socket, char *buffer, size_t length)
@@ -3089,6 +3135,11 @@ CAT_API cat_bool_t cat_socket_write_to_ex(cat_socket_t *socket, const cat_socket
     return cat_socket__write_to(socket, vector, vector_count, name, name_length, port, timeout);
 }
 
+CAT_API ssize_t cat_socket_try_write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port)
+{
+    return cat_socket__try_write_to(socket, vector, vector_count, name, name_length, port);
+}
+
 CAT_API ssize_t cat_socket_recv(cat_socket_t *socket, char *buffer, size_t size)
 {
     return cat_socket__read(socket, buffer, size, 0, NULL, cat_socket_get_read_timeout_fast(socket), cat_true);
@@ -3129,6 +3180,11 @@ CAT_API ssize_t cat_socket_recv_from_ex(cat_socket_t *socket, char *buffer, size
     return cat_socket__recv_from(socket, buffer, size, name, name_length, port, timeout);
 }
 
+CAT_API ssize_t cat_socket_try_recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
+{
+    return cat_socket__try_recv_from(socket, buffer, size, name, name_length, port);
+}
+
 CAT_API cat_bool_t cat_socket_send(cat_socket_t *socket, const char *buffer, size_t length)
 {
     return cat_socket__send(socket, buffer, length, NULL, 0, cat_socket_get_write_timeout_fast(socket));
@@ -3167,6 +3223,11 @@ CAT_API cat_bool_t cat_socket_send_to(cat_socket_t *socket, const char *buffer, 
 CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
     return cat_socket__send_to(socket, buffer, length, name, name_length, port, timeout);
+}
+
+CAT_API ssize_t cat_socket_try_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
+{
+    return cat_socket__try_send_to(socket, buffer, length, name, name_length, port);
 }
 
 static ssize_t cat_socket_internal_peekfrom(
