@@ -1605,7 +1605,7 @@ TEST(cat_socket, peekfrom)
         ASSERT_TRUE(cat_sockaddr_to_name(&address.common, address_length, ip, &ip_length, &port));
         ASSERT_EQ(std::string(ip, ip_length), std::string(echo_udp_server_ip, echo_udp_server_ip_length));
         ASSERT_EQ(port, echo_udp_server_port);
-        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
+        (void) cat_socket_recv_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
     }
 
     ASSERT_TRUE(cat_socket_send_to(&client, CAT_STRL("Hello libcat"), echo_udp_server_ip, echo_udp_server_ip_length, echo_udp_server_port));
@@ -1617,7 +1617,7 @@ TEST(cat_socket, peekfrom)
         ASSERT_EQ(std::string(buffer, n), std::string("Hello libcat"));
         ASSERT_EQ(std::string(ip, ip_length), std::string(echo_udp_server_ip, echo_udp_server_ip_length));
         ASSERT_EQ(port, echo_udp_server_port);
-        (void) cat_socket_read_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
+        (void) cat_socket_recv_from(&client, CAT_STRS(buffer), nullptr, 0, nullptr);
     }
 }
 

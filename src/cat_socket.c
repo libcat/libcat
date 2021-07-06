@@ -2989,7 +2989,7 @@ static cat_always_inline ssize_t cat_socket__try_send(cat_socket_t *socket, cons
     (void) cat_sockaddr_to_name_silent(_address, _address##_info.length, _name, _name_length, _port); \
 } while (0)
 
-static ssize_t cat_socket__read_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
+static ssize_t cat_socket__recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
     CAT_SOCKET_IO_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return -1);
     CAT_SOCKET_READ_ADDRESS_CONTEXT(address, name, name_length, port);
@@ -3064,16 +3064,6 @@ CAT_API ssize_t cat_socket_try_write(cat_socket_t *socket, const cat_socket_writ
     return cat_socket__try_write(socket, vector, vector_count, NULL, 0);
 }
 
-CAT_API ssize_t cat_socket_read_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
-{
-    return cat_socket__read_from(socket, buffer, size, name, name_length, port, cat_socket_get_read_timeout_fast(socket));
-}
-
-CAT_API ssize_t cat_socket_read_from_ex(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
-{
-    return cat_socket__read_from(socket, buffer, size, name, name_length, port, timeout);
-}
-
 CAT_API cat_bool_t cat_socket_writeto(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
     return cat_socket__write(socket, vector, vector_count, address, address_length, cat_socket_get_write_timeout_fast(socket));
@@ -3127,6 +3117,16 @@ CAT_API ssize_t cat_socket_recvfrom_ex(cat_socket_t *socket, char *buffer, size_
 CAT_API ssize_t cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
 {
     return cat_socket__try_recv(socket, buffer, size, address, address_length);
+}
+
+CAT_API ssize_t cat_socket_recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
+{
+    return cat_socket__recv_from(socket, buffer, size, name, name_length, port, cat_socket_get_read_timeout_fast(socket));
+}
+
+CAT_API ssize_t cat_socket_recv_from_ex(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
+{
+    return cat_socket__recv_from(socket, buffer, size, name, name_length, port, timeout);
 }
 
 CAT_API cat_bool_t cat_socket_send(cat_socket_t *socket, const char *buffer, size_t length)
