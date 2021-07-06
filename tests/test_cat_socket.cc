@@ -967,17 +967,37 @@ TEST(cat_socket, set_tcp_accept_balance_failed)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
-typedef ssize_t (*test_cat_socket_read_function_t)(cat_socket_t *socket, char *buffer, size_t length);
+typedef ssize_t (*test_cat_socket_read_function_t)(cat_socket_t *socket, char *buffer, size_t size);
+typedef ssize_t (*test_cat_socket_recv_function_t)(cat_socket_t *socket, char *buffer, size_t size);
+typedef ssize_t (*test_cat_socket_recvfrom_function_t)(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length);
+typedef ssize_t (*test_cat_socket_recv_from_function_t)(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port);
 
-static ssize_t test_cat_socket_try_recv_all(cat_socket_t *socket, char *buffer, size_t length)
+static ssize_t test_cat_socket_try_recv(cat_socket_t *socket, char *buffer, size_t size)
+{
+    while (true) {
+        ssize_t nread = cat_socket_try_recv(socket, buffer, size);
+        if (nread == CAT_EAGAIN) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, cat_socket_get_read_timeout(socket));
+            EXPECT_EQ(ret, CAT_RET_OK);
+            if (ret != CAT_RET_OK) {
+                return -1;
+            }
+            continue;
+        }
+        EXPECT_GE(nread, 0);
+        return nread;
+    }
+}
+
+static ssize_t test_cat_socket_try_recv_all(cat_socket_t *socket, char *buffer, size_t size)
 {
     ssize_t nread;
     size_t offset = 0;
 
     while (true) {
-        nread = cat_socket_try_recv(socket, buffer + offset, length - offset);
-        if (nread == CAT_EAGAIN || (nread >= 0 && nread != length - offset)) {
-            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, TEST_IO_TIMEOUT);
+        nread = cat_socket_try_recv(socket, buffer + offset, size - offset);
+        if (nread == CAT_EAGAIN || (nread >= 0 && nread != size - offset)) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, cat_socket_get_read_timeout(socket));
             EXPECT_EQ(ret, CAT_RET_OK);
             if (ret != CAT_RET_OK) {
                 return -1;
@@ -994,7 +1014,43 @@ static ssize_t test_cat_socket_try_recv_all(cat_socket_t *socket, char *buffer, 
     return nread;
 }
 
-typedef cat_bool_t (*test_cat_socket_write_function_t)(cat_socket_t *socket, const char *buffer, size_t length);
+static ssize_t test_cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
+{
+    while (true) {
+        ssize_t nread = cat_socket_try_recvfrom(socket, buffer, size, address, address_length);
+        if (nread == CAT_EAGAIN) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, cat_socket_get_read_timeout(socket));
+            EXPECT_EQ(ret, CAT_RET_OK);
+            if (ret != CAT_RET_OK) {
+                return -1;
+            }
+            continue;
+        }
+        EXPECT_GE(nread, 0);
+        return nread;
+    }
+}
+
+static ssize_t test_cat_socket_try_recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
+{
+    while (true) {
+        ssize_t nread = cat_socket_try_recv_from(socket, buffer, size, name, name_length, port);
+        if (nread == CAT_EAGAIN) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, cat_socket_get_read_timeout(socket));
+            EXPECT_EQ(ret, CAT_RET_OK);
+            if (ret != CAT_RET_OK) {
+                return -1;
+            }
+            continue;
+        }
+        EXPECT_GE(nread, 0);
+        return nread;
+    }
+}
+
+typedef cat_bool_t (*test_cat_socket_send_function_t)(cat_socket_t *socket, const char *buffer, size_t length);
+typedef cat_bool_t (*test_cat_socket_sendto_function_t)(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length);
+typedef cat_bool_t (*test_cat_socket_send_to_function_t)(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port);
 
 static cat_bool_t test_cat_socket_try_send_all(cat_socket_t *socket, const char *buffer, size_t length)
 {
@@ -1004,7 +1060,7 @@ static cat_bool_t test_cat_socket_try_send_all(cat_socket_t *socket, const char 
     while (true) {
         nwrite = cat_socket_try_send(socket, buffer + offset, length - offset);
         if (nwrite == CAT_EAGAIN ||  (nwrite >= 0 && nwrite != length - offset)) {
-            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLOUT, NULL, TEST_IO_TIMEOUT);
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLOUT, NULL, cat_socket_get_write_timeout(socket));
             EXPECT_EQ(ret, CAT_RET_OK);
             if (ret != CAT_RET_OK) {
                 return cat_false;
@@ -1017,21 +1073,64 @@ static cat_bool_t test_cat_socket_try_send_all(cat_socket_t *socket, const char 
         break;
     }
 
-    EXPECT_GE(nwrite, 0);
-    return nwrite >= 0;
+    EXPECT_EQ(nwrite, length);
+    return nwrite == length;
+}
+
+static cat_bool_t test_cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    while (true) {
+        ssize_t nwrite = cat_socket_try_sendto(socket, buffer, length, address, address_length);
+        if (nwrite == CAT_EAGAIN) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLOUT, NULL, cat_socket_get_write_timeout(socket));
+            EXPECT_EQ(ret, CAT_RET_OK);
+            if (ret != CAT_RET_OK) {
+                return cat_false;
+            }
+            continue;
+        }
+        EXPECT_EQ(nwrite, length);
+        return nwrite == length;
+    }
+}
+
+static cat_bool_t test_cat_socket_try_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
+{
+    while (true) {
+        ssize_t nwrite = cat_socket_try_send_to(socket, buffer, length, name, name_length, port);
+        if (nwrite == CAT_EAGAIN) {
+            cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLOUT, NULL, cat_socket_get_write_timeout(socket));
+            EXPECT_EQ(ret, CAT_RET_OK);
+            if (ret != CAT_RET_OK) {
+                return cat_false;
+            }
+            continue;
+        }
+        EXPECT_EQ(nwrite, length);
+        return nwrite == length;
+    }
 }
 
 typedef struct test_cat_socket_io_functions_s {
     test_cat_socket_read_function_t read;
-    test_cat_socket_write_function_t write;
+    test_cat_socket_recv_function_t recv;
+    test_cat_socket_send_function_t send;
+    test_cat_socket_recvfrom_function_t recvfrom;
+    test_cat_socket_sendto_function_t sendto;
+    test_cat_socket_recv_from_function_t recv_from;
+    test_cat_socket_send_to_function_t send_to;
 } test_cat_socket_io_functions_t;
 
 static const test_cat_socket_io_functions_t test_cat_socket_blocking_io_functions = {
-    cat_socket_read, cat_socket_send,
+    cat_socket_read, cat_socket_recv, cat_socket_send,
+    cat_socket_recvfrom, cat_socket_sendto,
+    cat_socket_recv_from, cat_socket_send_to
 };
 
 static const test_cat_socket_io_functions_t test_cat_socket_non_blocking_io_functions = {
-    test_cat_socket_try_recv_all, test_cat_socket_try_send_all,
+    test_cat_socket_try_recv_all, test_cat_socket_try_recv, test_cat_socket_try_send_all,
+    test_cat_socket_try_recvfrom, test_cat_socket_try_sendto,
+    test_cat_socket_try_recv_from, test_cat_socket_try_send_to,
 };
 
 static const std::vector<test_cat_socket_io_functions_t> test_cat_socket_io_functions_all = {
@@ -1043,78 +1142,84 @@ static const std::vector<test_cat_socket_io_functions_t> test_cat_socket_io_func
     test_cat_socket_blocking_io_functions,
 };
 
+#define TEST_IO_FUNCTIONS_START(io_functions_list, io_functions) \
+    for (auto io_functions : io_functions_list) {
+
+#define TEST_IO_FUNCTIONS_END() \
+    }
+
 static void echo_stream_client_tests(cat_socket_t *echo_client, const std::vector<test_cat_socket_io_functions_t> io_functions_list = test_cat_socket_io_functions_all)
 {
-    for (auto io_functions : io_functions_list) {
-        size_t n;
-        ssize_t ret;
+    TEST_IO_FUNCTIONS_START(io_functions_list, io_functions);
+    size_t n;
+    ssize_t ret;
 
-        /* normal loop */
-        for (n = TEST_MAX_REQUESTS; n--;) {
-            char read_buffer[TEST_BUFFER_SIZE_STD];
-            char write_buffer[TEST_BUFFER_SIZE_STD];
-            /* send request */
-            cat_snrand(CAT_STRS(write_buffer));
-            ASSERT_TRUE(io_functions.write(echo_client, CAT_STRS(write_buffer)));
-            /* recv response */
-            ret = io_functions.read(echo_client, CAT_STRS(read_buffer));
-            ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
-            read_buffer[sizeof(read_buffer) - 1] = '\0';
-            write_buffer[sizeof(write_buffer) - 1] = '\0';
-            ASSERT_STREQ(read_buffer, write_buffer);
-        }
-
-        /* pipeline */
-        char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
-        size_t read_buffer_count = 0;
-        ASSERT_NE(read_buffers, nullptr);
-        DEFER(cat_free(read_buffers));
-        DEFER({
-            while (read_buffer_count--) {
-                cat_free(read_buffers[read_buffer_count]);
-            }
-        });
-        char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
-        size_t write_buffer_count = 0;
-        ASSERT_NE(write_buffers, nullptr);
-        DEFER(cat_free(write_buffers););
-        DEFER({
-            while (write_buffer_count--) {
-                cat_free(write_buffers[write_buffer_count]);
-            }
-        });
-        /* generate write data */
-        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
-            write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
-            ASSERT_NE(write_buffers[n], nullptr);
-            write_buffer_count++;
-            cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
-        }
-        /* send requests */
-        bool done = false;
-        wait_group wg;
-        co([&] {
-            wg++;
-            DEFER(wg--);
-            for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
-                ASSERT_TRUE(io_functions.write(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
-            }
-            done = true;
-        });
-        /* recv responses */
-        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
-            read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
-            ASSERT_NE(read_buffers[n], nullptr);
-            read_buffer_count++;
-            ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
-            ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
-            read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-            write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-            ASSERT_STREQ(read_buffers[n], write_buffers[n]);
-        }
-        wg();
-        ASSERT_TRUE(done);
+    /* normal loop */
+    for (n = TEST_MAX_REQUESTS; n--;) {
+        char read_buffer[TEST_BUFFER_SIZE_STD];
+        char write_buffer[TEST_BUFFER_SIZE_STD];
+        /* send request */
+        cat_snrand(CAT_STRS(write_buffer));
+        ASSERT_TRUE(io_functions.send(echo_client, CAT_STRS(write_buffer)));
+        /* recv response */
+        ret = io_functions.read(echo_client, CAT_STRS(read_buffer));
+        ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
+        read_buffer[sizeof(read_buffer) - 1] = '\0';
+        write_buffer[sizeof(write_buffer) - 1] = '\0';
+        ASSERT_STREQ(read_buffer, write_buffer);
     }
+
+    /* pipeline */
+    char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
+    size_t read_buffer_count = 0;
+    ASSERT_NE(read_buffers, nullptr);
+    DEFER(cat_free(read_buffers));
+    DEFER({
+        while (read_buffer_count--) {
+            cat_free(read_buffers[read_buffer_count]);
+        }
+    });
+    char **write_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*write_buffers));
+    size_t write_buffer_count = 0;
+    ASSERT_NE(write_buffers, nullptr);
+    DEFER(cat_free(write_buffers););
+    DEFER({
+        while (write_buffer_count--) {
+            cat_free(write_buffers[write_buffer_count]);
+        }
+    });
+    /* generate write data */
+    for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+        write_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+        ASSERT_NE(write_buffers[n], nullptr);
+        write_buffer_count++;
+        cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
+    }
+    /* send requests */
+    bool done = false;
+    wait_group wg;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
+            ASSERT_TRUE(io_functions.send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+        }
+        done = true;
+    });
+    /* recv responses */
+    for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+        read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+        ASSERT_NE(read_buffers[n], nullptr);
+        read_buffer_count++;
+        ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
+        ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
+        read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+        write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+        ASSERT_STREQ(read_buffers[n], write_buffers[n]);
+    }
+    wg();
+    ASSERT_TRUE(done);
+    TEST_IO_FUNCTIONS_END();
 }
 
 TEST(cat_socket, echo_tcp_client)
@@ -1165,13 +1270,12 @@ TEST(cat_socket, echo_tcp_client_localhost)
 TEST(cat_socket, echo_udp_client)
 {
     TEST_REQUIRE(echo_udp_server != nullptr, cat_socket, echo_udp_server);
-    cat_socket_t echo_client;
-    ssize_t ret;
+    TEST_IO_FUNCTIONS_START(test_cat_socket_io_functions_all, io_functions);
 
+    cat_socket_t echo_client;
     ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_UDP), nullptr);
     DEFER(cat_socket_close(&echo_client));
 
-    /* normal loop */
     for (int type = 0; type < 2; type++) {
         if (type == 1) {
             ASSERT_TRUE(cat_socket_connect(
@@ -1186,23 +1290,24 @@ TEST(cat_socket, echo_udp_client)
             /* send request */
             cat_snrand(CAT_STRS(write_buffer));
             if (type == 0) {
-                ASSERT_TRUE(cat_socket_send_to(
+                ASSERT_TRUE(io_functions.send_to(
                     &echo_client, CAT_STRS(write_buffer),
                     echo_udp_server_ip, echo_udp_server_ip_length, echo_udp_server_port
                 ));
             } else {
-                ASSERT_TRUE(cat_socket_send(&echo_client, CAT_STRS(write_buffer)));
+                ASSERT_TRUE(io_functions.send(&echo_client, CAT_STRS(write_buffer)));
             }
             /* recv response */
             cat_sockaddr_union_t address;
             cat_socklen_t address_length = sizeof(address);
+            ssize_t ret;
             if (type == 0) {
-                ret = cat_socket_recvfrom(
+                ret = io_functions.recvfrom(
                     &echo_client, CAT_STRS(read_buffer),
                     &address.common, &address_length
                 );
             } else {
-                ret = cat_socket_recv(&echo_client, CAT_STRS(read_buffer));
+                ret = io_functions.recv(&echo_client, CAT_STRS(read_buffer));
             }
             ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
             read_buffer[sizeof(read_buffer) - 1] = '\0';
@@ -1218,6 +1323,7 @@ TEST(cat_socket, echo_udp_client)
             }
         }
     }
+    TEST_IO_FUNCTIONS_END();
 }
 
 TEST(cat_socket, echo_pipe_client)
@@ -1248,6 +1354,7 @@ TEST(cat_socket, echo_pipe_client)
 TEST(cat_socket, echo_udg_client)
 {
     TEST_REQUIRE(echo_udg_server != nullptr, cat_socket, echo_udg_server);
+    TEST_IO_FUNCTIONS_START(test_cat_socket_io_functions_all, io_functions);
     cat_socket_t echo_client;
     ssize_t ret;
 
@@ -1272,24 +1379,24 @@ TEST(cat_socket, echo_udg_client)
             /* send request */
             cat_snrand(CAT_STRS(write_buffer));
             if (type == 0) {
-                ASSERT_TRUE(cat_socket_send_to(
+                ASSERT_TRUE(io_functions.send_to(
                     &echo_client, CAT_STRS(write_buffer),
                     echo_udg_server_path.c_str(),
                     echo_udg_server_path.length(), 0
                 ));
             } else {
-                ASSERT_TRUE(cat_socket_send(&echo_client, CAT_STRS(write_buffer)));
+                ASSERT_TRUE(io_functions.send(&echo_client, CAT_STRS(write_buffer)));
             }
             /* recv response */
             cat_sockaddr_union_t address;
             cat_socklen_t address_length = sizeof(address);
             if (type == 0) {
-                ret = cat_socket_recvfrom(
+                ret = io_functions.recvfrom(
                     &echo_client, CAT_STRS(read_buffer),
                     &address.common, &address_length
                 );
             } else {
-                ret = cat_socket_recv(&echo_client, CAT_STRS(read_buffer));
+                ret = io_functions.recv(&echo_client, CAT_STRS(read_buffer));
             }
             ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
             read_buffer[sizeof(read_buffer) - 1] = '\0';
@@ -1305,6 +1412,7 @@ TEST(cat_socket, echo_udg_client)
             }
         }
     }
+    TEST_IO_FUNCTIONS_END();
 }
 #endif
 
