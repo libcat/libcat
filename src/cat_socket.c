@@ -1420,6 +1420,19 @@ CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socke
     return cat_socket__accept(server, client, client_type, NULL, timeout);
 }
 
+static cat_always_inline void cat_socket_on_connect_done(cat_socket_t *socket, cat_socket_internal_t *isocket, cat_sa_family_t af)
+{
+    /* connect done successfully, we can do something here before transfer data */
+    socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
+    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
+    cat_socket_on_open(socket, af);
+    /* clear previous cache (maybe impossible here) */
+    if (unlikely(isocket->cache.peername)) {
+        cat_free(isocket->cache.peername);
+        isocket->cache.peername = NULL;
+    }
+}
+
 static void cat_socket_connect_callback(uv_connect_t* request, int status)
 {
     cat_socket_internal_t *isocket = cat_container_of(request->handle, cat_socket_internal_t, u.stream);
@@ -1436,10 +1449,21 @@ static void cat_socket_connect_callback(uv_connect_t* request, int status)
     cat_free(request);
 }
 
+static void cat_socket_try_connect_callback(uv_connect_t* request, int status)
+{
+    cat_socket_internal_t *isocket = cat_container_of(request->handle, cat_socket_internal_t, u.stream);
+
+    if (status == 0) {
+        cat_socket_on_connect_done(isocket->u.socket, isocket, (cat_sa_family_t) (intptr_t) request->data);
+    }
+
+    cat_free(request);
+}
+
 static cat_bool_t cat_socket__connect(
     cat_socket_t *socket, cat_socket_internal_t *isocket,
     const cat_sockaddr_t *address, cat_socklen_t address_length,
-    cat_timeout_t timeout
+    cat_timeout_t timeout, cat_bool_t is_try
 )
 {
     CAT_SOCKET_CHECK_INPUT_ADDRESS_REQUIRED(address, address_length, return cat_false);
@@ -1461,7 +1485,10 @@ static cat_bool_t cat_socket__connect(
         request = NULL;
     }
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-        error = uv_tcp_connect(request, &isocket->u.tcp, address, cat_socket_connect_callback);
+        error = uv_tcp_connect(
+            request, &isocket->u.tcp, address,
+            !is_try ? cat_socket_connect_callback : cat_socket_try_connect_callback
+        );
         if (unlikely(error != 0)) {
             cat_update_last_error_with_reason(error, "Tcp connect init failed");
             cat_free(request);
@@ -1475,62 +1502,58 @@ static cat_bool_t cat_socket__connect(
         if (!cat_sockaddr_is_linux_abstract_name(name, name_length)) {
             name_length = cat_strnlen(name, name_length);
         }
-        (void) uv_pipe_connect_ex(request, &isocket->u.pipe, name, name_length, cat_socket_connect_callback);
+        (void) uv_pipe_connect_ex(
+            request, &isocket->u.pipe, name, name_length,
+            !is_try ? cat_socket_connect_callback : cat_socket_try_connect_callback
+        );
     } else {
         error = CAT_EAFNOSUPPORT;
     }
     if (request != NULL) {
-        cat_bool_t ret;
-        isocket->context.connect.data.status = CAT_ECANCELED;
-        isocket->context.connect.coroutine = CAT_COROUTINE_G(current);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_CONNECT;
-        ret = cat_time_wait(timeout);
-        isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
-        isocket->context.connect.coroutine = NULL;
-        if (unlikely(!ret)) {
-            cat_update_last_error_with_previous("Socket connect wait failed");
-            /* interrupt can not recover */
-            cat_socket_internal_close(isocket);
-            return cat_false;
-        }
-        error = isocket->context.connect.data.status;
-        if (error == CAT_ECANCELED) {
-            cat_update_last_error(CAT_ECANCELED, "Socket connect has been canceled");
-            /* intterupt can not recover */
-            cat_socket_internal_close(isocket);
-            return cat_false;
+        if (!is_try) {
+            cat_bool_t ret;
+            isocket->context.connect.data.status = CAT_ECANCELED;
+            isocket->context.connect.coroutine = CAT_COROUTINE_G(current);
+            isocket->io_flags = CAT_SOCKET_IO_FLAG_CONNECT;
+            ret = cat_time_wait(timeout);
+            isocket->io_flags = CAT_SOCKET_IO_FLAG_NONE;
+            isocket->context.connect.coroutine = NULL;
+            if (unlikely(!ret)) {
+                cat_update_last_error_with_previous("Socket connect wait failed");
+                /* interrupt can not recover */
+                cat_socket_internal_close(isocket);
+                return cat_false;
+            }
+            error = isocket->context.connect.data.status;
+            if (error == CAT_ECANCELED) {
+                cat_update_last_error(CAT_ECANCELED, "Socket connect has been canceled");
+                /* interrupt can not recover */
+                cat_socket_internal_close(isocket);
+                return cat_false;
+            }
+        } else {
+            request->data = (void *) (intptr_t) address->sa_family;
         }
     }
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Socket connect failed");
         return cat_false;
     }
-    /* connect done successfully, we can do something here before transfer data */
-    socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
-    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
-    cat_socket_on_open(socket, address->sa_family);
-    /* clear previous cache (maybe impossible here) */
-    if (unlikely(isocket->cache.peername)) {
-        cat_free(isocket->cache.peername);
-        isocket->cache.peername = NULL;
+    if (!is_try) {
+        cat_socket_on_connect_done(socket, isocket, address->sa_family);
     }
 
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, size_t name_length, int port)
-{
-    return cat_socket_connect_ex(socket, name, name_length, port, cat_socket_get_connect_timeout_fast(socket));
-}
-
-CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout)
+static cat_bool_t cat_socket__smart_connect(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout, cat_bool_t is_try)
 {
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_CONNECT, return cat_false);
     CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
 
     /* address can be NULL if it's UDP */
     if (name_length == 0 && ((socket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP)) {
-        return cat_socket__connect(socket, isocket, NULL, 0, timeout);
+        return cat_socket__connect(socket, isocket, NULL, 0, timeout, is_try);
     }
 
     /* otherwise we resolve address */
@@ -1542,7 +1565,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
     address_info.address.common.sa_family = af;
     error = cat_sockaddr__getbyname(&address_info.address.common, &address_info.length, name, name_length, port);
     if (error == 0) {
-        return cat_socket__connect(socket, isocket, &address_info.address.common, address_info.length, timeout);
+        return cat_socket__connect(socket, isocket, &address_info.address.common, address_info.length, timeout, is_try);
     }
     if (unlikely(error != CAT_EINVAL)) {
         cat_update_last_error_with_reason(error, "Socket connect failed, reason: Socket get address by name failed");
@@ -1603,7 +1626,8 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
             socket, isocket,
             &address_info.address.common,
             (cat_socklen_t) response->ai_addrlen,
-            timeout
+            timeout,
+            is_try
         );
         if (ret || is_initialized || !cat_socket_is_available(socket)) {
             break;
@@ -1620,6 +1644,23 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
     return ret;
 }
 
+static cat_bool_t cat_socket__connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout, cat_bool_t is_try)
+{
+    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_CONNECT, return cat_false);
+    CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
+
+    return cat_socket__connect(socket, isocket, address, address_length, timeout, is_try);
+}
+
+CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, size_t name_length, int port)
+{
+    return cat_socket_connect_ex(socket, name, name_length, port, cat_socket_get_connect_timeout_fast(socket));
+}
+
+CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout)
+{
+    return cat_socket__smart_connect(socket, name, name_length, port, timeout, cat_false);
+}
 CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
     return cat_socket_connect_to_ex(socket, address, address_length, cat_socket_get_connect_timeout_fast(socket));
@@ -1627,10 +1668,17 @@ CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockadd
 
 CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
-    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_CONNECT, return cat_false);
-    CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
+    return cat_socket__connect_to(socket, address, address_length, timeout, cat_false);
+}
 
-    return cat_socket__connect(socket, isocket, address, address_length, timeout);
+CAT_API cat_bool_t cat_socket_try_connect(cat_socket_t *socket, const char *name, size_t name_length, int port)
+{
+    return cat_socket__smart_connect(socket, name, name_length, port, CAT_TIMEOUT_INVALID, cat_true);
+}
+
+CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
+{
+    return cat_socket__connect_to(socket, address, address_length, CAT_TIMEOUT_INVALID, cat_true);
 }
 
 #ifdef CAT_SSL
@@ -1642,6 +1690,8 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->allow_self_signed = cat_false;
     cat_const_string_init(&options->passphrase);
 }
+
+/* TODO: Support non-blocking SSL handshake? (just for PHP, stupid design) */
 
 CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options)
 {
@@ -2590,7 +2640,7 @@ static cat_bool_t cat_socket_internal_write_raw(
         request = NULL;
     }
     if (unlikely(request == NULL)) {
-        /* why we do not try write: on high-traffic scenarios, try_write will instead lead to performance */
+        /* why we do not try write: on high-traffic scenarios, is_try_write will instead lead to performance */
         if (!is_udp) {
             context_size = cat_offsize_of(cat_socket_write_request_t, u.stream);
         } else {
@@ -2901,13 +2951,13 @@ static cat_always_inline ssize_t cat_socket_internal_try_write(
 }
 
 #define CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM_SILENT(_socket, _isocket, _failure) do { \
-    if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
+    if (!(_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM)) { \
         CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY_SILENT(_isocket, _failure); \
     } \
 } while (0)
 
 #define CAT_SOCKET_IO_ESTABLISHED_CHECK_FOR_STREAM(_socket, _isocket, _failure) do { \
-    if ((_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) != CAT_SOCKET_TYPE_FLAG_DGRAM) { \
+    if (!(_socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM)) { \
         CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(_isocket, _failure); \
     } \
 } while (0)
@@ -3383,7 +3433,7 @@ static cat_always_inline void cat_socket_cancel_io(cat_coroutine_t *coroutine, c
     if (coroutine != NULL) {
         /* interrupt the operation */
         cat_coroutine_schedule(coroutine, SOCKET, "Cancel %s", type_name);
-    }
+    } /* else: under which case will coroutine be null except we are in try_connect()? */
 }
 
 static void cat_socket_close_callback(uv_handle_t *handle)
