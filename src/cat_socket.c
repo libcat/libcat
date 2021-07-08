@@ -1814,15 +1814,15 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
             break;
         }
         CAT_ASSERT(n == CAT_RET_NONE); {
-            ssize_t nread, nwritten;
+            ssize_t nread, nwrite;
             CAT_TIME_WAIT_START() {
                 nread = cat_socket_recv_ex(socket, buffer->value, buffer->size, timeout);
             } CAT_TIME_WAIT_END(timeout);
             if (unlikely(nread <= 0)) {
                 break;
             }
-            nwritten = cat_ssl_write_encrypted_bytes(ssl, buffer->value, nread);
-            if (unlikely(nwritten != nread)) {
+            nwrite = cat_ssl_write_encrypted_bytes(ssl, buffer->value, nread);
+            if (unlikely(nwrite != nread)) {
                 break;
             }
             continue;
