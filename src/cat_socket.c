@@ -1451,11 +1451,13 @@ static void cat_socket_connect_callback(uv_connect_t* request, int status)
 
 static void cat_socket_try_connect_callback(uv_connect_t* request, int status)
 {
+#ifndef CAT_OS_DARWIN
     cat_socket_internal_t *isocket = cat_container_of(request->handle, cat_socket_internal_t, u.stream);
 
     if (status == 0) {
         cat_socket_on_connect_done(isocket->u.socket, isocket, (cat_sa_family_t) (intptr_t) request->data);
     }
+#endif
 
     cat_free(request);
 }
@@ -1531,15 +1533,21 @@ static cat_bool_t cat_socket__connect(
                 cat_socket_internal_close(isocket);
                 return cat_false;
             }
-        } else {
+        }
+#ifndef CAT_OS_DARWIN
+        else {
             request->data = (void *) (intptr_t) address->sa_family;
         }
+#endif
     }
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Socket connect failed");
         return cat_false;
     }
-    if (!is_try) {
+#ifndef CAT_OS_DARWIN /* connect done is later than POLLOUT event on macOS */
+    if (!is_try)
+#endif
+    {
         cat_socket_on_connect_done(socket, isocket, address->sa_family);
     }
 

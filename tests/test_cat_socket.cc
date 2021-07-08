@@ -1202,12 +1202,12 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
     if (prepare_function != nullptr) {
         prepare_function(echo_client, io_functions);
     }
-    ASSERT_TRUE(cat_socket_is_established(echo_client));
     DEFER({
         if (echo_client == &_echo_client) {
             cat_socket_close(echo_client);
         }
     });
+    ASSERT_TRUE(cat_socket_is_established(echo_client));
 
     /* normal loop */
     for (n = TEST_MAX_REQUESTS; n--;) {
