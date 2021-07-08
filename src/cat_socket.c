@@ -1412,7 +1412,7 @@ CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *c
 
 CAT_API cat_socket_t *cat_socket_accept_typed(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type)
 {
-    return cat_socket__accept(server, client, client_type, NULL, cat_socket_get_accept_timeout_fast(server));
+    return cat_socket_accept_typed_ex(server, client, client_type, cat_socket_get_accept_timeout_fast(server));
 }
 
 CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type, cat_timeout_t timeout)
@@ -1669,6 +1669,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
 {
     return cat_socket__smart_connect(socket, name, name_length, port, timeout, cat_false);
 }
+
 CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
     return cat_socket_connect_to_ex(socket, address, address_length, cat_socket_get_connect_timeout_fast(socket));
@@ -3011,18 +3012,6 @@ static cat_always_inline ssize_t cat_socket__try_write(cat_socket_t *socket, con
     return cat_socket_internal_try_write(isocket, vector, vector_count, address, address_length);
 }
 
-static cat_always_inline cat_bool_t cat_socket__send(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
-{
-    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
-    return cat_socket__write(socket, &vector, 1, address, address_length, timeout);
-}
-
-static cat_always_inline ssize_t cat_socket__try_send(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
-{
-    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
-    return cat_socket__try_write(socket, &vector, 1, address, address_length);
-}
-
 #define CAT_SOCKET_READ_ADDRESS_CONTEXT(_address, _name, _name_length, _port) \
     cat_sockaddr_info_t _address##_info; \
     cat_sockaddr_t *_address; \
@@ -3131,21 +3120,9 @@ static ssize_t cat_socket__try_write_to(cat_socket_t *socket, const cat_socket_w
     return cat_socket_internal_try_write(isocket, vector, vector_count, address, address_length);
 }
 
-static cat_always_inline cat_bool_t cat_socket__send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout)
-{
-    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
-    return cat_socket__write_to(socket, &vector, 1, name, name_length, port, timeout);
-}
-
-static cat_always_inline ssize_t cat_socket__try_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
-{
-    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
-    return cat_socket__try_write_to(socket, &vector, 1, name, name_length, port);
-}
-
 CAT_API ssize_t cat_socket_read(cat_socket_t *socket, char *buffer, size_t length)
 {
-    return cat_socket__read(socket, buffer, length, 0, NULL, cat_socket_get_read_timeout_fast(socket), cat_false);
+    return cat_socket_read_ex(socket, buffer, length, cat_socket_get_read_timeout_fast(socket));
 }
 
 CAT_API ssize_t cat_socket_read_ex(cat_socket_t *socket, char *buffer, size_t length, cat_timeout_t timeout)
@@ -3155,7 +3132,7 @@ CAT_API ssize_t cat_socket_read_ex(cat_socket_t *socket, char *buffer, size_t le
 
 CAT_API cat_bool_t cat_socket_write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count)
 {
-    return cat_socket__write(socket, vector, vector_count, NULL, 0, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_write_ex(socket, vector, vector_count, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_write_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, cat_timeout_t timeout)
@@ -3165,12 +3142,12 @@ CAT_API cat_bool_t cat_socket_write_ex(cat_socket_t *socket, const cat_socket_wr
 
 CAT_API ssize_t cat_socket_try_write(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count)
 {
-    return cat_socket__try_write(socket, vector, vector_count, NULL, 0);
+    return cat_socket_try_writeto(socket, vector, vector_count, NULL, 0);
 }
 
 CAT_API cat_bool_t cat_socket_writeto(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
-    return cat_socket__write(socket, vector, vector_count, address, address_length, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_writeto_ex(socket, vector, vector_count, address, address_length, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_writeto_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
@@ -3185,7 +3162,7 @@ CAT_API ssize_t cat_socket_try_writeto(cat_socket_t *socket, const cat_socket_wr
 
 CAT_API cat_bool_t cat_socket_write_to(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port)
 {
-    return cat_socket__write_to(socket, vector, vector_count, name, name_length, port, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_write_to_ex(socket, vector, vector_count, name, name_length, port, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_write_to_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port, cat_timeout_t timeout)
@@ -3200,7 +3177,7 @@ CAT_API ssize_t cat_socket_try_write_to(cat_socket_t *socket, const cat_socket_w
 
 CAT_API ssize_t cat_socket_recv(cat_socket_t *socket, char *buffer, size_t size)
 {
-    return cat_socket__read(socket, buffer, size, 0, NULL, cat_socket_get_read_timeout_fast(socket), cat_true);
+    return cat_socket_recv_ex(socket, buffer, size, cat_socket_get_read_timeout_fast(socket));
 }
 
 CAT_API ssize_t cat_socket_recv_ex(cat_socket_t *socket, char *buffer, size_t size, cat_timeout_t timeout)
@@ -3215,7 +3192,7 @@ CAT_API ssize_t cat_socket_try_recv(cat_socket_t *socket, char *buffer, size_t s
 
 CAT_API ssize_t cat_socket_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
 {
-    return cat_socket__read(socket, buffer, size, address, address_length, cat_socket_get_read_timeout_fast(socket), cat_true);
+    return cat_socket_recvfrom_ex(socket, buffer, size, address, address_length, cat_socket_get_read_timeout_fast(socket));
 }
 
 CAT_API ssize_t cat_socket_recvfrom_ex(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout)
@@ -3230,7 +3207,7 @@ CAT_API ssize_t cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size
 
 CAT_API ssize_t cat_socket_recv_from(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port)
 {
-    return cat_socket__recv_from(socket, buffer, size, name, name_length, port, cat_socket_get_read_timeout_fast(socket));
+    return cat_socket_recv_from_ex(socket, buffer, size, name, name_length, port, cat_socket_get_read_timeout_fast(socket));
 }
 
 CAT_API ssize_t cat_socket_recv_from_ex(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
@@ -3245,47 +3222,51 @@ CAT_API ssize_t cat_socket_try_recv_from(cat_socket_t *socket, char *buffer, siz
 
 CAT_API cat_bool_t cat_socket_send(cat_socket_t *socket, const char *buffer, size_t length)
 {
-    return cat_socket__send(socket, buffer, length, NULL, 0, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_send_ex(socket, buffer, length, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_send_ex(cat_socket_t *socket, const char *buffer, size_t length, cat_timeout_t timeout)
 {
-    return cat_socket__send(socket, buffer, length, NULL, 0, timeout);
+    return cat_socket_sendto_ex(socket, buffer, length, NULL, 0, timeout);
 }
 
 CAT_API ssize_t cat_socket_try_send(cat_socket_t *socket, const char *buffer, size_t length)
 {
-    return cat_socket__try_send(socket, buffer, length, NULL, 0);
+    return cat_socket_try_sendto(socket, buffer, length, NULL, 0);
 }
 
 CAT_API cat_bool_t cat_socket_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
-    return cat_socket__send(socket, buffer, length, address, address_length, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_sendto_ex(socket, buffer, length, address, address_length, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_sendto_ex(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
-    return cat_socket__send(socket, buffer, length, address, address_length, timeout);
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket_writeto_ex(socket, &vector, 1, address, address_length, timeout);
 }
 
 CAT_API ssize_t cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
-    return cat_socket__try_send(socket, buffer, length, address, address_length);
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket_try_writeto(socket, &vector, 1, address, address_length);
 }
 
 CAT_API cat_bool_t cat_socket_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
 {
-    return cat_socket__send_to(socket, buffer, length, name, name_length, port, cat_socket_get_write_timeout_fast(socket));
+    return cat_socket_send_to_ex(socket, buffer, length, name, name_length, port, cat_socket_get_write_timeout_fast(socket));
 }
 
 CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
-    return cat_socket__send_to(socket, buffer, length, name, name_length, port, timeout);
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket_write_to_ex(socket, &vector, 1, name, name_length, port, timeout);
 }
 
 CAT_API ssize_t cat_socket_try_send_to(cat_socket_t *socket, const char *buffer, size_t length, const char *name, size_t name_length, int port)
 {
-    return cat_socket__try_send_to(socket, buffer, length, name, name_length, port);
+    cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
+    return cat_socket_try_write_to(socket, &vector, 1, name, name_length, port);
 }
 
 static ssize_t cat_socket_internal_peekfrom(
