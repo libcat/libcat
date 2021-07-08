@@ -63,7 +63,6 @@ TEST(cat_poll, base)
 
 TEST(cat_poll, duplicate)
 {
-    SKIP_IF_(!cat_os_is_windows(), "Only work for Windows");
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     PREPARE_TCP_SOCKET(socket);
 
