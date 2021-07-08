@@ -145,3 +145,14 @@ TEST(cat_select, base)
     ASSERT_TRUE(select_is_readable(fd));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
 }
+
+TEST(cat_select, error)
+{
+    ASSERT_LT(cat_select(-1, nullptr, nullptr, nullptr, nullptr), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
+TEST(cat_select, empty)
+{
+    ASSERT_EQ(cat_select(0, nullptr, nullptr, nullptr, nullptr), 0);
+}
