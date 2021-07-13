@@ -3585,6 +3585,21 @@ CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket)
     return "none";
 }
 
+#ifndef CAT_SSL
+#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return_statement)
+#else
+#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return_statement) do { \
+    if (cat_socket_internal_ssl_get_liveness(isocket)) { \
+        return_statement; \
+    } \
+} while (0)
+
+static cat_always_inline cat_bool_t cat_socket_internal_ssl_get_liveness(const cat_socket_internal_t *isocket)
+{
+    return isocket->ssl != NULL && isocket->ssl->read_buffer.length > 0;
+}
+#endif
+
 static cat_errno_t cat_socket_check_liveness_by_fd(cat_socket_fd_t fd)
 {
     char buffer;
@@ -3617,6 +3632,7 @@ CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket)
 {
     CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_EBADF);
     CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(isocket, fd, return CAT_EBADF);
+    CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return 0);
 
     return cat_socket_check_liveness_by_fd(fd);
 }
@@ -3625,6 +3641,7 @@ CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
     CAT_SOCKET_INTERNAL_FD_GETTER(isocket, fd, return cat_false);
+    CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return cat_true);
     cat_errno_t error;
 
     error = cat_socket_check_liveness_by_fd(fd);
