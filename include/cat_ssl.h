@@ -154,6 +154,7 @@ CAT_API void cat_ssl_context_configure_verify(cat_ssl_context_t *context);
 /* connection */
 CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context);
 CAT_API void cat_ssl_close(cat_ssl_t *ssl);
+CAT_API cat_bool_t cat_ssl_shutdown(cat_ssl_t *ssl);
 
 CAT_API cat_buffer_t *cat_ssl_get_read_buffer(cat_ssl_t *ssl, size_t size);
 
