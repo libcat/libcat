@@ -636,6 +636,9 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_available(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_open(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_established(const cat_socket_t *socket);
+#ifdef CAT_SSL
+CAT_API cat_bool_t cat_socket_is_encrypted(const cat_socket_t *socket);
+#endif
 CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_session(const cat_socket_t *socket);

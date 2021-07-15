@@ -3557,6 +3557,14 @@ CAT_API cat_bool_t cat_socket_is_established(const cat_socket_t *socket)
     return isocket != NULL && cat_socket_internal_is_established(isocket);
 }
 
+#ifdef CAT_SSL
+CAT_API cat_bool_t cat_socket_is_encrypted(const cat_socket_t *socket)
+{
+    cat_socket_internal_t *isocket = socket->internal;
+    return isocket != NULL && isocket->ssl != NULL && cat_socket_internal_is_established(isocket);
+}
+#endif
+
 CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket)
 {
     return !!(socket->type & CAT_SOCKET_TYPE_FLAG_SERVER);
