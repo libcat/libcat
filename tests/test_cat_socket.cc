@@ -1022,29 +1022,28 @@ static ssize_t test_cat_socket_try_recv(cat_socket_t *socket, char *buffer, size
     }
 }
 
-static ssize_t test_cat_socket_try_recv_all(cat_socket_t *socket, char *buffer, size_t size)
+static ssize_t test_cat_socket_try_recv_all(cat_socket_t *socket, char *buffer, size_t length)
 {
-    ssize_t nread;
     size_t offset = 0;
 
     while (true) {
-        nread = cat_socket_try_recv(socket, buffer + offset, size - offset);
-        if (nread == CAT_EAGAIN || (nread >= 0 && nread != size - offset)) {
+        ssize_t nread = cat_socket_try_recv(socket, buffer + offset, length - offset);
+        if (nread > 0) {
+            offset += nread;
+        }
+        if (nread == CAT_EAGAIN || (nread >= 0 && offset != length)) {
             cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLIN, NULL, cat_socket_get_read_timeout(socket));
             EXPECT_EQ(ret, CAT_RET_OK);
             if (ret != CAT_RET_OK) {
                 return -1;
-            }
-            if (nread > 0) {
-                offset += nread;
             }
             continue;
         }
         break;
     }
 
-    EXPECT_GE(nread, 0);
-    return nread;
+    EXPECT_EQ(offset, length);
+    return offset;
 }
 
 static ssize_t test_cat_socket_try_recvfrom(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length)
@@ -1087,27 +1086,26 @@ typedef cat_bool_t (*test_cat_socket_send_to_function_t)(cat_socket_t *socket, c
 
 static cat_bool_t test_cat_socket_try_send_all(cat_socket_t *socket, const char *buffer, size_t length)
 {
-    ssize_t nwrite;
     size_t offset = 0;
 
     while (true) {
-        nwrite = cat_socket_try_send(socket, buffer + offset, length - offset);
-        if (nwrite == CAT_EAGAIN ||  (nwrite >= 0 && nwrite != length - offset)) {
+        ssize_t nwrite = cat_socket_try_send(socket, buffer + offset, length - offset);
+        if (nwrite > 0) {
+            offset += nwrite;
+        }
+        if (nwrite == CAT_EAGAIN ||  (nwrite >= 0 && offset != length)) {
             cat_ret_t ret = cat_poll_one(cat_socket_get_fd_fast(socket), POLLOUT, NULL, cat_socket_get_write_timeout(socket));
             EXPECT_EQ(ret, CAT_RET_OK);
             if (ret != CAT_RET_OK) {
                 return cat_false;
-            }
-            if (nwrite > 0) {
-                offset += nwrite;
             }
             continue;
         }
         break;
     }
 
-    EXPECT_EQ(nwrite, length);
-    return nwrite == length;
+    EXPECT_EQ(offset, length);
+    return offset == length;
 }
 
 static cat_bool_t test_cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, size_t length, const cat_sockaddr_t *address, cat_socklen_t address_length)
