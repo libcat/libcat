@@ -19,15 +19,6 @@
 #include "cat_ssl.h"
 
 #ifdef CAT_SSL
-
-#ifdef CAT_OS_WIN
-#include <Wincrypt.h>
-/* These are from Wincrypt.h, they conflict with OpenSSL */
-#undef X509_NAME
-#undef X509_CERT_PAIR
-#undef X509_EXTENSIONS
-#endif
-
 /*
 This diagram shows how the read and write memory BIO's (rbio & wbio) are
 associated with the socket read and write respectively.  On the inbound flow
@@ -199,6 +190,10 @@ CAT_API void cat_ssl_context_close(cat_ssl_context_t *context)
 
 CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_protocols_t protocols)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x009080dfL
+    /* only in 0.9.8m+ */
+    SSL_CTX_clear_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+#endif
     if (!(protocols & CAT_SSL_PROTOCOL_SSLv2)) {
         SSL_CTX_set_options(context, SSL_OP_NO_SSLv2);
     }
@@ -228,6 +223,20 @@ CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_p
 #endif
 }
 
+CAT_API cat_bool_t cat_ssl_context_set_client_ca_list(cat_ssl_context_t *context, const char *ca_file)
+{
+    /* Servers need to load and assign CA names from the cafile */
+    cat_debug(SSL, "SSL_load_client_CA_file(\"%s\")", ca_file);
+    STACK_OF(X509_NAME) *cert_names = SSL_load_client_CA_file(ca_file);
+    if (cert_names == NULL) {
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_load_client_CA_file(\"%s\") failed", ca_file);
+        return cat_false;
+    }
+    cat_debug(SSL, "SSL_CTX_set_client_CA_list()");
+    SSL_CTX_set_client_CA_list(context, cert_names);
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *context)
 {
     cat_debug(SSL, "SSL_CTX_set_default_verify_paths()");
@@ -238,29 +247,34 @@ CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *c
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_ssl_context_set_ca_file(cat_ssl_context_t *context, const char *ca_file)
+CAT_API cat_bool_t cat_ssl_context_load_verify_locations(cat_ssl_context_t *context, const char *ca_file, const char *ca_path)
 {
-    if (unlikely(ca_file == NULL)) {
-        cat_update_last_error(CAT_EINVAL, "SSL ca file can not be empty ");
-        return cat_false;
-    }
-    cat_debug(SSL, "SSL_CTX_load_verify_locations(ca_file: \"%s\")", ca_file);
+    cat_debug(SSL, "SSL_CTX_load_verify_locations(ca_file: \"%s\", ca_path: \"%s\")", ca_file != NULL ? ca_file : "NULL", ca_path != NULL ? ca_path : "NULL");
     if (SSL_CTX_load_verify_locations(context, ca_file, NULL) != 1) {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_load_verify_locations(ca_file) failed");
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_load_verify_locations() failed");
         return cat_false;
     }
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_ssl_context_set_ca_path(cat_ssl_context_t *context, const char *ca_path)
+CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, const char *certificate, const char *certificate_key)
 {
-    if (unlikely(ca_path == NULL)) {
-        cat_update_last_error(CAT_EINVAL, "SSL ca file can not be empty ");
+    /* a certificate to use for authentication */
+    cat_debug(SSL, "SSL_CTX_use_certificate_chain_file(\"%s\")", certificate);
+    if (SSL_CTX_use_certificate_chain_file(context, certificate) != 1) {
+        cat_ssl_update_last_error(CAT_ESSL,  "SSL_CTX_use_certificate_chain_file(\"%s\") failed, "
+            "check that your ca_file/ca_path settings include details of your certificate and its issuer");
         return cat_false;
     }
-    cat_debug(SSL, "SSL_CTX_load_verify_locations(ca_path: \"%s\")", ca_path);
-    if (SSL_CTX_load_verify_locations(context, NULL, ca_path) != 1) {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_load_verify_locations(ca_path) failed");
+    if (certificate_key == NULL) {
+        certificate_key = certificate;
+    }
+    if (SSL_CTX_use_PrivateKey_file(context, certificate_key, SSL_FILETYPE_PEM) != 1) {
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_use_PrivateKey_file(\"%s\") failed", certificate_key);
+        return cat_false;
+    }
+    if (!SSL_CTX_check_private_key(context)) {
+        cat_ssl_update_last_error(CAT_ESSL, "SSL private key does not match certificate");
         return cat_false;
     }
     return cat_true;
@@ -347,7 +361,7 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
         /* check the depth */
         allowed_depth = SSL_get_verify_depth(connection);
         if (allowed_depth < 0) {
-            allowed_depth = OPENSSL_DEFAULT_STREAM_VERIFY_DEPTH;
+            allowed_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
         }
         for (i = 0; i < cert_chain_ctx->cChain; i++) {
             if ((int) cert_chain_ctx->rgpChain[i]->cElement > allowed_depth) {
@@ -398,14 +412,21 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
     return cat_true;
 }
 
+CAT_API void cat_ssl_context_configure_cert_verify_callback(cat_ssl_context_t *context)
+{
+    cat_debug(SSL, "SSL_CTX_set_cert_verify_callback()");
+    SSL_CTX_set_cert_verify_callback(context, cat_ssl_win_cert_verify_callback, NULL);
+}
+#endif
+
 static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{ */
 {
     /* conjure the stream & context to use */
     cat_ssl_connection_t *connection = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
-    int err, depth, ret, allowed_depth;
-
-    ret = preverify_ok;
+    int depth, allowed_depth;
+    int err;
+    int ret = preverify_ok;
 
     /* determine the status for the current cert */
     err = X509_STORE_CTX_get_error(ctx);
@@ -419,7 +440,7 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     /* check the depth */
     allowed_depth = SSL_get_verify_depth(connection);
     if (allowed_depth < 0) {
-        allowed_depth = OPENSSL_DEFAULT_STREAM_VERIFY_DEPTH;
+        allowed_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
     }
     if (depth > allowed_depth) {
         ret = 0;
@@ -429,14 +450,29 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     return ret;
 }
 
-CAT_API void cat_ssl_context_configure_verify(cat_ssl_context_t *context)
+CAT_API void cat_ssl_context_enable_verify_peer(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_cert_verify_callback()");
-    SSL_CTX_set_cert_verify_callback(context, cat_ssl_win_cert_verify_callback, NULL);
-    cat_debug(SSL, "SSL_CTX_set_verify(SSL_VERIFY_PEER, NULL)");
-    SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
+    cat_debug(SSL, "SSL_CTX_set_verify(SSL_VERIFY_PEER, ssl_verify_callback)");
+	SSL_CTX_set_verify(context, SSL_VERIFY_PEER, cat_ssl_verify_callback);
 }
-#endif
+
+CAT_API void cat_ssl_context_disable_verify_peer(cat_ssl_context_t *context)
+{
+    cat_debug(SSL, "SSL_CTX_set_verify(SSL_VERIFY_NONE, NULL)");
+	SSL_CTX_set_verify(context, SSL_VERIFY_NONE, NULL);
+}
+
+CAT_API void cat_ssl_context_set_no_ticket(cat_ssl_context_t *context)
+{
+    cat_debug(SSL, "SSL_CTX_set_options(SSL_OP_NO_TICKET)");
+    SSL_CTX_set_options(context, SSL_OP_NO_TICKET);
+}
+
+CAT_API void cat_ssl_context_set_no_compression(cat_ssl_context_t *context)
+{
+    cat_debug(SSL, "SSL_CTX_set_options(SSL_OP_NO_COMPRESSION)");
+    SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
+}
 
 CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
 {

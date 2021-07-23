@@ -1693,38 +1693,44 @@ CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const cat_soc
 #ifdef CAT_SSL
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options)
 {
-    cat_const_string_init(&options->peer_name);
+    options->peer_name = NULL;
+    options->ca_file = NULL;
+    options->ca_path = NULL;
+    options->certificate = NULL;
+    options->certificate_key = NULL;
+    options->passphrase = NULL;
+    options->verify_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
     options->verify_peer = cat_true;
     options->verify_peer_name = cat_true;
     options->allow_self_signed = cat_false;
-    cat_const_string_init(&options->passphrase);
+    options->no_ticket = cat_false;
+    options->no_compression = cat_false;
 }
 
 /* TODO: Support non-blocking SSL handshake? (just for PHP, stupid design) */
 
-CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options)
+CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, const cat_socket_crypto_options_t *options)
 {
-    return cat_socket_enable_crypto_ex(socket, context, options, cat_socket_get_handshake_timeout_fast(socket));
+    return cat_socket_enable_crypto_ex(socket, options, cat_socket_get_handshake_timeout_fast(socket));
 }
 
-CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_crypto_context_t *context, const cat_socket_crypto_options_t *options, cat_timeout_t timeout)
+CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_socket_crypto_options_t *options, cat_timeout_t timeout)
 {
     /* TODO: DTLS support */
     CAT_SOCKET_INET_STREAM_ONLY(socket, return cat_false);
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_RDWR, return cat_false);
-    if (unlikely(isocket->ssl != NULL)) {
+    if (unlikely(isocket->ssl != NULL && cat_ssl_is_established(isocket->ssl))) {
         CAT_SOCKET_INTERNAL_ESTABLISHED_ONCE(isocket, return cat_false);
     } else {
         CAT_SOCKET_INTERNAL_ESTABLISHED_ONLY(isocket, return cat_false);
     }
     cat_ssl_t *ssl;
+    cat_ssl_context_t *context = NULL;
     cat_buffer_t *buffer;
     cat_socket_crypto_options_t ioptions;
     cat_bool_t is_client = cat_socket_is_client(socket);
     cat_bool_t use_tmp_context;
     cat_bool_t ret = cat_false;
-
-    CAT_ASSERT(isocket->ssl == NULL);
 
     /* check options */
     if (options == NULL) {
@@ -1733,7 +1739,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         ioptions = *options;
     }
 
-    /* check context */
+    /* check context (TODO: support context from arg?) */
     use_tmp_context = context == NULL;
     if (use_tmp_context) {
         cat_ssl_method_t method;
@@ -1751,14 +1757,40 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         }
     }
 
+    if (ioptions.verify_peer) {
+        if (!is_client && ioptions.ca_file != NULL) {
+            if (!cat_ssl_context_set_client_ca_list(context, ioptions.ca_file)) {
+                goto _setup_error;
+            }
+        }
+        if (ioptions.ca_file  != NULL || ioptions.ca_path != NULL) {
+            if (!cat_ssl_context_load_verify_locations(context, ioptions.ca_file, ioptions.ca_path)) {
+                goto _setup_error;
+            }
+        } else {
 #ifndef CAT_OS_WIN
-    /* check context related options */
-    if (is_client && ioptions.verify_peer) {
-        (void) cat_ssl_context_set_default_verify_paths(context);
-    }
+            /* check context related options */
+            if (is_client && !cat_ssl_context_set_default_verify_paths(context)) {
+                goto _setup_error;
+            }
 #else
-    cat_ssl_context_configure_verify(context);
+            cat_ssl_context_configure_cert_verify_callback(context);
 #endif
+        }
+        cat_ssl_context_set_verify_depth(context, ioptions.verify_depth);
+        cat_ssl_context_enable_verify_peer(context);
+    } else {
+        cat_ssl_context_disable_verify_peer(context);
+    }
+    if (ioptions.certificate != NULL) {
+        cat_ssl_context_set_certificate(context, ioptions.certificate, ioptions.certificate_key);
+    }
+    if (ioptions.no_ticket) {
+        cat_ssl_context_set_no_ticket(context);
+    }
+    if (ioptions.no_compression) {
+        cat_ssl_context_set_no_compression(context);
+    }
 
     /* create ssl connection */
     ssl = cat_ssl_create(NULL, context);
@@ -1778,17 +1810,15 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
     }
 
     /* connection related options */
-    if (ioptions.peer_name.length == 0 && isocket->ssl_peer_name != NULL) {
-        ioptions.peer_name.data = isocket->ssl_peer_name;
-        ioptions.peer_name.length = strlen(isocket->ssl_peer_name);
+    if (ioptions.peer_name == NULL) {
+        ioptions.peer_name = isocket->ssl_peer_name;
     }
-    if (is_client && ioptions.peer_name.length > 0) {
-        CAT_ASSERT(ioptions.peer_name.data[ioptions.peer_name.length] == '\0');
-        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name.data);
+    if (is_client && ioptions.peer_name != NULL) {
+        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
     }
     ssl->allow_self_signed = ioptions.allow_self_signed;
-    if (ioptions.passphrase.length > 0) {
-        if (unlikely(!cat_ssl_set_passphrase(ssl, ioptions.passphrase.data, ioptions.passphrase.length))) {
+    if (ioptions.passphrase != NULL) {
+        if (!cat_ssl_set_passphrase(ssl, ioptions.passphrase, strlen(ioptions.passphrase))) {
             goto _set_options_error;
         }
     }
@@ -1849,11 +1879,11 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
         }
     }
     if (ioptions.verify_peer_name) {
-        if (ioptions.peer_name.length == 0) {
+        if (ioptions.peer_name == NULL) {
             cat_update_last_error(CAT_EINVAL, "SSL verify peer is enabled but peer name is empty");
             goto _verify_error;
         }
-        if (!cat_ssl_check_host(ssl, ioptions.peer_name.data, ioptions.peer_name.length)) {
+        if (!cat_ssl_check_host(ssl, ioptions.peer_name, strlen(ioptions.peer_name))) {
             goto _verify_error;
         }
     }
@@ -1867,6 +1897,10 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, cat_socket_
     cat_socket_internal_close(isocket);
     _set_options_error:
     cat_ssl_close(ssl);
+    if (0) {
+        _setup_error:
+        cat_ssl_context_close(context);
+    }
     _create_error:
     cat_update_last_error_with_previous("Socket enable crypto failed");
 
@@ -3558,10 +3592,17 @@ CAT_API cat_bool_t cat_socket_is_established(const cat_socket_t *socket)
 }
 
 #ifdef CAT_SSL
+CAT_API cat_bool_t cat_socket_has_crypto(const cat_socket_t *socket)
+{
+    cat_socket_internal_t *isocket = socket->internal;
+    return isocket != NULL && isocket->ssl != NULL;
+}
+
 CAT_API cat_bool_t cat_socket_is_encrypted(const cat_socket_t *socket)
 {
     cat_socket_internal_t *isocket = socket->internal;
-    return isocket != NULL && isocket->ssl != NULL && cat_socket_internal_is_established(isocket);
+    return isocket != NULL && cat_socket_internal_is_established(isocket) &&
+           isocket->ssl != NULL && cat_ssl_is_established(isocket->ssl);
 }
 #endif
 

@@ -31,7 +31,7 @@ TEST(cat_ssl, remote_https_server)
     DEFER(cat_socket_close(socket));
 
     ASSERT_TRUE(cat_socket_connect(socket, TEST_REMOTE_HTTPS_SERVER));
-    ASSERT_TRUE(cat_socket_enable_crypto(socket, nullptr, nullptr));
+    ASSERT_TRUE(cat_socket_enable_crypto(socket, nullptr));
 
     char *request = cat_sprintf(
         "GET / HTTP/1.1\r\n"
