@@ -113,7 +113,7 @@ namespace testing
         return nwrite == length;
     }
 
-    bool unlink(const char *filename)
+    bool remove_file(const char *filename)
     {
         return remove(filename) == 0;
     }
@@ -313,8 +313,8 @@ public:
     virtual void TearDown()
     {
 #if defined(CAT_SSL) && !defined(CAT_DEBUG)
-        unlink(testing::CONFIG_SSL_CERTIFICATE.c_str());
-        unlink(testing::CONFIG_SSL_CERTIFICATE_KEY.c_str());
+        remove_file(testing::CONFIG_SSL_CERTIFICATE.c_str());
+        remove_file(testing::CONFIG_SSL_CERTIFICATE_KEY.c_str());
 #endif
 
         call_shutdown_functions();
