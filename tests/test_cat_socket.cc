@@ -1483,6 +1483,7 @@ TEST(cat_socket, send_yield)
     size_t buffer_size = send_buffer_size * (!is_valgrind() ? 8 : 2);
     char *write_buffer = (char *) cat_malloc(buffer_size);
     ASSERT_NE(write_buffer, nullptr);
+    DEFER(cat_free(write_buffer));
     cat_snrand(write_buffer, buffer_size);
     do {
         cat_coroutine_t write_coroutine;
@@ -1505,12 +1506,11 @@ TEST(cat_socket, send_yield)
     } while (0);
     char *read_buffer = (char *) cat_malloc(buffer_size);
     ASSERT_NE(read_buffer, nullptr);
+    DEFER(cat_free(read_buffer));
     ASSERT_EQ(cat_socket_read(&client, read_buffer, buffer_size), (ssize_t) buffer_size);
     read_buffer[buffer_size - 1] = '\0';
     write_buffer[buffer_size - 1] = '\0';
     ASSERT_STREQ(read_buffer, write_buffer);
-    cat_free(read_buffer);
-    cat_free(write_buffer);
 }
 
 TEST(cat_socket, cross_close_when_connecting_local)
