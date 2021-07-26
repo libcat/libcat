@@ -52,10 +52,23 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                 if (read_n == 0) {
                     break;
                 }
-                if (std::string(read_buffer, read_n) == "RESET") {
+#ifdef CAT_SSL
+                if (strncmp(read_buffer, "SSL", read_n) == 0) {
+                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                    cat_socket_crypto_options_t ssl_options;
+                    cat_socket_crypto_options_init(&ssl_options);
+                    ssl_options.verify_peer = cat_false;
+                    ssl_options.verify_peer_name = cat_false;
+                    ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE;
+                    ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY;
+                    ASSERT_TRUE(cat_socket_enable_crypto(client, &ssl_options));
+                    continue;
+                }
+#endif
+                if (strncmp(read_buffer, "RESET", read_n) == 0) {
                     break;
                 }
-                if (std::string(read_buffer, read_n) == "TIMEOUT") {
+                if (strncmp(read_buffer, "TIMEOUT", read_n) == 0) {
                     ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
                     break;
                 }
@@ -1206,6 +1219,22 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         }
     });
     ASSERT_TRUE(cat_socket_is_established(echo_client));
+
+#ifdef CAT_SSL
+    if (echo_client == &_echo_client &&
+        (echo_client->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
+        ASSERT_TRUE(io_functions.send(echo_client, CAT_STRL("SSL")));
+        char ssl_greeter[CAT_STRLEN("SSL") + 1];
+        ASSERT_EQ(io_functions.read(echo_client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
+        ssl_greeter[sizeof(ssl_greeter) - 1] = '\0';
+        ASSERT_STREQ(ssl_greeter, "SSL");
+        cat_socket_crypto_options_t ssl_options;
+        cat_socket_crypto_options_init(&ssl_options);
+        ssl_options.verify_peer = cat_false;
+        ssl_options.verify_peer_name = cat_false;
+        ASSERT_TRUE(cat_socket_enable_crypto(echo_client, &ssl_options));
+    }
+#endif
 
     /* normal loop */
     for (n = TEST_MAX_REQUESTS; n--;) {

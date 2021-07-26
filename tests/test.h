@@ -29,6 +29,8 @@
 /* ext, not enabled by default */
 #include "cat_curl.h"
 
+#include "test_config.h"
+
 /* common macros */
 
 #define SKIP_IF(expression) do { \
@@ -85,6 +87,11 @@
 #define TEST_HTTP_STATUS_CODE_OK           200
 #define TEST_HTTP_CLIENT_FAKE_USERAGENT    "curl/7.58.0"
 
+#ifdef CAT_SSL
+#define TEST_SERVER_SSL_CERTIFICATE        ::testing::CONFIG_SSL_CERTIFICATE.c_str()
+#define TEST_SERVER_SSL_CERTIFICATE_KEY    ::testing::CONFIG_SSL_CERTIFICATE_KEY.c_str()
+#endif
+
 #define PP_CAT(a, b) PP_CAT_I(a, b)
 #define PP_CAT_I(a, b) PP_CAT_II(~, a ## b)
 #define PP_CAT_II(p, res) res
@@ -139,6 +146,11 @@ namespace testing
     extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
     /* TMP_PATH */
     extern std::string CONFIG_TMP_PATH;
+
+#ifdef CAT_SSL
+    extern std::string CONFIG_SSL_CERTIFICATE;
+    extern std::string CONFIG_SSL_CERTIFICATE_KEY;
+#endif
 
     /* common functions */
 
