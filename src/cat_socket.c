@@ -1847,12 +1847,16 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
             if (unlikely(!ret)) {
                 break;
             }
-            continue;
         }
         if (ssl_ret == CAT_SSL_RET_OK) {
             cat_debug(SOCKET, "SSL handshake completed");
             ret = cat_true;
             break;
+        }
+        /* ssl_read_encrypted_bytes() may return n > 0
+         * after ssl_handshake() return OK */
+        if (n > 0) {
+            continue;
         }
         CAT_ASSERT(n == CAT_RET_NONE); {
             ssize_t nread, nwrite;
