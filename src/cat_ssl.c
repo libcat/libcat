@@ -1087,10 +1087,6 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
     *out_length = 0;
 
-    if (unlikely(buffer->length == 0)) {
-        return cat_true;
-    }
-
     while (1) {
         int n;
 
