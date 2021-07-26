@@ -121,6 +121,25 @@ using namespace testing;
 
 namespace testing
 {
+    /* common vars */
+
+    extern cat_timeout_t CONFIG_IO_TIMEOUT;
+    extern uint32_t CONFIG_MAX_REQUESTS;
+    extern uint32_t CONFIG_MAX_CONCURRENCY;
+
+    /* REMOTE_HTTP_SERVER */
+    extern std::string CONFIG_REMOTE_HTTP_SERVER_HOST;
+    extern int CONFIG_REMOTE_HTTP_SERVER_PORT;
+    extern std::string CONFIG_REMOTE_HTTP_SERVER_KEYWORD;
+    /* REMOTE_HTTPS_SERVER */
+    extern std::string CONFIG_REMOTE_HTTPS_SERVER_HOST;
+    extern int CONFIG_REMOTE_HTTPS_SERVER_PORT;
+    extern std::string CONFIG_REMOTE_HTTPS_SERVER_KEYWORD;
+    /* REMOTE_IPV6_HTTP_SERVER */
+    extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
+    /* TMP_PATH */
+    extern std::string CONFIG_TMP_PATH;
+
     /* common functions */
 
     static inline bool is_valgrind(void)
@@ -169,24 +188,7 @@ namespace testing
 
     void register_shutdown_function(std::function<void(void)> function);
 
-    /* common vars */
-
-    extern cat_timeout_t CONFIG_IO_TIMEOUT;
-    extern uint32_t CONFIG_MAX_REQUESTS;
-    extern uint32_t CONFIG_MAX_CONCURRENCY;
-
-    /* REMOTE_HTTP_SERVER */
-    extern std::string CONFIG_REMOTE_HTTP_SERVER_HOST;
-    extern int CONFIG_REMOTE_HTTP_SERVER_PORT;
-    extern std::string CONFIG_REMOTE_HTTP_SERVER_KEYWORD;
-    /* REMOTE_HTTPS_SERVER */
-    extern std::string CONFIG_REMOTE_HTTPS_SERVER_HOST;
-    extern int CONFIG_REMOTE_HTTPS_SERVER_PORT;
-    extern std::string CONFIG_REMOTE_HTTPS_SERVER_KEYWORD;
-    /* REMOTE_IPV6_HTTP_SERVER */
-    extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
-    /* TMP_PATH */
-    extern std::string CONFIG_TMP_PATH;
+    /* common classes */
 
     class wait_group
     {
