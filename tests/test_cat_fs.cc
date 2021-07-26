@@ -1539,3 +1539,24 @@ TEST(cat_fs, cancel){
 #undef CANCEL_TEST
 
 }
+
+TEST(cat_fs, get_or_put_content)
+{
+    std::string random_bytes = get_random_bytes(TEST_BUFFER_SIZE_STD);
+    size_t length;
+
+    std::string filename = get_random_path();
+    ASSERT_TRUE(cat_fs_put_contents(filename.c_str(), random_bytes.c_str(), random_bytes.length()));
+    DEFER({
+        unlink(filename.c_str());
+        ASSERT_FALSE(file_exists(filename.c_str()));
+    });
+    char *content = cat_fs_get_contents(filename.c_str(), &length);
+    ASSERT_NE(content, nullptr);
+    DEFER(cat_free(content));
+    ASSERT_EQ(length, random_bytes.length());
+    ASSERT_STREQ(content, random_bytes.c_str());
+    std::string content_str = file_get_contents(filename.c_str());
+    ASSERT_EQ(length, content_str.length());
+    ASSERT_STREQ(content, content_str.c_str());
+}

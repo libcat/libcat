@@ -27,6 +27,7 @@
 
 #include <list>
 #include <fstream>
+#include <sstream>
 
 namespace testing
 {
@@ -82,6 +83,34 @@ namespace testing
     {
         std::ifstream file(filename);
         return file.good();
+    }
+
+    std::string file_get_contents(const char *filename)
+    {
+        std::stringstream ss;
+        ss << std::ifstream(filename).rdbuf();
+        return ss.str();
+    }
+
+    bool file_put_contents(const char *filename, const std::string content)
+    {
+        return file_put_contents(filename, content.c_str(), content.length());
+    }
+
+    bool file_put_contents(const char *filename, const char *content, size_t length)
+    {
+        FILE *file = fopen(filename, "w");
+        if (file == NULL) {
+            return false;
+        }
+        ssize_t nwrite = fwrite(content, sizeof(char), length, file);
+        fclose(file);
+        return nwrite == length;
+    }
+
+    bool unlink(const char *filename)
+    {
+        return remove(filename) == 0;
     }
 
     std::string get_random_bytes(size_t length)

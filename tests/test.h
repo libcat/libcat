@@ -173,6 +173,9 @@ namespace testing
     const char *get_debugger_name(void);
 
     bool file_exists(const char *filename);
+    std::string file_get_contents(const char *filename);
+    bool file_put_contents(const char *filename, const std::string content);
+    bool file_put_contents(const char *filename, const char *content, size_t length);
 
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
