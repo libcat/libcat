@@ -263,12 +263,13 @@ CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, c
     cat_debug(SSL, "SSL_CTX_use_certificate_chain_file(\"%s\")", certificate);
     if (SSL_CTX_use_certificate_chain_file(context, certificate) != 1) {
         cat_ssl_update_last_error(CAT_ESSL,  "SSL_CTX_use_certificate_chain_file(\"%s\") failed, "
-            "check that your ca_file/ca_path settings include details of your certificate and its issuer");
+            "check that your ca_file/ca_path settings include details of your certificate and its issuer", certificate);
         return cat_false;
     }
     if (certificate_key == NULL) {
         certificate_key = certificate;
     }
+    cat_debug(SSL, "SSL_CTX_use_PrivateKey_file(\"%s\")", certificate_key);
     if (SSL_CTX_use_PrivateKey_file(context, certificate_key, SSL_FILETYPE_PEM) != 1) {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_use_PrivateKey_file(\"%s\") failed", certificate_key);
         return cat_false;
