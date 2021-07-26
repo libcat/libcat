@@ -157,6 +157,12 @@ namespace testing
 
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 
+    static inline std::string get_random_path(size_t length = 8)
+    {
+        std::string random_bytes = get_random_bytes(length);
+        return string_format("%s/%s", TEST_TMP_PATH, random_bytes.c_str());
+    }
+
     cat_coroutine_t *co(std::function<void(void)> function);
     bool defer(std::function<void(void)> function);
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout);
