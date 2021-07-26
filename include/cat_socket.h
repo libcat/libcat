@@ -292,10 +292,12 @@ typedef enum cat_socket_common_type_e {
 } cat_socket_common_type_t;
 
 typedef enum cat_socket_union_type_flags_e {
-    CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS =
+    CAT_SOCKET_TYPE_FLAGS_ROLE =
         CAT_SOCKET_TYPE_FLAG_SERVER |
         CAT_SOCKET_TYPE_FLAG_CLIENT |
         CAT_SOCKET_TYPE_FLAG_SESSION,
+    CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS =
+        CAT_SOCKET_TYPE_FLAGS_ROLE,
 } cat_socket_union_type_flags_t;
 
 typedef uint32_t cat_socket_type_t;

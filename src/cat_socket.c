@@ -1370,6 +1370,8 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
             /* TODO: socket_extends() ? */
             memcpy(&iclient->options, iclient_options == NULL ? &iserver->options : iclient_options, sizeof(iclient->options));
             cat_socket_on_open(client, AF_UNSPEC);
+            /* recover socket role when recv_handle() */
+            client->type |= (client_type & CAT_SOCKET_TYPE_FLAGS_ROLE);
             return client;
         }
         if (unlikely(error != CAT_EAGAIN)) {
