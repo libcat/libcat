@@ -2955,9 +2955,9 @@ static ssize_t cat_socket_internal_try_write_encrypted(
                 } while (++ssl_vector_current < ssl_vector_eof);
                 /* We tell caller all data has been sent, but actually they are in buffered,
                  * it's ok, just like syscall write() did. */
-                nwrite = cat_io_vector_length((const cat_io_vector_t *) vector, vector_count);
                 has_buffered_data = cat_true;
             }
+            nwrite = cat_io_vector_length((const cat_io_vector_t *) vector, vector_count);
         }
     }
 
