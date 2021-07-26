@@ -1886,7 +1886,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     }
     if (ioptions.verify_peer_name) {
         if (ioptions.peer_name == NULL) {
-            cat_update_last_error(CAT_EINVAL, "SSL verify peer is enabled but peer name is empty");
+            cat_update_last_error(CAT_EINVAL, "SSL verify peer name is enabled but peer name is empty");
             goto _verify_error;
         }
         if (!cat_ssl_check_host(ssl, ioptions.peer_name, strlen(ioptions.peer_name))) {
