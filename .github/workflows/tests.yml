@@ -9,10 +9,11 @@ jobs:
   win-tests:
     name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
     runs-on: ${{matrix.os}}
+    timeout-minutes: 60
     strategy:
       matrix:
         os: [ "windows-latest" ]
-        build-type: [ "Debug", "Release"]
+        build-type: [ "Debug", "Release" ]
         #build-type: [ "Debug" ]
       max-parallel: 2
       fail-fast: false
@@ -121,6 +122,7 @@ jobs:
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
+    timeout-minutes: 30
     strategy:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
