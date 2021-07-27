@@ -103,7 +103,6 @@ TEST_REQUIREMENT(cat_socket, echo_tcp_server)
         DEFER(echo_tcp_server_port = 0);
         echo_tcp_server = cat_coroutine_get_current();
         DEFER(echo_tcp_server = nullptr);
-        cat_socket_set_read_timeout(&server, -1);
 
         echo_stream_server_connection_handler(&server);
     });
@@ -140,7 +139,6 @@ TEST_REQUIREMENT(cat_socket, echo_udp_server)
         DEFER(echo_udp_server_port = 0);
         echo_udp_server = cat_coroutine_get_current();
         DEFER(echo_udp_server = nullptr;);
-        cat_socket_set_read_timeout(&server, -1);
 
         while (true) {
             char read_buffer[TEST_BUFFER_SIZE_STD];
@@ -197,7 +195,6 @@ TEST_REQUIREMENT(cat_socket, echo_pipe_server)
         ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
         echo_pipe_server = cat_coroutine_get_current();
         DEFER(echo_pipe_server = nullptr;);
-        cat_socket_set_read_timeout(&server, -1);
 
         echo_stream_server_connection_handler(&server);
     });
@@ -231,7 +228,6 @@ TEST_REQUIREMENT(cat_socket, echo_udg_server)
         ASSERT_TRUE(cat_socket_bind(&server, echo_udg_server_path.c_str(), echo_udg_server_path.length(), 0));
         echo_udg_server = cat_coroutine_get_current();
         DEFER(echo_udg_server = nullptr;);
-        cat_socket_set_read_timeout(&server, -1);
 
         while (true) {
             char read_buffer[TEST_BUFFER_SIZE_STD];

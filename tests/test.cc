@@ -227,6 +227,7 @@ public:
             cat_free(timeout);
         }
         cat_socket_set_global_timeout(TEST_IO_TIMEOUT);
+        cat_socket_set_global_accept_timeout(TEST_IO_TIMEOUT);
         /* MAX_REQUEST */
         if (cat_env_exists("TEST_MAX_REQUESTS")) {
             char *n = cat_env_get("TEST_MAX_REQUESTS");
