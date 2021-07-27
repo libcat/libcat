@@ -113,7 +113,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_tcp_server)
 {
     ASSERT_NE(echo_tcp_server, nullptr);
     cat_coroutine_resume(echo_tcp_server, nullptr, nullptr);
-    echo_tcp_server_wg();
+    ASSERT_TRUE(echo_tcp_server_wg());
     ASSERT_EQ(echo_tcp_server, nullptr);
 }
 
@@ -166,7 +166,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_udp_server)
 {
     ASSERT_NE(echo_udp_server, nullptr);
     cat_coroutine_resume(echo_udp_server, nullptr, nullptr);
-    echo_udp_server_wg();
+    ASSERT_TRUE(echo_udp_server_wg());
     ASSERT_EQ(echo_udp_server, nullptr);
 }
 
@@ -205,7 +205,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_pipe_server)
 {
     ASSERT_NE(echo_pipe_server, nullptr);
     cat_coroutine_resume(echo_pipe_server, nullptr, nullptr);
-    echo_pipe_server_wg();
+    ASSERT_TRUE(echo_pipe_server_wg());
     ASSERT_EQ(echo_pipe_server, nullptr);
 }
 
@@ -255,7 +255,7 @@ TEST_REQUIREMENT_DTOR(cat_socket, echo_udg_server)
 {
     ASSERT_NE(echo_udg_server, nullptr);
     cat_coroutine_resume(echo_udg_server, nullptr, nullptr);
-    echo_udg_server_wg();
+    ASSERT_TRUE(echo_udg_server_wg());
     ASSERT_EQ(echo_udg_server, nullptr);
 }
 #endif
