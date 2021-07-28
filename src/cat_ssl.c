@@ -1087,6 +1087,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
     cat_buffer_t *buffer = &ssl->read_buffer;
     size_t nread = 0, nwrite = 0;
     size_t out_size = *out_length;
+    cat_bool_t ret = cat_false;
 
     *out_length = 0;
 
@@ -1095,6 +1096,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         if (unlikely(nread == out_size)) {
             // full
+            ret = cat_true;
             break;
         }
 
@@ -1123,6 +1125,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         if (unlikely(nwrite == buffer->length)) {
             // ENOBUFS
+            ret = cat_true;
             break;
         }
 
@@ -1144,7 +1147,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
     *out_length = nread;
 
-    return cat_true;
+    return ret;
 }
 
 CAT_API char *cat_ssl_get_error_reason(void)
