@@ -1835,6 +1835,8 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         if (unlikely(ssl_ret == CAT_SSL_RET_ERROR)) {
             break;
         }
+        /* ssl_read_encrypted_bytes() may return n > 0
+         * after ssl_handshake() return OK */
         n = cat_ssl_read_encrypted_bytes(ssl, buffer->value, buffer->size);
         if (unlikely(n == CAT_RET_ERROR)) {
             break;
@@ -1849,12 +1851,10 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
             }
         }
         if (ssl_ret == CAT_SSL_RET_OK) {
-            cat_debug(SOCKET, "SSL handshake completed");
+            cat_debug(SOCKET, "Socket SSL handshake completed");
             ret = cat_true;
             break;
         }
-        /* ssl_read_encrypted_bytes() may return n > 0
-         * after ssl_handshake() return OK */
         if (n > 0) {
             continue;
         }

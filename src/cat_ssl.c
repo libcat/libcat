@@ -668,16 +668,19 @@ CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl)
 CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 {
     cat_ssl_connection_t *connection = ssl->connection;
-    int n, ssl_error;
+
+    if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
+        return CAT_SSL_RET_OK;
+    }
 
     cat_ssl_clear_error();
 
-    n = SSL_do_handshake(connection);
+    int n = SSL_do_handshake(connection);
 
     cat_debug(SSL, "SSL_do_handshake(%p): %d", ssl, n);
     if (n == 1) {
-        cat_ssl_handshake_log(ssl);
         ssl->flags |= CAT_SSL_FLAG_HANDSHAKED;
+        cat_ssl_handshake_log(ssl);
 #ifndef SSL_OP_NO_RENEGOTIATION
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS
@@ -692,7 +695,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
         return CAT_SSL_RET_OK;
     }
 
-    ssl_error = SSL_get_error(connection, n);
+    int ssl_error = SSL_get_error(connection, n);
 
     cat_debug(SSL, "SSL_get_error(%p): %d", ssl, ssl_error);
 
