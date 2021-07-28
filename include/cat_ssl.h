@@ -117,9 +117,9 @@ typedef enum cat_ssl_protocol_e {
 } cat_ssl_protocol_t;
 
 typedef enum cat_ssl_union_protocols_e {
-#define CAT_SSL_PROTOCO_ALLL_GEN(name, value) CAT_SSL_PROTOCOL_##name |
-    CAT_SSL_PROTOCOLS_ALL = CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCO_ALLL_GEN) 0,
-#undef CAT_SSL_PROTOCO_ALLL_GEN
+#define CAT_SSL_PROTOCOL_ALL_GEN(name, value) CAT_SSL_PROTOCOL_##name |
+    CAT_SSL_PROTOCOLS_ALL = CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCOL_ALL_GEN) 0,
+#undef CAT_SSL_PROTOCOL_ALL_GEN
 } cat_ssl_union_protocols_t;
 
 typedef unsigned int cat_ssl_protocols_t;
