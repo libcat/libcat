@@ -924,7 +924,7 @@ CAT_API size_t cat_ssl_encrypted_size(size_t length)
 static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_t *in_length, char *out, size_t *out_length)
 {
     cat_ssl_connection_t *connection = ssl->connection;
-    size_t nread = 0, nwritten = 0;
+    size_t nread = 0, nwrite = 0;
     size_t in_size = *in_length;
     size_t out_size = *out_length;
     cat_bool_t ret = cat_false;
@@ -955,7 +955,7 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
             break;
         }
 
-        if (nwritten == in_size) {
+        if (nwrite == in_size) {
             /* done */
             ret = cat_true;
             break;
@@ -963,9 +963,9 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
 
         cat_ssl_clear_error();
 
-        n = SSL_write(connection, in + nwritten, (int) (in_size - nwritten));
+        n = SSL_write(connection, in + nwrite, (int) (in_size - nwrite));
 
-        cat_debug(SSL, "SSL_write(%p, %zu) = %d", ssl, in_size - nwritten, n);
+        cat_debug(SSL, "SSL_write(%p, %zu) = %d", ssl, in_size - nwrite, n);
 
         if (unlikely(n <= 0)) {
             int error = SSL_get_error(connection, n);
@@ -981,11 +981,11 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
                 break;
             }
         } else {
-            nwritten += n;
+            nwrite += n;
         }
     }
 
-    *in_length = nwritten;
+    *in_length = nwrite;
     *out_length = nread;
 
     return ret;
@@ -1085,7 +1085,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 {
     cat_ssl_connection_t *connection = ssl->connection;
     cat_buffer_t *buffer = &ssl->read_buffer;
-    size_t nread = 0, nwritten = 0;
+    size_t nread = 0, nwrite = 0;
     size_t out_size = *out_length;
 
     *out_length = 0;
@@ -1121,17 +1121,17 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
             nread += n;
         }
 
-        if (unlikely(nwritten == buffer->length)) {
+        if (unlikely(nwrite == buffer->length)) {
             // ENOBUFS
             break;
         }
 
         n = cat_ssl_write_encrypted_bytes(
-            ssl, buffer->value + nwritten, buffer->length - nwritten
+            ssl, buffer->value + nwrite, buffer->length - nwrite
         );
 
         if (n > 0) {
-            nwritten += n;
+            nwrite += n;
         } else if (n == CAT_RET_NONE) {
             // continue to SSL_read()
         } else {
@@ -1140,7 +1140,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
         }
     }
 
-    cat_buffer_truncate(buffer, nwritten, 0);
+    cat_buffer_truncate(buffer, nwrite, 0);
 
     *out_length = nread;
 
