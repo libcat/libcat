@@ -2912,6 +2912,9 @@ static ssize_t cat_socket_internal_try_write_encrypted(
         address, address_length
     );
 
+    if (nwrite_encrypted == CAT_EAGAIN) {
+        nwrite_encrypted = 0;
+    }
     if (unlikely(nwrite_encrypted < 0)) {
         nwrite = nwrite_encrypted;
     } else {
