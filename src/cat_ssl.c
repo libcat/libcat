@@ -1087,6 +1087,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
     cat_buffer_t *buffer = &ssl->read_buffer;
     size_t nread = 0, nwrite = 0;
     size_t out_size = *out_length;
+    cat_bool_t have_encrypted_data = buffer->length != 0;
     cat_bool_t ret = cat_false;
 
     *out_length = 0;
@@ -1094,10 +1095,19 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
     while (1) {
         int n;
 
-        if (unlikely(nread == out_size)) {
-            // full
-            ret = cat_true;
-            break;
+        if (have_encrypted_data) {
+            n = cat_ssl_write_encrypted_bytes(
+                ssl, buffer->value + nwrite, buffer->length - nwrite
+            );
+            if (n > 0) {
+                nwrite += n;
+                have_encrypted_data = buffer->length - nwrite > 0;
+            } else if (n == CAT_RET_NONE) {
+                // continue to SSL_read()
+            } else {
+                cat_update_last_error_with_previous("SSL_write() error");
+                break;
+            }
         }
 
         cat_ssl_clear_error();
@@ -1121,24 +1131,16 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
             }
         } else {
             nread += n;
+            if (nread == out_size) {
+                /* out buffer is full */
+                ret = cat_true;
+                break;
+            }
         }
 
-        if (unlikely(nwrite == buffer->length)) {
-            // ENOBUFS
+        if (!have_encrypted_data) {
+            /* need more encrypted data */
             ret = cat_true;
-            break;
-        }
-
-        n = cat_ssl_write_encrypted_bytes(
-            ssl, buffer->value + nwrite, buffer->length - nwrite
-        );
-
-        if (n > 0) {
-            nwrite += n;
-        } else if (n == CAT_RET_NONE) {
-            // continue to SSL_read()
-        } else {
-            cat_update_last_error_with_previous("SSL_write() error");
             break;
         }
     }
