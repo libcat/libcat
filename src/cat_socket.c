@@ -2929,20 +2929,13 @@ static ssize_t cat_socket_internal_try_write_encrypted(
             }
             nwrite = CAT_EAGAIN;
         } else {
-            size_t _nwrite_encrypted = nwrite_encrypted;
             cat_io_vector_t *ssl_vector_current = ssl_vector;
             cat_io_vector_t *ssl_vector_eof = ssl_vector + ssl_vector_count;
-            size_t ssl_vector_base_offset = 0;
+            size_t ssl_vector_base_offset = nwrite_encrypted;
             nwrite = cat_io_vector_length((const cat_io_vector_t *) vector, vector_count);
-            while (1) {
-                if (_nwrite_encrypted >= ssl_vector_current->length) {
-                    _nwrite_encrypted -= ssl_vector_current->length;
-                    if (++ssl_vector_current == ssl_vector_eof) {
-                        break;
-                    }
-                } else {
-                    ssl_vector_base_offset = ssl_vector_current->length - _nwrite_encrypted;
-                    _nwrite_encrypted = 0;
+            while (ssl_vector_base_offset >= ssl_vector_current->length) {
+                ssl_vector_base_offset -= ssl_vector_current->length;
+                if (++ssl_vector_current == ssl_vector_eof) {
                     break;
                 }
             }
@@ -2975,6 +2968,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
                 }
                 /* We tell caller all data has been sent, but actually they are in buffered,
                  * it's ok, just like syscall write() did. */
+                cat_debug(SSL, "SSL %p write buffer now has %zu bytes queued data", ssl, ssl->write_buffer.length);
             }
         }
     }
