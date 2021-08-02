@@ -1850,15 +1850,15 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
                 break;
             }
         }
-        if (ssl_ret == CAT_SSL_RET_OK) {
+        /* Notice: if it's client and it write something to the server,
+         * it means server will response something later, so, we need to recv it then returns,
+         * otherwise it will lead errors on Windows */
+        if (ssl_ret == CAT_SSL_RET_OK && !(n > 0 && is_client)) {
             cat_debug(SOCKET, "Socket SSL handshake completed");
             ret = cat_true;
             break;
         }
-        if (n > 0) {
-            continue;
-        }
-        CAT_ASSERT(n == CAT_RET_NONE); {
+        {
             ssize_t nread, nwrite;
             CAT_TIME_WAIT_START() {
                 nread = cat_socket_recv_ex(socket, buffer->value, buffer->size, timeout);
