@@ -834,19 +834,21 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         error = uv_udp_init_ex(cat_event_loop, &isocket->u.udp, af);
     } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
 #ifdef CAT_OS_UNIX_LIKE
-        if ((type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG &&
-            !(ioptions.flags & CAT_SOCKET_CREATION_FLAG_OPEN_FD)) {
-            ioptions.flags &= ~CAT_SOCKET_CREATION_OPEN_FLAGS;
-            ioptions.flags |= CAT_SOCKET_CREATION_FLAG_OPEN_FD;
-            ioptions.o.fd = socket_create(AF_UNIX, SOCK_DGRAM, IPPROTO_IP);
-            if (unlikely(ioptions.o.fd < 0)) {
-                error = cat_translate_sys_error(errno);
-                goto _init_error;
+        if ((type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) {
+            if ((ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) == 0) {
+                ioptions.flags |= CAT_SOCKET_CREATION_FLAG_OPEN_FD;
+                ioptions.o.fd = socket_create(AF_UNIX, SOCK_DGRAM, IPPROTO_IP);
+                if (unlikely(ioptions.o.fd < 0)) {
+                    error = cat_translate_sys_error(errno);
+                    goto _init_error;
+                }
             }
-            type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
-            check_connection = cat_false;
-            isocket->u.udg.readfd = CAT_SOCKET_INVALID_FD;
-            isocket->u.udg.writefd = CAT_SOCKET_INVALID_FD;
+            if (ioptions.flags & CAT_SOCKET_CREATION_FLAG_OPEN_FD) {
+                type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
+                check_connection = cat_false;
+                isocket->u.udg.readfd = CAT_SOCKET_INVALID_FD;
+                isocket->u.udg.writefd = CAT_SOCKET_INVALID_FD;
+            }
         }
         else
 #endif
