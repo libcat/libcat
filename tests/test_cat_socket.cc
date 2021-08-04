@@ -61,6 +61,7 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     ssl_options.verify_peer_name = cat_false;
                     ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE;
                     ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY;
+                    ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
                     ASSERT_TRUE(cat_socket_enable_crypto(client, &ssl_options));
                     continue;
                 }
