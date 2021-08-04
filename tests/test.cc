@@ -20,6 +20,8 @@
 
 #include "test.h"
 
+#include "test_config.h"
+
 #ifdef CAT_OS_UNIX_LIKE
 #include <sys/types.h>
 #include <sys/ptrace.h>
@@ -51,6 +53,7 @@ namespace testing
 #ifdef CAT_SSL
     std::string CONFIG_SSL_CERTIFICATE;
     std::string CONFIG_SSL_CERTIFICATE_KEY;
+    std::string CONFIG_SSL_CA_FILE;
 #endif
 
     bool has_debugger(void)
@@ -304,6 +307,8 @@ public:
         }
 
 #ifdef CAT_SSL
+        testing::CONFIG_SSL_CA_FILE = string_format("%s/cat_ssl_ca.crt", TEST_TMP_PATH);
+        ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CA_FILE.c_str(), TEST_SERVER_SSL_CA_CONTENT));
         testing::CONFIG_SSL_CERTIFICATE = string_format("%s/cat_ssl_server.crt", TEST_TMP_PATH);
         ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CERTIFICATE.c_str(), TEST_SERVER_SSL_CERTIFICATE_CONTENT));
         testing::CONFIG_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_server.key", TEST_TMP_PATH);
