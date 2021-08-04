@@ -1703,6 +1703,7 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->certificate = NULL;
     options->certificate_key = NULL;
     options->passphrase = NULL;
+    options->protocols = CAT_SSL_PROTOCOLS_DEFAULT;
     options->verify_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
     options->verify_peer = cat_true;
     options->verify_peer_name = cat_true;
@@ -1760,6 +1761,8 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
             goto _create_error;
         }
     }
+
+    cat_ssl_context_set_protocols(context, ioptions.protocols);
 
     if (ioptions.verify_peer) {
         if (!is_client && ioptions.ca_file != NULL) {
