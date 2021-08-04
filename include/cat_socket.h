@@ -575,7 +575,7 @@ typedef struct cat_socket_crypto_options_s {
     cat_bool_t no_compression;
 } cat_socket_crypto_options_t;
 
-CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options);
+CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options, cat_bool_t is_client);
 
 CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, const cat_socket_crypto_options_t *options);
 CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_socket_crypto_options_t *options, cat_timeout_t timeout);

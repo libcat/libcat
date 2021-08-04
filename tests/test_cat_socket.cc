@@ -56,8 +56,8 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                 if (strncmp(read_buffer, "SSL", read_n) == 0) {
                     ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
                     cat_socket_crypto_options_t ssl_options;
-                    cat_socket_crypto_options_init(&ssl_options);
-                    ssl_options.verify_peer = cat_false;
+                    cat_socket_crypto_options_init(&ssl_options, cat_false);
+                    ssl_options.verify_peer = cat_true;
                     ssl_options.verify_peer_name = cat_false;
                     ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE;
                     ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY;
@@ -1226,10 +1226,8 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         ssl_greeter[sizeof(ssl_greeter) - 1] = '\0';
         ASSERT_STREQ(ssl_greeter, "SSL");
         cat_socket_crypto_options_t ssl_options;
-        cat_socket_crypto_options_init(&ssl_options);
+        cat_socket_crypto_options_init(&ssl_options, cat_true);
         ssl_options.allow_self_signed = cat_true;
-        ssl_options.verify_peer = cat_true;
-        ssl_options.verify_peer_name = cat_true;
         ssl_options.peer_name = "localhost";
         ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
         ASSERT_TRUE(cat_socket_enable_crypto(echo_client, &ssl_options));

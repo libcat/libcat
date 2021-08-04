@@ -1695,7 +1695,7 @@ CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const cat_soc
 }
 
 #ifdef CAT_SSL
-CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options)
+CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options, cat_bool_t is_client)
 {
     options->peer_name = NULL;
     options->ca_file = NULL;
@@ -1705,8 +1705,8 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->passphrase = NULL;
     options->protocols = CAT_SSL_PROTOCOLS_DEFAULT;
     options->verify_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
-    options->verify_peer = cat_true;
-    options->verify_peer_name = cat_true;
+    options->verify_peer = is_client;
+    options->verify_peer_name = is_client;
     options->allow_self_signed = cat_false;
     options->no_ticket = cat_false;
     options->no_compression = cat_false;
@@ -1739,7 +1739,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
 
     /* check options */
     if (options == NULL) {
-        cat_socket_crypto_options_init(&ioptions);
+        cat_socket_crypto_options_init(&ioptions, is_client);
     } else {
         ioptions = *options;
     }
