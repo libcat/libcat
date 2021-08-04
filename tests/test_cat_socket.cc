@@ -1210,7 +1210,7 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         prepare_function(echo_client, io_functions);
     }
     DEFER({
-        if (echo_client == &_echo_client) {
+        if (echo_client == &_echo_client && cat_socket_is_available(echo_client)) {
             cat_socket_close(echo_client);
         }
     });
