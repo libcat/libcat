@@ -39,6 +39,29 @@ socket write of encrypted data.
           |         encrypted bytes          |       |  unencrypted bytes  |
 */
 
+#define CAT_SSL_OP_NO_SSLv2   SSL_OP_NO_SSLv2
+#define CAT_SSL_OP_NO_SSLv3   SSL_OP_NO_SSLv3
+#define CAT_SSL_OP_NO_TLSv1   SSL_OP_NO_TLSv1
+#ifdef SSL_OP_NO_TLSv1_1
+#define CAT_SSL_OP_NO_TLSv1_1 SSL_OP_NO_TLSv1_1
+#else
+#define CAT_SSL_OP_NO_TLSv1_1 0
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+#define CAT_SSL_OP_NO_TLSv1_2 SSL_OP_NO_TLSv1_2
+#else
+#define CAT_SSL_OP_NO_TLSv1_2 0
+#endif
+#ifdef SSL_OP_NO_TLSv1_3
+#define CAT_SSL_OP_NO_TLSv1_3 SSL_OP_NO_TLSv1_3
+#else
+#define CAT_SSL_OP_NO_TLSv1_3 0
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x009080dfL
+#define CAT_HAVE_SSL_CTX_CLEAR_OPTIONS 1
+#endif
+
 static void cat_ssl_clear_error(void);
 static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int where, int ret);
 #ifdef CAT_DEBUG
@@ -190,37 +213,34 @@ CAT_API void cat_ssl_context_close(cat_ssl_context_t *context)
 
 CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_protocols_t protocols)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x009080dfL
+    unsigned long op = 0;
+#ifdef CAT_HAVE_SSL_CTX_CLEAR_OPTIONS
     /* only in 0.9.8m+ */
-    SSL_CTX_clear_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+    SSL_CTX_clear_options(context,
+        CAT_SSL_OP_NO_SSLv2 | CAT_SSL_OP_NO_SSLv3 | CAT_SSL_OP_NO_TLSv1 |
+        CAT_SSL_OP_NO_TLSv1_1 | CAT_SSL_OP_NO_TLSv1_2 | CAT_SSL_OP_NO_TLSv1_3);
 #endif
     if (!(protocols & CAT_SSL_PROTOCOL_SSLv2)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_SSLv2);
+        op |= CAT_SSL_OP_NO_SSLv2;
     }
     if (!(protocols & CAT_SSL_PROTOCOL_SSLv3)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_SSLv3);
+        op |= CAT_SSL_OP_NO_SSLv3;
     }
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_TLSv1);
+        op |= CAT_SSL_OP_NO_TLSv1;
     }
-#ifdef SSL_OP_NO_TLSv1_1
-    SSL_CTX_clear_options(context, SSL_OP_NO_TLSv1_1);
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_1)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_TLSv1_1);
+        op |= CAT_SSL_OP_NO_TLSv1_1;
     }
-#endif
-#ifdef SSL_OP_NO_TLSv1_2
-    SSL_CTX_clear_options(context, SSL_OP_NO_TLSv1_2);
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_2)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_TLSv1_2);
+        op |= CAT_SSL_OP_NO_TLSv1_2;
     }
-#endif
-#ifdef SSL_OP_NO_TLSv1_3
-    SSL_CTX_clear_options(context, SSL_OP_NO_TLSv1_3);
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_3)) {
-        SSL_CTX_set_options(context, SSL_OP_NO_TLSv1_3);
+        op |= CAT_SSL_OP_NO_TLSv1_3;
     }
-#endif
+    if (op != 0) {
+        SSL_CTX_set_options(context, CAT_SSL_OP_NO_TLSv1_1);
+    }
 }
 
 CAT_API cat_bool_t cat_ssl_context_set_client_ca_list(cat_ssl_context_t *context, const char *ca_file)
