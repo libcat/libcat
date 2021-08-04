@@ -1743,6 +1743,13 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     } else {
         ioptions = *options;
     }
+    if (ioptions.peer_name == NULL) {
+        ioptions.peer_name = isocket->ssl_peer_name;
+    }
+    if (ioptions.verify_peer_name && ioptions.peer_name == NULL) {
+        cat_update_last_error(CAT_EINVAL, "SSL verify peer name is enabled but peer name is empty");
+        goto _prepare_error;
+    }
 
     /* check context (TODO: support context from arg?) */
     use_tmp_context = context == NULL;
@@ -1754,11 +1761,11 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
             method = CAT_SSL_METHOD_DTLS;
         } else {
             cat_update_last_error(CAT_ESSL, "Socket type is not supported by SSL");
-            goto _create_error;
+            goto _prepare_error;
         }
         context = cat_ssl_context_create(method);
         if (unlikely(context == NULL)) {
-            goto _create_error;
+            goto _prepare_error;
         }
     }
 
@@ -1806,7 +1813,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         cat_ssl_context_close(context);
     }
     if (unlikely(ssl == NULL)) {
-        goto _create_error;
+        goto _prepare_error;
     }
 
     /* set state */
@@ -1817,16 +1824,13 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     }
 
     /* connection related options */
-    if (ioptions.peer_name == NULL) {
-        ioptions.peer_name = isocket->ssl_peer_name;
-    }
     if (is_client && ioptions.peer_name != NULL) {
         cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
     }
     ssl->allow_self_signed = ioptions.allow_self_signed;
     if (ioptions.passphrase != NULL) {
         if (!cat_ssl_set_passphrase(ssl, ioptions.passphrase, strlen(ioptions.passphrase))) {
-            goto _set_options_error;
+            goto _ssl_handle_error;
         }
     }
 
@@ -1881,21 +1885,17 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
 
     if (unlikely(!ret)) {
         /* Notice: io error can not recover */
-        goto _io_error;
+        goto _unrecoverable_error;
     }
 
     if (ioptions.verify_peer) {
         if (!cat_ssl_verify_peer(ssl, ioptions.allow_self_signed)) {
-            goto _verify_error;
+            goto _unrecoverable_error;
         }
     }
     if (ioptions.verify_peer_name) {
-        if (ioptions.peer_name == NULL) {
-            cat_update_last_error(CAT_EINVAL, "SSL verify peer name is enabled but peer name is empty");
-            goto _verify_error;
-        }
         if (!cat_ssl_check_host(ssl, ioptions.peer_name, strlen(ioptions.peer_name))) {
-            goto _verify_error;
+            goto _unrecoverable_error;
         }
     }
 
@@ -1903,16 +1903,15 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
 
     return cat_true;
 
-    _verify_error:
-    _io_error:
+    _unrecoverable_error:
     cat_socket_internal_close(isocket);
-    _set_options_error:
+    _ssl_handle_error:
     cat_ssl_close(ssl);
     if (0) {
         _setup_error:
         cat_ssl_context_close(context);
     }
-    _create_error:
+    _prepare_error:
     cat_update_last_error_with_previous("Socket enable crypto failed");
 
     return cat_false;
