@@ -4104,6 +4104,9 @@ CAT_API void cat_socket_close_all(void)
 
 CAT_API cat_bool_t cat_socket_move(cat_socket_t *from, cat_socket_t *to)
 {
+    if (from == to) {
+        return cat_true;
+    }
     if (from->internal != NULL && from->internal->io_flags != CAT_SOCKET_IO_FLAG_NONE) {
         // TODO: make it work
         cat_update_last_error(CAT_EMISUSE, "Socket is immovable during IO operations");
