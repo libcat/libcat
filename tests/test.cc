@@ -51,9 +51,11 @@ namespace testing
     std::string CONFIG_TMP_PATH = "/tmp";
 
 #ifdef CAT_SSL
-    std::string CONFIG_SSL_CERTIFICATE;
-    std::string CONFIG_SSL_CERTIFICATE_KEY;
     std::string CONFIG_SSL_CA_FILE;
+    std::string CONFIG_SERVER_SSL_CERTIFICATE;
+    std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY;
+    std::string CONFIG_CLIENT_SSL_CERTIFICATE;
+    std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY;
 #endif
 
     bool has_debugger(void)
@@ -309,18 +311,25 @@ public:
 #ifdef CAT_SSL
         testing::CONFIG_SSL_CA_FILE = string_format("%s/cat_ssl_ca.crt", TEST_TMP_PATH);
         ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CA_FILE.c_str(), TEST_SERVER_SSL_CA_CONTENT));
-        testing::CONFIG_SSL_CERTIFICATE = string_format("%s/cat_ssl_server.crt", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CERTIFICATE.c_str(), TEST_SERVER_SSL_CERTIFICATE_CONTENT));
-        testing::CONFIG_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_server.key", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CERTIFICATE_KEY.c_str(), TEST_SERVER_SSL_CERTIFICATE_KEY_CONTENT));
+        testing::CONFIG_SERVER_SSL_CERTIFICATE = string_format("%s/cat_ssl_server.crt", TEST_TMP_PATH);
+        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str(), TEST_SERVER_SSL_CERTIFICATE_CONTENT));
+        testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_server.key", TEST_TMP_PATH);
+        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str(), TEST_SERVER_SSL_CERTIFICATE_KEY_CONTENT));
+        testing::CONFIG_CLIENT_SSL_CERTIFICATE = string_format("%s/cat_ssl_client.crt", TEST_TMP_PATH);
+        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str(), TEST_CLIENT_SSL_CERTIFICATE_CONTENT));
+        testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_client.key", TEST_TMP_PATH);
+        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str(), TEST_CLIENT_SSL_CERTIFICATE_KEY_CONTENT));
 #endif
     }
 
     virtual void TearDown()
     {
 #if defined(CAT_SSL) && !defined(CAT_DEBUG)
-        remove_file(testing::CONFIG_SSL_CERTIFICATE.c_str());
-        remove_file(testing::CONFIG_SSL_CERTIFICATE_KEY.c_str());
+        remove_file(testing::CONFIG_SSL_CA_FILE.c_str());
+        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str());
+        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str());
+        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str());
+        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str());
 #endif
 
         call_shutdown_functions();

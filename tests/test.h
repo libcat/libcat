@@ -87,8 +87,10 @@
 
 #ifdef CAT_SSL
 #define TEST_SERVER_SSL_CA_FILE            ::testing::CONFIG_SSL_CA_FILE.c_str()
-#define TEST_SERVER_SSL_CERTIFICATE        ::testing::CONFIG_SSL_CERTIFICATE.c_str()
-#define TEST_SERVER_SSL_CERTIFICATE_KEY    ::testing::CONFIG_SSL_CERTIFICATE_KEY.c_str()
+#define TEST_SERVER_SSL_CERTIFICATE        ::testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str()
+#define TEST_SERVER_SSL_CERTIFICATE_KEY    ::testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str()
+#define TEST_CLIENT_SSL_CERTIFICATE        ::testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str()
+#define TEST_CLIENT_SSL_CERTIFICATE_KEY    ::testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str()
 #endif
 
 #define PP_CAT(a, b) PP_CAT_I(a, b)
@@ -148,8 +150,10 @@ namespace testing
 
 #ifdef CAT_SSL
     extern std::string CONFIG_SSL_CA_FILE;
-    extern std::string CONFIG_SSL_CERTIFICATE;
-    extern std::string CONFIG_SSL_CERTIFICATE_KEY;
+    extern std::string CONFIG_SERVER_SSL_CERTIFICATE;
+    extern std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY;
+    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE;
+    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY;
 #endif
 
     /* common functions */
