@@ -34,6 +34,10 @@ typedef enum cat_log_union_types_e {
     CAT_LOG_TYPES_UNFILTERABLE    = CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR,
 } cat_log_union_types_t;
 
+#define CAT_LOG_STRING_OR_NULL_FMT "%s%s%s"
+#define CAT_LOG_STRING_OR_NULL_PARAM(string) \
+        (string != NULL ? "\"" : ""), (string != NULL ? string : "NULL"), (string != NULL ? "\"" : "")
+
 #define cat_log_with_type(type, module_type, code, format, ...) do { \
     if (( \
             (((type) & CAT_G(log_types)) == (type)) && \
