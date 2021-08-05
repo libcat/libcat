@@ -59,8 +59,9 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     cat_socket_crypto_options_init(&ssl_options, cat_false);
                     ssl_options.verify_peer = cat_true;
                     ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
-                    ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE;
-                    ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY;
+                    ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE_ENCODED;
+                    ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
+                    ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHPRASE;
                     ASSERT_TRUE(cat_socket_enable_crypto(client, &ssl_options));
                     continue;
                 }
