@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include "cat.h"
+#include "cat_ref.h"
 
 #ifdef CAT_HAVE_OPENSSL
 #define CAT_SSL 1
@@ -30,6 +31,11 @@ extern "C" {
 #include "cat_buffer.h"
 
 #include <openssl/opensslv.h>
+
+#if OPENSSL_VERSION_NUMBER < 0x10002000L
+#error "Require OpenSSL >= 1.0.2"
+#endif
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bn.h>
@@ -120,28 +126,31 @@ typedef enum cat_ssl_union_protocols_e {
 #define CAT_SSL_PROTOCOL_ALL_GEN(name, value) CAT_SSL_PROTOCOL_##name |
     CAT_SSL_PROTOCOLS_ALL = CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCOL_ALL_GEN) 0,
 #undef CAT_SSL_PROTOCOL_ALL_GEN
-    CAT_SSL_PROTOCOLS_DEFAULT = CAT_SSL_PROTOCOL_TLSv1 |
-                                CAT_SSL_PROTOCOL_TLSv1_1 |
+    CAT_SSL_PROTOCOLS_DEFAULT = CAT_SSL_PROTOCOL_TLSv1_1 |
                                 CAT_SSL_PROTOCOL_TLSv1_2 |
                                 CAT_SSL_PROTOCOL_TLSv1_3,
 } cat_ssl_union_protocols_t;
 
 typedef unsigned int cat_ssl_protocols_t;
 
-typedef SSL_CTX cat_ssl_context_t;
+typedef SSL_CTX cat_ssl_ctx_t;
 typedef SSL     cat_ssl_connection_t;
 typedef BIO     cat_ssl_bio_t;
 
+typedef struct cat_ssl_context_s {
+    CAT_REF_FIELD;
+    cat_ssl_ctx_t *ctx;
+    cat_string_t passphrase;
+} cat_ssl_context_t;
+
 typedef struct cat_ssl_s {
     cat_ssl_flags_t flags;
-    cat_ssl_context_t *context;
     cat_ssl_connection_t *connection;
     cat_ssl_bio_t *nbio;
     cat_buffer_t read_buffer;
     cat_buffer_t write_buffer;
     /* options */
     cat_bool_t allow_self_signed;
-    cat_string_t passphrase;
 } cat_ssl_t;
 
 #define CAT_SSL_MAX_BLOCK_LENGTH  EVP_MAX_BLOCK_LENGTH
@@ -151,7 +160,7 @@ typedef struct cat_ssl_s {
 CAT_API cat_bool_t cat_ssl_module_init(void);
 
 /* context */
-CAT_API cat_ssl_context_t *cat_ssl_context_create(cat_ssl_method_t method);
+CAT_API cat_ssl_context_t *cat_ssl_context_create(cat_ssl_method_t method, cat_ssl_protocols_t protocols);
 CAT_API void cat_ssl_context_close(cat_ssl_context_t *context);
 
 CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_protocols_t protocols);
@@ -159,6 +168,7 @@ CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_p
 CAT_API cat_bool_t cat_ssl_context_set_client_ca_list(cat_ssl_context_t *context, const char *ca_file);
 CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *context);
 CAT_API cat_bool_t cat_ssl_context_load_verify_locations(cat_ssl_context_t *context, const char *ca_file, const char *ca_path);
+CAT_API cat_bool_t cat_ssl_context_set_passphrase(cat_ssl_context_t *context, const char *passphrase, size_t passphrase_length);
 CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, const char *certificate, const char *certificate_key);
 CAT_API void cat_ssl_context_set_verify_depth(cat_ssl_context_t *context, int depth);
 #ifdef CAT_OS_WIN
@@ -180,7 +190,6 @@ CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl);
 CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl);
 
 CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name);
-CAT_API cat_bool_t cat_ssl_set_passphrase(cat_ssl_t *ssl, const char *passphrase, size_t passphrase_length);
 
 typedef enum cat_ssl_ret_e {
     CAT_SSL_RET_OK         = 0,

@@ -1757,19 +1757,14 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         cat_ssl_method_t method;
         if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
             method = CAT_SSL_METHOD_TLS;
-        } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM)  {
+        } else /* if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) */ {
             method = CAT_SSL_METHOD_DTLS;
-        } else {
-            cat_update_last_error(CAT_ESSL, "Socket type is not supported by SSL");
-            goto _prepare_error;
         }
-        context = cat_ssl_context_create(method);
+        context = cat_ssl_context_create(method, ioptions.protocols);
         if (unlikely(context == NULL)) {
             goto _prepare_error;
         }
     }
-
-    cat_ssl_context_set_protocols(context, ioptions.protocols);
 
     if (ioptions.verify_peer) {
         if (!is_client && ioptions.ca_file != NULL) {
@@ -1795,6 +1790,11 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         cat_ssl_context_enable_verify_peer(context);
     } else {
         cat_ssl_context_disable_verify_peer(context);
+    }
+    if (ioptions.passphrase != NULL) {
+        if (!cat_ssl_context_set_passphrase(context, ioptions.passphrase, strlen(ioptions.passphrase))) {
+            goto _setup_error;
+        }
     }
     if (ioptions.certificate != NULL) {
         cat_ssl_context_set_certificate(context, ioptions.certificate, ioptions.certificate_key);
@@ -1828,11 +1828,6 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
     }
     ssl->allow_self_signed = ioptions.allow_self_signed;
-    if (ioptions.passphrase != NULL) {
-        if (!cat_ssl_set_passphrase(ssl, ioptions.passphrase, strlen(ioptions.passphrase))) {
-            goto _ssl_handle_error;
-        }
-    }
 
     buffer = &ssl->read_buffer;
 
@@ -1905,7 +1900,6 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
 
     _unrecoverable_error:
     cat_socket_internal_close(isocket);
-    _ssl_handle_error:
     cat_ssl_close(ssl);
     if (0) {
         _setup_error:
