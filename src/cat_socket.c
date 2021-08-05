@@ -798,6 +798,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         goto _malloc_internal_error;
     }
 #endif
+    /* Notice: dump callback may access this even if creation failed,
+     * so we must set it to NULL here */
+    isocket->u.socket = NULL;
+
     if (options == NULL) {
         memset(&ioptions, 0, sizeof(ioptions));
     } else {
