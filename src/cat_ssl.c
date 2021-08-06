@@ -923,6 +923,7 @@ CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t si
     if (unlikely(n <= 0)) {
         if (unlikely(!BIO_should_retry(ssl->nbio))) {
             cat_ssl_update_last_error(CAT_ESSL, "BIO_read(%zu) failed", size);
+            cat_ssl_unrecoverable_error(ssl);
             return CAT_RET_ERROR;
         }
         cat_debug(SSL, "BIO_read(%p) should retry", ssl);
@@ -943,6 +944,7 @@ CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, si
     if (unlikely(n <= 0)) {
         if (unlikely(!BIO_should_retry(ssl->nbio))) {
             cat_ssl_update_last_error(CAT_ESSL, "BIO_write(%zu) failed", length);
+            cat_ssl_unrecoverable_error(ssl);
             return CAT_RET_ERROR;
         }
         cat_debug(SSL, "BIO_write(%p) should retry", ssl);
@@ -1311,6 +1313,16 @@ static void cat_ssl_clear_error(void)
         }
     }
     ERR_clear_error();
+}
+
+CAT_API CAT_COLD cat_bool_t cat_ssl_is_down(const cat_ssl_t *ssl)
+{
+    return !!(ssl->flags & CAT_SSL_FLAG_UNRECOVERABLE_ERROR);
+}
+
+CAT_API CAT_COLD void cat_ssl_unrecoverable_error(cat_ssl_t *ssl)
+{
+    cat_ssl_set_shutdown(ssl, CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
 }
 
 static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int where, int ret)

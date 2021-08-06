@@ -94,6 +94,7 @@ typedef enum cat_ssl_flag_e {
     CAT_SSL_FLAG_HANDSHAKED            = 1 << 3,
     CAT_SSL_FLAG_RENEGOTIATION         = 1 << 4,
     CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET  = 1 << 5,
+    CAT_SSL_FLAG_UNRECOVERABLE_ERROR   = 1 << 31,
 } cat_ssl_flag_t;
 
 typedef enum cat_ssl_union_flags_e {
@@ -229,8 +230,11 @@ CAT_API cat_bool_t cat_ssl_shutdown(cat_ssl_t *ssl);
 #endif
 
 /* errors */
+
 CAT_API char *cat_ssl_get_error_reason(void);
 CAT_API void cat_ssl_update_last_error(cat_errno_t code, const char *format, ...);
+CAT_API CAT_COLD cat_bool_t cat_ssl_is_down(const cat_ssl_t *ssl);
+CAT_API CAT_COLD void cat_ssl_unrecoverable_error(cat_ssl_t *ssl);
 
 #endif /* CAT_HAVE_OPENSSL */
 #ifdef __cplusplus
