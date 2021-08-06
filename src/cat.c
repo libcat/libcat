@@ -108,6 +108,10 @@ do {
     if (cat_env_is_true("CAT_DEBUG", cat_false)) {
         CAT_G(log_types) = CAT_LOG_TYPES_ALL;
         CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
+        /* enable SLE if there is no env to set it explicitly */
+        if (!cat_env_exists("CAT_SLE")) {
+            CAT_G(show_last_error) = cat_true;
+        }
     }
 #ifdef CAT_SOURCE_POSITION
     /* show source position */
