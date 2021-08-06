@@ -2246,7 +2246,9 @@ static ssize_t cat_socket_internal_read_raw(
             CAT_ASSERT(is_dgram && "only dgram fd creation is lazy");
         } else while (1) {
             while (1) {
-                if (!is_dgram) {
+                if (isocket->flags & CAT_SOCKET_INTERNAL_FLAG_NOT_SOCK) {
+                    error = read(fd, buffer + nread, size - nread);
+                } else if (!is_dgram) {
                     error = recv(fd, buffer + nread, size - nread, 0);
                 } else {
                     error = recvfrom(fd, buffer, size, 0, address, address_length);
@@ -2256,6 +2258,10 @@ static ssize_t cat_socket_internal_read_raw(
                         break;
                     }
                     if (unlikely(cat_sys_errno == EINTR)) {
+                        continue;
+                    }
+                    if (unlikely(cat_sys_errno == ENOTSOCK)) {
+                        isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_NOT_SOCK;
                         continue;
                     }
                     error = cat_translate_sys_error(cat_sys_errno);

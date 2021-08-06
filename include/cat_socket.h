@@ -318,6 +318,9 @@ typedef uint8_t cat_socket_flags_t;
 typedef enum cat_socket_internal_flag_e {
     CAT_SOCKET_INTERNAL_FLAG_NONE = 0,
     CAT_SOCKET_INTERNAL_FLAG_CONNECTED = 1 << 0,
+    /* socket may be a pipe file, which is created by pipe2()
+     * and can only work with read()/write() */
+    CAT_SOCKET_INTERNAL_FLAG_NOT_SOCK = 1 << 1,
 } cat_socket_internal_flag_t;
 
 typedef uint32_t cat_socket_internal_flags_t;
