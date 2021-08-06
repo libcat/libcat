@@ -63,6 +63,8 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
                     ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHPRASE;
                     ASSERT_TRUE(cat_socket_enable_crypto(client, &ssl_options));
+                    ASSERT_TRUE(cat_socket_has_crypto(client));
+                    ASSERT_TRUE(cat_socket_is_encrypted(client));
                     continue;
                 }
 #endif
@@ -356,6 +358,46 @@ TEST(cat_socket, sockaddr_get_address_pipe)
     ASSERT_EQ(CAT_STRLEN(TEST_PIPE_PATH), buffer_size);
 }
 
+TEST(cat_socket, sockaddr_get_address_failed)
+{
+    cat_sockaddr_info_t info;
+    char buffer[1];
+    size_t buffer_size;
+
+    info.address.common.sa_family = (cat_sa_family_t) -1;
+    buffer_size = sizeof(buffer);
+    ASSERT_FALSE(cat_sockaddr_get_address(&info.address.common, sizeof(info.address.common.sa_family), buffer, &buffer_size));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAFNOSUPPORT);
+
+    info.address.common.sa_family = AF_INET;
+    info.length = sizeof(info.address.in);
+    ASSERT_TRUE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_LE(info.length, CAT_SOCKET_IPV4_BUFFER_SIZE);
+    buffer_size = sizeof(buffer);
+    ASSERT_FALSE(cat_sockaddr_get_address(&info.address.common, info.length, buffer, &buffer_size));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_GE(buffer_size, CAT_STRLEN("127.0.0.1") + 1);
+
+    info.address.common.sa_family = AF_INET6;
+    info.length = sizeof(info.address.in6);
+    ASSERT_TRUE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("::1"), 80));
+    ASSERT_LE(info.length, CAT_SOCKET_IPV6_BUFFER_SIZE);
+    buffer_size = sizeof(buffer);
+    ASSERT_FALSE(cat_sockaddr_get_address(&info.address.common, info.length, buffer, &buffer_size));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_GE(buffer_size, CAT_STRLEN("::1") + 1);
+
+    info.address.common.sa_family = AF_LOCAL;
+    info.length = sizeof(info.address.local);
+    ASSERT_TRUE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("/path/to/foo/bar"), 0));
+    ASSERT_GT(info.length, CAT_STRLEN("/path/to/foo/bar"));
+    ASSERT_LE(info.length, CAT_SOCKADDR_MAX_PATH);
+    buffer_size = sizeof(buffer);
+    ASSERT_FALSE(cat_sockaddr_get_address(&info.address.common, info.length, buffer, &buffer_size));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_EQ(buffer_size, CAT_STRLEN("/path/to/foo/bar") + 1);
+}
+
 TEST(cat_socket, sockaddr_get_port_ip)
 {
     cat_socket_t socket;
@@ -425,6 +467,17 @@ TEST(cat_socket, sockaddr_get_port_pipe)
     ASSERT_EQ(port, 0);
 }
 
+TEST(cat_socket, sockaddr_get_port_failed)
+{
+    cat_sockaddr_t address = { 0 };
+    int port;
+
+    address.sa_family = (cat_sa_family_t) -1;
+    port = cat_sockaddr_get_port(&address);
+    ASSERT_NE(port, 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAFNOSUPPORT);
+}
+
 TEST(cat_socket, sockaddr_set_port_ip4)
 {
     cat_socket_t socket;
@@ -461,6 +514,51 @@ TEST(cat_socket, sockaddr_set_port_ip6)
     ASSERT_TRUE(cat_sockaddr_set_port((cat_sockaddr_t *) &info->address.common, expect_port));
     actual_port = cat_sockaddr_get_port(&info->address.common);
     ASSERT_EQ(expect_port, actual_port);
+}
+
+TEST(cat_socket, sockaddr_getbyname)
+{
+    cat_sockaddr_info_t info;
+
+    info.length = (cat_socklen_t) -1;
+    info.address.common.sa_family = AF_LOCAL;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("/path/to/foo/bar"), 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    info.length =  0;
+    info.address.common.sa_family = AF_LOCAL;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("/path/to/foo/bar"), 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    info.length = sizeof(info.address.local);
+    info.address.common.sa_family = AF_LOCAL;
+    std::string long_name = get_random_bytes(CAT_SOCKADDR_MAX_PATH + 1);
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, long_name.c_str(), long_name.length(), 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENAMETOOLONG);
+
+    info.length = sizeof(info.address.local) - sizeof(info.address.local.sl_path);
+    info.address.common.sa_family = AF_LOCAL;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("/path/to/foo/bar"), 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_EQ(info.length, offsetof(cat_sockaddr_local_t, sl_path) + CAT_STRLEN("/path/to/foo/bar") + 1);
+
+    info.length = sizeof(info.address.in) - sizeof(info.address.in.sin_addr);
+    info.address.common.sa_family = AF_INET;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_EQ(info.length, sizeof(info.address.in));
+
+    info.length = sizeof(info.address.in6) - sizeof(info.address.in6.sin6_addr);
+    info.address.common.sa_family = AF_INET6;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("::1"), 80));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSPC);
+    ASSERT_EQ(info.length, sizeof(info.address.in6));
+
+    info.length = sizeof(info.address.common.sa_family);
+    info.address.common.sa_family = (cat_sa_family_t) -1;
+    ASSERT_FALSE(cat_sockaddr_getbyname(&info.address.common, &info.length, CAT_STRL("0.0.0.0"), 80));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAFNOSUPPORT);
+    ASSERT_EQ(info.length, 0);
 }
 
 TEST(cat_socket, sockaddr_to_name)
@@ -793,12 +891,14 @@ TEST(cat_socket, check_liveness)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
+    ASSERT_NE(cat_socket_get_liveness(&socket), 0);
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_check_liveness(&socket));
+    ASSERT_EQ(cat_socket_get_liveness(&socket), 0);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
     ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&socket), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ECONNRESET);
+    ASSERT_EQ(cat_socket_get_liveness(&socket), CAT_ECONNRESET);
 }
 
 TEST(cat_socket, is_eof_error)
@@ -1233,6 +1333,8 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         ssl_options.certificate = TEST_CLIENT_SSL_CERTIFICATE;
         ssl_options.certificate_key = TEST_CLIENT_SSL_CERTIFICATE_KEY;
         ASSERT_TRUE(cat_socket_enable_crypto(echo_client, &ssl_options));
+        ASSERT_TRUE(cat_socket_has_crypto(echo_client));
+        ASSERT_TRUE(cat_socket_is_encrypted(echo_client));
     }
 #endif
 
@@ -1975,6 +2077,47 @@ TEST(cat_socket, open_os_socket)
     DEFER(cat_socket_close(&echo_client2));
 
     echo_stream_client_tests(&echo_client2);
+}
+
+TEST(cat_socket, move)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t echo_client;
+    cat_socket_t echo_client2;
+
+    ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
+    DEFER(if (cat_socket_is_available(&echo_client)) { cat_socket_close(&echo_client); });
+    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_move(&echo_client, &echo_client2));
+    DEFER(cat_socket_close(&echo_client2));
+    ASSERT_FALSE(cat_socket_is_available(&echo_client));
+    ASSERT_TRUE(cat_socket_is_available(&echo_client2));
+    {
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            echo_stream_client_tests(&echo_client2);
+        });
+        ASSERT_FALSE(cat_socket_move(&echo_client2, &echo_client));
+        ASSERT_TRUE(cat_socket_move(&echo_client2, &echo_client2));
+    }
+}
+
+TEST(cat_socket, pipe)
+{
+    cat_socket_t read_pipe, write_pipe;
+    cat_os_fd_t fds[2];
+    std::string random = get_random_bytes(TEST_BUFFER_SIZE_STD - 1);
+    char buffer[TEST_BUFFER_SIZE_STD];
+    ASSERT_TRUE(cat_pipe(fds, CAT_PIPE_FLAG_NONBLOCK, CAT_PIPE_FLAG_NONBLOCK));
+    ASSERT_EQ(cat_socket_open_os_fd(&read_pipe, CAT_SOCKET_TYPE_PIPE, fds[0]), &read_pipe);
+    DEFER(cat_socket_close(&read_pipe));
+    ASSERT_EQ(cat_socket_open_os_fd(&write_pipe, CAT_SOCKET_TYPE_PIPE, fds[1]), &write_pipe);
+    DEFER(cat_socket_close(&write_pipe));
+    ASSERT_TRUE(cat_socket_send(&write_pipe, random.c_str(), random.length() + 1));
+    ASSERT_EQ(cat_socket_read(&read_pipe, CAT_STRS(buffer)), random.length() + 1);
+    ASSERT_STREQ(buffer, random.c_str());
 }
 
 TEST(cat_socket, dump_all_and_close_all)
