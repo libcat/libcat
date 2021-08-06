@@ -739,15 +739,13 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
         cat_debug(SSL, "SSL_ERROR_WANT_READ");
         return CAT_SSL_RET_WANT_IO;
     }
-    /* memory bios should never block with SSL_ERROR_WANT_WRITE. */
 
-    cat_debug(SSL, "SSL handshake failed");
+    CAT_SHOULD_BE(ssl_error != SSL_ERROR_WANT_WRITE &&
+        "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
+    CAT_SHOULD_BE(!(ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) &&
+        "Connection closed by peer in SSL handshake, but it is impossible for BIO mode");
 
-    if (ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {
-        cat_update_last_error_of_syscall("Peer closed connection in SSL handshake");
-    } else {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL_do_handshake() failed");
-    }
+    cat_ssl_update_last_error(CAT_ESSL, "SSL_do_handshake() failed");
 
     return CAT_SSL_RET_ERROR;
 }
@@ -1016,6 +1014,7 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
                 break;
             } else {
                 cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+                cat_ssl_unrecoverable_error(ssl);
                 break;
             }
         } else {
@@ -1077,13 +1076,13 @@ CAT_API cat_bool_t cat_ssl_encrypt(
                 cat_debug(SSL, "SSL encrypt buffer extend");
                 if (vout_counted == vout_size) {
                     cat_update_last_error(CAT_ENOBUFS, "Unexpected vector count (too many)");
-                    goto _error;
+                    goto _unrecoverable_error;
                 }
                 buffer = (char *) cat_malloc(size = CAT_SSL_BUFFER_SIZE);
 #if CAT_ALLOC_HANDLE_ERRORS
                 if (unlikely(buffer == NULL)) {
                     cat_update_last_error_of_syscall("Realloc for SSL write buffer failed");
-                    goto _error;
+                    goto _unrecoverable_error;
                 }
 #endif
                 /* switch to the next */
@@ -1103,6 +1102,8 @@ CAT_API cat_bool_t cat_ssl_encrypt(
 
     return cat_true;
 
+    _unrecoverable_error:
+    cat_ssl_unrecoverable_error(ssl);
     _error:
     cat_ssl_encrypted_vector_free(ssl, vout, vout_counted);
     return cat_false;
@@ -1165,6 +1166,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
                 break;
             } else {
                 cat_ssl_update_last_error(CAT_ESSL, "SSL_read() error");
+                cat_ssl_unrecoverable_error(ssl);
                 break;
             }
         } else {
