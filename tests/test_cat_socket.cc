@@ -266,7 +266,7 @@ TEST(cat_socket, get_local_free_port)
     ASSERT_GT(cat_socket_get_local_free_port(), 0);
 }
 
-TEST(cat_socket, cat_sockaddr_af_name)
+TEST(cat_socket, sockaddr_af_name)
 {
     ASSERT_STREQ("UNSPEC", cat_sockaddr_af_name(AF_UNSPEC));
     ASSERT_STREQ("INET", cat_sockaddr_af_name(AF_INET));
@@ -279,7 +279,7 @@ TEST(cat_socket, cat_sockaddr_af_name)
     ASSERT_STREQ("UNKNOWN", cat_sockaddr_af_name(-1));
 }
 
-TEST(cat_socket, cat_sockaddr_get_address_ip)
+TEST(cat_socket, sockaddr_get_address_ip)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -298,7 +298,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip)
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV4), buffer_size);
 }
 
-TEST(cat_socket, cat_sockaddr_get_address_ip4)
+TEST(cat_socket, sockaddr_get_address_ip4)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -317,7 +317,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip4)
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV4), buffer_size);
 }
 
-TEST(cat_socket, cat_sockaddr_get_address_ip6)
+TEST(cat_socket, sockaddr_get_address_ip6)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -336,7 +336,7 @@ TEST(cat_socket, cat_sockaddr_get_address_ip6)
     ASSERT_EQ(CAT_STRLEN(TEST_LISTEN_IPV6), buffer_size);
 }
 
-TEST(cat_socket, cat_sockaddr_get_address_pipe)
+TEST(cat_socket, sockaddr_get_address_pipe)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -356,7 +356,7 @@ TEST(cat_socket, cat_sockaddr_get_address_pipe)
     ASSERT_EQ(CAT_STRLEN(TEST_PIPE_PATH), buffer_size);
 }
 
-TEST(cat_socket, cat_sockaddr_get_port_ip)
+TEST(cat_socket, sockaddr_get_port_ip)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -373,7 +373,7 @@ TEST(cat_socket, cat_sockaddr_get_port_ip)
     ASSERT_GT(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_get_port_ip4)
+TEST(cat_socket, sockaddr_get_port_ip4)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -390,7 +390,7 @@ TEST(cat_socket, cat_sockaddr_get_port_ip4)
     ASSERT_GT(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_get_port_ip6)
+TEST(cat_socket, sockaddr_get_port_ip6)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -407,7 +407,7 @@ TEST(cat_socket, cat_sockaddr_get_port_ip6)
     ASSERT_GT(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_get_port_pipe)
+TEST(cat_socket, sockaddr_get_port_pipe)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -425,7 +425,7 @@ TEST(cat_socket, cat_sockaddr_get_port_pipe)
     ASSERT_EQ(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_set_port_ip4)
+TEST(cat_socket, sockaddr_set_port_ip4)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -444,7 +444,7 @@ TEST(cat_socket, cat_sockaddr_set_port_ip4)
     ASSERT_EQ(expect_port, actual_port);
 }
 
-TEST(cat_socket, cat_sockaddr_set_port_ip6)
+TEST(cat_socket, sockaddr_set_port_ip6)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -463,7 +463,7 @@ TEST(cat_socket, cat_sockaddr_set_port_ip6)
     ASSERT_EQ(expect_port, actual_port);
 }
 
-TEST(cat_socket, cat_sockaddr_to_name)
+TEST(cat_socket, sockaddr_to_name)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -482,7 +482,7 @@ TEST(cat_socket, cat_sockaddr_to_name)
     ASSERT_GT(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_to_name_address_length_eq_zero)
+TEST(cat_socket, sockaddr_to_name_address_length_eq_zero)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -501,7 +501,7 @@ TEST(cat_socket, cat_sockaddr_to_name_address_length_eq_zero)
     ASSERT_EQ(port, 0);
 }
 
-TEST(cat_socket, cat_sockaddr_copy)
+TEST(cat_socket, sockaddr_copy)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *from;
@@ -516,7 +516,7 @@ TEST(cat_socket, cat_sockaddr_copy)
     ASSERT_EQ(0, cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length));
 }
 
-TEST(cat_socket, cat_sockaddr_copy_to_length_eq_zero)
+TEST(cat_socket, sockaddr_copy_to_length_eq_zero)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *from;
@@ -530,7 +530,7 @@ TEST(cat_socket, cat_sockaddr_copy_to_length_eq_zero)
     ASSERT_EQ(CAT_ENOSPC, cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length));
 }
 
-TEST(cat_socket, cat_sockaddr_check_ip4)
+TEST(cat_socket, sockaddr_check_ip4)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -545,7 +545,7 @@ TEST(cat_socket, cat_sockaddr_check_ip4)
     ASSERT_TRUE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in_t)));
 }
 
-TEST(cat_socket, cat_sockaddr_check_ip6)
+TEST(cat_socket, sockaddr_check_ip6)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
@@ -560,7 +560,7 @@ TEST(cat_socket, cat_sockaddr_check_ip6)
     ASSERT_TRUE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in6_t)));
 }
 
-TEST(cat_socket, cat_sockaddr_check_pipe_error)
+TEST(cat_socket, sockaddr_check_pipe_error)
 {
     cat_socket_t socket;
     const cat_sockaddr_info_t *info;
