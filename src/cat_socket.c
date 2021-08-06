@@ -1914,6 +1914,29 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
 
     return cat_false;
 }
+
+#if 0
+/* TODO: BIO SSL shutdown
+ * we must cancel all IO operations and mark this socket unavailable temporarily,
+ * then read or write on it to shutdown SSL connection */
+CAT_API cat_bool_t cat_socket_disable_crypto(cat_socket_t *socket)
+{
+    if (!cat_socket_is_encrypted(socket)) {
+        return cat_true;
+    }
+    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(socket, isocket, CAT_SOCKET_IO_FLAG_RDWR, return cat_false);
+    cat_ssl_t *ssl = isocket->ssl;
+
+    while (1) {
+        cat_ssl_ret_t ret = cat_ssl_shutdown(ssl);
+        if (ret == 1) {
+            cat_ssl_close(ssl);
+            return cat_true;
+        }
+        // read or write...
+    }
+}
+#endif
 #endif
 
 static int cat_socket_internal_getname(const cat_socket_internal_t *isocket, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_bool_t is_peer)
@@ -3538,6 +3561,13 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
         if (isocket->u.udg.writefd != CAT_OS_INVALID_FD) {
             (void) uv__close(isocket->u.udg.writefd);
         }
+    }
+#endif
+
+#ifdef CAT_SSL
+    if (isocket->ssl != NULL &&
+        cat_ssl_get_shutdown(isocket->ssl) != (CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN)) {
+        cat_ssl_set_quiet_shutdown(isocket->ssl, cat_true);
     }
 #endif
 

@@ -634,17 +634,6 @@ CAT_API void cat_ssl_close(cat_ssl_t *ssl)
     }
 }
 
-CAT_API cat_bool_t cat_ssl_shutdown(cat_ssl_t *ssl)
-{
-    (void) ssl;
-    // FIXME: BIO shutdown
-    // if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
-        // SSL_shutdown(ssl->connection);
-    // }
-
-    return cat_false;
-}
-
 CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl)
 {
     cat_ssl_connection_t *connection = ssl->connection;
@@ -1198,6 +1187,58 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
     return ret;
 }
+
+CAT_API cat_ssl_shutdown_masks_t cat_ssl_get_shutdown(const cat_ssl_t *ssl)
+{
+    return SSL_get_shutdown(ssl->connection);
+}
+
+CAT_API void cat_ssl_set_shutdown(cat_ssl_t *ssl, cat_ssl_shutdown_masks_t mode)
+{
+    CAT_ASSERT((mode &~ (CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN)) == 0);
+    SSL_set_shutdown(ssl->connection, mode);
+}
+
+CAT_API void cat_ssl_set_quiet_shutdown(cat_ssl_t *ssl, cat_bool_t enable)
+{
+    SSL_set_quiet_shutdown(ssl->connection, enable);
+}
+
+#if 0 /* Enable it when we implement it in socket */
+CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
+{
+    cat_ssl_connection_t *connection = ssl->connection;
+    int error, ret;
+
+    if (!cat_ssl_is_established(ssl)) {
+        return CAT_SSL_RET_OK;
+    }
+
+    ret = SSL_shutdown(ssl->connection);
+    cat_debug(SSL, "SSL_shutdown(%p) = %d", ret);
+    if (ret == 1) {
+        return CAT_SSL_RET_OK;
+    } else if (ret == 0) {
+        return CAT_SSL_RET_NONE;
+    }
+
+    error = SSL_get_error(connection, n);
+    if (error == SSL_ERROR_WANT_READ) {
+        cat_debug(SSL, "SSL_shutdown(%p) want read", ssl);
+        return CAT_SSL_RET_WANT_READ;
+    } else if (error == SSL_ERROR_WANT_WRITE) {
+        cat_debug(SSL, "SSL_shutdown(%p) want write", ssl);
+        return CAT_SSL_RET_WANT_WRITE;
+    }
+
+    if (error == SSL_ERROR_SYSCALL) {
+        cat_update_last_error_of_syscall("SSL_write() error");
+    } else {
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+    }
+    return CAT_RET_ERROR;
+}
+#endif
 
 CAT_API char *cat_ssl_get_error_reason(void)
 {

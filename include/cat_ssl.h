@@ -213,6 +213,21 @@ CAT_API cat_bool_t cat_ssl_encrypt(cat_ssl_t *ssl, const cat_io_vector_t *vin, u
 CAT_API void cat_ssl_encrypted_vector_free(cat_ssl_t *ssl, cat_io_vector_t *vector, unsigned int vector_count);
 CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length);
 
+typedef enum cat_ssl_shutdown_mask_e {
+    CAT_SSL_SENT_SHUTDOWN = SSL_SENT_SHUTDOWN,
+    CAT_SSL_RECEIVED_SHUTDOWN = SSL_RECEIVED_SHUTDOWN,
+} cat_ssl_shutdown_mask_t;
+
+typedef int cat_ssl_shutdown_masks_t;
+
+CAT_API cat_ssl_shutdown_masks_t cat_ssl_get_shutdown(const cat_ssl_t *ssl);
+CAT_API void cat_ssl_set_shutdown(cat_ssl_t *ssl, cat_ssl_shutdown_masks_t mode);
+CAT_API void cat_ssl_set_quiet_shutdown(cat_ssl_t *ssl, cat_bool_t enable);
+
+#if 0 // TODO: implement it
+CAT_API cat_bool_t cat_ssl_shutdown(cat_ssl_t *ssl);
+#endif
+
 /* errors */
 CAT_API char *cat_ssl_get_error_reason(void);
 CAT_API void cat_ssl_update_last_error(cat_errno_t code, const char *format, ...);
