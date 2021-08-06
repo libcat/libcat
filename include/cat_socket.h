@@ -315,12 +315,17 @@ typedef enum cat_socket_flag_e {
 
 typedef uint8_t cat_socket_flags_t;
 
-typedef enum cat_socket_internal_flag_e {
-    CAT_SOCKET_INTERNAL_FLAG_NONE = 0,
-    CAT_SOCKET_INTERNAL_FLAG_CONNECTED = 1 << 0,
+#define CAT_SOCKET_INTERNAL_FLAG_MAP(XX) \
+    XX(NONE,           0) \
+    XX(CONNECTED, 1 << 0) \
     /* socket may be a pipe file, which is created by pipe2()
-     * and can only work with read()/write() */
-    CAT_SOCKET_INTERNAL_FLAG_NOT_SOCK = 1 << 1,
+     * and can only work with read()/write() */ \
+    XX(NOT_SOCK,  1 << 1) \
+
+typedef enum cat_socket_internal_flag_e {
+#define CAT_SOCKET_INTERNAL_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_INTERNAL_FLAG_, name, value)
+    CAT_SOCKET_INTERNAL_FLAG_MAP(CAT_SOCKET_INTERNAL_FLAG_GEN)
+#undef CAT_SOCKET_INTERNAL_FLAG_GEN
 } cat_socket_internal_flag_t;
 
 typedef uint32_t cat_socket_internal_flags_t;
