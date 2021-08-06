@@ -53,6 +53,7 @@
     if (unlikely(!(x))) { __builtin_unreachable(); } \
 } while (0)
 #else
+#define CAT_NO_ASSUME
 #define CAT_ASSUME(x)
 #endif
 
@@ -60,6 +61,18 @@
 #define CAT_ASSERT(x) assert(x)
 #else
 #define CAT_ASSERT(x) CAT_ASSUME(x)
+#endif
+
+#ifdef CAT_DEBUG
+#define CAT_SHOULD_BE(x) CAT_ASSERT(x)
+#else
+#ifndef CAT_NO_ASSUME
+#define CAT_SHOULD_BE(x) CAT_ASSUME(x)
+#else
+#define CAT_SHOULD_BE(x) do { \
+    if (unlikely(!(x))) { abort(); } \
+} while (0)
+#endif
 #endif
 
 #ifndef CAT_IDE_HELPER
