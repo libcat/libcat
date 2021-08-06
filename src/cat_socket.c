@@ -3500,7 +3500,7 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
     return cat_socket__accept(socket, handle, handle_info.type, &handle_info.options, timeout);
 }
 
-static cat_always_inline void cat_socket_cancel_io(cat_coroutine_t *coroutine, const char *type_name)
+static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)
 {
     if (coroutine != NULL) {
         /* interrupt the operation */
@@ -3573,23 +3573,23 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket)
 
     /* cancel all IO operations */
     if (isocket->io_flags == CAT_SOCKET_IO_FLAG_BIND) {
-        cat_socket_cancel_io(isocket->context.bind.coroutine, "bind");
+        cat_socket_io_cancel(isocket->context.bind.coroutine, "bind");
     } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_ACCEPT) {
-        cat_socket_cancel_io(isocket->context.accept.coroutine, "accept");
+        cat_socket_io_cancel(isocket->context.accept.coroutine, "accept");
     } else if (isocket->io_flags == CAT_SOCKET_IO_FLAG_CONNECT) {
-        cat_socket_cancel_io(isocket->context.connect.coroutine, "connect");
+        cat_socket_io_cancel(isocket->context.connect.coroutine, "connect");
     } else {
         /* Notice: we cancel write first */
         if (isocket->io_flags & CAT_SOCKET_IO_FLAG_WRITE) {
             cat_queue_t *write_coroutines = &isocket->context.io.write.coroutines;
             cat_coroutine_t *write_coroutine;
             while ((write_coroutine = cat_queue_front_data(write_coroutines, cat_coroutine_t, waiter.node))) {
-                cat_socket_cancel_io(write_coroutine, "write");
+                cat_socket_io_cancel(write_coroutine, "write");
             }
             CAT_ASSERT(cat_queue_empty(write_coroutines));
         }
         if (isocket->io_flags & CAT_SOCKET_IO_FLAG_READ) {
-            cat_socket_cancel_io(isocket->context.io.read.coroutine, "read");
+            cat_socket_io_cancel(isocket->context.io.read.coroutine, "read");
         }
     }
 
