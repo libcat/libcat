@@ -82,6 +82,10 @@ extern "C" {
 #define cat_ssl_version() SSLeay_version(SSLEAY_VERSION)
 #endif
 
+#define CAT_SSL_MAX_BLOCK_LENGTH  EVP_MAX_BLOCK_LENGTH
+#define CAT_SSL_MAX_PLAIN_LENGTH  SSL3_RT_MAX_PLAIN_LENGTH
+#define CAT_SSL_BUFFER_SIZE       SSL3_RT_MAX_PACKET_SIZE
+
 typedef enum cat_ssl_flag_e {
     CAT_SSL_FLAG_NONE                  = 0,
     CAT_SSL_FLAG_ALLOC                 = 1 << 0,
@@ -153,9 +157,14 @@ typedef struct cat_ssl_s {
     cat_bool_t allow_self_signed;
 } cat_ssl_t;
 
-#define CAT_SSL_MAX_BLOCK_LENGTH  EVP_MAX_BLOCK_LENGTH
-#define CAT_SSL_MAX_PLAIN_LENGTH  SSL3_RT_MAX_PLAIN_LENGTH
-#define CAT_SSL_BUFFER_SIZE       SSL3_RT_MAX_PACKET_SIZE
+typedef enum cat_ssl_ret_e {
+    CAT_SSL_RET_OK         = 1,
+    CAT_SSL_RET_NONE       = 0,
+    CAT_SSL_RET_ERROR      = -1,
+    CAT_SSL_RET_WANT_READ  = 1 << 0,
+    CAT_SSL_RET_WANT_WRITE = 1 << 1,
+    CAT_SSL_RET_WANT_IO = CAT_SSL_RET_WANT_READ | CAT_SSL_RET_WANT_WRITE,
+} cat_ssl_ret_t;
 
 CAT_API cat_bool_t cat_ssl_module_init(void);
 
@@ -180,24 +189,14 @@ CAT_API void cat_ssl_context_set_no_ticket(cat_ssl_context_t *context);
 CAT_API void cat_ssl_context_set_no_compression(cat_ssl_context_t *context);
 
 /* connection */
+
 CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context);
 CAT_API void cat_ssl_close(cat_ssl_t *ssl);
-CAT_API cat_bool_t cat_ssl_shutdown(cat_ssl_t *ssl);
-
-CAT_API cat_buffer_t *cat_ssl_get_read_buffer(cat_ssl_t *ssl, size_t size);
 
 CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl);
 CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl);
 
 CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name);
-
-typedef enum cat_ssl_ret_e {
-    CAT_SSL_RET_OK         = 0,
-    CAT_SSL_RET_ERROR      = -1,
-    CAT_SSL_RET_WANT_READ  = 1 << 0,
-    CAT_SSL_RET_WANT_WRITE = 1 << 1,
-    CAT_SSL_RET_WANT_IO = CAT_SSL_RET_WANT_READ | CAT_SSL_RET_WANT_WRITE,
-} cat_ssl_ret_t;
 
 CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl);
 
