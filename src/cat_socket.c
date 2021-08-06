@@ -482,7 +482,8 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
 
 #define CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure) \
         CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, { \
-            cat_update_last_error(error, "Socket has been closed"); \
+            cat_update_last_error(error, "Socket has been closed%s", \
+                (_socket->flags & CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR) ? " due to unrecoverable IO error" : ""); \
             _failure; \
         })
 
@@ -605,6 +606,11 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
 } while (0)
 
 static void cat_socket_internal_close(cat_socket_internal_t *isocket);
+
+static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_internal_t *isocket);
+#ifdef CAT_SSL
+static cat_always_inline void cat_socket_internal_ssl_recoverability_check(cat_socket_internal_t *isocket);
+#endif
 
 #ifdef CAT_OS_UNIX_LIKE
 static int socket_create(int domain, int type, int protocol)
@@ -1531,14 +1537,14 @@ static cat_bool_t cat_socket__connect(
             if (unlikely(!ret)) {
                 cat_update_last_error_with_previous("Socket connect wait failed");
                 /* interrupt can not recover */
-                cat_socket_internal_close(isocket);
+                cat_socket_internal_unrecoverable_io_error(isocket);
                 return cat_false;
             }
             error = isocket->context.connect.data.status;
             if (error == CAT_ECANCELED) {
                 cat_update_last_error(CAT_ECANCELED, "Socket connect has been canceled");
                 /* interrupt can not recover */
-                cat_socket_internal_close(isocket);
+                cat_socket_internal_unrecoverable_io_error(isocket);
                 return cat_false;
             }
         }
@@ -1903,7 +1909,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     return cat_true;
 
     _unrecoverable_error:
-    cat_socket_internal_close(isocket);
+    cat_socket_internal_unrecoverable_io_error(isocket);
     cat_ssl_close(ssl);
     if (0) {
         _setup_error:
@@ -2482,6 +2488,7 @@ static ssize_t cat_socket_internal_read_decrypted(
     return (ssize_t) nread;
 
     _error:
+    cat_socket_internal_ssl_recoverability_check(isocket);
     if (nread == 0) {
         return -1;
     }
@@ -2510,6 +2517,7 @@ static ssize_t cat_socket_internal_try_recv_decrypted(
             }
         } CAT_PROTECT_LAST_ERROR_END();
         if (!decrypted) {
+            cat_socket_internal_ssl_recoverability_check(isocket);
             return error;
         }
 
@@ -2765,8 +2773,9 @@ static cat_bool_t cat_socket_internal_write_raw(
         }
         /* handle error */
         if (unlikely(!ret || request->error == CAT_ECANCELED)) {
-            /* write request is in progress, we must cancel it by close */
-            cat_socket_internal_close(isocket);
+            /* write request is in progress, it can not be cancelled gracefully,
+             * so we must cancel it by socket_close(), it's unrecoverable */
+            cat_socket_internal_unrecoverable_io_error(isocket);
 #if 0
             /* event scheduler will wake up the current coroutine on cat_socket_write_callback with ECANCELED */
             cat_coroutine_wait_for(CAT_COROUTINE_G(scheduler));
@@ -2882,6 +2891,7 @@ static cat_bool_t cat_socket_internal_write_encrypted(
 
     if (unlikely(!ret)) {
         cat_update_last_error_with_previous("Socket SSL write failed");
+        cat_socket_internal_ssl_recoverability_check(isocket);
         return cat_false;
     }
 
@@ -2933,6 +2943,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
         }
     } CAT_PROTECT_LAST_ERROR_END();
     if (unlikely(!encrypted)) {
+        cat_socket_internal_ssl_recoverability_check(isocket);
         return error;
     }
 
@@ -3458,7 +3469,7 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
     };
     cat_socket_write_vector_t vector = cat_socket_write_vector_init((char *) &handle_info, (cat_socket_vector_length_t) sizeof(handle_info));
     if (!cat_socket_internal_write_raw(isocket, &vector, 1, NULL, 0, handle, timeout)) {
-        cat_socket_internal_close(isocket);
+        cat_socket_internal_unrecoverable_io_error(isocket);
         return cat_false;
     }
 
@@ -3480,7 +3491,7 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
     if (nread != sizeof(handle_info)) {
         if (nread >= 0) {
             /* interrupt can not recover */
-            cat_socket_internal_close(isocket);
+            cat_socket_internal_unrecoverable_io_error(isocket);
         }
         return NULL;
     }
@@ -3601,6 +3612,9 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
     cat_socket_internal_t *isocket = socket->internal;
     cat_bool_t ret = cat_true;
 
+    /* native EBADF will be reported from now on */
+    socket->flags &= ~CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
+
     if (isocket == NULL) {
         /* we do not update the last error here
          * because the only reason for close failure is
@@ -3628,6 +3642,31 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 
     return ret;
 }
+
+static cat_always_inline void cat_socket_internal_unrecoverable_io_error_raw(cat_socket_internal_t *isocket)
+{
+    isocket->u.socket->flags |= CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
+    cat_socket_internal_close(isocket);
+}
+
+static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_internal_t *isocket)
+{
+#ifdef CAT_SSL
+    if (isocket->ssl != NULL) {
+        cat_ssl_unrecoverable_error(isocket->ssl);
+    }
+#endif
+    cat_socket_internal_unrecoverable_io_error_raw(isocket);
+}
+
+#ifdef CAT_SSL
+static cat_always_inline void cat_socket_internal_ssl_recoverability_check(cat_socket_internal_t *isocket)
+{
+    if (cat_ssl_is_down(isocket->ssl)) {
+        cat_socket_internal_unrecoverable_io_error_raw(isocket);
+    }
+}
+#endif
 
 /* getter / status / options */
 

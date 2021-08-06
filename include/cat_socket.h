@@ -304,8 +304,9 @@ typedef uint32_t cat_socket_type_t;
 
 /* 0 ~ 8 */
 #define CAT_SOCKET_FLAG_MAP(XX) \
-    XX(NONE, 0)           \
-    XX(ALLOCATED, 1 << 0) \
+    XX(NONE,                     0) \
+    XX(ALLOCATED,           1 << 0) \
+    XX(UNRECOVERABLE_ERROR, 1 << 1) \
 
 typedef enum cat_socket_flag_e {
 #define CAT_SOCKET_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_FLAG_, name, value)
