@@ -218,14 +218,15 @@ CAT_API cat_bool_t cat_sockaddr_set_port(cat_sockaddr_t *address, int port)
 
 static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *address_length, const char *name, size_t name_length, int port)
 {
+    cat_socklen_t size = address_length != NULL ? *address_length : 0;
+    if (unlikely(((int) size) < ((int) sizeof(address->sa_family)))) {
+        return CAT_EINVAL;
+    }
     cat_sa_family_t af = address->sa_family;
-    cat_socklen_t length = address_length != NULL ? *address_length : 0;
     cat_bool_t unspec = af == AF_UNSPEC;
     int error;
 
-    if (unlikely(((int) length) < 0)) {
-        return CAT_EINVAL;
-    }
+    *address_length = 0;
 
     if (af == AF_LOCAL) {
         cat_socklen_t real_length;
@@ -237,7 +238,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
         }
         is_lan = cat_sockaddr_is_linux_abstract_name(name, name_length);
         real_length = (cat_socklen_t) (CAT_SOCKADDR_HEADER_LENGTH + name_length + !is_lan);
-        if (unlikely(real_length > length)) {
+        if (unlikely(real_length > size)) {
             *address_length = (cat_socklen_t) real_length;
             return CAT_ENOSPC;
         }
@@ -260,7 +261,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
     while (1) {
         if (af == AF_INET) {
             *address_length = sizeof(cat_sockaddr_in_t);
-            if (unlikely(length < sizeof(cat_sockaddr_in_t))) {
+            if (unlikely(size < sizeof(cat_sockaddr_in_t))) {
                 error = CAT_ENOSPC;
             } else {
                 error = uv_ip4_addr(name, port, (cat_sockaddr_in_t *) address);
@@ -271,7 +272,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
             }
         } else if (af == AF_INET6) {
             *address_length = sizeof(cat_sockaddr_in6_t);
-            if (unlikely(length < sizeof(cat_sockaddr_in6_t))) {
+            if (unlikely(size < sizeof(cat_sockaddr_in6_t))) {
                 error = CAT_ENOSPC;
             } else {
                 error = uv_ip6_addr(name, port, (cat_sockaddr_in6_t *) address);
@@ -283,7 +284,6 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
     }
 
     if (error != 0) { /* may need DNS resolve */
-        *address_length = 0;
         return error;
     }
     if (unspec) {
