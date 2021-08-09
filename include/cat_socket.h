@@ -582,6 +582,7 @@ typedef struct cat_socket_crypto_options_s {
     cat_bool_t allow_self_signed;
     cat_bool_t no_ticket;
     cat_bool_t no_compression;
+    cat_bool_t no_client_ca_list;
 } cat_socket_crypto_options_t;
 
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options, cat_bool_t is_client);

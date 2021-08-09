@@ -1720,6 +1720,7 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->allow_self_signed = cat_false;
     options->no_ticket = cat_false;
     options->no_compression = cat_false;
+    options->no_client_ca_list = cat_false;
 }
 
 /* TODO: Support non-blocking SSL handshake? (just for PHP, stupid design) */
@@ -1777,7 +1778,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     }
 
     if (ioptions.verify_peer) {
-        if (!is_client && ioptions.ca_file != NULL) {
+        if (!is_client && !ioptions.no_client_ca_list && ioptions.ca_file != NULL) {
             if (!cat_ssl_context_set_client_ca_list(context, ioptions.ca_file)) {
                 goto _setup_error;
             }
