@@ -605,7 +605,7 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
     } \
 } while (0)
 
-static void cat_socket_internal_close(cat_socket_internal_t *isocket);
+static void cat_socket_internal_close(cat_socket_internal_t *isocket, cat_bool_t unrecoverable_error);
 
 static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_internal_t *isocket);
 #ifdef CAT_SSL
@@ -1636,7 +1636,7 @@ static cat_bool_t cat_socket__smart_connect(cat_socket_t *socket, const char *na
         if (response->ai_family != last_af) {
             CAT_ASSERT(af == AF_UNSPEC);
             // af changed and socket has not been initialized yet, recreate isocket
-            cat_socket_internal_close(isocket);
+            cat_socket_internal_close(isocket, cat_false);
             ret = cat_socket_create(socket, socket->type) != NULL;
             if (!ret) {
                 cat_update_last_error_with_previous("Socket connect recreate failed");
@@ -3546,12 +3546,16 @@ static void cat_socket_close_callback(uv_handle_t *handle)
 }
 
 /* Notice: socket may be freed before isocket closed, so we can not use socket anymore after IO wait failure  */
-static void cat_socket_internal_close(cat_socket_internal_t *isocket)
+static void cat_socket_internal_close(cat_socket_internal_t *isocket, cat_bool_t unrecoverable_error)
 {
     cat_socket_t *socket = isocket->u.socket;
 
     if (socket == NULL) {
         return;
+    }
+
+    if (unlikely(unrecoverable_error)) {
+        socket->flags |= CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
     }
 
     /* unbind */
@@ -3624,7 +3628,7 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
 #endif
         ret = cat_false;
     } else {
-        cat_socket_internal_close(isocket);
+        cat_socket_internal_close(isocket, cat_false);
     }
 
     if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
@@ -3643,12 +3647,6 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
     return ret;
 }
 
-static cat_always_inline void cat_socket_internal_unrecoverable_io_error_raw(cat_socket_internal_t *isocket)
-{
-    isocket->u.socket->flags |= CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
-    cat_socket_internal_close(isocket);
-}
-
 static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_internal_t *isocket)
 {
 #ifdef CAT_SSL
@@ -3656,15 +3654,16 @@ static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_inter
         cat_ssl_unrecoverable_error(isocket->ssl);
     }
 #endif
-    cat_socket_internal_unrecoverable_io_error_raw(isocket);
+    cat_socket_internal_close(isocket, cat_true);
 }
 
 #ifdef CAT_SSL
 static cat_always_inline void cat_socket_internal_ssl_recoverability_check(cat_socket_internal_t *isocket)
 {
-    if (cat_ssl_is_down(isocket->ssl)) {
-        cat_socket_internal_unrecoverable_io_error_raw(isocket);
+    if (!cat_ssl_is_down(isocket->ssl)) {
+        return;
     }
+    cat_socket_internal_close(isocket, cat_true);
 }
 #endif
 
