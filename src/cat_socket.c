@@ -2448,12 +2448,13 @@ static ssize_t cat_socket_internal_read_decrypted(
     cat_ssl_t *ssl = isocket->ssl; CAT_ASSERT(ssl != NULL);
     cat_buffer_t *read_buffer = &ssl->read_buffer;
     size_t nread = 0;
+    cat_bool_t eof;
 
     while (1) {
         size_t out_length = size - nread;
         ssize_t n;
 
-        if (!cat_ssl_decrypt(ssl, buffer, &out_length)) {
+        if (!cat_ssl_decrypt(ssl, buffer, &out_length, &eof)) {
             cat_update_last_error_with_previous("Socket SSL decrypt failed");
             goto _error;
         }
@@ -2466,6 +2467,13 @@ static ssize_t cat_socket_internal_read_decrypted(
             if (nread == size) {
                 break;
             }
+        }
+        if (eof) {
+            if (once) {
+                /* do not treat it as error */
+                break;
+            }
+            goto _error;
         }
 
         CAT_TIME_WAIT_START() {
@@ -2509,10 +2517,10 @@ static ssize_t cat_socket_internal_try_recv_decrypted(
         size_t out_length = size;
         ssize_t nread;
         cat_errno_t error = 0;
-        cat_bool_t decrypted;
+        cat_bool_t decrypted, eof;
 
         CAT_PROTECT_LAST_ERROR_START() {
-            decrypted = cat_ssl_decrypt(ssl, buffer, &out_length);
+            decrypted = cat_ssl_decrypt(ssl, buffer, &out_length, &eof);
             if (!decrypted) {
                 error = cat_get_last_error_code();
             }
@@ -2524,6 +2532,9 @@ static ssize_t cat_socket_internal_try_recv_decrypted(
 
         if (out_length > 0) {
             return out_length;
+        }
+        if (eof) {
+            return 0;
         }
 
         nread = cat_socket_internal_try_recv_raw(

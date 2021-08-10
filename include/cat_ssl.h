@@ -212,7 +212,7 @@ CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, si
 CAT_API size_t cat_ssl_encrypted_size(size_t length);
 CAT_API cat_bool_t cat_ssl_encrypt(cat_ssl_t *ssl, const cat_io_vector_t *vin, unsigned int vin_count, cat_io_vector_t *vout, unsigned int *vout_count);
 CAT_API void cat_ssl_encrypted_vector_free(cat_ssl_t *ssl, cat_io_vector_t *vector, unsigned int vector_count);
-CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length);
+CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length, cat_bool_t *eof);
 
 typedef enum cat_ssl_shutdown_mask_e {
     CAT_SSL_SENT_SHUTDOWN = SSL_SENT_SHUTDOWN,

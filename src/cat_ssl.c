@@ -731,19 +731,18 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 
     int ssl_error = cat_ssl_get_error(ssl, n);
 
-    cat_debug(SSL, "SSL_get_error(%p): %d", ssl, ssl_error);
-
+    CAT_SHOULD_BE(ssl_error != SSL_ERROR_WANT_WRITE &&
+        "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
     if (ssl_error == SSL_ERROR_WANT_READ) {
         cat_debug(SSL, "SSL_ERROR_WANT_READ");
         return CAT_SSL_RET_WANT_IO;
     }
 
-    CAT_SHOULD_BE(ssl_error != SSL_ERROR_WANT_WRITE &&
-        "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
-    CAT_SHOULD_BE(!(ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) &&
-        "Connection closed by peer in SSL handshake, but it is impossible for BIO mode");
-
-    cat_ssl_update_last_error(CAT_ESSL, "SSL_do_handshake() failed");
+    if (ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {
+        cat_update_last_error_with_reason(CAT_ECONNRESET, "SSL handshake failed");
+    } else {
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_do_handshake() failed");
+    }
 
     return CAT_SSL_RET_ERROR;
 }
@@ -1009,7 +1008,12 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
                 cat_update_last_error_of_syscall("SSL_write() error");
                 break;
             } else {
-                cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+                if (error != SSL_ERROR_ZERO_RETURN) {
+                    cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+                } else {
+                    /* TODO: try to confirm: is that possible? */
+                    cat_update_last_error_with_reason(CAT_ECONNRESET, "SSL_write() error");
+                }
                 cat_ssl_unrecoverable_error(ssl);
                 break;
             }
@@ -1116,7 +1120,7 @@ CAT_API void cat_ssl_encrypted_vector_free(cat_ssl_t *ssl, cat_io_vector_t *vect
     }
 }
 
-CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length)
+CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length, cat_bool_t *eof)
 {
     cat_buffer_t *buffer = &ssl->read_buffer;
     size_t nread = 0, nwrite = 0;
@@ -1125,6 +1129,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
     cat_bool_t ret = cat_false;
 
     *out_length = 0;
+    *eof = cat_false;
 
     while (1) {
         int n;
@@ -1156,6 +1161,11 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
                 cat_debug(SSL, "SSL_read(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
                 // continue to SSL_write_encrypted_bytes()
+            } else if (error == SSL_ERROR_ZERO_RETURN) {
+                // Connection closed normally
+                *eof = cat_true;
+                ret = cat_true;
+                break;
             } else if (error == SSL_ERROR_SYSCALL) {
                 cat_update_last_error_of_syscall("SSL_read() error");
                 break;
