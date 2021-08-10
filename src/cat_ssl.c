@@ -729,17 +729,17 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
         return CAT_SSL_RET_OK;
     }
 
-    int ssl_error = cat_ssl_get_error(ssl, n);
+    int error = cat_ssl_get_error(ssl, n);
 
-    CAT_SHOULD_BE(ssl_error != SSL_ERROR_WANT_WRITE &&
+    CAT_SHOULD_BE(error != SSL_ERROR_WANT_WRITE &&
         "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
-    if (ssl_error == SSL_ERROR_WANT_READ) {
+    if (error == SSL_ERROR_WANT_READ) {
         cat_debug(SSL, "SSL_ERROR_WANT_READ");
         return CAT_SSL_RET_WANT_IO;
-    }
-
-    if (ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {
-        cat_update_last_error_with_reason(CAT_ECONNRESET, "SSL handshake failed");
+    } else if (error == SSL_ERROR_SYSCALL) {
+        cat_update_last_error_of_syscall("SSL_do_handshake() failed");
+    } else if (error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {
+        cat_update_last_error_with_reason(CAT_ECONNRESET, "SSL_do_handshake() failed");
     } else {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_do_handshake() failed");
     }
@@ -1237,12 +1237,12 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
     } else if (error == SSL_ERROR_WANT_WRITE) {
         cat_debug(SSL, "SSL_shutdown(%p) want write", ssl);
         return CAT_SSL_RET_WANT_WRITE;
-    }
-
-    if (error == SSL_ERROR_SYSCALL) {
-        cat_update_last_error_of_syscall("SSL_write() error");
+    } else if (error == SSL_ERROR_SYSCALL) {
+        cat_update_last_error_of_syscall("SSL_shutdown() failed");
+    } else if (ssl_error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {
+        cat_update_last_error_with_reason(CAT_ECONNRESET, "SSL_shutdown() failed");
     } else {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_shutdown() error");
     }
     return CAT_RET_ERROR;
 }
