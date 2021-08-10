@@ -39,6 +39,7 @@ socket write of encrypted data.
           |         encrypted bytes          |       |  unencrypted bytes  |
 */
 
+static int cat_ssl_get_error(const cat_ssl_t *ssl, int ret_code);
 static void cat_ssl_clear_error(void);
 static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int where, int ret);
 #ifdef CAT_DEBUG
@@ -678,12 +679,11 @@ CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl)
 CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name)
 {
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-    cat_ssl_connection_t *connection = ssl->connection;
     int error;
 
     cat_debug(SSL, "SSL_set_tlsext_host_name(%p, \"%s\")", ssl, name);
 
-    error = SSL_set_tlsext_host_name(connection, name);
+    error = SSL_set_tlsext_host_name(ssl->connection, name);
 
     if (unlikely(error != 1)) {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_set_tlsext_host_name(\"%s\") failed", name);
@@ -703,15 +703,13 @@ CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl)
 
 CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 {
-    cat_ssl_connection_t *connection = ssl->connection;
-
     if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
         return CAT_SSL_RET_OK;
     }
 
     cat_ssl_clear_error();
 
-    int n = SSL_do_handshake(connection);
+    int n = SSL_do_handshake(ssl->connection);
 
     cat_debug(SSL, "SSL_do_handshake(%p): %d", ssl, n);
     if (n == 1) {
@@ -731,7 +729,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
         return CAT_SSL_RET_OK;
     }
 
-    int ssl_error = SSL_get_error(connection, n);
+    int ssl_error = cat_ssl_get_error(ssl, n);
 
     cat_debug(SSL, "SSL_get_error(%p): %d", ssl, ssl_error);
 
@@ -822,11 +820,10 @@ static cat_bool_t cat_ssl_check_name(const char *name, size_t name_length, ASN1_
 
 CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t name_length)
 {
-    cat_ssl_connection_t *connection = ssl->connection;
     X509 *cert;
     cat_bool_t ret = cat_false;
 
-    cert = SSL_get_peer_certificate(connection);
+    cert = SSL_get_peer_certificate(ssl->connection);
 
     if (cert == NULL) {
         return cat_false;
@@ -959,7 +956,6 @@ CAT_API size_t cat_ssl_encrypted_size(size_t length)
 
 static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_t *in_length, char *out, size_t *out_length)
 {
-    cat_ssl_connection_t *connection = ssl->connection;
     size_t nread = 0, nwrite = 0;
     size_t in_size = *in_length;
     size_t out_size = *out_length;
@@ -999,12 +995,12 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
 
         cat_ssl_clear_error();
 
-        n = SSL_write(connection, in + nwrite, (int) (in_size - nwrite));
+        n = SSL_write(ssl->connection, in + nwrite, (int) (in_size - nwrite));
 
         cat_debug(SSL, "SSL_write(%p, %zu) = %d", ssl, in_size - nwrite, n);
 
         if (unlikely(n <= 0)) {
-            int error = SSL_get_error(connection, n);
+            int error = cat_ssl_get_error(ssl, n);
 
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
                 cat_debug(SSL, "SSL_write(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
@@ -1122,7 +1118,6 @@ CAT_API void cat_ssl_encrypted_vector_free(cat_ssl_t *ssl, cat_io_vector_t *vect
 
 CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length)
 {
-    cat_ssl_connection_t *connection = ssl->connection;
     cat_buffer_t *buffer = &ssl->read_buffer;
     size_t nread = 0, nwrite = 0;
     size_t out_size = *out_length;
@@ -1151,12 +1146,12 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         cat_ssl_clear_error();
 
-        n = SSL_read(connection, out + nread, (int) (out_size - nread));
+        n = SSL_read(ssl->connection, out + nread, (int) (out_size - nread));
 
         cat_debug(SSL, "SSL_read(%p, %zu) = %d", ssl, out_size - nread, n);
 
         if (unlikely(n <= 0)) {
-            int error = SSL_get_error(connection, n);
+            int error = cat_ssl_get_error(ssl, n);
 
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
                 cat_debug(SSL, "SSL_read(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
@@ -1211,7 +1206,6 @@ CAT_API void cat_ssl_set_quiet_shutdown(cat_ssl_t *ssl, cat_bool_t enable)
 #if 0 /* Enable it when we implement it in socket */
 CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
 {
-    cat_ssl_connection_t *connection = ssl->connection;
     int error, ret;
 
     if (!cat_ssl_is_established(ssl)) {
@@ -1226,7 +1220,7 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
         return CAT_SSL_RET_NONE;
     }
 
-    error = SSL_get_error(connection, n);
+    error = cat_ssl_get_error(ssl, n);
     if (error == SSL_ERROR_WANT_READ) {
         cat_debug(SSL, "SSL_shutdown(%p) want read", ssl);
         return CAT_SSL_RET_WANT_READ;
@@ -1243,6 +1237,13 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
     return CAT_RET_ERROR;
 }
 #endif
+
+static int cat_ssl_get_error(const cat_ssl_t *ssl, int ret_code)
+{
+    int error = SSL_get_error(ssl->connection, ret_code);
+    cat_debug(SSL, "SSL_get_error(%p, %d) = %d", ssl, ret_code, error);
+    return error;
+}
 
 CAT_API CAT_COLD char *cat_ssl_get_error_reason(void)
 {
