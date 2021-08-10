@@ -1153,7 +1153,8 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         n = SSL_read(ssl->connection, out + nread, (int) (out_size - nread));
 
-        cat_debug(SSL, "SSL_read(%p, %zu) = %d", ssl, out_size - nread, n);
+        cat_debug(SSL, "SSL_read(%p, " CAT_LOG_STRINGL_OR_NULL_FMT ", %zu) = %d",
+                  ssl, CAT_LOG_STRINGL_OR_NULL_PARAM(out + nread, n), out_size - nread, n);
 
         if (unlikely(n <= 0)) {
             int error = cat_ssl_get_error(ssl, n);
