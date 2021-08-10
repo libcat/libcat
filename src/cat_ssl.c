@@ -1244,7 +1244,7 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
 }
 #endif
 
-CAT_API char *cat_ssl_get_error_reason(void)
+CAT_API CAT_COLD char *cat_ssl_get_error_reason(void)
 {
     char *errstr = NULL, *errstr2;
     const char *data;
@@ -1277,7 +1277,7 @@ CAT_API char *cat_ssl_get_error_reason(void)
     return errstr;
 }
 
-CAT_API void cat_ssl_update_last_error(cat_errno_t error, const char *format, ...)
+CAT_API CAT_COLD void cat_ssl_update_last_error(cat_errno_t error, const char *format, ...)
 {
     va_list args;
     char *message, *reason;
