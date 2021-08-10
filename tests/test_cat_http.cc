@@ -493,12 +493,12 @@ TEST(cat_http_parser, all)
             if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_LINE) {
                 ASSERT_EQ(cat_http_parser_get_method(&parser), CAT_HTTP_METHOD_GET);
             }
-            cat_debug(TEST, "%s: %.*s", cat_http_parser_get_event_name(&parser), (int ) parser.data_length, parser.data);
+            CAT_LOG_DEBUG(TEST, "%s: %.*s", cat_http_parser_get_event_name(&parser), (int ) parser.data_length, parser.data);
         } else {
-            cat_debug(TEST, "%s", cat_http_parser_get_event_name(&parser));
+            CAT_LOG_DEBUG(TEST, "%s", cat_http_parser_get_event_name(&parser));
         }
         if (cat_http_parser_is_completed(&parser)) {
-            cat_debug(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
             ASSERT_EQ(cat_http_parser_get_major_version(&parser), 1);
             ASSERT_EQ(cat_http_parser_get_minor_version(&parser), 1);
             break;

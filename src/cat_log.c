@@ -19,7 +19,7 @@
 #include "cat.h"
 #include "cat_coroutine.h" /* for coroutine id (TODO: need to decouple it?) */
 
-CAT_API cat_log_t cat_log;
+CAT_API cat_log_t cat_log_function;
 
 #if 0
 static const char *cat_log_get_date()

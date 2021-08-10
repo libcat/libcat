@@ -60,7 +60,7 @@ TEST(cat, runtime_init_with_error_log_stdout)
     cat_runtime_shutdown();
     cat_runtime_init();
     testing::internal::CaptureStdout();
-    cat_warn(CORE, "Now error log is stdout");
+    CAT_WARN(CORE, "Now error log is stdout");
     std::string output = testing::internal::GetCapturedStdout();
     ASSERT_NE(output.find("Now error log is stdout"), std::string::npos);
 }
@@ -74,7 +74,7 @@ TEST(cat, runtime_init_with_error_log_stderr)
     cat_runtime_shutdown();
     cat_runtime_init();
     testing::internal::CaptureStderr();
-    cat_warn(CORE, "Now error log is stderr");
+    CAT_WARN(CORE, "Now error log is stderr");
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_NE(output.find("Now error log is stderr"), std::string::npos);
 }

@@ -137,7 +137,7 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
 #ifdef CAT_DEBUG
     do {
         char *tmp = NULL;
-        cat_debug(TIME, "Sleep %s", tmp = cat_time_format_msec(msec));
+        CAT_LOG_DEBUG(TIME, "Sleep %s", tmp = cat_time_format_msec(msec));
         if (tmp != NULL) { cat_free(tmp); }
     } while (0);
 #endif

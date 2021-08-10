@@ -43,7 +43,7 @@ void cat_bug_detector_callback(int signum)
 
 CAT_API cat_bool_t cat_module_init(void)
 {
-    cat_log = cat_log_standard;
+    cat_log_function = cat_log_standard;
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
     cat_register_allocator(NULL);
@@ -142,7 +142,7 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
 CAT_API char **cat_setup_args(int argc, char** argv)
 {
     if (cat_args_registered) {
-        cat_core_error(PROCESS, "API misuse: setup_args() should be called only once");
+        CAT_CORE_ERROR(PROCESS, "API misuse: setup_args() should be called only once");
     }
     cat_args_registered = cat_true;
 

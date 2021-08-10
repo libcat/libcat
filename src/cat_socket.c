@@ -1869,7 +1869,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
          * it means server will response something later, so, we need to recv it then returns,
          * otherwise it will lead errors on Windows */
         if (ssl_ret == CAT_SSL_RET_OK && !(n > 0 && is_client)) {
-            cat_debug(SOCKET, "Socket SSL handshake completed");
+            CAT_LOG_DEBUG(SOCKET, "Socket SSL handshake completed");
             ret = cat_true;
             break;
         }
@@ -2987,7 +2987,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
             * try again in the next call. */
 #ifdef CAT_DEBUG
         size_t encrypted_bytes = cat_io_vector_length(ssl_vector, ssl_vector_count);
-        cat_debug(SSL, "SSL %p expect send %zu encrypted bytes, actually %zu bytes was sent (raw data is %zu bytes)",
+        CAT_LOG_DEBUG(SSL, "SSL %p expect send %zu encrypted bytes, actually %zu bytes was sent (raw data is %zu bytes)",
             ssl, encrypted_bytes, (size_t) nwrite_encrypted, (size_t) nwrite);
         CAT_ASSERT(((size_t) nwrite_encrypted == encrypted_bytes) ==
                     (ssl_vector_current == ssl_vector_eof));
@@ -3010,7 +3010,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
             }
             /* We tell caller all data has been sent, but actually they are in buffered,
                 * it's ok, just like syscall write() did. */
-            cat_debug(SSL, "SSL %p write buffer now has %zu bytes queued data", ssl, ssl->write_buffer.length);
+            CAT_LOG_DEBUG(SSL, "SSL %p write buffer now has %zu bytes queued data", ssl, ssl->write_buffer.length);
             uv_write_t *request = (uv_write_t *) cat_malloc(sizeof(*request));
 #if CAT_ALLOC_HANDLE_ERRORS
             if (unlikely(request == NULL)) {
@@ -4141,7 +4141,7 @@ static void cat_socket_dump_callback(uv_handle_t* handle, void* arg)
         peer_port = cat_socket_get_peer_port(socket);
     }
 
-    cat_info(SOCKET, "%-4s fd: %-6d io: %-12s role: %-7s addr: %s:%d, peer: %s:%d",
+    CAT_LOG_INFO(SOCKET, "%-4s fd: %-6d io: %-12s role: %-7s addr: %s:%d, peer: %s:%d",
                      type_name, (int) fd, io_state_naming, role, sock_addr, sock_port, peer_addr, peer_port);
 }
 

@@ -69,7 +69,7 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
 #if OPENSSL_VERSION_NUMBER >= 0x10100003L
     if (OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG | OPENSSL_INIT_SSL_DEFAULT | OPENSSL_INIT_ADD_ALL_CIPHERS, NULL) == 0) {
         ERR_print_errors_fp(CAT_G(error_log));
-        cat_core_error(SSL, "OPENSSL_init_ssl() failed");
+        CAT_CORE_ERROR(SSL, "OPENSSL_init_ssl() failed");
     }
 #else
     OPENSSL_config(NULL);
@@ -96,12 +96,12 @@ CAT_API cat_bool_t cat_ssl_module_init(void)
     cat_ssl_index = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
     if (cat_ssl_index == -1) {
         ERR_print_errors_fp(CAT_G(error_log));
-        cat_core_error(SSL, "SSL_get_ex_new_index() failed");
+        CAT_CORE_ERROR(SSL, "SSL_get_ex_new_index() failed");
     }
     cat_ssl_context_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
     if (cat_ssl_context_index == -1) {
         ERR_print_errors_fp(CAT_G(error_log));
-        cat_core_error(SSL, "SSL_CTX_get_ex_new_index() failed");
+        CAT_CORE_ERROR(SSL, "SSL_CTX_get_ex_new_index() failed");
     }
 
     return cat_true;
@@ -266,20 +266,20 @@ CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_p
 CAT_API cat_bool_t cat_ssl_context_set_client_ca_list(cat_ssl_context_t *context, const char *ca_file)
 {
     /* Servers need to load and assign CA names from the cafile */
-    cat_debug(SSL, "SSL_load_client_CA_file(%p, \"%s\")", context, ca_file);
+    CAT_LOG_DEBUG(SSL, "SSL_load_client_CA_file(%p, \"%s\")", context, ca_file);
     STACK_OF(X509_NAME) *cert_names = SSL_load_client_CA_file(ca_file);
     if (cert_names == NULL) {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_load_client_CA_file(\"%s\") failed", context, ca_file);
         return cat_false;
     }
-    cat_debug(SSL, "SSL_CTX_set_client_CA_list(%p)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_client_CA_list(%p)", context);
     SSL_CTX_set_client_CA_list(context->ctx, cert_names);
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_default_verify_paths(%p)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_default_verify_paths(%p)", context);
     if (SSL_CTX_set_default_verify_paths(context->ctx) != 1) {
         cat_ssl_update_last_error(CAT_EINVAL, "SSL_CTX_set_default_verify_paths() failed");
         return cat_false;
@@ -289,7 +289,7 @@ CAT_API cat_bool_t cat_ssl_context_set_default_verify_paths(cat_ssl_context_t *c
 
 CAT_API cat_bool_t cat_ssl_context_load_verify_locations(cat_ssl_context_t *context, const char *ca_file, const char *ca_path)
 {
-    cat_debug(SSL, "SSL_CTX_load_verify_locations(%p, ca_file: " CAT_LOG_STRING_OR_NULL_FMT ", ca_path: " CAT_LOG_STRING_OR_NULL_FMT ")",
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_load_verify_locations(%p, ca_file: " CAT_LOG_STRING_OR_NULL_FMT ", ca_path: " CAT_LOG_STRING_OR_NULL_FMT ")",
         context, CAT_LOG_STRING_OR_NULL_PARAM(ca_file), CAT_LOG_STRING_OR_NULL_PARAM(ca_path));
     if (SSL_CTX_load_verify_locations(context->ctx, ca_file, NULL) != 1) {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_load_verify_locations() failed");
@@ -322,7 +322,7 @@ CAT_API cat_bool_t cat_ssl_context_set_passphrase(cat_ssl_context_t *context, co
         cat_update_last_error_of_syscall("Malloc for SSL passphrase failed");
         return cat_false;
     }
-    cat_debug(SSL, "SSL_set_default_passwd(%p, passphrase=\"%.*s\")", context, (int) passphrase_length, passphrase);
+    CAT_LOG_DEBUG(SSL, "SSL_set_default_passwd(%p, passphrase=\"%.*s\")", context, (int) passphrase_length, passphrase);
     SSL_CTX_set_default_passwd_cb_userdata(ctx, context);
     SSL_CTX_set_default_passwd_cb(ctx, cat_ssl_context_password_callback);
 
@@ -334,7 +334,7 @@ CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, c
     cat_ssl_ctx_t *ctx = context->ctx;
 
     /* a certificate to use for authentication */
-    cat_debug(SSL, "SSL_CTX_use_certificate_chain_file(%p, \"%s\")", context, certificate);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_use_certificate_chain_file(%p, \"%s\")", context, certificate);
     if (SSL_CTX_use_certificate_chain_file(ctx, certificate) != 1) {
         cat_ssl_update_last_error(CAT_ESSL,  "SSL_CTX_use_certificate_chain_file(\"%s\") failed, "
             "check that your ca_file/ca_path settings include details of your certificate and its issuer", certificate);
@@ -343,7 +343,7 @@ CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, c
     if (certificate_key == NULL) {
         certificate_key = certificate;
     }
-    cat_debug(SSL, "SSL_CTX_use_PrivateKey_file(%p, \"%s\")", context, certificate_key);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_use_PrivateKey_file(%p, \"%s\")", context, certificate_key);
     if (SSL_CTX_use_PrivateKey_file(ctx, certificate_key, SSL_FILETYPE_PEM) != 1) {
         cat_ssl_update_last_error(CAT_ESSL, "SSL_CTX_use_PrivateKey_file(\"%s\") failed", certificate_key);
         return cat_false;
@@ -357,7 +357,7 @@ CAT_API cat_bool_t cat_ssl_context_set_certificate(cat_ssl_context_t *context, c
 
 CAT_API void cat_ssl_context_set_verify_depth(cat_ssl_context_t *context, int depth)
 {
-    cat_debug(SSL, "SSL_CTX_set_verify_depth(%p, %d)", context, depth);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_verify_depth(%p, %d)", context, depth);
     SSL_CTX_set_verify_depth(context->ctx, depth);
 }
 
@@ -489,7 +489,7 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
 
 CAT_API void cat_ssl_context_configure_cert_verify_callback(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_cert_verify_callback(%p)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_cert_verify_callback(%p)", context);
     SSL_CTX_set_cert_verify_callback(context->ctx, cat_ssl_win_cert_verify_callback, NULL);
 }
 #endif
@@ -527,25 +527,25 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
 
 CAT_API void cat_ssl_context_enable_verify_peer(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_PEER, ssl_verify_callback)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_PEER, ssl_verify_callback)", context);
 	SSL_CTX_set_verify(context->ctx, SSL_VERIFY_PEER, cat_ssl_verify_callback);
 }
 
 CAT_API void cat_ssl_context_disable_verify_peer(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_NONE, NULL)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_NONE, NULL)", context);
 	SSL_CTX_set_verify(context->ctx, SSL_VERIFY_NONE, NULL);
 }
 
 CAT_API void cat_ssl_context_set_no_ticket(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_options(%p, SSL_OP_NO_TICKET)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_options(%p, SSL_OP_NO_TICKET)", context);
     SSL_CTX_set_options(context->ctx, SSL_OP_NO_TICKET);
 }
 
 CAT_API void cat_ssl_context_set_no_compression(cat_ssl_context_t *context)
 {
-    cat_debug(SSL, "SSL_CTX_set_options(%p, SSL_OP_NO_COMPRESSION)", context);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_options(%p, SSL_OP_NO_COMPRESSION)", context);
     SSL_CTX_set_options(context->ctx, SSL_OP_NO_COMPRESSION);
 }
 
@@ -647,10 +647,10 @@ CAT_API void cat_ssl_set_accept_state(cat_ssl_t *ssl)
         }
     }
 
-    cat_debug(SSL, "SSL_set_accept_state(%p)", ssl);
+    CAT_LOG_DEBUG(SSL, "SSL_set_accept_state(%p)", ssl);
     SSL_set_accept_state(connection); /* sets ssl to work in server mode. */
 #ifdef SSL_OP_NO_RENEGOTIATION
-    cat_debug(SSL, "SSL_set_options(%p, SSL_OP_NO_RENEGOTIATION)", ssl);
+    CAT_LOG_DEBUG(SSL, "SSL_set_options(%p, SSL_OP_NO_RENEGOTIATION)", ssl);
     SSL_set_options(connection, SSL_OP_NO_RENEGOTIATION);
 #endif
     ssl->flags |= CAT_SSL_FLAG_ACCEPT_STATE;
@@ -671,7 +671,7 @@ CAT_API void cat_ssl_set_connect_state(cat_ssl_t *ssl)
         }
     }
 
-    cat_debug(SSL, "SSL_set_connect_state(%p)", ssl);
+    CAT_LOG_DEBUG(SSL, "SSL_set_connect_state(%p)", ssl);
     SSL_set_connect_state(connection); /* sets ssl to work in client mode. */
     ssl->flags |= CAT_SSL_FLAG_CONNECT_STATE;
 }
@@ -681,7 +681,7 @@ CAT_API cat_bool_t cat_ssl_set_sni_server_name(cat_ssl_t *ssl, const char *name)
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
     int error;
 
-    cat_debug(SSL, "SSL_set_tlsext_host_name(%p, \"%s\")", ssl, name);
+    CAT_LOG_DEBUG(SSL, "SSL_set_tlsext_host_name(%p, \"%s\")", ssl, name);
 
     error = SSL_set_tlsext_host_name(ssl->connection, name);
 
@@ -711,7 +711,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 
     int n = SSL_do_handshake(ssl->connection);
 
-    cat_debug(SSL, "SSL_do_handshake(%p): %d", ssl, n);
+    CAT_LOG_DEBUG(SSL, "SSL_do_handshake(%p): %d", ssl, n);
     if (n == 1) {
         ssl->flags |= CAT_SSL_FLAG_HANDSHAKED;
         cat_ssl_handshake_log(ssl);
@@ -725,7 +725,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 #endif
 #endif
 #endif
-        cat_debug(SSL, "SSL handshake succeeded");
+        CAT_LOG_DEBUG(SSL, "SSL handshake succeeded");
         return CAT_SSL_RET_OK;
     }
 
@@ -734,7 +734,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
     CAT_SHOULD_BE(error != SSL_ERROR_WANT_WRITE &&
         "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
     if (error == SSL_ERROR_WANT_READ) {
-        cat_debug(SSL, "SSL_ERROR_WANT_READ");
+        CAT_LOG_DEBUG(SSL, "SSL_ERROR_WANT_READ");
         return CAT_SSL_RET_WANT_IO;
     } else if (error == SSL_ERROR_SYSCALL) {
         cat_update_last_error_of_syscall("SSL_do_handshake() failed");
@@ -834,10 +834,10 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
         goto _out;
     }
     if (X509_check_host(cert, (char *) name, name_length, 0, NULL) != 1) {
-        cat_debug(SSL, "X509_check_host(): no match");
+        CAT_LOG_DEBUG(SSL, "X509_check_host(): no match");
         goto _out;
     }
-    cat_debug(SSL, "X509_check_host(): match");
+    CAT_LOG_DEBUG(SSL, "X509_check_host(): match");
     ret = cat_true;
     goto _out;
 #else
@@ -861,15 +861,15 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
                     continue;
                 }
                 str = altname->d.dNSName;
-                cat_debug(SSL, "Subject alt name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
+                CAT_LOG_DEBUG(SSL, "Subject alt name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
                 if (cat_ssl_check_name(name, name_length, str)) {
-                    cat_debug(SSL, "Subject alt name: match");
+                    CAT_LOG_DEBUG(SSL, "Subject alt name: match");
                     GENERAL_NAMES_free(altnames);
                     ret = cat_true;
                     goto _out;
                 }
             }
-            cat_debug(SSL, "Subject alt name: no match");
+            CAT_LOG_DEBUG(SSL, "Subject alt name: no match");
             GENERAL_NAMES_free(altnames);
             goto _out;
         }
@@ -890,14 +890,14 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
             }
             entry = X509_NAME_get_entry(sname, i);
             str = X509_NAME_ENTRY_get_data(entry);
-            cat_debug(SSL, "Common name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
+            CAT_LOG_DEBUG(SSL, "Common name: \"%*s\"", ASN1_STRING_length(str), ASN1_STRING_data(str));
             if (cat_ssl_check_name(name, name_length, str)) {
-                cat_debug(SSL, "Common name: match");
+                CAT_LOG_DEBUG(SSL, "Common name: match");
                 ret = cat_true;
                 goto _out;
             }
         }
-        cat_debug(SSL, "Common name: no match");
+        CAT_LOG_DEBUG(SSL, "Common name: no match");
     }
 #endif
 
@@ -913,14 +913,14 @@ CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t si
     cat_ssl_clear_error();
 
     n = BIO_read(ssl->nbio, buffer, (int) size);
-    cat_debug(SSL, "BIO_read(%p, %zu) = %d", ssl, size, n);
+    CAT_LOG_DEBUG(SSL, "BIO_read(%p, %zu) = %d", ssl, size, n);
     if (unlikely(n <= 0)) {
         if (unlikely(!BIO_should_retry(ssl->nbio))) {
             cat_ssl_update_last_error(CAT_ESSL, "BIO_read(%zu) failed", size);
             cat_ssl_unrecoverable_error(ssl);
             return CAT_RET_ERROR;
         }
-        cat_debug(SSL, "BIO_read(%p) should retry", ssl);
+        CAT_LOG_DEBUG(SSL, "BIO_read(%p) should retry", ssl);
         return CAT_RET_NONE;
     }
 
@@ -934,14 +934,14 @@ CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, si
     cat_ssl_clear_error();
 
     n = BIO_write(ssl->nbio, buffer, (int) length);
-    cat_debug(SSL, "BIO_write(%p, %zu) = %d", ssl, length, n);
+    CAT_LOG_DEBUG(SSL, "BIO_write(%p, %zu) = %d", ssl, length, n);
     if (unlikely(n <= 0)) {
         if (unlikely(!BIO_should_retry(ssl->nbio))) {
             cat_ssl_update_last_error(CAT_ESSL, "BIO_write(%zu) failed", length);
             cat_ssl_unrecoverable_error(ssl);
             return CAT_RET_ERROR;
         }
-        cat_debug(SSL, "BIO_write(%p) should retry", ssl);
+        CAT_LOG_DEBUG(SSL, "BIO_write(%p) should retry", ssl);
         return CAT_RET_NONE;
     }
 
@@ -996,13 +996,13 @@ static cat_bool_t cat_ssl_encrypt_buffered(cat_ssl_t *ssl, const char *in, size_
 
         n = SSL_write(ssl->connection, in + nwrite, (int) (in_size - nwrite));
 
-        cat_debug(SSL, "SSL_write(%p, %zu) = %d", ssl, in_size - nwrite, n);
+        CAT_LOG_DEBUG(SSL, "SSL_write(%p, %zu) = %d", ssl, in_size - nwrite, n);
 
         if (unlikely(n <= 0)) {
             int error = cat_ssl_get_error(ssl, n);
 
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
-                cat_debug(SSL, "SSL_write(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
+                CAT_LOG_DEBUG(SSL, "SSL_write(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
                 // continue to  SSL_read_encrypted_bytes()
             } else if (error == SSL_ERROR_SYSCALL) {
                 cat_update_last_error_of_syscall("SSL_write() error");
@@ -1073,7 +1073,7 @@ CAT_API cat_bool_t cat_ssl_encrypt(
             vout_counted++;
             if (cat_get_last_error_code() == CAT_ENOBUFS) {
                 CAT_ASSERT(length == size);
-                cat_debug(SSL, "SSL encrypt buffer extend");
+                CAT_LOG_DEBUG(SSL, "SSL encrypt buffer extend");
                 if (vout_counted == vout_size) {
                     cat_update_last_error(CAT_ENOBUFS, "Unexpected vector count (too many)");
                     goto _unrecoverable_error;
@@ -1153,18 +1153,20 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         n = SSL_read(ssl->connection, out + nread, (int) (out_size - nread));
 
-        cat_debug(SSL, "SSL_read(%p, " CAT_LOG_STRINGL_OR_NULL_FMT ", %zu) = %d",
-                  ssl, CAT_LOG_STRINGL_OR_NULL_PARAM(out + nread, n), out_size - nread, n);
+        CAT_LOG_DEBUG_SCOPE(SSL, {
+            CAT_LOG_DEBUG_D(SSL, "SSL_read(%p, " CAT_LOG_STRINGL_OR_NULL_FMT ", %zu) = %d",
+                ssl, CAT_LOG_STRINGL_OR_NULL_PARAM(out + nread, n), out_size - nread, n);
+        });
 
         if (unlikely(n <= 0)) {
             int error = cat_ssl_get_error(ssl, n);
 
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
-                cat_debug(SSL, "SSL_read(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
+                CAT_LOG_DEBUG(SSL, "SSL_read(%p) want %s", ssl, error == SSL_ERROR_WANT_READ ? "read" : "write");
                 // continue to SSL_write_encrypted_bytes()
             } else if (error == SSL_ERROR_ZERO_RETURN) {
                 // Connection closed normally
-                cat_debug(SSL, "SSL %p connection closed by peer", ssl);
+                CAT_LOG_DEBUG(SSL, "SSL %p connection closed by peer", ssl);
                 *eof = cat_true;
                 ret = cat_true;
                 break;
@@ -1225,7 +1227,7 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
     }
 
     ret = SSL_shutdown(ssl->connection);
-    cat_debug(SSL, "SSL_shutdown(%p) = %d", ret);
+    CAT_LOG_DEBUG(SSL, "SSL_shutdown(%p) = %d", ret);
     if (ret == 1) {
         return CAT_SSL_RET_OK;
     } else if (ret == 0) {
@@ -1234,10 +1236,10 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
 
     error = cat_ssl_get_error(ssl, n);
     if (error == SSL_ERROR_WANT_READ) {
-        cat_debug(SSL, "SSL_shutdown(%p) want read", ssl);
+        CAT_LOG_DEBUG(SSL, "SSL_shutdown(%p) want read", ssl);
         return CAT_SSL_RET_WANT_READ;
     } else if (error == SSL_ERROR_WANT_WRITE) {
-        cat_debug(SSL, "SSL_shutdown(%p) want write", ssl);
+        CAT_LOG_DEBUG(SSL, "SSL_shutdown(%p) want write", ssl);
         return CAT_SSL_RET_WANT_WRITE;
     } else if (error == SSL_ERROR_SYSCALL) {
         cat_update_last_error_of_syscall("SSL_shutdown() failed");
@@ -1298,7 +1300,7 @@ static const char *cat_ssl_error_to_str(int error)
 static int cat_ssl_get_error(const cat_ssl_t *ssl, int ret_code)
 {
     int error = SSL_get_error(ssl->connection, ret_code);
-    cat_debug(SSL, "SSL_get_error(%p, %d) = %d [%s]", ssl, ret_code, error, cat_ssl_error_to_str(error));
+    CAT_LOG_DEBUG(SSL, "SSL_get_error(%p, %d) = %d [%s]", ssl, ret_code, error, cat_ssl_error_to_str(error));
     return error;
 }
 
@@ -1367,7 +1369,7 @@ static void cat_ssl_clear_error(void)
 {
     while (unlikely(ERR_peek_error())) {
         char *reason = cat_ssl_get_error_reason();
-        cat_notice(SSL, "Ignoring stale global SSL error %s", reason != NULL ? reason : "");
+        CAT_NOTICE(SSL, "Ignoring stale global SSL error %s", reason != NULL ? reason : "");
         if (reason != NULL) {
             cat_free(reason);
         }
@@ -1394,7 +1396,7 @@ static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int wh
         cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
         if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
             ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION;
-            cat_debug(SSL, "SSL %p renegotiation", ssl);
+            CAT_LOG_DEBUG(SSL, "SSL %p renegotiation", ssl);
         }
     }
 #endif
@@ -1450,12 +1452,12 @@ static void cat_ssl_handshake_log(cat_ssl_t *ssl)
             d++;
         }
         *d = '\0';
-        cat_debug(SSL, "SSL: %s, cipher: \"%s\"", SSL_get_version(ssl->connection), &buf[1]);
+        CAT_LOG_DEBUG(SSL, "SSL: %s, cipher: \"%s\"", SSL_get_version(ssl->connection), &buf[1]);
         if (SSL_session_reused(ssl->connection)) {
-            cat_debug(SSL, "SSL reused session");
+            CAT_LOG_DEBUG(SSL, "SSL reused session");
         }
     } else {
-        cat_debug(SSL, "SSL no shared ciphers");
+        CAT_LOG_DEBUG(SSL, "SSL no shared ciphers");
     }
 }
 #endif

@@ -47,7 +47,7 @@ TEST(cat_ssl, remote_https_server)
     ASSERT_TRUE(cat_socket_send(socket, request, strlen(request)));
     nread = cat_socket_recv(socket, CAT_STRS(buffer));
     ASSERT_GT(nread, 0);
-    cat_debug(SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
+    CAT_LOG_DEBUG(SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
     ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
 }
 
