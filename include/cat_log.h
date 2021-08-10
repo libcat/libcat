@@ -38,6 +38,10 @@ typedef enum cat_log_union_types_e {
 #define CAT_LOG_STRING_OR_NULL_PARAM(string) \
         (string != NULL ? "\"" : ""), (string != NULL ? string : "NULL"), (string != NULL ? "\"" : "")
 
+#define CAT_LOG_STRINGL_OR_NULL_FMT "%s%.*s%s"
+#define CAT_LOG_STRINGL_OR_NULL_PARAM(string, length) \
+        (string != NULL ? "\"" : ""), (string != NULL && length > 0 ? length : 0), (string != NULL ? string : "NULL"), (string != NULL ? "\"" : "")
+
 #define cat_log_with_type(type, module_type, code, format, ...) do { \
     if (( \
             (((type) & CAT_G(log_types)) == (type)) && \
