@@ -172,6 +172,26 @@
 #define CAT_OPT_SPEED
 #endif
 
+#if defined(__GNUC__) && CAT_GCC_VERSION >= 5000
+# define CAT_ATTRIBUTE_UNUSED_LABEL __attribute__((cold, unused));
+# define CAT_ATTRIBUTE_COLD_LABEL __attribute__((cold));
+# define CAT_ATTRIBUTE_HOT_LABEL __attribute__((hot));
+#else
+# define CAT_ATTRIBUTE_UNUSED_LABEL
+# define CAT_ATTRIBUTE_COLD_LABEL
+# define CAT_ATTRIBUTE_HOT_LABEL
+#endif
+
+#if defined(__GNUC__) && CAT_GCC_VERSION >= 3004 && defined(__i386__)
+# define CAT_FASTCALL __attribute__((fastcall))
+#elif defined(_MSC_VER) && defined(_M_IX86) && _MSC_VER == 1700
+# define CAT_FASTCALL __fastcall
+#elif defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(__clang__)
+# define CAT_FASTCALL __vectorcall
+#else
+# define CAT_FASTCALL
+#endif
+
 #if (defined(__GNUC__) && __GNUC__ >= 3 && !defined(__INTEL_COMPILER) && !defined(DARWIN) && !defined(__hpux) && !defined(_AIX) && !defined(__osf__)) || __has_attribute(noreturn)
 #define CAT_HAVE_NORETURN
 #define CAT_NORETURN __attribute__((noreturn))
