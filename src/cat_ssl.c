@@ -1163,6 +1163,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
                 // continue to SSL_write_encrypted_bytes()
             } else if (error == SSL_ERROR_ZERO_RETURN) {
                 // Connection closed normally
+                cat_debug(SSL, "SSL %p connection closed by peer", ssl);
                 *eof = cat_true;
                 ret = cat_true;
                 break;
@@ -1248,10 +1249,55 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
 }
 #endif
 
+#ifdef CAT_DEBUG
+static const char *cat_ssl_error_to_str(int error)
+{
+    switch (error)
+    {
+    case SSL_ERROR_NONE:
+        return "SSL_ERROR_NONE";
+    case SSL_ERROR_SSL:
+        return "SSL_ERROR_SSL";
+    case SSL_ERROR_WANT_READ:
+        return "SSL_ERROR_WANT_READ";
+    case SSL_ERROR_WANT_WRITE:
+        return "SSL_ERROR_WANT_WRITE";
+    case SSL_ERROR_WANT_X509_LOOKUP:
+        return "SSL_ERROR_WANT_X509_LOOKUP";
+    case SSL_ERROR_SYSCALL:
+        return "SSL_ERROR_SYSCALL";
+    case SSL_ERROR_ZERO_RETURN:
+        return "SSL_ERROR_ZERO_RETURN";
+    case SSL_ERROR_WANT_CONNECT:
+        return "SSL_ERROR_WANT_CONNECT";
+    case SSL_ERROR_WANT_ACCEPT:
+        return "SSL_ERROR_WANT_ACCEPT";
+#if defined(SSL_ERROR_WANT_ASYNC)
+    case SSL_ERROR_WANT_ASYNC:
+        return "SSL_ERROR_WANT_ASYNC";
+#endif
+#if defined(SSL_ERROR_WANT_ASYNC_JOB)
+    case SSL_ERROR_WANT_ASYNC_JOB:
+        return "SSL_ERROR_WANT_ASYNC_JOB";
+#endif
+#if defined(SSL_ERROR_WANT_EARLY)
+    case SSL_ERROR_WANT_EARLY:
+        return "SSL_ERROR_WANT_EARLY";
+#endif
+#if defined(SSL_ERROR_WANT_CLIENT_HELLO_CB)
+    case SSL_ERROR_WANT_CLIENT_HELLO_CB:
+        return "SSL_ERROR_WANT_CLIENT_HELLO_CB";
+#endif
+    default:
+        return "SSL_ERROR unknown";
+    }
+}
+#endif
+
 static int cat_ssl_get_error(const cat_ssl_t *ssl, int ret_code)
 {
     int error = SSL_get_error(ssl->connection, ret_code);
-    cat_debug(SSL, "SSL_get_error(%p, %d) = %d", ssl, ret_code, error);
+    cat_debug(SSL, "SSL_get_error(%p, %d) = %d [%s]", ssl, ret_code, error, cat_ssl_error_to_str(error));
     return error;
 }
 
