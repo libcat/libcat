@@ -159,6 +159,15 @@ CAT_API cat_bool_t cat_env_exists(const char *name)
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_env_is_empty(const char *name)
+{
+    cat_errno_t error;
+    char *env = cat_env_get_silent(name, &error);
+    cat_bool_t is_empty = cat_str_is_empty(env);
+    cat_free(env);
+    return is_empty;
+}
+
 CAT_API cat_bool_t cat_env_compare(const char *name, const char *value, cat_env_comparer_t comparer, cat_bool_t default_value)
 {
     const char *values[1] = { value };

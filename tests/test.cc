@@ -291,25 +291,19 @@ public:
         }
 
         /* TMP_PATH */
-        char *host = cat_env_get("TEST_TMP_PATH");
+        char *host = nullptr;
+        if (!cat_env_is_empty("TEST_TMP_PATH")) {
+            host = cat_env_get("TEST_TMP_PATH");
+        }
 #ifdef CAT_OS_WIN
-        if (nullptr == host || '\0' == host[0]) {
-            if (nullptr != host && '\0' == host[0]) {
-                cat_free(host);
-            }
+        else if (!cat_env_is_empty("TEMP")) {
+            host = cat_env_get("TEMP");
+        } else if (!cat_env_is_empty("TMP")) {
             host = cat_env_get("TMP");
         }
-        if (nullptr == host || '\0' == host[0]) {
-            if (nullptr != host && '\0' == host[0]) {
-                cat_free(host);
-            }
-            host = cat_env_get("TEMP");
-        }
 #endif
-        if (nullptr != host) {
-            if ('\0' != host[0]) {
-                testing::CONFIG_TMP_PATH = host;
-            }
+        if (host != nullptr) {
+            testing::CONFIG_TMP_PATH = host;
             cat_free(host);
         }
 
