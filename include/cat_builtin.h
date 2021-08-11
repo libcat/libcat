@@ -88,6 +88,13 @@
 #define CAT_NEVER_HERE(reason) abort()
 #endif
 
+/* pseudo fallthrough keyword; */
+#if defined(__GNUC__) && __GNUC__ >= 7
+# define CAT_FALLTHROUGH __attribute__((__fallthrough__))
+#else
+# define CAT_FALLTHROUGH ((void) 0)
+#endif
+
 /* function prefix */
 
 #ifdef CAT_DEBUG
