@@ -102,6 +102,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
     if (cat_env_is_true("CAT_SLE", cat_false)) {
         CAT_G(show_last_error) = cat_true;
     }
+    CAT_G(log_str_size) = cat_env_get_i("CAT_LOG_STR_SIZE", 32);
 #ifdef CAT_DEBUG
 do {
     /* enable all log types and log module types */
