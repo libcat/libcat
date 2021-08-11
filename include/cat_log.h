@@ -34,13 +34,19 @@ typedef enum cat_log_union_types_e {
     CAT_LOG_TYPES_UNFILTERABLE    = CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR,
 } cat_log_union_types_t;
 
+#define CAT_LOG_STRING_OR_X_PARAM(string, x) \
+        (string != NULL ? "\"" : ""), (string != NULL ? string : x), (string != NULL ? "\"" : "")
+
+#define CAT_LOG_STRINGL_OR_X_PARAM(string, length, x) \
+        ((string != NULL && length > 0) ? "\"" : ""), (int) ((string != NULL && length > 0) ? length : strlen(x)), ((string != NULL && length > 0) ? string : x), ((string != NULL && length > 0) ? "\"" : "")
+
 #define CAT_LOG_STRING_OR_NULL_FMT "%s%s%s"
 #define CAT_LOG_STRING_OR_NULL_PARAM(string) \
-        (string != NULL ? "\"" : ""), (string != NULL ? string : "NULL"), (string != NULL ? "\"" : "")
+        CAT_LOG_STRING_OR_X_PARAM(string, "NULL")
 
 #define CAT_LOG_STRINGL_OR_NULL_FMT "%s%.*s%s"
 #define CAT_LOG_STRINGL_OR_NULL_PARAM(string, length) \
-        (string != NULL ? "\"" : ""), (string != NULL && length > 0 ? length : 0), (string != NULL ? string : "NULL"), (string != NULL ? "\"" : "")
+        CAT_LOG_STRINGL_OR_X_PARAM(string, length, "NULL")
 
 /* Notes for log macros:
  * [XXX_WITH_TYPE] macros designed for dynamic types,
@@ -156,3 +162,5 @@ typedef void (*cat_log_t)(CAT_LOG_PARAMATERS);
 extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
 
 CAT_API void cat_log_standard(CAT_LOG_PARAMATERS);
+
+CAT_API const char *cat_log_buffer_quote(const char *buffer, ssize_t n, char **tmp_str); CAT_FREE
