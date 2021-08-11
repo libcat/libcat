@@ -46,19 +46,22 @@ typedef enum cat_log_union_types_e {
  * [XXX_WITH_TYPE] macros designed for dynamic types,
  * [XXX_D] macros means log directly without checking user config */
 
-#define CAT_LOG_SCOPE_WITH_TYPE(type, module_type, xxx) do { \
+#define CAT_LOG_SCOPE_WITH_TYPE_START(type, module_type) do { \
     if (( \
             (((type) & CAT_G(log_types)) == (type)) && \
             ((CAT_MODULE_TYPE_##module_type & CAT_G(log_module_types)) == CAT_MODULE_TYPE_##module_type) \
         ) || \
         unlikely(((type) & CAT_LOG_TYPES_UNFILTERABLE) == (type)) \
-    ) { \
-        xxx; \
+    ) {
+
+#define CAT_LOG_SCOPE_WITH_TYPE_END() \
     } \
 } while (0)
 
-#define CAT_LOG_SCOPE(type, module_type, xxx) \
-        CAT_LOG_SCOPE_WITH_TYPE(CAT_LOG_TYPE_##type, module_type, xxx)
+#define CAT_LOG_SCOPE_START(type, module_type) \
+        CAT_LOG_SCOPE_WITH_TYPE_START(CAT_LOG_TYPE_##type, module_type)
+
+#define CAT_LOG_SCOPE_END CAT_LOG_SCOPE_WITH_TYPE_END
 
 #define CAT_LOG_WITH_TYPE(type, module_type, code, format, ...) \
         cat_log_function( \
@@ -73,9 +76,9 @@ typedef enum cat_log_union_types_e {
         )
 
 #define CAT_LOG(type, module_type, code, format, ...) \
-        CAT_LOG_SCOPE(type, module_type, { \
+        CAT_LOG_SCOPE_START(type, module_type) { \
             CAT_LOG_D(type, module_type, code, format, ##__VA_ARGS__); \
-        })
+        } CAT_LOG_SCOPE_END()
 
 #define CAT_LOG_NORETURN(type, module_type, code, format, ...) do { \
         CAT_LOG_D(type, module_type, code, format, ##__VA_ARGS__); \
@@ -96,11 +99,13 @@ typedef enum cat_log_union_types_e {
         CAT_LOG_NORETURN(type, module_type, code, ##__VA_ARGS__)
 
 #ifndef CAT_DEBUG
-#define CAT_LOG_DEBUG_SCOPE(module_type, xxx)
+#define CAT_LOG_DEBUG_SCOPE_START(module_type)
+#define CAT_LOG_DEBUG_SCOPE_END()
 #define CAT_LOG_DEBUG(module_type, format, ...)
 #define CAT_LOG_DEBUG_D(module_type, format, ...)
 #else
-#define CAT_LOG_DEBUG_SCOPE(module_type, xxx)                      CAT_LOG_SCOPE(DEBUG, module_type, xxx)
+#define CAT_LOG_DEBUG_SCOPE_START(module_type)                     CAT_LOG_SCOPE_START(DEBUG, module_type)
+#define CAT_LOG_DEBUG_SCOPE_END()                                  CAT_LOG_SCOPE_END()
 #define CAT_LOG_DEBUG(module_type, format, ...)                    CAT_LOG(DEBUG, module_type, 0, format, ##__VA_ARGS__);
 #define CAT_LOG_DEBUG_D(module_type, format, ...)                  CAT_LOG_D(DEBUG, module_type, 0, format, ##__VA_ARGS__);
 #endif
