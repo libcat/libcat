@@ -214,8 +214,8 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
 
     cat_curl_multi_configure(
         multi,
-        (void*)cat_curl_multi_socket_function,
-        (void*)cat_curl_multi_timeout_function,
+        (void *) cat_curl_multi_socket_function,
+        (void *) cat_curl_multi_timeout_function,
         context
     );
 
@@ -304,8 +304,8 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
     context.events = POLLNONE;
     cat_curl_multi_configure(
         context.multi,
-        (void*)cat_curl_easy_socket_function,
-        (void*)cat_curl_easy_timeout_function,
+        (void *) cat_curl_easy_socket_function,
+        (void *) cat_curl_easy_timeout_function,
         &context
     );
     mcode = curl_multi_add_handle(context.multi, ch);
