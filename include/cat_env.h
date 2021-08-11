@@ -20,6 +20,9 @@
 
 CAT_API char *cat_env_get(const char *name); CAT_FREE
 CAT_API char *cat_env_get_ex(const char *name, char *buffer, size_t *size); CAT_MAY_FREE
+CAT_API char *cat_env_get_silent(const char *name, cat_errno_t *error_ptr); CAT_FREE
+CAT_API char *cat_env_get_silent_ex(const char *name, char *buffer, size_t *size, cat_errno_t *error_ptr); CAT_MAY_FREE
+CAT_API int cat_env_get_i(const char *name, int default_value);
 CAT_API cat_bool_t cat_env_set(const char *name, const char *value);
 CAT_API cat_bool_t cat_env_unset(const char *name);
 CAT_API cat_bool_t cat_env_exists(const char *name);
