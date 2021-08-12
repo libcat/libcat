@@ -353,11 +353,10 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
         if (message != NULL) {
             CAT_ASSERT(message->msg == CURLMSG_DONE);
             CAT_ASSERT(running_handles == 0);
-#ifdef CAT_DEBUG
-            char *done_url;
-            curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url);
-            CAT_LOG_DEBUG(EXT, "curl_easy_perform(multi=%p, url='%s') DONE", context.multi, done_url);
-#endif
+            CAT_LOG_DEBUG_SCOPE_START_EX(EXT, char *done_url;
+                curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url)) {
+                CAT_LOG_DEBUG(EXT, "curl_easy_perform(multi=%p, url='%s') DONE", context.multi, done_url);
+            } CAT_LOG_DEBUG_SCOPE_END();
             code = message->data.result;
             break;
         }
