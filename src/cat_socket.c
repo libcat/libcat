@@ -3490,7 +3490,7 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
 
 CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t *handle)
 {
-    return cat_socket_recv_handle_ex(socket, handle, cat_socket_get_read_timeout_fast(socket));
+    return cat_socket_recv_handle_ex(socket, handle, cat_socket_get_accept_timeout_fast(socket));
 }
 
 CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
