@@ -73,25 +73,28 @@ typedef enum cat_log_union_types_e {
 
 #define CAT_LOG_SCOPE_END CAT_LOG_SCOPE_WITH_TYPE_END
 
-#define CAT_LOG_WITH_TYPE(type, module_type, code, format, ...) \
+#define CAT_LOG_D_WITH_TYPE(type, module_type, code, format, ...) \
         cat_log_function( \
             type, CAT_MODULE_TYPE_##module_type, #module_type \
             CAT_SOURCE_POSITION_CC, code, format, ##__VA_ARGS__ \
         )
 
 #define CAT_LOG_D(type, module_type, code, format, ...) \
-        CAT_LOG_WITH_TYPE( \
+        CAT_LOG_D_WITH_TYPE( \
             CAT_LOG_TYPE_##type, module_type, \
             code, format, ##__VA_ARGS__ \
         )
 
-#define CAT_LOG(type, module_type, code, format, ...) \
-        CAT_LOG_SCOPE_START(type, module_type) { \
-            CAT_LOG_D(type, module_type, code, format, ##__VA_ARGS__); \
+#define CAT_LOG_WITH_TYPE(type, module_type, code, format, ...) \
+        CAT_LOG_SCOPE_WITH_TYPE_START(type, module_type) { \
+            CAT_LOG_D_WITH_TYPE(type, module_type, code, format, ##__VA_ARGS__); \
         } CAT_LOG_SCOPE_END()
 
+#define CAT_LOG(type, module_type, code, format, ...) \
+        CAT_LOG_WITH_TYPE(CAT_LOG_TYPE_##type, module_type, code, format, ##__VA_ARGS__)
+
 #define CAT_LOG_NORETURN(type, module_type, code, format, ...) do { \
-        CAT_LOG_D(type, module_type, code, format, ##__VA_ARGS__); \
+        CAT_LOG_D_WITH_TYPE(CAT_LOG_TYPE_##type, module_type, code, format, ##__VA_ARGS__); \
         cat_abort(); /* make static analysis happy */ \
 } while (0)
 
