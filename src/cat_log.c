@@ -43,23 +43,15 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
     FILE *output;
     (void) module_type;
 
-    do {
-        va_list args;
-        va_start(args, format);
-        message = cat_vsprintf(format, args);
-        if (unlikely(message == NULL)) {
-            fprintf(CAT_G(error_log), "Sprintf log message failed" CAT_EOL);
-            return;
-        }
-        va_end(args);
-    } while (0);
-
-    switch (type)
-    {
+    switch (type) {
         case CAT_LOG_TYPE_DEBUG : {
+#ifndef CAT_ENABLE_DEBUG_LOG
+            return;
+#else
             type_string = "Debug";
             output = stdout;
             break;
+#endif
         }
         case CAT_LOG_TYPE_INFO : {
             type_string = "Info";
@@ -88,8 +80,18 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         }
         default:
             CAT_NEVER_HERE("Unknown log type");
-            break;
     }
+
+    do {
+        va_list args;
+        va_start(args, format);
+        message = cat_vsprintf(format, args);
+        if (unlikely(message == NULL)) {
+            fprintf(CAT_G(error_log), "Sprintf log message failed" CAT_EOL);
+            return;
+        }
+        va_end(args);
+    } while (0);
 
     do {
         const char *name = cat_coroutine_get_current_role_name();

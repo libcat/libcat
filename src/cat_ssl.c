@@ -1259,7 +1259,7 @@ CAT_API cat_ssl_ret_t cat_ssl_shutdown(cat_ssl_t *ssl)
 }
 #endif
 
-#ifdef CAT_DEBUG
+#ifdef CAT_ENABLE_DEBUG_LOG
 static const char *cat_ssl_error_to_str(int error)
 {
     switch (error)

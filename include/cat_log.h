@@ -16,6 +16,10 @@
   +--------------------------------------------------------------------------+
  */
 
+#if defined(CAT_DEBUG) && !defined(CAT_DISABLE_DEBUG_LOG)
+#define CAT_ENABLE_DEBUG_LOG 1
+#endif
+
 typedef enum cat_log_type_e {
     CAT_LOG_TYPE_DEBUG           = 1 << 0,
     CAT_LOG_TYPE_INFO            = 1 << 1,
@@ -104,14 +108,18 @@ typedef enum cat_log_union_types_e {
 #define CAT_LOG__WITH_REASON_NORETURN(type, module_type, code, ...) \
         CAT_LOG_NORETURN(type, module_type, code, ##__VA_ARGS__)
 
-#ifndef CAT_DEBUG
+#ifndef CAT_ENABLE_DEBUG_LOG
 #define CAT_LOG_DEBUG_SCOPE_START(module_type)
 #define CAT_LOG_DEBUG_SCOPE_END()
+#define CAT_LOG_DEBUG_SCOPE_START_EX(module_type, pre)
+#define CAT_LOG_DEBUG_SCOPE_END_EX(end)
 #define CAT_LOG_DEBUG(module_type, format, ...)
 #define CAT_LOG_DEBUG_D(module_type, format, ...)
 #else
-#define CAT_LOG_DEBUG_SCOPE_START(module_type)                     CAT_LOG_SCOPE_START(DEBUG, module_type)
-#define CAT_LOG_DEBUG_SCOPE_END()                                  CAT_LOG_SCOPE_END()
+#define CAT_LOG_DEBUG_SCOPE_START(module_type)                     CAT_LOG_SCOPE_START(DEBUG, module_type) {
+#define CAT_LOG_DEBUG_SCOPE_END()                                  } CAT_LOG_SCOPE_END()
+#define CAT_LOG_DEBUG_SCOPE_START_EX(module_type, pre)             CAT_LOG_SCOPE_START(DEBUG, module_type) { pre;
+#define CAT_LOG_DEBUG_SCOPE_END_EX(end)                            end; } CAT_LOG_SCOPE_END()
 #define CAT_LOG_DEBUG(module_type, format, ...)                    CAT_LOG(DEBUG, module_type, 0, format, ##__VA_ARGS__);
 #define CAT_LOG_DEBUG_D(module_type, format, ...)                  CAT_LOG_D(DEBUG, module_type, 0, format, ##__VA_ARGS__);
 #endif
