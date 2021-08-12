@@ -1169,7 +1169,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
                 // continue to SSL_write_encrypted_bytes()
             } else if (error == SSL_ERROR_ZERO_RETURN) {
                 // Connection closed normally
-                CAT_LOG_DEBUG(SSL, "SSL %p connection closed by peer", ssl);
+                CAT_LOG_DEBUG(SSL, "SSL(%p) connection closed by peer", ssl);
                 *eof = cat_true;
                 ret = cat_true;
                 break;
@@ -1399,7 +1399,7 @@ static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int wh
         cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
         if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
             ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION;
-            CAT_LOG_DEBUG(SSL, "SSL %p renegotiation", ssl);
+            CAT_LOG_DEBUG(SSL, "SSL#(p) renegotiation", ssl);
         }
     }
 #endif
@@ -1433,14 +1433,13 @@ static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int wh
 #ifdef CAT_DEBUG
 static void cat_ssl_handshake_log(cat_ssl_t *ssl)
 {
+    const char *cipher_str = NULL;
     char buf[129], *s, *d;
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
     const
 #endif
-    SSL_CIPHER *cipher;
-
-    cipher = SSL_get_current_cipher(ssl->connection);
-    if (cipher) {
+    SSL_CIPHER *cipher = SSL_get_current_cipher(ssl->connection);
+    if (cipher != NULL) {
         SSL_CIPHER_description(cipher, &buf[1], 128);
         for (s = &buf[1], d = buf; *s; s++) {
             if (*s == ' ' && *d == ' ') {
@@ -1455,13 +1454,10 @@ static void cat_ssl_handshake_log(cat_ssl_t *ssl)
             d++;
         }
         *d = '\0';
-        CAT_LOG_DEBUG(SSL, "SSL: %s, cipher: \"%s\"", SSL_get_version(ssl->connection), &buf[1]);
-        if (SSL_session_reused(ssl->connection)) {
-            CAT_LOG_DEBUG(SSL, "SSL reused session");
-        }
-    } else {
-        CAT_LOG_DEBUG(SSL, "SSL no shared ciphers");
+        cipher_str = &buf[1];
     }
+    CAT_LOG_DEBUG(SSL, "SSL(%p) version: %s, cipher: " CAT_LOG_STRING_OR_NULL_FMT ", reused: %u",
+        ssl, SSL_get_version(ssl->connection), CAT_LOG_STRING_OR_NULL_PARAM(cipher_str), SSL_session_reused(ssl->connection));
 }
 #endif
 
