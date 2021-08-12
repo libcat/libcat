@@ -38,6 +38,13 @@ CAT_API const char *cat_strlchr(const char *s, const char *last, char c)
     return NULL;
 }
 
+/* Copy a string returning a pointer to its end */
+CAT_API char *cat_stpcpy(char *dest, const char *src)
+{
+    for (; (*dest=*src); src++, dest++);
+    return dest;
+}
+
 CAT_API char *cat_vsprintf(const char *format, va_list args)
 {
     va_list _args;
@@ -161,26 +168,21 @@ CAT_API cat_bool_t cat_str_quote_ex2(
     const unsigned char *p = (const unsigned char *) in;
     char *s = out;
     size_t i;
-    int use_hex, c, eol;
-    cat_bool_t printable;
+    unsigned char c;
+    cat_bool_t use_hex;
+    cat_bool_t is_zero_terminated = style & CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED;
     cat_bool_t ret = cat_true;
-
-    if (style & CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED) {
-        eol = '\0';
-    }  else {
-        eol = 0x100; /* this can never match a char */
-    }
 
     use_hex = 0;
     if (style & CAT_STR_QUOTE_STYLE_FLAG_PRINT_ALL_STRINGS_IN_HEX) {
         use_hex = 1;
     } else if (style & CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCILL_STRINGS_IN_HEX) {
         /* Check for presence of symbol which require
-		   to hex-quote the whole string. */
+           to hex-quote the whole string. */
         for (i = 0; i < length; ++i) {
             c = p[i];
             /* Check for NUL-terminated string. */
-            if (c == eol) {
+            if (is_zero_terminated && c == '\0') {
                 break;
             }
 
@@ -190,9 +192,9 @@ CAT_API cat_bool_t cat_str_quote_ex2(
                 break;
             }
             /* In ASCII isspace is only these chars: "\t\n\v\f\r".
-			 * They happen to have ASCII codes 9,10,11,12,13.
-			 */
-            if (c < ' ' && (unsigned)(c - 9) >= 5) {
+             * They happen to have ASCII codes 9,10,11,12,13.
+             */
+            if (c < ' ' && (unsigned) (c - 9) >= 5) {
                 use_hex = 1;
                 break;
             }
@@ -200,7 +202,7 @@ CAT_API cat_bool_t cat_str_quote_ex2(
     }
 
     if (style & CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT) {
-        s = stpcpy(s, " /* ");
+        s = cat_stpcpy(s, " /* ");
     }
     if (!(style & CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES)) {
         *s++ = '\"';
@@ -211,11 +213,11 @@ CAT_API cat_bool_t cat_str_quote_ex2(
         for (i = 0; i < length; ++i) {
             c = p[i];
             /* Check for NUL-terminated string. */
-            if (c == eol)
+            if (is_zero_terminated && c == '\0')
                 goto _asciz_ended;
             *s++ = '\\';
             *s++ = 'x';
-            s = cat_byte_to_hexstr(c, s);
+            s = cat_byte_to_hexstr((uint8_t) c, s);
         }
         goto _string_ended;
     }
@@ -223,7 +225,7 @@ CAT_API cat_bool_t cat_str_quote_ex2(
     for (i = 0; i < length; ++i) {
         c = p[i];
         /* Check for NUL-terminated string. */
-        if (c == eol) {
+        if (is_zero_terminated && c == '\0') {
             goto _asciz_ended;
         }
         if ((i == (length - 1)) &&
@@ -231,59 +233,60 @@ CAT_API cat_bool_t cat_str_quote_ex2(
             goto _asciz_ended;
         }
         switch (c) {
-        case '\"':
-        case '\\':
-            *s++ = '\\';
-            *s++ = c;
-            break;
-        case '\f':
-            *s++ = '\\';
-            *s++ = 'f';
-            break;
-        case '\n':
-            *s++ = '\\';
-            *s++ = 'n';
-            break;
-        case '\r':
-            *s++ = '\\';
-            *s++ = 'r';
-            break;
-        case '\t':
-            *s++ = '\\';
-            *s++ = 't';
-            break;
-        case '\v':
-            *s++ = '\\';
-            *s++ = 'v';
-            break;
-        default:
-            printable = cat_byte_is_printable(c);
-
-            if (printable && escape_chars != NULL) {
-                printable = !strchr(escape_chars, c);
-            }
-
-            if (printable) {
-                *s++ = c;
-            }
-            else {
-                /* Print \octal */
+            case '\"':
+            case '\\':
                 *s++ = '\\';
-                if (i + 1 < length && p[i + 1] >= '0' && p[i + 1] <= '7') {
-                    /* Print \ooo */
-                    *s++ = '0' + (c >> 6);
-                    *s++ = '0' + ((c >> 3) & 0x7);
+                *s++ = c;
+                break;
+            case '\f':
+                *s++ = '\\';
+                *s++ = 'f';
+                break;
+            case '\n':
+                *s++ = '\\';
+                *s++ = 'n';
+                break;
+            case '\r':
+                *s++ = '\\';
+                *s++ = 'r';
+                break;
+            case '\t':
+                *s++ = '\\';
+                *s++ = 't';
+                break;
+            case '\v':
+                *s++ = '\\';
+                *s++ = 'v';
+                break;
+            default: {
+                cat_bool_t printable = cat_byte_is_printable(c);
+
+                if (printable && escape_chars != NULL) {
+                    printable = !strchr(escape_chars, c);
+                }
+
+                if (printable) {
+                    *s++ = c;
                 }
                 else {
-                    /* Print \[[o]o]o */
-                    if ((c >> 3) != 0) {
-                        if ((c >> 6) != 0) {
-                            *s++ = '0' + (c >> 6);
-                        }
+                    /* Print \octal */
+                    *s++ = '\\';
+                    if (i + 1 < length && p[i + 1] >= '0' && p[i + 1] <= '7') {
+                        /* Print \ooo */
+                        *s++ = '0' + (c >> 6);
                         *s++ = '0' + ((c >> 3) & 0x7);
                     }
+                    else {
+                        /* Print \[[o]o]o */
+                        if ((c >> 3) != 0) {
+                            if ((c >> 6) != 0) {
+                                *s++ = '0' + (c >> 6);
+                            }
+                            *s++ = '0' + ((c >> 3) & 0x7);
+                        }
+                    }
+                    *s++ = '0' + (c & 0x7);
                 }
-                *s++ = '0' + (c & 0x7);
             }
         }
     }
@@ -293,7 +296,7 @@ _string_ended:
         *s++ = '\"';
     }
     if (style & CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT) {
-        s = stpcpy(s, " */");
+        s = cat_stpcpy(s, " */");
     }
 
     if (!(style & CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED) || p[i] != '\0') {
@@ -309,7 +312,7 @@ _asciz_ended:
         *s++ = '\"';
     }
     if (style & CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT) {
-        s = stpcpy(s, " */");
+        s = cat_stpcpy(s, " */");
     }
     /* Return true: we printed entire ASCIZ string (didn't truncate it)
      * ... */
