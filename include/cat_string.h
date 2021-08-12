@@ -25,7 +25,7 @@
 
 static cat_always_inline cat_bool_t cat_str_is_empty(const char *str)
 {
-    return str != NULL && str[0] != '\0';
+    return str == NULL || str[0] == '\0';
 }
 
 static cat_always_inline const char *cat_str_dempty(const char *str)
