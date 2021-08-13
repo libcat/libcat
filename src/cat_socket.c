@@ -744,6 +744,7 @@ static CAT_COLD void cat_socket_fail_close_callback(uv_handle_t *handle)
 CAT_API void cat_socket_init(cat_socket_t *socket)
 {
     socket->type = CAT_SOCKET_TYPE_ANY;
+    socket->flags = CAT_SOCKET_FLAG_NONE;
     socket->internal = NULL;
 }
 
