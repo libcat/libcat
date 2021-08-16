@@ -161,7 +161,7 @@ jobs:
           echo "::group::Make cmake cache"
           cmake .. \
             -DASAN=ON \
-            ${{ (runner.os == 'Linux' && '' != secrets.CODECOV_TOKEN) && '-DCODE_COVERAGE=ON' || '' }} \
+            ${{ '' != secrets.CODECOV_TOKEN && '-DCODE_COVERAGE=ON' || '' }} \
             -DCMAKE_C_FLAGS="-Werror" || exit 1
           echo "::endgroup::"
           echo "::group::Build libcat"
@@ -177,7 +177,6 @@ jobs:
           echo "::endgroup::"
 
       - name: Coverage tests
-        if: runner.os == 'Linux'
         working-directory: libcat
         shell: bash
         run: |
@@ -185,7 +184,7 @@ jobs:
             echo "No CODECOV_TOKEN set, skipping coverage tests"
             exit 0
           }
-          sudo apt-get install lcov &&
+          ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }} &&
           lcov \
             --capture \
             --directory "." \
