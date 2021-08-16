@@ -24,7 +24,7 @@ TEST(cat_process, echo)
     cat_process_t *process;
     cat_process_options_t options = { nullptr };
     const char *args[] = { "/bin/echo", "Hello libcat", NULL };
-    cat_process_stdio_container_t stdio[3] = { 0 };
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
 
     options.file = "/bin/echo";
     options.args = args;
@@ -101,7 +101,7 @@ TEST(test_suite_name, test_name) { \
     cat_process_t *process; \
     cat_process_options_t options = { nullptr }; \
     const char *args[] = { exepath->data, "--gtest_filter=cat_process." #test_name, NULL }; \
-    cat_process_stdio_container_t stdio[3] = { 0 }; \
+    cat_process_stdio_container_t stdio[3] = { { 0 } }; \
     \
     options.file = args[0]; \
     options.args = args; \
