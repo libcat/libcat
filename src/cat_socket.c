@@ -636,57 +636,56 @@ static cat_bool_t cat_socket_getaddrbyname_ex(cat_socket_t *socket, cat_sockaddr
     address_info->length = sizeof(address_info->address);
     error = cat_sockaddr__getbyname(&address->common, &address_info->length, name, name_length, port);
 
-    /* why only unspec is allowed ? */
-    if ((socket->type & CAT_SOCKET_TYPE_FLAG_UNSPEC)) {
-        if (error == CAT_EINVAL) {
-            // try to solve the name
-            struct addrinfo hints = {0};
-            struct addrinfo *response;
-            cat_bool_t ret;
-            hints.ai_family = af;
-            hints.ai_flags = 0;
-            if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
-                hints.ai_socktype = SOCK_STREAM;
-            } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) {
-                hints.ai_socktype = SOCK_DGRAM;
-            } else {
-                hints.ai_socktype = 0;
-            }
-            response = cat_dns_getaddrinfo_ex(name, NULL, &hints, cat_socket_get_dns_timeout_fast(socket));
-            if (unlikely(response == NULL)) {
-                return cat_false;
-            }
-            if (is_host_name != NULL) {
-                *is_host_name = cat_true;
-            }
-            memcpy(&address->common, response->ai_addr, response->ai_addrlen);
-            cat_dns_freeaddrinfo(response);
-            ret = cat_sockaddr_set_port(&address->common, port);
-            if (unlikely(!ret)) {
-                return cat_false;
-            }
-            switch (address->common.sa_family)
-            {
-                case AF_INET:
-                    address_info->length = sizeof(cat_sockaddr_in_t);
-                    break;
-                case AF_INET6:
-                    address_info->length = sizeof(cat_sockaddr_in6_t);
-                    break;
-                default:
-                    CAT_NEVER_HERE("Must be AF_INET/AF_INET6");
-            }
-        }
-
+    if (likely(error == 0)) {
         return cat_true;
     }
-
-    if (unlikely(error != 0)) {
+    if (unlikely(error != CAT_EINVAL)) {
         cat_update_last_error_with_reason(error, "Socket get address by name failed");
         return cat_false;
     }
 
-    return cat_true;
+    /* try to solve the name */
+    do {
+        struct addrinfo hints = {0};
+        struct addrinfo *response;
+        cat_bool_t ret;
+        hints.ai_family = af;
+        hints.ai_flags = 0;
+        if (socket->type & CAT_SOCKET_TYPE_FLAG_STREAM) {
+            hints.ai_socktype = SOCK_STREAM;
+        } else if (socket->type & CAT_SOCKET_TYPE_FLAG_DGRAM) {
+            hints.ai_socktype = SOCK_DGRAM;
+        } else {
+            hints.ai_socktype = 0;
+        }
+        response = cat_dns_getaddrinfo_ex(name, NULL, &hints, cat_socket_get_dns_timeout_fast(socket));
+        if (unlikely(response == NULL)) {
+            break;
+        }
+        if (is_host_name != NULL) {
+            *is_host_name = cat_true;
+        }
+        memcpy(&address->common, response->ai_addr, response->ai_addrlen);
+        cat_dns_freeaddrinfo(response);
+        ret = cat_sockaddr_set_port(&address->common, port);
+        if (unlikely(!ret)) {
+            break;
+        }
+        switch (address->common.sa_family) {
+            case AF_INET:
+                address_info->length = sizeof(cat_sockaddr_in_t);
+                break;
+            case AF_INET6:
+                address_info->length = sizeof(cat_sockaddr_in6_t);
+                break;
+            default:
+                CAT_NEVER_HERE("Must be AF_INET/AF_INET6");
+        }
+        return cat_true;
+    } while (0);
+
+    cat_update_last_error_with_previous("Socket get address by name failed");
+    return cat_false;
 }
 
 static cat_always_inline cat_bool_t cat_socket_getaddrbyname(cat_socket_t *socket, cat_sockaddr_info_t *address_info, const char *name, size_t name_length, int port)
