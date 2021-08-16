@@ -78,6 +78,17 @@ extern CAT_API cat_allocator_t cat_allocator;
 CAT_API cat_bool_t cat_register_allocator(const cat_allocator_t *allocator);
 #endif
 
+static cat_always_inline char *cat_memdup(const void *p, size_t size)
+{
+    void *np = cat_malloc(size);
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (unlikely(np == NULL)) {
+        return NULL;
+    }
+#endif
+    return (char *) memcpy(np, p, size);
+}
+
 CAT_API char *cat_sys_strdup(const char *string);
 CAT_API char *cat_sys_strndup(const char *string, size_t length);
 
