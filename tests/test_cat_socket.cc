@@ -44,7 +44,7 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
             wg++;
             DEFER(wg--);
             DEFER(cat_socket_close(client));
-            ASSERT_STREQ(cat_socket_get_role_name(client), "session");
+            ASSERT_STREQ(cat_socket_get_role_name(client), "server-connection");
             while (true) {
                 char read_buffer[TEST_BUFFER_SIZE_STD];
                 ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
@@ -964,7 +964,7 @@ TEST(cat_socket, get_role_name)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_STREQ(cat_socket_get_role_name(&socket), "none");
+    ASSERT_STREQ(cat_socket_get_role_name(&socket), "unknown");
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_STREQ(cat_socket_get_role_name(&socket), "client");
 }

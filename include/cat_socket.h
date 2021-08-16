@@ -250,10 +250,6 @@ typedef struct cat_socket_creation_options_s {
     XX(STDIN,  1 << 10) \
     XX(STDOUT, 1 << 11) \
     XX(STDERR, 1 << 12) \
-    /* 20 ~ 23 (stream (tcp|pipe|tty)) */ \
-    XX(SERVER,      1 << 20) CAT_INTERNAL \
-    XX(CLIENT,      1 << 21) CAT_INTERNAL \
-    XX(SESSION,     1 << 22) CAT_INTERNAL \
 
 #define CAT_SOCKET_TYPE_FLAG_MAP(XX) CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, CAT_SSL_ENUM_GEN(XX))
 
@@ -296,15 +292,6 @@ typedef enum cat_socket_common_type_e {
 #undef CAT_SOCKET_TYPE_GEN
 } cat_socket_common_type_t;
 
-typedef enum cat_socket_union_type_flags_e {
-    CAT_SOCKET_TYPE_FLAGS_ROLE =
-        CAT_SOCKET_TYPE_FLAG_SERVER |
-        CAT_SOCKET_TYPE_FLAG_CLIENT |
-        CAT_SOCKET_TYPE_FLAG_SESSION,
-    CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS =
-        CAT_SOCKET_TYPE_FLAGS_ROLE,
-} cat_socket_union_type_flags_t;
-
 typedef uint32_t cat_socket_type_t;
 
 /* 0 ~ 8 */
@@ -326,7 +313,11 @@ typedef uint8_t cat_socket_flags_t;
     XX(ESTABLISHED,       1 << 0) \
     /* socket may be a pipe file, which is created by pipe2()
      * and can only work with read()/write() */ \
-    XX(NOT_SOCK,  1 << 1) \
+    XX(NOT_SOCK,          1 << 1) \
+    /* 20 ~ 23 (stream (tcp|pipe|tty)) */ \
+    XX(SERVER,            1 << 20) \
+    XX(SERVER_CONNECTION, 1 << 21) \
+    XX(CLIENT,            1 << 22) \
 
 typedef enum cat_socket_internal_flag_e {
 #define CAT_SOCKET_INTERNAL_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_INTERNAL_FLAG_, name, value)
@@ -664,8 +655,8 @@ CAT_API cat_bool_t cat_socket_has_crypto(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_encrypted(const cat_socket_t *socket);
 #endif
 CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket);
+CAT_API cat_bool_t cat_socket_is_server_connection(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket);
-CAT_API cat_bool_t cat_socket_is_session(const cat_socket_t *socket);
 CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket);
 CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket);

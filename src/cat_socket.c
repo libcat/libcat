@@ -815,9 +815,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     }
 
     /* solve type and get af */
-    if (type & CAT_SOCKET_TYPE_FLAG_SERVER) {
-        type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
-        type |= CAT_SOCKET_TYPE_FLAG_SESSION;
+    if (ioptions.flags & CAT_SOCKET_CREATION_FLAG_ACCEPT) {
         /* Notice: use AF_UNSPEC to make sure that
          * socket will not be created for now
          * (it should be created when accept) */
@@ -1346,7 +1344,7 @@ CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog)
         return cat_false;
     }
     uv_unref(&isocket->u.handle);
-    socket->type |= CAT_SOCKET_TYPE_FLAG_SERVER;
+    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_SERVER;
 
     return cat_true;
 }
@@ -1357,10 +1355,13 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
         CAT_SOCKET_SERVER_ONLY(server, return NULL);
     }
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
+    cat_socket_internal_t *iclient;
     int error;
 
     if (client == NULL || client->internal == NULL) {
-        client = cat_socket_create(client, client_type == CAT_SOCKET_TYPE_ANY ? server->type : client_type);
+        cat_socket_creation_options_t options;
+        options.flags = CAT_SOCKET_CREATION_FLAG_ACCEPT;
+        client = cat_socket_create_ex(client, client_type == CAT_SOCKET_TYPE_ANY ? server->type : client_type, &options);
         if (unlikely(client == NULL)) {
             cat_update_last_error_with_previous("Socket create for accepting connection failed");
             return NULL;
@@ -1369,19 +1370,17 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
         cat_update_last_error(CAT_EMISUSE, "Socket accept can not specify the type for a constructed socket");
         return NULL;
     }
+    iclient = client->internal;
 
     while (1) {
         cat_bool_t ret;
         error = uv_accept(&iserver->u.stream, &client->internal->u.stream);
         if (error == 0) {
-            cat_socket_internal_t *iclient = client->internal;
             /* init client properties */
-            iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
+            iclient->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
             /* TODO: socket_extends() ? */
             memcpy(&iclient->options, iclient_options == NULL ? &iserver->options : iclient_options, sizeof(iclient->options));
             cat_socket_on_open(client, AF_UNSPEC);
-            /* recover socket role when recv_handle() */
-            client->type |= (client_type & CAT_SOCKET_TYPE_FLAGS_ROLE);
             return client;
         }
         if (unlikely(error != CAT_EAGAIN)) {
@@ -1435,7 +1434,7 @@ CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socke
 static cat_always_inline void cat_socket_on_connect_done(cat_socket_t *socket, cat_socket_internal_t *isocket, cat_sa_family_t af)
 {
     /* connect done successfully, we can do something here before transfer data */
-    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
+    isocket->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_CLIENT);
     cat_socket_on_open(socket, af);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.peername)) {
@@ -3711,30 +3710,35 @@ CAT_API cat_bool_t cat_socket_is_encrypted(const cat_socket_t *socket)
 
 CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket)
 {
-    return !!(socket->type & CAT_SOCKET_TYPE_FLAG_SERVER);
+    cat_socket_internal_t *isocket = socket->internal;
+    return isocket != NULL && isocket->flags & CAT_SOCKET_INTERNAL_FLAG_SERVER;
+}
+
+CAT_API cat_bool_t cat_socket_is_server_connection(const cat_socket_t *socket)
+{
+    cat_socket_internal_t *isocket = socket->internal;
+    return isocket != NULL && isocket->flags & CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION;
 }
 
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket)
 {
-    return !!(socket->type & CAT_SOCKET_TYPE_FLAG_CLIENT);
-}
-
-CAT_API cat_bool_t cat_socket_is_session(const cat_socket_t *socket)
-{
-    return !!(socket->type & CAT_SOCKET_TYPE_FLAG_SESSION);
+    cat_socket_internal_t *isocket = socket->internal;
+    return isocket != NULL && isocket->flags & CAT_SOCKET_INTERNAL_FLAG_CLIENT;
 }
 
 CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket)
 {
-    if (cat_socket_is_session(socket)) {
-        return "session";
-    } else if (cat_socket_is_client(socket)) {
+    if (cat_socket_is_server_connection(socket)) {
+        return "server-connection";
+    }
+    if (cat_socket_is_client(socket)) {
         return "client";
-    } else if (cat_socket_is_server(socket)) {
+    }
+    if (cat_socket_is_server(socket)) {
         return "server";
     }
 
-    return "none";
+    return "unknown";
 }
 
 #ifndef CAT_SSL
