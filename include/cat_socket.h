@@ -417,6 +417,11 @@ typedef struct cat_socket_internal_options_s {
     cat_socket_timeout_options_t timeout;
 } cat_socket_internal_options_t;
 
+typedef struct cat_socket_inheritance_info_s {
+    cat_socket_type_t type;
+    cat_socket_internal_options_t options;
+} cat_socket_inheritance_info_t;
+
 struct cat_socket_internal_s
 {
     /* === public === */
@@ -440,6 +445,7 @@ struct cat_socket_internal_s
     struct {
         cat_socket_fd_t fd;
         cat_socket_write_request_t *write_request;
+        cat_socket_inheritance_info_t *recv_handle_info;
         cat_sockaddr_info_t *sockname;
         cat_sockaddr_info_t *peername;
         int recv_buffer_size;
@@ -471,11 +477,6 @@ struct cat_socket_s
     cat_socket_flags_t flags;
     cat_socket_internal_t *internal;
 };
-
-typedef struct cat_socket_inheritance_info_s {
-    cat_socket_type_t type;
-    cat_socket_internal_options_t options;
-} cat_socket_inheritance_info_t;
 
 /* globals */
 

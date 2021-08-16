@@ -928,6 +928,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     /* part of cache */
     isocket->cache.fd = CAT_SOCKET_INVALID_FD;
     isocket->cache.write_request = NULL;
+    isocket->cache.recv_handle_info = NULL;
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
     isocket->cache.recv_buffer_size = -1;
@@ -3493,16 +3494,25 @@ CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t 
 CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
 {
     CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
-    cat_socket_inheritance_info_t handle_info;
-    ssize_t nread;
+    cat_socket_inheritance_info_t *handle_info = isocket->cache.recv_handle_info;
+    cat_socket_inheritance_info_t handle_info_storage;
+    cat_socket_t *ret;
 
-    nread = cat_socket_internal_read(isocket, (char *) &handle_info, sizeof(handle_info), NULL, NULL, timeout, cat_false);
-    if (nread != sizeof(handle_info)) {
-        if (nread >= 0) {
-            /* interrupt can not recover */
-            cat_socket_internal_unrecoverable_io_error(isocket);
+    if (handle_info == NULL) {
+        ssize_t nread = cat_socket_internal_read(
+            isocket, (char *) &handle_info_storage, sizeof(handle_info_storage),
+            NULL, NULL, timeout, cat_false
+        );
+        if (nread != sizeof(handle_info_storage)) {
+            if (nread >= 0) {
+                /* interrupt can not recover */
+                cat_socket_internal_unrecoverable_io_error(isocket);
+            }
+            return NULL;
         }
-        return NULL;
+        handle_info = &handle_info_storage;
+    } else {
+        handle_info = isocket->cache.recv_handle_info;
     }
 
     CAT_ASSERT(uv_pipe_pending_count(&isocket->u.pipe) > 0);
@@ -3514,10 +3524,30 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
     } else if (uv_handle_type == UV_NAMED_PIPE) {
         handle_type = CAT_SOCKET_TYPE_PIPE;
     }
-    CAT_ASSERT((handle_type & handle_info.type) == handle_type);
+    CAT_ASSERT((handle_type & handle_info->type) == handle_type);
 #endif
 
-    return cat_socket__accept(socket, handle, handle_info.type, &handle_info.options, timeout);
+    ret = cat_socket__accept(socket, handle, handle_info->type, &handle_info->options, timeout);
+
+    if (unlikely(ret == NULL)) {
+        if (handle_info != isocket->cache.recv_handle_info) {
+            isocket->cache.recv_handle_info =
+                (cat_socket_inheritance_info_t *) cat_memdup(handle_info, sizeof(*handle_info));
+#if CAT_ALLOC_HANDLE_ERRORS
+            if (unlikely(isocket->cache.recv_handle_info == NULL)) {
+                /* dup failed, we can not re-accept it without handle info */
+                cat_socket_internal_unrecoverable_io_error(isocket);
+            }
+#endif
+        }
+    } else {
+        if (handle_info == isocket->cache.recv_handle_info) {
+            cat_free(handle_info);
+            isocket->cache.recv_handle_info = NULL;
+        }
+    }
+
+    return ret;
 }
 
 static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)

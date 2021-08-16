@@ -2019,8 +2019,16 @@ TEST(cat_socket, send_handle)
             ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
         }
 
-        cat_socket_t worker_client;
         ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
+
+        cat_socket_t worker_client;
+        {
+            ASSERT_EQ(cat_socket_create(&worker_client, CAT_SOCKET_TYPE_TCP), &worker_client);
+            DEFER(cat_socket_close(&worker_client));
+            ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), nullptr);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+        }
+        cat_socket_init(&worker_client);
         ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
         DEFER(cat_socket_close(&worker_client));
         ASSERT_EQ((worker_client.type & type), type);
