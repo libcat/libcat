@@ -1367,9 +1367,14 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
     int error;
 
-    client = cat_socket_create(client, client_type == CAT_SOCKET_TYPE_ANY ? server->type : client_type);
-    if (unlikely(client == NULL)) {
-        cat_update_last_error_with_previous("Socket create for accepting connection failed");
+    if (client == NULL || client->internal == NULL) {
+        client = cat_socket_create(client, client_type == CAT_SOCKET_TYPE_ANY ? server->type : client_type);
+        if (unlikely(client == NULL)) {
+            cat_update_last_error_with_previous("Socket create for accepting connection failed");
+            return NULL;
+        }
+    } else if (unlikely(client_type != CAT_SOCKET_TYPE_ANY)) {
+        cat_update_last_error(CAT_EMISUSE, "Socket accept can not specify the type for a constructed socket");
         return NULL;
     }
 
@@ -1417,7 +1422,7 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
 
 CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *client)
 {
-    return cat_socket__accept(server, client, CAT_SOCKET_TYPE_ANY, NULL, cat_socket_get_accept_timeout_fast(server));
+    return cat_socket_accept_ex(server, client, cat_socket_get_accept_timeout_fast(server));
 }
 
 CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout)
