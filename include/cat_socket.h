@@ -200,11 +200,17 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
 #undef TCP_KEEPALIVE
 #endif
 
+#define CAT_SOCKET_CREATION_FLAG_MAP(XX) \
+    XX(NONE,              0) \
+    XX(OPEN_FD,      1 << 0) \
+    XX(OPEN_SOCKET,  1 << 1) \
+    XX(OPEN_HANDLE,  1 << 2) \
+    XX(ACCEPT,       1 << 3) \
+
 typedef enum cat_socket_creation_flag_e {
-    CAT_SOCKET_CREATION_FLAG_NONE        = 0,
-    CAT_SOCKET_CREATION_FLAG_OPEN_FD     = 1 << 0,
-    CAT_SOCKET_CREATION_FLAG_OPEN_SOCKET = 1 << 1,
-    CAT_SOCKET_CREATION_FLAG_OPEN_HANDLE = 1 << 2,
+#define CAT_SOCKET_CREATION_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_CREATION_FLAG_, name, value)
+    CAT_SOCKET_CREATION_FLAG_MAP(CAT_SOCKET_CREATION_FLAG_GEN)
+#undef CAT_SOCKET_CREATION_FLAG_GEN
 } cat_socket_creation_flag_t;
 
 typedef enum cat_socket_creation_union_flags_e {
