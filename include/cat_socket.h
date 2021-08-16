@@ -573,6 +573,7 @@ typedef struct cat_socket_crypto_options_s {
     const char *passphrase;
     cat_ssl_protocols_t protocols;
     int verify_depth;
+    cat_bool_t is_client;
     cat_bool_t verify_peer;
     cat_bool_t verify_peer_name;
     cat_bool_t allow_self_signed;

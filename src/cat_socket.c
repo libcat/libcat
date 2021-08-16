@@ -1703,6 +1703,7 @@ CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const cat_soc
 #ifdef CAT_SSL
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options, cat_bool_t is_client)
 {
+    options->is_client = is_client;
     options->peer_name = NULL;
     options->ca_file = NULL;
     options->ca_path = NULL;
@@ -1740,12 +1741,12 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     cat_ssl_context_t *context = NULL;
     cat_buffer_t *buffer;
     cat_socket_crypto_options_t ioptions;
-    cat_bool_t is_client = cat_socket_is_client(socket);
     cat_bool_t use_tmp_context;
     cat_bool_t ret = cat_false;
 
     /* check options */
     if (options == NULL) {
+        cat_bool_t is_client = !cat_socket_is_server_connection(socket);
         cat_socket_crypto_options_init(&ioptions, is_client);
     } else {
         ioptions = *options;
@@ -1774,7 +1775,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     }
 
     if (ioptions.verify_peer) {
-        if (!is_client && !ioptions.no_client_ca_list && ioptions.ca_file != NULL) {
+        if (!ioptions.is_client && !ioptions.no_client_ca_list && ioptions.ca_file != NULL) {
             if (!cat_ssl_context_set_client_ca_list(context, ioptions.ca_file)) {
                 goto _setup_error;
             }
@@ -1786,7 +1787,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         } else {
 #ifndef CAT_OS_WIN
             /* check context related options */
-            if (is_client && !cat_ssl_context_set_default_verify_paths(context)) {
+            if (ioptions.is_client && !cat_ssl_context_set_default_verify_paths(context)) {
                 goto _setup_error;
             }
 #else
@@ -1824,14 +1825,14 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
     }
 
     /* set state */
-    if (!is_client) {
+    if (!ioptions.is_client) {
         cat_ssl_set_accept_state(ssl);
     } else {
         cat_ssl_set_connect_state(ssl);
     }
 
     /* connection related options */
-    if (is_client && ioptions.peer_name != NULL) {
+    if (ioptions.is_client && ioptions.peer_name != NULL) {
         cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
     }
     ssl->allow_self_signed = ioptions.allow_self_signed;
@@ -1864,7 +1865,7 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         /* Notice: if it's client and it write something to the server,
          * it means server will response something later, so, we need to recv it then returns,
          * otherwise it will lead errors on Windows */
-        if (ssl_ret == CAT_SSL_RET_OK && !(n > 0 && is_client)) {
+        if (ssl_ret == CAT_SSL_RET_OK && !(n > 0 && ioptions.is_client)) {
             CAT_LOG_DEBUG(SOCKET, "Socket SSL handshake completed");
             ret = cat_true;
             break;
