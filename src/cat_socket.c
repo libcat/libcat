@@ -822,21 +822,14 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
          * socket will not be created for now
          * (it should be created when accept) */
         af = AF_UNSPEC;
+    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
+        af = AF_INET;
+    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
+        af = AF_INET6;
     } else {
-        type &= ~CAT_SOCKET_TYPE_FLAGS_DO_NOT_EXTENDS;
-        if (type & CAT_SOCKET_TYPE_FLAG_UNSPEC) {
-            af = AF_UNSPEC;
-        } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
-            af = AF_INET;
-        } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
-            af = AF_INET6;
-        } else {
-            af = AF_UNSPEC;
-            if (type & CAT_SOCKET_TYPE_FLAG_INET) {
-                type |= CAT_SOCKET_TYPE_FLAG_UNSPEC;
-            }
-        }
+        af = AF_UNSPEC;
     }
+
     /* init handle */
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
         error = uv_tcp_init_ex(cat_event_loop, &isocket->u.tcp, af);

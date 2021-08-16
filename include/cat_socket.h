@@ -241,10 +241,9 @@ typedef struct cat_socket_creation_options_s {
     XX(IPV6,  1 << 6) \
     XX(LOCAL, 1 << 7) \
     /* 10 ~ 19 ((tcp|udp)-extra) */ \
-    XX(UNSPEC,        1 << 10)  CAT_INTERNAL /* (it is AF_UNSPEC when was created by user) */ \
-    XX(TCP_DELAY,     1 << 11)  CAT_INTERNAL /* (disable tcp_nodelay) */ \
-    XX(TCP_KEEPALIVE, 1 << 12)  CAT_INTERNAL /* (enable keep-alive) */ \
-    XX(UDP_BROADCAST, 1 << 11)  CAT_INTERNAL /* (enable broadcast) TODO: support it or remove */ \
+    XX(TCP_DELAY,     1 << 10)  CAT_INTERNAL /* (disable tcp_nodelay) */ \
+    XX(TCP_KEEPALIVE, 1 << 11)  CAT_INTERNAL /* (enable keep-alive) */ \
+    XX(UDP_BROADCAST, 1 << 12)  CAT_INTERNAL /* (enable broadcast) TODO: support it or remove */ \
     /* 10 ~ 19 (pipe-extra) */ \
     XX(IPC,    1 << 10) \
     /* 10 ~ 19 (tty-extra) */ \
