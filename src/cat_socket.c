@@ -523,7 +523,7 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
 
 static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socket_internal_t *isocket)
 {
-    if (!(isocket->flags & CAT_SOCKET_INTERNAL_FLAG_CONNECTED)) {
+    if (!(isocket->flags & CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED)) {
         return cat_false;
     }
 #ifdef CAT_SSL
@@ -952,14 +952,14 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     if (ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) {
         const cat_sockaddr_info_t *address_info = NULL;
         if (check_connection) {
-            cat_bool_t is_connected = cat_false;
+            cat_bool_t is_established = cat_false;
             if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
-                is_connected = cat_true;
+                is_established = cat_true;
             } else if (isocket->u.handle.flags & (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE)) {
-                is_connected = cat_true;
+                is_established = cat_true;
             }
-            if (is_connected) {
-                isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
+            if (is_established) {
+                isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
             }
         }
         cat_socket_on_open(socket, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
@@ -1384,7 +1384,7 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
         if (error == 0) {
             cat_socket_internal_t *iclient = client->internal;
             /* init client properties */
-            iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
+            iclient->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
             /* TODO: socket_extends() ? */
             memcpy(&iclient->options, iclient_options == NULL ? &iserver->options : iclient_options, sizeof(iclient->options));
             cat_socket_on_open(client, AF_UNSPEC);
@@ -1443,8 +1443,7 @@ CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socke
 static cat_always_inline void cat_socket_on_connect_done(cat_socket_t *socket, cat_socket_internal_t *isocket, cat_sa_family_t af)
 {
     /* connect done successfully, we can do something here before transfer data */
-    socket->type |= CAT_SOCKET_TYPE_FLAG_CLIENT;
-    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_CONNECTED;
+    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
     cat_socket_on_open(socket, af);
     /* clear previous cache (maybe impossible here) */
     if (unlikely(isocket->cache.peername)) {

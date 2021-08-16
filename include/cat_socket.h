@@ -317,8 +317,8 @@ typedef enum cat_socket_flag_e {
 typedef uint8_t cat_socket_flags_t;
 
 #define CAT_SOCKET_INTERNAL_FLAG_MAP(XX) \
-    XX(NONE,           0) \
-    XX(CONNECTED, 1 << 0) \
+    XX(NONE,              0) \
+    XX(ESTABLISHED,       1 << 0) \
     /* socket may be a pipe file, which is created by pipe2()
      * and can only work with read()/write() */ \
     XX(NOT_SOCK,  1 << 1) \
