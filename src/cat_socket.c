@@ -3747,11 +3747,11 @@ CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket)
 }
 
 #ifndef CAT_SSL
-#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return_statement)
+#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, on_success)
 #else
-#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, return_statement) do { \
+#define CAT_SOCKET_INTERNAL_SSL_LIVENESS_FAST_CHECK(isocket, on_success) do { \
     if (cat_socket_internal_ssl_get_liveness(isocket)) { \
-        return_statement; \
+        on_success; \
     } \
 } while (0)
 
