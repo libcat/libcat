@@ -68,10 +68,52 @@ jobs:
       - name: Checkout libcat sources
         uses: actions/checkout@v2
 
-      - name: Coverage tests preparation
+      - name: Prepare coverage dependencies
         if: matrix.build-type == 'Debug'
+        shell: powershell
         run: |
-          choco install opencppcoverage codecov
+          $headers = @{
+            "accept"="application/vnd.github.v3+json";
+            "content-type"="application/json";
+            "authorization"="Bearer ${{github.token}}";
+          }
+          # get latest OpenCppCoverage download path
+          Write-Host "Fetching latest OpenCppCoverage download path"
+          $info = Invoke-WebRequest `
+            -UseBasicParsing `
+            -Headers $headers `
+            -Uri https://api.github.com/repos/OpenCppCoverage/OpenCppCoverage/releases/latest `
+              | ConvertFrom-Json
+          foreach ($x in $info.assets) {
+            if($x.name.EndsWith('.exe')) {
+              Write-Host "Downloading latest OpenCppCoverage"
+              $uri = $x.browser_download_url
+              Invoke-WebRequest -Uri $uri -OutFile OpenCppCoverage.exe -Headers $headers -UseBasicParsing
+              break
+            }
+          }
+          # install OpenCppCoverage
+          Write-Host "Installing OpenCppCoverage"
+          & .\OpenCppCoverage.exe /SP- /NORESTART /VERYSILENT /DIR=C:\OpenCppCoverage
+          # get latest codecov uploader download path
+          Write-Host "Fetching latest codecov uploader download path"
+          $info = Invoke-WebRequest `
+            -UseBasicParsing `
+            -Headers $headers `
+            -Uri https://api.github.com/repos/codecov/codecov-exe/releases/latest `
+              | ConvertFrom-Json
+          foreach ($x in $info.assets) {
+            if($x.name.EndsWith('win7-x64.zip')) {
+              Write-Host "Downloading latest codecov uploader"
+              $uri = $x.browser_download_url
+              Invoke-WebRequest -Uri $uri -OutFile codecov.zip -Headers $headers -UseBasicParsing
+              break
+            }
+          }
+          # unzip it
+          Write-Host "Extracting codecov uploader"
+          New-Item C:\Codecov -ItemType Container | Out-Null
+          Expand-Archive .\codecov.zip -DestinationPath C:\Codecov
 
       - name: Build and test libcat
         shell: cmd
@@ -100,7 +142,7 @@ jobs:
           ECHO ::group::Test libcat
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
-          IF "Debug" == "${{ matrix.build-type }}" ( "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" ^
+          IF "Debug" == "${{ matrix.build-type }}" ( "C:\OpenCppCoverage\OpenCppCoverage.exe" ^
             --export_type cobertura:coverage.xml ^
             --sources include ^
             --sources src ^
@@ -112,7 +154,7 @@ jobs:
             --excluded_line_regex "\s*\{\s*" ^
             --modules build\Debug\cat_tests.exe -- ^
             build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
-          ${{ matrix.build-type == 'Debug' && format('codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
+          ${{ matrix.build-type == 'Debug' && format('C:\Codecov\codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
           ECHO ::endgroup::
           EXIT /b 0
           REM error condition
