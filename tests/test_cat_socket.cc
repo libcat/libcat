@@ -891,14 +891,14 @@ TEST(cat_socket, check_liveness)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
-    ASSERT_NE(cat_socket_get_liveness(&socket), 0);
+    ASSERT_NE(cat_socket_get_connection_error(&socket), 0);
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_check_liveness(&socket));
-    ASSERT_EQ(cat_socket_get_liveness(&socket), 0);
+    ASSERT_EQ(cat_socket_get_connection_error(&socket), 0);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
     ASSERT_EQ(cat_poll_one(cat_socket_get_fd_fast(&socket), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
-    ASSERT_EQ(cat_socket_get_liveness(&socket), CAT_ECONNRESET);
+    ASSERT_EQ(cat_socket_get_connection_error(&socket), CAT_ECONNRESET);
 }
 
 TEST(cat_socket, is_eof_error)

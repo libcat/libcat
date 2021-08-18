@@ -660,7 +660,7 @@ CAT_API cat_bool_t cat_socket_is_server(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_server_connection(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_client(const cat_socket_t *socket);
 CAT_API const char *cat_socket_get_role_name(const cat_socket_t *socket);
-CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket);
+CAT_API cat_errno_t cat_socket_get_connection_error(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_check_liveness(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_is_eof_error(cat_errno_t error);
 

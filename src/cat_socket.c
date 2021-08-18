@@ -3815,7 +3815,7 @@ static cat_errno_t cat_socket_check_liveness_by_fd(cat_socket_fd_t fd)
     return 0;
 }
 
-CAT_API cat_errno_t cat_socket_get_liveness(const cat_socket_t *socket)
+CAT_API cat_errno_t cat_socket_get_connection_error(const cat_socket_t *socket)
 {
     CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_EBADF);
     CAT_SOCKET_INTERNAL_FD_GETTER_SILENT(isocket, fd, return CAT_EBADF);
