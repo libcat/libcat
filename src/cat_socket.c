@@ -3469,7 +3469,7 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
         return cat_false;
     }
     if (unlikely(!cat_socket_can_be_transfer_by_ipc(handle))) {
-        cat_update_last_error(CAT_EINVAL, "Socket can only send " CAT_SOCKET_IPCC_SUPPORTS "handle");
+        cat_update_last_error(CAT_EINVAL, "Socket can only send " CAT_SOCKET_IPCC_SUPPORTS " handle");
         return cat_false;
     }
 
