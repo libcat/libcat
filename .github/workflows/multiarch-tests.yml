@@ -1,0 +1,60 @@
+name: multiarch tests
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  aa64-tests:
+    name: Test on ${{ matrix.data.os }} arch ${{ matrix.data.arch }}
+    runs-on: ${{ fromJSON(matrix.data.runs-on) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        data:
+          - runs-on: '[ "self-hosted", "Linux", "ARM64" ]'
+            os: "Linux"
+            arch: "aarch64"
+          - runs-on: '[ "self-hosted", "Linux", "mips64el" ]'
+            os: "Linux"
+            arch: "mips64el"
+    steps:
+      - name: Build libcat and Run tests
+        shell: bash
+        run: |
+          echo "::group::Clean up"
+          export TEST_TMP_PATH="$(pwd)/tmp"
+          rm -rf libcat ${TEST_TMP_PATH}
+          mkdir -p libcat ${TEST_TMP_PATH}
+          echo "::group::Clone libcat"
+          BARE_GIT=/usr/share/runner/libcat.git
+          GIT_REF='${{ github.ref }}'
+          GIT_REF=${GIT_REF##*/}
+          #GIT_REF=ci
+          GIT_REPO='${{ github.repository }}'
+          #GIT_REPO=libcat/libcat
+          if [ ! -d "${BARE_GIT}" ]
+          then
+            git clone --bare "https://github.com/${GIT_REPO}" "${BARE_GIT}"
+          else
+            git --git-dir="${BARE_GIT}" fetch origin "${GIT_REF}"
+          fi
+          cd libcat
+          git --git-dir="${BARE_GIT}" archive "${GIT_REF}" | tar x
+          # prepare temp dir
+          
+          echo "::group::Create build dir"
+          mkdir -p build && cd build || exit 1
+          echo "::endgroup::"
+          echo "::group::Make cmake cache"
+          cmake .. \
+            -DCMAKE_CXX_FLAGS="-std=c++11" \
+            ${{ secrets.CODECOV_TOKEN && '-DCODE_COVERAGE=ON' || '' }} \
+            -DCMAKE_C_FLAGS_DEBUG="-Werror" \
+            -DCMAKE_CXX_FLAGS_DEBUG="-Werror"
+          echo "::endgroup::"
+          echo "::group::Build libcat"
+          cmake --build . -j4 --target cat_tests
+          echo "::endgroup::"
+          echo "::group::Test libcat"
+          ./cat_tests --gtest_color=yes
+          echo "::endgroup::"
