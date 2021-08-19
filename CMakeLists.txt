@@ -292,7 +292,17 @@ if (1)
                 CAT_CPU_ARCH MATCHES "^arm64" OR
                 CAT_CPU_ARCH MATCHES "^aarch64"
             )
-                set(CAT_CPU_ARCH "arm64")
+            set(CAT_CPU_ARCH "arm64")
+        elseif(
+            CAT_CPU_ARCH MATCHES "^mips64" OR
+            CAT_CPU_ARCH MATCHES "^mips64el" OR
+            CAT_CPU_ARCH MATCHES "^mips64le"
+        )
+            set(CAT_CPU_ARCH "mips64")
+        elseif(
+            CAT_CPU_ARCH MATCHES "^riscv64" OR
+        )
+            set(CAT_CPU_ARCH "riscv64")
         endif()
         if (CAT_CPU_ARCH STREQUAL "unknown")
             # TODO use ucontext
