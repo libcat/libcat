@@ -56,8 +56,8 @@ set(cat_defines "")
 
 # prepare debug cflags
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
-	set(CMAKE_BUILD_TYPE Debug)
-	set(CAT_DEBUG 1)
+    set(CMAKE_BUILD_TYPE Debug)
+    set(CAT_DEBUG 1)
     set(CAT_LINT_EXTRA TRUE)
     list(APPEND cat_defines CAT_DEBUG=1)
     if(NOT MSVC)
@@ -218,9 +218,9 @@ endif()
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 # ========== msvc x86 disable safeseh ==========
 # if (MSVC AND "${LIBCOPP_FCONTEXT_OS_PLATFORM}" STREQUAL "i386")
-# 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
-# 	set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
-# 	set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
+#     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
+#     set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
+#     set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
 # endif()
 
 list(APPEND cat_defines HAVE_LIBCAT=1)
@@ -269,30 +269,30 @@ if (1)
             set(CMAKE_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR})
         endif()
         string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} CAT_CPU_ARCH)
-    	if(CAT_CPU_ARCH STREQUAL "unknown" OR
-    		CAT_CPU_ARCH STREQUAL "i386" OR
-    		CAT_CPU_ARCH STREQUAL "i686" OR
-    		CAT_CPU_ARCH STREQUAL "x86_64" OR
-    		CAT_CPU_ARCH STREQUAL "amd64"
-    		)
+        if(CAT_CPU_ARCH STREQUAL "unknown" OR
+            CAT_CPU_ARCH STREQUAL "i386" OR
+            CAT_CPU_ARCH STREQUAL "i686" OR
+            CAT_CPU_ARCH STREQUAL "x86_64" OR
+            CAT_CPU_ARCH STREQUAL "amd64"
+            )
             if(CMAKE_SIZEOF_VOID_P MATCHES 8)
                 set(CMAKE_SYSTEM_PROCESSOR "x86_64")
                 set(CAT_CPU_ARCH "x86_64")
             else()
                 set(CMAKE_SYSTEM_PROCESSOR "i386")
                 set(CAT_CPU_ARCH "i386")
-    		endif()
-    	elseif(
-    		CAT_CPU_ARCH MATCHES "^armv5" OR
-    		CAT_CPU_ARCH MATCHES "^armv7" OR
-    		CAT_CPU_ARCH MATCHES "^armeabi"
-    	)
-    		set(CAT_CPU_ARCH "arm")
-    	elseif(
-    			CAT_CPU_ARCH MATCHES "^arm64" OR
-    			CAT_CPU_ARCH MATCHES "^aarch64"
-    		)
-    			set(CAT_CPU_ARCH "arm64")
+            endif()
+        elseif(
+            CAT_CPU_ARCH MATCHES "^armv5" OR
+            CAT_CPU_ARCH MATCHES "^armv7" OR
+            CAT_CPU_ARCH MATCHES "^armeabi"
+        )
+            set(CAT_CPU_ARCH "arm")
+        elseif(
+                CAT_CPU_ARCH MATCHES "^arm64" OR
+                CAT_CPU_ARCH MATCHES "^aarch64"
+            )
+                set(CAT_CPU_ARCH "arm64")
         endif()
         if (CAT_CPU_ARCH STREQUAL "unknown")
             # TODO use ucontext
@@ -301,7 +301,7 @@ if (1)
     endif()
     # patch for old -DCAT_CPU_ARCH=mips to -DCAT_CPU_ARCH=mips32
     if (CAT_CPU_ARCH STREQUAL "mips")
-    	set(CAT_CPU_ARCH "mips32")
+        set(CAT_CPU_ARCH "mips32")
     endif ()
     # ========== set abi ==========
     if( CAT_CPU_ARCH STREQUAL "arm" OR CAT_CPU_ARCH STREQUAL "arm64")
@@ -601,7 +601,7 @@ endif()
 # Valgrind headers and libraries finder (UNIX-like only)
 #
 # Usage of this module as follows:
-# 	find_package(Valgrind)
+#     find_package(Valgrind)
 #
 # Variables used by this module, they can change the default behaviour and need
 # to be set before calling find_package:
@@ -610,47 +610,47 @@ endif()
 # module has problems finding the proper installation path.
 #
 # Variables defined by this module:
-# 	Valgrind_FOUND System has valgrind
-# 	Valgrind_INCLUDE_DIR where to find valgrind/memcheck.h, etc.
-# 	Valgrind_EXECUTABLE the valgrind executable.
+#     Valgrind_FOUND System has valgrind
+#     Valgrind_INCLUDE_DIR where to find valgrind/memcheck.h, etc.
+#     Valgrind_EXECUTABLE the valgrind executable.
 # Get hint from environment variable (if any)
 if(NOT WIN32)
-	if(NOT VALGRIND_ROOT)
-	    if (DEFINED ENV{VALGRIND_ROOT})
-	        set(VALGRIND_ROOT "$ENV{VALGRIND_ROOT}" CACHE PATH "Valgrind base directory location (optional, used for nonstandard installation paths)")
-	    else()
-	        set(VALGRIND_ROOT "/usr/")
-	    endif()
-	    mark_as_advanced(VALGRIND_ROOT)
-	endif()
-	# Search path for nonstandard locations
-	if(VALGRIND_ROOT)
-		set(Valgrind_INCLUDE_PATH PATHS "${VALGRIND_ROOT}/include" NO_DEFAULT_PATH)
-		set(Valgrind_BINARY_PATH PATHS "${VALGRIND_ROOT}/bin" NO_DEFAULT_PATH)
-	endif()
-	find_path(Valgrind_INCLUDE_DIR valgrind HINTS ${Valgrind_INCLUDE_PATH})
-	find_program(Valgrind_EXECUTABLE NAMES valgrind PATH ${Valgrind_BINARY_PATH})
-	include(FindPackageHandleStandardArgs)
-	find_package_handle_standard_args(Valgrind DEFAULT_MSG Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
-	mark_as_advanced(Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
+    if(NOT VALGRIND_ROOT)
+        if (DEFINED ENV{VALGRIND_ROOT})
+            set(VALGRIND_ROOT "$ENV{VALGRIND_ROOT}" CACHE PATH "Valgrind base directory location (optional, used for nonstandard installation paths)")
+        else()
+            set(VALGRIND_ROOT "/usr/")
+        endif()
+        mark_as_advanced(VALGRIND_ROOT)
+    endif()
+    # Search path for nonstandard locations
+    if(VALGRIND_ROOT)
+        set(Valgrind_INCLUDE_PATH PATHS "${VALGRIND_ROOT}/include" NO_DEFAULT_PATH)
+        set(Valgrind_BINARY_PATH PATHS "${VALGRIND_ROOT}/bin" NO_DEFAULT_PATH)
+    endif()
+    find_path(Valgrind_INCLUDE_DIR valgrind HINTS ${Valgrind_INCLUDE_PATH})
+    find_program(Valgrind_EXECUTABLE NAMES valgrind PATH ${Valgrind_BINARY_PATH})
+    include(FindPackageHandleStandardArgs)
+    find_package_handle_standard_args(Valgrind DEFAULT_MSG Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
+    mark_as_advanced(Valgrind_INCLUDE_DIR Valgrind_EXECUTABLE)
 endif()
 
 # Valgrind dep (UNIX-like only)
 if (NOT WIN32)
-	find_package(Valgrind QUIET)
-	cmake_dependent_option(LIBCAT_WITH_VALGRIND
-		"Build with valgrind by default if build type is Debug and found Valgrind" ON
-		"CAT_DEBUG; VALGRIND_FOUND" OFF)
-	if (LIBCAT_WITH_VALGRIND)
-		if (NOT VALGRIND_FOUND)
-		    message(FATAL_ERROR "Require Valgrind but not found")
-		endif()
-	    message(STATUS "Build with Valgrind")
-	    list(APPEND cat_defines CAT_HAVE_VALGRIND=1)
-	    list(APPEND cat_includes ${VALGRIND_INCLUDE_DIR})
-	else()
-	    message(STATUS "Build without Valgrind")
-	endif()
+    find_package(Valgrind QUIET)
+    cmake_dependent_option(LIBCAT_WITH_VALGRIND
+        "Build with valgrind by default if build type is Debug and found Valgrind" ON
+        "CAT_DEBUG; VALGRIND_FOUND" OFF)
+    if (LIBCAT_WITH_VALGRIND)
+        if (NOT VALGRIND_FOUND)
+            message(FATAL_ERROR "Require Valgrind but not found")
+        endif()
+        message(STATUS "Build with Valgrind")
+        list(APPEND cat_defines CAT_HAVE_VALGRIND=1)
+        list(APPEND cat_includes ${VALGRIND_INCLUDE_DIR})
+    else()
+        message(STATUS "Build without Valgrind")
+    endif()
 endif()
 
 # llhttp dep
@@ -679,9 +679,9 @@ if (APPLE AND NOT OPENSSL_INCLUDE_DIR)
 endif()
 cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON OPENSSL_FOUND OFF)
 if (LIBCAT_ENABLE_OPENSSL)
-	if (NOT OPENSSL_FOUND)
-	    message(FATAL_ERROR "Require OpenSSL but not found")
-	endif()
+    if (NOT OPENSSL_FOUND)
+        message(FATAL_ERROR "Require OpenSSL but not found")
+    endif()
     message(STATUS "Enable OpenSSL")
     list(APPEND cat_defines CAT_HAVE_OPENSSL=1)
     list(APPEND cat_includes ${OPENSSL_INCLUDE_DIR})
@@ -701,7 +701,7 @@ if (NOT CURL_FOUND AND PkgConfig_FOUND)
 endif()
 cmake_dependent_option(LIBCAT_ENABLE_CURL "Enable cURL if found" ON CURL_FOUND OFF)
 if (LIBCAT_ENABLE_CURL)
-	if (NOT CURL_FOUND)
+    if (NOT CURL_FOUND)
         message(FATAL_ERROR "Require cURL but not found")
     endif()
     message(STATUS "Enable cURL")
@@ -758,9 +758,9 @@ cmake_dependent_option(LIBCAT_BUILD_TESTS
     ON GTEST_FOUND
     OFF)
 if (LIBCAT_BUILD_TESTS)
-	if (NOT GTEST_FOUND AND NOT (CAT_GTEST_FOUND AND CAT_GTEST_MAIN_FOUND))
-	    message(FATAL_ERROR "Require GTest to build tests but not found")
-	endif()
+    if (NOT GTEST_FOUND AND NOT (CAT_GTEST_FOUND AND CAT_GTEST_MAIN_FOUND))
+        message(FATAL_ERROR "Require GTest to build tests but not found")
+    endif()
     message(STATUS "Enable testing (GTest-based)")
     enable_testing()
     enable_language(CXX)
@@ -776,7 +776,7 @@ if (LIBCAT_BUILD_TESTS)
     list(REMOVE_ITEM cat_cxxflags -Wstrict-prototypes)
 
     message(STATUS "C++ Compiler is ${CMAKE_CXX_COMPILER_ID}")
-	set(cat_test_sources
+    set(cat_test_sources
         tests/test.cc
         tests/test_cat.cc
         tests/test_cat_memory.cc
