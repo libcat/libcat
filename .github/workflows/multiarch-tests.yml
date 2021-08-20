@@ -1,7 +1,9 @@
 name: multiarch tests
 
-on: 
+on:
   workflow_dispatch:
+  schedule:
+    - cron: '42 3 * * *'
 
 jobs:
   aa64-tests:
