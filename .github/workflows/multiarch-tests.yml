@@ -6,21 +6,19 @@ on:
     - cron: '42 3 * * *'
 
 jobs:
-  aa64-tests:
+  multiarch-tests:
     # only libcat organization have these self-hosted runners
     # if you donot have them, these tests will stuck
     if: ${{ github.repository == 'libcat/libcat' }}
-    name: Test on ${{ matrix.data.os }} arch ${{ matrix.data.arch }}
-    runs-on: ${{ fromJSON(matrix.data.runs-on) }}
+    name: Test on ${{ matrix.os }} arch ${{ matrix.arch }}
+    runs-on: [ "self-hosted", "${{matrix.os}}", "${{matrix.arch}}" ]
     strategy:
       fail-fast: false
       matrix:
-        data:
-          - runs-on: '[ "self-hosted", "Linux", "ARM64" ]'
-            os: "Linux"
-            arch: "aarch64"
-          - runs-on: '[ "self-hosted", "Linux", "mips64el" ]'
-            os: "Linux"
+        include:
+          - os: "Linux"
+            arch: "ARM64"
+          - os: "Linux"
             arch: "mips64el"
     steps:
       - name: Build libcat and Run tests
