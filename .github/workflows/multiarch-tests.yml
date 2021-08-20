@@ -1,6 +1,7 @@
 name: multiarch tests
 
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '42 3 * * *'
@@ -26,6 +27,7 @@ jobs:
       - name: Build libcat and Run tests
         shell: bash
         run: |
+          echo "ima bad guy"
           echo "::group::Clean up"
           export TEST_TMP_PATH="$(pwd)/tmp"
           rm -rf libcat ${TEST_TMP_PATH}
