@@ -7,6 +7,9 @@ on:
 
 jobs:
   aa64-tests:
+    # only libcat organization have these self-hosted runners
+    # if you donot have them, these tests will stuck
+    if: ${{ github.repository == 'libcat/libcat' }}
     name: Test on ${{ matrix.data.os }} arch ${{ matrix.data.arch }}
     runs-on: ${{ fromJSON(matrix.data.runs-on) }}
     strategy:
