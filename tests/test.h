@@ -29,6 +29,14 @@
 /* ext, not enabled by default */
 #include "cat_curl.h"
 
+/* GTEST_SKIP and GTEST_SKIP_ shim */
+#ifndef GTEST_SKIP
+# define GTEST_SKIP() {/* do nothing */}
+#endif
+#ifndef GTEST_SKIP_
+# define GTEST_SKIP_(message) {printf("skip: %s\n", message);}
+#endif
+
 /* common macros */
 
 #define SKIP_IF(expression) do { \
