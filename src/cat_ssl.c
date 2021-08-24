@@ -178,7 +178,7 @@ CAT_API cat_ssl_context_t *cat_ssl_context_create(cat_ssl_method_t method, cat_s
     options |= SSL_OP_NO_ANTI_REPLAY;
 #endif
 #ifdef SSL_OP_NO_CLIENT_RENEGOTIATION
-    op |= SSL_OP_NO_CLIENT_RENEGOTIATION;
+    options |= SSL_OP_NO_CLIENT_RENEGOTIATION;
 #endif
     SSL_CTX_set_options(ctx, options);
     /* set min/max proto version */
@@ -235,7 +235,25 @@ CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_p
     cat_ssl_ctx_t *ctx = context->ctx;
     unsigned long options = 0;
 
+#ifdef SSL_OP_NO_SSL_MASK
     SSL_CTX_clear_options(ctx, SSL_OP_NO_SSL_MASK);
+#else
+    SSL_CTX_clear_options(ctx,
+        SSL_OP_NO_SSLv2 |
+        SSL_OP_NO_SSLv3 |
+        SSL_OP_NO_TLSv1 |
+#ifdef SSL_OP_NO_TLSv1_1
+        SSL_OP_NO_TLSv1_1|
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+        SSL_OP_NO_TLSv1_2|
+#endif
+#ifdef SSL_OP_NO_TLSv1_3
+        SSL_OP_NO_TLSv1_3|
+#endif
+        0
+    );
+#endif
     if (!(protocols & CAT_SSL_PROTOCOL_SSLv2)) {
         options |= SSL_OP_NO_SSLv2;
     }
@@ -245,19 +263,19 @@ CAT_API void cat_ssl_context_set_protocols(cat_ssl_context_t *context, cat_ssl_p
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1)) {
         options |= SSL_OP_NO_TLSv1;
     }
-#ifdef CAT_SSL_OP_NO_TLSv1_1
+#ifdef SSL_OP_NO_TLSv1_1
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_1)) {
-        set_options |= SSL_OP_NO_TLSv1_1;
+        options |= SSL_OP_NO_TLSv1_1;
     }
 #endif
-#ifdef CAT_SSL_OP_NO_TLSv1_2
+#ifdef SSL_OP_NO_TLSv1_2
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_2)) {
-        set_options |= SSL_OP_NO_TLSv1_2;
+        options |= SSL_OP_NO_TLSv1_2;
     }
 #endif
-#ifdef CAT_SSL_OP_NO_TLSv1_3
+#ifdef SSL_OP_NO_TLSv1_3
     if (!(protocols & CAT_SSL_PROTOCOL_TLSv1_3)) {
-        set_options |= SSL_OP_NO_TLSv1_3;
+        options |= SSL_OP_NO_TLSv1_3;
     }
 #endif
     SSL_CTX_set_options(ctx, options);
