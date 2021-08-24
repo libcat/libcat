@@ -703,13 +703,15 @@ CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl)
 
 CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
 {
+    cat_ssl_connection_t *connection = ssl->connection;
+
     if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
         return CAT_SSL_RET_OK;
     }
 
     cat_ssl_clear_error();
 
-    int n = SSL_do_handshake(ssl->connection);
+    int n = SSL_do_handshake(connection);
 
     CAT_LOG_DEBUG(SSL, "SSL_do_handshake(%p): %d", ssl, n);
     if (n == 1) {
@@ -1395,11 +1397,11 @@ static void cat_ssl_info_callback(const cat_ssl_connection_t *connection, int wh
     (void) ret;
 
 #ifndef SSL_OP_NO_RENEGOTIATION
-    if ((where & SSL_CB_HANDSHAKE_START) && SSL_is_server(connection)) {
+    if ((where & SSL_CB_HANDSHAKE_START) && SSL_is_server((SSL *) connection)) {
         cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
         if (ssl->flags & CAT_SSL_FLAG_HANDSHAKED) {
             ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION;
-            CAT_LOG_DEBUG(SSL, "SSL#(p) renegotiation", ssl);
+            CAT_LOG_DEBUG(SSL, "SSL#(%p) renegotiation", ssl);
         }
     }
 #endif
@@ -1457,7 +1459,7 @@ static void cat_ssl_handshake_log(cat_ssl_t *ssl)
         cipher_str = &buf[1];
     }
     CAT_LOG_DEBUG(SSL, "SSL(%p) version: %s, cipher: " CAT_LOG_STRING_OR_NULL_FMT ", reused: %u",
-        ssl, SSL_get_version(ssl->connection), CAT_LOG_STRING_OR_NULL_PARAM(cipher_str), SSL_session_reused(ssl->connection));
+        ssl, SSL_get_version(ssl->connection), CAT_LOG_STRING_OR_NULL_PARAM(cipher_str), !!SSL_session_reused(ssl->connection));
 }
 #endif
 
