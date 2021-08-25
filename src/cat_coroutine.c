@@ -19,11 +19,25 @@
 #include "cat_coroutine.h"
 #include "cat_time.h"
 
-#if defined(CAT_OS_UNIX_LIKE) && defined(CAT_DEBUG)
-#include <sys/mman.h>
-#ifdef PROT_NONE
-#define CAT_COROUTINE_USE_MPEOTECT
+#if defined(CAT_OS_UNIX_LIKE)
+# include <sys/mman.h>
+# if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
+#  define MAP_ANONYMOUS MAP_ANON
+# endif
+/* FreeBSD require a first (i.e. addr) argument of mmap(2) is not NULL
+ * if MAP_STACK is passed.
+ * http://www.FreeBSD.org/cgi/query-pr.cgi?pr=158755 */
+# if !defined(MAP_STACK) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#  undef MAP_STACK
+#  define MAP_STACK 0
+# endif
+# ifndef MAP_FAILED
+#  define MAP_FAILED ((void * ) -1)
+# endif
 #endif
+
+#if defined(CAT_DEBUG) && (defined(CAT_OS_WIN) || defined(PROT_NONE))
+#define CAT_COROUTINE_USE_MEMORY_PROTECT
 #endif
 
 #ifdef CAT_HAVE_VALGRIND
@@ -337,15 +351,36 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 {
     cat_coroutine_stack_t *stack, *stack_end;
     cat_coroutine_context_t context;
+    size_t real_stack_size;
 
     /* align stack size */
     stack_size = cat_coroutine_align_stack_size(stack_size);
     /* alloc memory */
-    stack = (cat_coroutine_stack_t *) cat_sys_malloc(stack_size + (coroutine != NULL ? 0 : sizeof(*coroutine)));
-    if (unlikely(!stack)) {
-        cat_update_last_error_of_syscall("Malloc for stack failed with size %zu", stack_size);
+    real_stack_size = stack_size + (coroutine != NULL ? 0 : sizeof(*coroutine));
+#ifndef CAT_OS_WIN
+    stack = mmap(NULL, real_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+    if (unlikely(stack == MAP_FAILED)) {
+        cat_update_last_error_of_syscall("Mmap for coroutine stack failed with size %zu", stack_size);
         return NULL;
     }
+#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+    if (unlikely(mprotect(stack, cat_getpagesize(), PROT_NONE) != 0)) {
+        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "MProtect stack failed");
+    }
+#endif
+#else
+	stack = VirtualAlloc(0, real_stack_size, MEM_COMMIT, PAGE_READWRITE);
+    if (unlikely(stack == NULL)) {
+        cat_update_last_error_of_syscall("VirtualAlloc for coroutine stack failed with size %zu", stack_size);
+        return NULL;
+    }
+#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+	DWORD old_protect;
+	if (unlikely(!VirtualProtect(stack, cat_getpagesize(), PAGE_READWRITE | PAGE_GUARD /* PAGE_NOACCESS */, &old_protect))) {
+        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "VirtualProtect stack failed");
+	}
+#endif
+#endif
     /* calculations */
     stack_end = (cat_coroutine_stack_t *) (((char *) stack) + stack_size);
     /* determine the position of the coroutine */
@@ -355,8 +390,8 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     if (unlikely(getcontext(&context) == -1)) {
-        cat_sys_free(stack);
-        cat_update_last_error_of_syscall("Ucontext getcontext failed");
+        munmap(stack, real_stack_size);
+        cat_update_last_error_of_syscall("Ucontext getcontext() failed");
         return NULL;
     }
     context.uc_stack.ss_sp = stack;
@@ -367,15 +402,9 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #else
     context = cat_coroutine_context_make(stack_end, stack_size, cat_coroutine_context_function);
 #endif
-    /* protect stack */
-#ifdef CAT_COROUTINE_USE_MPEOTECT
-    if (unlikely(mprotect(cat_getpageof(stack) + cat_getpagesize(), cat_getpagesize(), PROT_NONE) != 0)) {
-        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Protect stack failed");
-    }
-#endif
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
-    coroutine->flags = CAT_COROUTINE_FLAG_NONE;
+    coroutine->flags = stack_size != real_stack_size ? CAT_COROUTINE_FLAG_ALLOCATED : CAT_COROUTINE_FLAG_NONE;
     coroutine->state = CAT_COROUTINE_STATE_READY;
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     coroutine->round = 0;
@@ -408,19 +437,17 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
 
     CAT_ASSERT(stack != NULL && "Coroutine is unready or closed");
     CAT_ASSERT(!cat_coroutine_is_alive(coroutine) && "Coroutine should not be active");
-
+    CAT_LOG_DEBUG(COROUTINE, "Close R" CAT_COROUTINE_ID_FMT, coroutine->id);
 #ifdef CAT_HAVE_VALGRIND
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
-#ifdef CAT_COROUTINE_USE_MPEOTECT
-    if (unlikely(mprotect(cat_getpageof(stack) + cat_getpagesize(), cat_getpagesize(), PROT_READ | PROT_WRITE) != 0)) {
-        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Unprotect stack failed");
-    }
-#endif
-    /* fast free */
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
     coroutine->stack = NULL;
-    cat_sys_free(stack);
+#ifndef CAT_OS_WIN
+    munmap(stack, coroutine->stack_size + (coroutine->flags & CAT_COROUTINE_FLAG_ALLOCATED) ? sizeof(*coroutine) : 0);
+#else
+    VirtualFree(stack, 0, MEM_RELEASE);
+#endif
 }
 
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data)

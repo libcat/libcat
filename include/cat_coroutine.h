@@ -52,6 +52,7 @@ typedef uint64_t cat_coroutine_id_t;
 
 typedef enum cat_coroutine_flag_e {
     CAT_COROUTINE_FLAG_NONE = 0,
+    CAT_COROUTINE_FLAG_ALLOCATED = 1 << 0,
     /* for user */
 #define CAT_COROUTINE_FLAG_USR_GEN(XX) \
     CAT_COROUTINE_FLAG_USR##XX = 1 << (XX + (32 - 1 - 8))
