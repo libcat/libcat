@@ -93,23 +93,22 @@ typedef enum cat_log_union_types_e {
 #define CAT_LOG(type, module_type, code, format, ...) \
         CAT_LOG_WITH_TYPE(CAT_LOG_TYPE_##type, module_type, code, format, ##__VA_ARGS__)
 
+#define CAT_LOG_V(type, module_type, code, ...) \
+        CAT_LOG(type, module_type, code, ##__VA_ARGS__) /* make MSVC happy */
+
 #define CAT_LOG_NORETURN(type, module_type, code, format, ...) do { \
         CAT_LOG_D_WITH_TYPE(CAT_LOG_TYPE_##type, module_type, code, format, ##__VA_ARGS__); \
         cat_abort(); /* make static analysis happy */ \
 } while (0)
 
-/* make MSVC happy */
-#define CAT_LOG_WITH_REASON(type, module_type, code, reason, format, ...) \
-        CAT_LOG__WITH_REASON(type, module_type, code, format ", reason: %s", reason, ##__VA_ARGS__)
+#define CAT_LOG_NORETURN_V(type, module_type, code, ...) \
+        CAT_LOG_NORETURN(type, module_type, code, ##__VA_ARGS__) /* make MSVC happy */
 
-#define CAT_LOG__WITH_REASON(type, module_type, code, ...) \
-        CAT_LOG(type, module_type, code, ##__VA_ARGS__)
+#define CAT_LOG_WITH_REASON(type, module_type, code, reason, format, ...) \
+        CAT_LOG_V(type, module_type, code, format ", reason: %s", reason, ##__VA_ARGS__)
 
 #define CAT_LOG_WITH_REASON_NORETURN(type, module_type, code, reason, format, ...) \
-        CAT_LOG__WITH_REASON_NORETURN(type, module_type, code, format ", reason: %s", reason, ##__VA_ARGS__)
-
-#define CAT_LOG__WITH_REASON_NORETURN(type, module_type, code, ...) \
-        CAT_LOG_NORETURN(type, module_type, code, ##__VA_ARGS__)
+        CAT_LOG_NORETURN_V(type, module_type, code, format ", reason: %s", reason, ##__VA_ARGS__)
 
 #ifndef CAT_ENABLE_DEBUG_LOG
 #define CAT_LOG_DEBUG_SCOPE_START(module_type)
@@ -151,7 +150,7 @@ typedef enum cat_log_union_types_e {
 
 #define CAT_SYSCALL_FAILURE(type, module_type, format, ...) do { \
     cat_errno_t _error = cat_translate_sys_error(cat_sys_errno); \
-    CAT_LOG(type, module_type, _error, format " (syscall failure " CAT_ERRNO_FMT ": %s)", ##__VA_ARGS__, _error, cat_strerror(_error)); \
+    CAT_LOG_V(type, module_type, _error, format " (syscall failure " CAT_ERRNO_FMT ": %s)", ##__VA_ARGS__, _error, cat_strerror(_error)); \
 } while (0)
 
 #define CAT_LOG_PARAMATERS \
