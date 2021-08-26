@@ -760,7 +760,7 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
             }
             //printf("found %s\n", dirents[i]->name);
             std::string name = std::string(dirents[i]->name);
-
+#ifdef HAVE_DIRENT_TYPES
             if(std::string(".") == name){
                 ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
             }else if(std::string("..") == name){
@@ -771,7 +771,11 @@ TEST(cat_fs, opendir_readdir_rewinddir_closedir)
                 ASSERT_EQ(dirents[i]->type, CAT_DIRENT_DIR);
             }else if(std::string("cat_tests_readdir_file3") == name){
                 ASSERT_EQ(dirents[i]->type, CAT_DIRENT_FILE);
-            }else{
+            }else
+#else
+            ASSERT_EQ(dirents[i]->type, CAT_DIRENT_UNKNOWN);
+#endif
+            {
                 printf("Bad result: %s at repeat %d, index %d", dirents[i]->name, repeat, i);
                 GTEST_FATAL_FAILURE_("failed test");
             }
@@ -845,8 +849,9 @@ TEST(cat_fs, scandir)
     ASSERT_EQ(cat_fs_mkdir(fnd, 0777), 0);
     ASSERT_EQ(cat_fs_mkdir(fnd2, 0777), 0);
     ASSERT_EQ(cat_fs_close(cat_fs_open(fnf3, O_RDONLY | O_CREAT | O_TRUNC, 0400)), 0);
-
+#ifdef HAVE_DIRENT_TYPES
     ASSERT_EQ(ret = cat_fs_scandir(fn, &namelist, cat_test_nofile_filter, cat_test_reverse_compare), 2);
+#endif
     DEFER({
         for(int i = 0 ;i < ret; i++){
             free((void*)namelist[i].name);
