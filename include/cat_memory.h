@@ -28,9 +28,9 @@
 #define cat_container_of(ptr, type, member)  ((type *) ((char *) (ptr) - offsetof(type, member)))
 
 /* return the eof point */
-static cat_always_inline char *cat_memcpy(char *p, const void *data, size_t length)
+static cat_always_inline cat_ptr_t cat_memcpy(char *p, const void *data, size_t length)
 {
-    return (((char *) memcpy(p, data, length)) + length);
+    return (((cat_ptr_t) memcpy(p, data, length)) + length);
 }
 
 /* allocator */
@@ -102,7 +102,7 @@ CAT_API void cat_free_function(void *ptr);
 CAT_API void cat_freep_function(void *ptr); /* free(ptr->ptr) */
 
 CAT_API int cat_getpagesize(void);
-CAT_API void *cat_getpageof(const void *ptr);
+CAT_API cat_ptr_t cat_getpageof(const void *ptr);
 
 CAT_API unsigned int cat_bit_count(uintmax_t num);
 CAT_API int cat_bit_pos(uintmax_t num);
