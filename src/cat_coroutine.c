@@ -492,7 +492,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 #ifdef __SANITIZE_ADDRESS__
     void* fake_stack_save = NULL;
     __sanitizer_start_switch_fiber(
-        coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &fake_stack_save : NULL,
+        current_coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &fake_stack_save : NULL,
         coroutine->asan_stack, coroutine->asan_stack_size
     );
 #endif
