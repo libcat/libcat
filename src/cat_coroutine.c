@@ -19,14 +19,31 @@
 #include "cat_coroutine.h"
 #include "cat_time.h"
 
-#if defined(CAT_OS_UNIX_LIKE)
-# include <sys/mman.h>
+/* Note: ASan can not work well with mmap()/VirtualAlloc(),
+ * Using sys_malloc() so we can get better memory log. */
+#if defined(__SANITIZE_ADDRESS__)
+# define CAT_COROUTINE_USE_SYS_MALLOC 1
+#elif !defined(CAT_OS_WIN)
+# define CAT_COROUTINE_USE_MMAP 1
+#else
+# define CAT_COROUTINE_USE_VIRTUAL_ALLOC 1
+#endif
+
+#ifdef CAT_DEBUG
+# define CAT_COROUTINE_USE_MEMORY_PROTECT 1
+#endif
+
+#if defined(CAT_OS_UNIX_LIKE) && (defined(CAT_COROUTINE_USE_MMAP) || defined(CAT_COROUTINE_USE_MEMORY_PROTECT))
+# include <sys/mman.h> /* for mmap()/mprotect() */
+#endif
+
+#ifdef CAT_COROUTINE_USE_MMAP
 # if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
 #  define MAP_ANONYMOUS MAP_ANON
 # endif
 /* FreeBSD require a first (i.e. addr) argument of mmap(2) is not NULL
- * if MAP_STACK is passed.
- * http://www.FreeBSD.org/cgi/query-pr.cgi?pr=158755 */
+* if MAP_STACK is passed.
+* http://www.FreeBSD.org/cgi/query-pr.cgi?pr=158755 */
 # if !defined(MAP_STACK) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #  undef MAP_STACK
 #  define MAP_STACK 0
@@ -34,24 +51,33 @@
 # ifndef MAP_FAILED
 #  define MAP_FAILED ((void * ) -1)
 # endif
+# define CAT_COROUTINE_MEMORY_INVALID MAP_FAILED
+#else
+# define CAT_COROUTINE_MEMORY_INVALID NULL
 #endif
 
-#if defined(CAT_DEBUG) && (defined(CAT_OS_WIN) || defined(PROT_NONE))
-#define CAT_COROUTINE_USE_MEMORY_PROTECT
+#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+# ifdef CAT_COROUTINE_USE_SYS_MALLOC
+#  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 2
+# else
+#  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 1
+# endif
+# else
+# define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT  0
 #endif
 
 #ifdef CAT_HAVE_VALGRIND
-#include <valgrind/valgrind.h>
+# include <valgrind/valgrind.h>
 #endif
 
 #ifdef __SANITIZE_ADDRESS__
 // for warning -Wstrict-prototypes/C4255
-#define __sanitizer_acquire_crash_state() __sanitizer_acquire_crash_state(void)
-#ifndef _MSC_VER
-#include <sanitizer/common_interface_defs.h>
-#else // workaround
-#include <../crt/src/sanitizer/common_interface_defs.h>
-#endif
+# define __sanitizer_acquire_crash_state() __sanitizer_acquire_crash_state(void)
+# ifndef _MSC_VER
+#  include <sanitizer/common_interface_defs.h>
+# else // workaround
+#  include <../crt/src/sanitizer/common_interface_defs.h>
+# endif
 #endif
 
 /* context */
