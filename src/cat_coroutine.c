@@ -454,16 +454,16 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
 
-#ifdef CAT_DEBUG
-    do {
+    CAT_LOG_DEBUG_SCOPE_START(COROUTINE) {
         const char *name = cat_coroutine_get_role_name(coroutine);
         if (name != NULL) {
-            CAT_LOG_DEBUG(COROUTINE, "Jump to %s", name);
+            CAT_LOG_DEBUG_D(COROUTINE, "Jump to %s", name);
         } else {
-            CAT_LOG_DEBUG(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
+            CAT_LOG_DEBUG_D(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
         }
-    } while (0);
-#endif
+    } CAT_LOG_DEBUG_SCOPE_END();
+    /* swap ptr */
+    CAT_COROUTINE_G(current) = coroutine;
     /* update from */
     coroutine->from = current_coroutine;
     /* solve origin */
@@ -481,8 +481,6 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
         /* current becomes target's origin */
         coroutine->previous = current_coroutine;
     }
-    /* swap ptr */
-    CAT_COROUTINE_G(current) = coroutine;
     /* update state */
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
     /* reset the opcode */
@@ -505,6 +503,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     cat_coroutine_transfer_t transfer = cat_coroutine_context_jump(coroutine->context, data);
     data = transfer.data;
 #endif
+    CAT_ASSERT(current_coroutine == CAT_COROUTINE_G(current));
     /* handle from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
