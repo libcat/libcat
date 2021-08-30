@@ -105,7 +105,7 @@ typedef struct cat_coroutine_transfer_s {
 
 typedef void (*cat_coroutine_context_function_t)(cat_coroutine_transfer_t transfer);
 
-cat_coroutine_context_t cat_coroutine_context_make(cat_coroutine_stack_t *stack, size_t stack_size, cat_coroutine_context_function_t function);
+cat_coroutine_context_t cat_coroutine_context_make(void *stack, size_t stack_size, cat_coroutine_context_function_t function);
 cat_coroutine_transfer_t cat_coroutine_context_jump(cat_coroutine_context_t const target_context, cat_data_t *transfer_data);
 #endif
 
@@ -379,7 +379,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size)
 {
-    cat_coroutine_stack_t *stack, *stack_end;
+    void *stack, *stack_end;
     cat_coroutine_context_t context;
     size_t real_stack_size;
 
@@ -412,7 +412,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #endif
 #endif
     /* calculations */
-    stack_end = (cat_coroutine_stack_t *) (((char *) stack) + stack_size);
+    stack_end = (((char *) stack) + stack_size);
     /* determine the position of the coroutine */
     if (coroutine == NULL) {
         coroutine = (cat_coroutine_t *) stack_end;

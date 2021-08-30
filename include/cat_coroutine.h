@@ -36,8 +36,6 @@ extern "C" {
 #define CAT_COROUTINE_SCHEDULER_ID              CAT_COROUTINE_MIN_ID
 #define CAT_COROUTINE_MAIN_ID                   1ULL
 
-typedef void cat_coroutine_stack_t;
-
 #ifndef CAT_COROUTINE_USE_UCONTEXT
 typedef void *cat_coroutine_context_t;
 #else
@@ -134,9 +132,10 @@ struct cat_coroutine_s
     cat_coroutine_t *from CAT_UNSAFE;
     cat_coroutine_t *previous;
     /* internal properties (readonly) */
-    cat_coroutine_stack_t *stack;
-    cat_coroutine_stack_size_t stack_size;
     cat_coroutine_function_t function;
+    cat_coroutine_stack_size_t stack_size;
+    /* internal properties (inaccessible) */
+    void *stack;
     cat_coroutine_context_t context;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     cat_data_t *transfer_data;
