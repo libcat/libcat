@@ -379,7 +379,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size)
 {
-    void *stack, *stack_end;
+    void *stack, *stack_start;
     cat_coroutine_context_t context;
     size_t real_stack_size;
 
@@ -412,10 +412,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #endif
 #endif
     /* calculations */
-    stack_end = (((char *) stack) + stack_size);
+    stack_start = (((char *) stack) + stack_size);
     /* determine the position of the coroutine */
     if (coroutine == NULL) {
-        coroutine = (cat_coroutine_t *) stack_end;
+        coroutine = (cat_coroutine_t *) stack_start;
     }
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -430,7 +430,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     context.uc_link = NULL;
     cat_coroutine_context_make(&context, (void (*)(void)) &cat_coroutine_context_function, 1, NULL);
 #else
-    context = cat_coroutine_context_make(stack_end, stack_size, cat_coroutine_context_function);
+    context = cat_coroutine_context_make(stack_start, stack_size, cat_coroutine_context_function);
 #endif
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
@@ -449,14 +449,14 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->transfer_data = NULL;
 #endif
 #ifdef CAT_HAVE_VALGRIND
-    coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_end, stack);
+    coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_start, stack);
 #endif
 #ifdef __SANITIZE_ADDRESS__
     coroutine->asan_stack = stack;
     coroutine->asan_stack_size = stack_size;
 #endif
     CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " with stack = %p, stack_size = %zu, function = %p on the %s",
-                        coroutine->id, stack, stack_size, function, ((void *) coroutine) == ((void*) stack_end) ? "stack" : "heap");
+                        coroutine->id, stack, stack_size, function, ((void *) coroutine) == ((void*) stack_start) ? "stack" : "heap");
 
     return coroutine;
 }
