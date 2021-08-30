@@ -172,6 +172,10 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 #ifdef CAT_HAVE_VALGRIND
         main_coroutine->valgrind_stack_id = UINT32_MAX;
 #endif
+#ifdef __SANITIZE_ADDRESS__
+        main_coroutine->asan_stack = NULL;
+        main_coroutine->asan_stack_size = 0;
+#endif
         CAT_COROUTINE_G(main) = main_coroutine;
         CAT_COROUTINE_G(current) = main_coroutine;
 
