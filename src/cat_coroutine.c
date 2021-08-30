@@ -463,20 +463,17 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 
 CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
 {
-    cat_coroutine_stack_t *stack = coroutine->stack;
-
-    CAT_ASSERT(stack != NULL && "Coroutine is unready or closed");
+    CAT_ASSERT(coroutine->state != CAT_COROUTINE_STATE_DEAD && "Coroutine is unready or closed");
     CAT_ASSERT(!cat_coroutine_is_alive(coroutine) && "Coroutine should not be active");
     CAT_LOG_DEBUG(COROUTINE, "Close R" CAT_COROUTINE_ID_FMT, coroutine->id);
 #ifdef CAT_HAVE_VALGRIND
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
-    coroutine->stack = NULL;
 #ifndef CAT_OS_WIN
-    munmap(stack, coroutine->stack_size + (coroutine->flags & CAT_COROUTINE_FLAG_ALLOCATED) ? sizeof(*coroutine) : 0);
+    munmap(coroutine->stack, coroutine->stack_size + (coroutine->flags & CAT_COROUTINE_FLAG_ALLOCATED) ? sizeof(*coroutine) : 0);
 #else
-    VirtualFree(stack, 0, MEM_RELEASE);
+    VirtualFree(coroutine->stack, 0, MEM_RELEASE);
 #endif
 }
 
