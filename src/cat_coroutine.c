@@ -383,6 +383,13 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     cat_coroutine_context_t context;
     size_t real_stack_size;
 
+#ifdef CAT_COROUTINE_USE_UCONTEXT
+    if (unlikely(getcontext(&context) == -1)) {
+        cat_update_last_error_of_syscall("Coroutine getcontext() failed");
+        return NULL;
+    }
+#endif
+
     /* align stack size */
     stack_size = cat_coroutine_align_stack_size(stack_size);
     /* alloc memory */
@@ -419,11 +426,6 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     }
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
-    if (unlikely(getcontext(&context) == -1)) {
-        munmap(stack, real_stack_size);
-        cat_update_last_error_of_syscall("Ucontext getcontext() failed");
-        return NULL;
-    }
     context.uc_stack.ss_sp = stack;
     context.uc_stack.ss_size = stack_size;
     context.uc_stack.ss_flags = 0;
