@@ -20,8 +20,9 @@
 #include "cat_time.h"
 
 /* Note: ASan can not work well with mmap()/VirtualAlloc(),
- * Using sys_malloc() so we can get better memory log. */
-#if defined(__SANITIZE_ADDRESS__)
+ * Using sys_malloc() so we can get better memory log.
+ * and on OpenBSD we must use mmap() with MAP_STACK */
+#if defined(__SANITIZE_ADDRESS__) && !defined(__OpenBSD__)
 # define CAT_COROUTINE_USE_SYS_MALLOC 1
 #elif !defined(CAT_OS_WIN)
 # define CAT_COROUTINE_USE_MMAP 1
