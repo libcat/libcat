@@ -145,6 +145,7 @@ struct cat_coroutine_s
     uint32_t valgrind_stack_id;
 #endif
 #ifdef __SANITIZE_ADDRESS__
+    void *asan_fake_stack;
     const void *asan_stack;
     size_t asan_stack_size;
 #endif

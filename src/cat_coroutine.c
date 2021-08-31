@@ -173,6 +173,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         main_coroutine->valgrind_stack_id = UINT32_MAX;
 #endif
 #ifdef __SANITIZE_ADDRESS__
+        main_coroutine->asan_fake_stack = NULL;
         main_coroutine->asan_stack = NULL;
         main_coroutine->asan_stack_size = 0;
 #endif
@@ -339,7 +340,8 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
 #ifdef __SANITIZE_ADDRESS__
-    __sanitizer_finish_switch_fiber(NULL, &coroutine->from->asan_stack, &coroutine->from->asan_stack_size);
+    CAT_ASSERT(coroutine->asan_fake_stack == NULL);
+    __sanitizer_finish_switch_fiber(coroutine->asan_fake_stack, &coroutine->from->asan_stack, &coroutine->from->asan_stack_size);
 #endif
     if (unlikely(++CAT_COROUTINE_G(count) > CAT_COROUTINE_G(peak_count))) {
         CAT_COROUTINE_G(peak_count) = CAT_COROUTINE_G(count);
@@ -454,6 +456,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_start, stack);
 #endif
 #ifdef __SANITIZE_ADDRESS__
+    coroutine->asan_fake_stack = NULL;
     coroutine->asan_stack = stack;
     coroutine->asan_stack_size = stack_size;
 #endif
@@ -517,9 +520,8 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
 #ifdef __SANITIZE_ADDRESS__
-    void* fake_stack_save = NULL;
     __sanitizer_start_switch_fiber(
-        current_coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &fake_stack_save : NULL,
+        current_coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &current_coroutine->asan_fake_stack : NULL,
         coroutine->asan_stack, coroutine->asan_stack_size
     );
 #endif
@@ -537,7 +539,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
 #ifdef __SANITIZE_ADDRESS__
-    __sanitizer_finish_switch_fiber(fake_stack_save, &coroutine->asan_stack, &coroutine->asan_stack_size);
+    __sanitizer_finish_switch_fiber(current_coroutine->asan_fake_stack, &coroutine->asan_stack, &coroutine->asan_stack_size);
 #endif
 #ifndef CAT_COROUTINE_USE_UCONTEXT
     /* update the from context */
