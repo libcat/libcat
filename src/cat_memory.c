@@ -149,9 +149,9 @@ CAT_API int cat_getpagesize(void)
     return (int) pagesize;
 }
 
-CAT_API cat_ptr_t cat_getpageof(const void *ptr)
+CAT_API void *cat_getpageof(const void *ptr)
 {
-    return (cat_ptr_t) (((uintptr_t) ptr) & ~(cat_getpagesize() - 1));
+    return (void *) (((uintptr_t) ptr) & ~(cat_getpagesize() - 1));
 }
 
 CAT_API unsigned int cat_bit_count(uintmax_t num)

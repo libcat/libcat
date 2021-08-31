@@ -96,7 +96,7 @@ CAT_API void cat_free_function(void *ptr);
 CAT_API void cat_freep_function(void *ptr); /* free(ptr->ptr) */
 
 CAT_API int cat_getpagesize(void);
-CAT_API cat_ptr_t cat_getpageof(const void *ptr);
+CAT_API void *cat_getpageof(const void *ptr);
 
 CAT_API unsigned int cat_bit_count(uintmax_t num);
 CAT_API int cat_bit_pos(uintmax_t num);
