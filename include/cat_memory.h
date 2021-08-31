@@ -27,12 +27,6 @@
 /* get object ptr by member ptr */
 #define cat_container_of(ptr, type, member)  ((type *) ((char *) (ptr) - offsetof(type, member)))
 
-/* return the eof point */
-static cat_always_inline cat_ptr_t cat_memcpy(char *p, const void *data, size_t length)
-{
-    return (((cat_ptr_t) memcpy(p, data, length)) + length);
-}
-
 /* allocator */
 
 #ifndef CAT_ALLOC_HANDLE_ERRORS
