@@ -462,8 +462,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->asan_stack = stack;
     coroutine->asan_stack_size = stack_size;
 #endif
-    CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " with stack = %p, stack_size = %zu, function = %p on the %s",
-                        coroutine->id, stack, stack_size, function, ((void *) coroutine) == ((void*) stack_start) ? "stack" : "heap");
+    CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " "
+        "with stack = %p, stack_size = %zu, function = %p, "
+        "virtual_memory = %p, virtual_memory_size = %zu",
+        coroutine->id, stack, stack_size, function, stack, real_stack_size);
 
     return coroutine;
 }
