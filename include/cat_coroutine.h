@@ -135,7 +135,8 @@ struct cat_coroutine_s
     cat_coroutine_function_t function;
     cat_coroutine_stack_size_t stack_size;
     /* internal properties (inaccessible) */
-    void *stack;
+    uint32_t virtual_memory_size;
+    void *virtual_memory;
     cat_coroutine_context_t context;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     cat_data_t *transfer_data;

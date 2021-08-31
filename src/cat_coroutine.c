@@ -162,10 +162,11 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         main_coroutine->round = ++CAT_COROUTINE_G(round);
         main_coroutine->from = NULL;
         main_coroutine->previous = NULL;
-        main_coroutine->stack = NULL;
         main_coroutine->stack_size = 0;
-        memset(&main_coroutine->context, ~0, sizeof(cat_coroutine_context_t));
         main_coroutine->function = NULL;
+        main_coroutine->virtual_memory = NULL;
+        main_coroutine->virtual_memory_size = 0;
+        memset(&main_coroutine->context, ~0, sizeof(cat_coroutine_context_t));
 #ifdef CAT_COROUTINE_USE_UCONTEXT
         main_coroutine->transfer_data = NULL;
 #endif
@@ -445,10 +446,11 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->from = NULL;
     coroutine->previous = NULL;
     coroutine->start_time = 0;
-    coroutine->stack = stack;
     coroutine->stack_size = (cat_coroutine_stack_size_t) stack_size;
-    coroutine->context = context;
     coroutine->function = function;
+    coroutine->virtual_memory = stack;
+    coroutine->virtual_memory_size = (uint32_t) real_stack_size;
+    coroutine->context = context;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = NULL;
 #endif
@@ -476,9 +478,9 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
 #endif
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
 #ifndef CAT_OS_WIN
-    munmap(coroutine->stack, coroutine->stack_size + (coroutine->flags & CAT_COROUTINE_FLAG_ALLOCATED) ? sizeof(*coroutine) : 0);
+    munmap(coroutine->virtual_memory, coroutine->virtual_memory_size);
 #else
-    VirtualFree(coroutine->stack, 0, MEM_RELEASE);
+    VirtualFree(coroutine->virtual_memory, 0, MEM_RELEASE);
 #endif
 }
 
