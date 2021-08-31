@@ -382,8 +382,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size)
 {
+    void *virtual_memory;
+    size_t virtual_memory_size;
+    size_t padding_size = cat_getpagesize() * CAT_COROUTINE_STACK_PADDING_PAGE_COUNT;
     void *stack, *stack_start;
-    size_t real_stack_size;
     cat_coroutine_context_t context;
     cat_coroutine_flags_t flags = CAT_COROUTINE_FLAG_NONE;
 
@@ -394,41 +396,74 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     }
 #endif
 
-    /* align stack size */
-    stack_size = cat_coroutine_align_stack_size(stack_size);
-    /* alloc memory */
-    real_stack_size = stack_size + (coroutine != NULL ? 0 : cat_getpagesize());
-#ifndef CAT_OS_WIN
-    stack = mmap(NULL, real_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-    if (unlikely(stack == MAP_FAILED)) {
-        cat_update_last_error_of_syscall("Mmap for coroutine stack failed with size %zu", stack_size);
-        return NULL;
-    }
-#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
-    if (unlikely(mprotect(stack, cat_getpagesize(), PROT_NONE) != 0)) {
-        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "MProtect stack failed");
-    }
-#endif
-#else
-	stack = VirtualAlloc(0, real_stack_size, MEM_COMMIT, PAGE_READWRITE);
-    if (unlikely(stack == NULL)) {
-        cat_update_last_error_of_syscall("VirtualAlloc for coroutine stack failed with size %zu", stack_size);
-        return NULL;
-    }
-#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
-	DWORD old_protect;
-	if (unlikely(!VirtualProtect(stack, cat_getpagesize(), PAGE_READWRITE | PAGE_GUARD /* PAGE_NOACCESS */, &old_protect))) {
-        CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "VirtualProtect stack failed");
-	}
-#endif
-#endif
-    /* calculations */
-    stack_start = (((char *) stack) + stack_size);
-    /* determine the position of the coroutine */
+    /* Malloc coroutine if necessary */
     if (coroutine == NULL) {
-        coroutine = (cat_coroutine_t *) stack_start;
+        coroutine = (cat_coroutine_t *) cat_malloc(sizeof(*coroutine));
+#if CAT_ALLOC_HANDLE_ERRORS
+        if (unlikely(coroutine == NULL)) {
+            cat_update_last_error_of_syscall("Malloc for coroutine failed");
+            return NULL;
+        }
+#endif
         flags |= CAT_COROUTINE_FLAG_ALLOCATED;
     }
+
+    /* align stack size and add padding */
+    stack_size = cat_coroutine_align_stack_size(stack_size);
+    /* Coroutine Virtual Memory
+    * - PADDING: memory-protection is on
+    *   (1 page for mmap/VirtualAlloc, 2 pages for sys_malloc)
+    + - - - - +-----------------------------------------------+
+    : PADDING :                     STACK                     :
+    + - - - - +-----------------------------------------------+
+    *         ^                                               ^
+    *       stack                                         stack_start
+    */
+    virtual_memory_size = padding_size + stack_size;
+    /* alloc memory */
+#if defined(CAT_COROUTINE_USE_MMAP)
+    virtual_memory = mmap(NULL, virtual_memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+#elif defined(CAT_COROUTINE_USE_VIRTUAL_ALLOC)
+	virtual_memory = VirtualAlloc(0, virtual_memory_size, MEM_COMMIT, PAGE_READWRITE);
+#else // if defined(CAT_COROUTINE_USE_SYS_MALLOC)
+	virtual_memory = cat_sys_malloc(virtual_memory_size);
+#endif
+    if (unlikely(virtual_memory == CAT_COROUTINE_MEMORY_INVALID)) {
+        cat_update_last_error_of_syscall("Allocate virtual memory for coroutine stack failed with size %zu", virtual_memory_size);
+        if (flags & CAT_COROUTINE_FLAG_ALLOCATED) {
+            cat_free(coroutine);
+        }
+        return NULL;
+    }
+    stack = ((char *) virtual_memory) + padding_size;
+    stack_start = ((char *) stack) + stack_size;
+
+#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+    /* protect a page of memory after the stack top
+     * to notify stack overflow */
+    do {
+        void *page = virtual_memory;
+        cat_bool_t ret;
+# ifdef CAT_COROUTINE_USE_SYS_MALLOC
+        /* mallocated memory is not aligned with the page */
+        page = cat_getpageof(page);
+        /* page cannot exceed the virtual memory range */
+        if (((uintptr_t) page) < ((uintptr_t) virtual_memory)) {
+            page = ((char *) page) + cat_getpagesize();
+        }
+# endif
+# ifndef CAT_OS_WIN
+        ret = mprotect(page, cat_getpagesize(), PROT_NONE) == 0;
+# else
+        DWORD old_protect;
+        ret = VirtualProtect(page, cat_getpagesize(), PAGE_NOACCESS /* PAGE_READWRITE | PAGE_GUARD */, &old_protect) != 0;
+# endif
+        if (unlikely(!ret)) {
+            CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Protect stack page failed");
+        }
+    } while (0);
+#endif
+
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     context.uc_stack.ss_sp = stack;
@@ -439,6 +474,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #else
     context = cat_coroutine_context_make(stack_start, stack_size, cat_coroutine_context_function);
 #endif
+
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
     coroutine->flags = flags;
@@ -450,8 +486,8 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->start_time = 0;
     coroutine->stack_size = (cat_coroutine_stack_size_t) stack_size;
     coroutine->function = function;
-    coroutine->virtual_memory = stack;
-    coroutine->virtual_memory_size = (uint32_t) real_stack_size;
+    coroutine->virtual_memory = virtual_memory;
+    coroutine->virtual_memory_size = (uint32_t) virtual_memory_size;
     coroutine->context = context;
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = NULL;
@@ -467,7 +503,8 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " "
         "with stack = %p, stack_size = %zu, function = %p, "
         "virtual_memory = %p, virtual_memory_size = %zu",
-        coroutine->id, stack, stack_size, function, stack, real_stack_size);
+        coroutine->id, stack, stack_size, function,
+        virtual_memory, virtual_memory_size);
 
     return coroutine;
 }
@@ -481,11 +518,16 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
-#ifndef CAT_OS_WIN
+#if defined(CAT_COROUTINE_USE_MMAP)
     munmap(coroutine->virtual_memory, coroutine->virtual_memory_size);
-#else
+#elif defined(CAT_COROUTINE_USE_VIRTUAL_ALLOC)
     VirtualFree(coroutine->virtual_memory, 0, MEM_RELEASE);
+#else // if defined(CAT_COROUTINE_USE_SYS_MALLOC)
+    cat_sys_free(coroutine->virtual_memory);
 #endif
+    if (coroutine->flags & CAT_COROUTINE_FLAG_ALLOCATED) {
+        cat_free(coroutine);
+    }
 }
 
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data)
