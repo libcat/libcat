@@ -394,6 +394,7 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
     cat_ssl_t *ssl = cat_ssl_get_from_connection(connection);
     cat_bool_t is_self_signed = 0;
 
+    CAT_LOG_DEBUG(SSL, "SSL_cert_verify_callback(%p)", ssl);
     { /* First convert the x509 struct back to a DER encoded buffer and let Windows decode it into a form it can work with */
         unsigned char *der_buf = NULL;
         int der_len;
@@ -456,8 +457,11 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
         if (allowed_depth < 0) {
             allowed_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
         }
+        CAT_LOG_DEBUG(SSL, "SSL allowed depth is %d", allowed_depth);
         for (i = 0; i < cert_chain_ctx->cChain; i++) {
-            if ((int) cert_chain_ctx->rgpChain[i]->cElement > allowed_depth) {
+            int depth = (int) cert_chain_ctx->rgpChain[i]->cElement;
+            if (depth > allowed_depth) {
+                CAT_LOG_DEBUG(SSL, "SSL cert depth is %d, exceeded allowed_depth, abort", depth);
                 CertFreeCertificateChain(cert_chain_ctx);
                 CertFreeCertificateContext(cert_ctx);
                 X509_STORE_CTX_set_error(x509_store_ctx, X509_V_ERR_CERT_CHAIN_TOO_LONG);
@@ -494,6 +498,7 @@ static int cat_ssl_win_cert_verify_callback(X509_STORE_CTX *x509_store_ctx, void
             if (is_self_signed && chain_policy_status.dwError == CERT_E_UNTRUSTEDROOT
                 && ssl->allow_self_signed) {
                 /* allow self-signed certs */
+                CAT_LOG_DEBUG(SSL, "SSL connection use self-signed cert but we allowed");
                 X509_STORE_CTX_set_error(x509_store_ctx, X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT);
             } else {
                 X509_STORE_CTX_set_error(x509_store_ctx, SSL_R_CERTIFICATE_VERIFY_FAILED);
@@ -521,12 +526,15 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     int err;
     int ret = preverify_ok;
 
+    CAT_LOG_DEBUG(SSL, "SSL_cert_verify_callback(%p)", ssl);
+
     /* determine the status for the current cert */
     err = X509_STORE_CTX_get_error(ctx);
     depth = X509_STORE_CTX_get_error_depth(ctx);
 
     /* if allow_self_signed is set, make sure that verification succeeds */
     if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT && ssl->allow_self_signed) {
+        CAT_LOG_DEBUG(SSL, "SSL connection use self-signed cert but we allowed");
         ret = 1;
     }
 
@@ -539,6 +547,8 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
         ret = 0;
         X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_CHAIN_TOO_LONG);
     }
+
+    CAT_LOG_DEBUG(SSL, "SSL allowed depth is %d, actual depth is %d, ret = %d", allowed_depth, depth, ret);
 
     return ret;
 }
