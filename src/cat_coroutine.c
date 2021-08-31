@@ -396,7 +396,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     /* align stack size */
     stack_size = cat_coroutine_align_stack_size(stack_size);
     /* alloc memory */
-    real_stack_size = stack_size + (coroutine != NULL ? 0 : sizeof(*coroutine));
+    real_stack_size = stack_size + (coroutine != NULL ? 0 : cat_getpagesize());
 #ifndef CAT_OS_WIN
     stack = mmap(NULL, real_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
     if (unlikely(stack == MAP_FAILED)) {
