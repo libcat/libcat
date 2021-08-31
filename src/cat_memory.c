@@ -124,7 +124,7 @@ CAT_API void cat_freep_function(void *ptr)
     cat_free_function(ptr);
 }
 
-CAT_API int cat_getpagesize(void)
+CAT_API size_t cat_getpagesize(void)
 {
     static int pagesize = 0;
 
@@ -146,7 +146,7 @@ CAT_API int cat_getpagesize(void)
         }
     }
 
-    return (int) pagesize;
+    return (size_t) pagesize;
 }
 
 CAT_API void *cat_getpageof(const void *ptr)

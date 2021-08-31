@@ -3956,7 +3956,7 @@ CAT_API const char *cat_socket_get_io_state_naming(const cat_socket_t *socket)
 
 static cat_always_inline int cat_socket_align_buffer_size(int size)
 {
-    int pagesize = cat_getpagesize();
+    int pagesize = (int) cat_getpagesize();
 
     if (unlikely(size < pagesize)) {
         return pagesize;
