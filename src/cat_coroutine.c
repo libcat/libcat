@@ -121,7 +121,8 @@ static cat_coroutine_stack_size_t cat_coroutine_align_stack_size(size_t size)
     } else if (unlikely(size > CAT_COROUTINE_MAX_STACK_SIZE)) {
         size = CAT_COROUTINE_MAX_STACK_SIZE;
     } else {
-        size = CAT_MEMORY_ALIGNED_SIZE_EX(size, CAT_COROUTINE_STACK_ALIGNED_SIZE);
+        size_t alignment = cat_getpagesize();
+        size = CAT_MEMORY_ALIGNED_SIZE_EX(size, alignment);
     }
 
     return (cat_coroutine_stack_size_t) size;
