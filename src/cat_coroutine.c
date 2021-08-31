@@ -383,8 +383,9 @@ CAT_API cat_coroutine_t *cat_coroutine_create(cat_coroutine_t *coroutine, cat_co
 CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat_coroutine_function_t function, size_t stack_size)
 {
     void *stack, *stack_start;
-    cat_coroutine_context_t context;
     size_t real_stack_size;
+    cat_coroutine_context_t context;
+    cat_coroutine_flags_t flags = CAT_COROUTINE_FLAG_NONE;
 
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     if (unlikely(getcontext(&context) == -1)) {
@@ -426,6 +427,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     /* determine the position of the coroutine */
     if (coroutine == NULL) {
         coroutine = (cat_coroutine_t *) stack_start;
+        flags |= CAT_COROUTINE_FLAG_ALLOCATED;
     }
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -439,7 +441,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #endif
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
-    coroutine->flags = stack_size != real_stack_size ? CAT_COROUTINE_FLAG_ALLOCATED : CAT_COROUTINE_FLAG_NONE;
+    coroutine->flags = flags;
     coroutine->state = CAT_COROUTINE_STATE_READY;
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     coroutine->round = 0;
