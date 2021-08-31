@@ -166,7 +166,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         main_coroutine->function = NULL;
         main_coroutine->virtual_memory = NULL;
         main_coroutine->virtual_memory_size = 0;
-        memset(&main_coroutine->context, ~0, sizeof(cat_coroutine_context_t));
+        memset(&main_coroutine->context, 0, sizeof(cat_coroutine_context_t));
 #ifdef CAT_COROUTINE_USE_UCONTEXT
         main_coroutine->transfer_data = NULL;
 #endif
