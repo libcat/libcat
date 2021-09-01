@@ -382,7 +382,7 @@ TEST(cat_buffer, truncate_value_not_allocted)
     cat_buffer_t buffer = { .value = nullptr, .size = CAT_TEST_DEFAULT_BUFFER_SIZE, .length = 0 };
 
     /* do nothing */
-    cat_buffer_truncate(&buffer, 0, CAT_TEST_DEFAULT_BUFFER_SIZE);
+    cat_buffer_truncate(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE, buffer.size);
     ASSERT_EQ(0, buffer.length);
     ASSERT_EQ(nullptr, buffer.value);
@@ -398,7 +398,7 @@ TEST(cat_buffer, truncate_start_gt_length)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
 
-    cat_buffer_truncate(&buffer, buffer.length + 1, buffer.length);
+    cat_buffer_sub(&buffer, buffer.length + 1, buffer.length);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(0, buffer.length);
     ASSERT_STREQ(data, buffer.value);
@@ -414,7 +414,7 @@ TEST(cat_buffer, truncate_length_eq_zero)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
 
-    cat_buffer_truncate(&buffer, 1, 0);
+    cat_buffer_truncate_from(&buffer, 1);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(sizeof(data), buffer.length + 1);
     ASSERT_STREQ(data + 1, buffer.value);
@@ -428,7 +428,7 @@ TEST(cat_buffer, truncate_equal_length)
     ASSERT_TRUE(cat_buffer_create(&buffer, CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2));
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
-    cat_buffer_truncate(&buffer, 0, buffer.length);
+    cat_buffer_truncate(&buffer, buffer.length);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(6, buffer.length);
     ASSERT_NE(nullptr, buffer.value);

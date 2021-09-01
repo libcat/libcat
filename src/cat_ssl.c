@@ -1227,7 +1227,7 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
         }
     }
 
-    cat_buffer_truncate(buffer, nwrite, 0);
+    cat_buffer_truncate_from(buffer, nwrite);
 
     *out_length = nread;
 
