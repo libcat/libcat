@@ -124,29 +124,27 @@ CAT_API void cat_freep_function(void *ptr)
     cat_free_function(ptr);
 }
 
-CAT_API size_t cat_getpagesize(void)
-{
-    static int pagesize = 0;
+CAT_API size_t cat_pagesize = 0;
 
-    if (unlikely(pagesize == 0)) {
+CAT_API size_t cat_getpagesize_slow(void)
+{
+    int pagesize;
+
 #ifdef CAT_OS_WIN
-        SYSTEM_INFO system_info;
-        GetSystemInfo(&system_info);
-        pagesize = system_info.dwPageSize;
+    SYSTEM_INFO system_info;
+    GetSystemInfo(&system_info);
+    pagesize = system_info.dwPageSize;
+#elif __APPLE__
+    pagesize = sysconf(_SC_PAGE_SIZE);
 #else
-#if __APPLE__
-        pagesize = sysconf(_SC_PAGE_SIZE);
-#else
-        pagesize = getpagesize();
+    pagesize = getpagesize();
 #endif
-#endif
-        if (pagesize <= 0) {
-            /* anyway, We have to return a normal result */
-            pagesize = 4096;
-        }
+    if (pagesize <= 0) {
+        /* anyway, We have to return a normal result */
+        pagesize = 4096;
     }
 
-    return (size_t) pagesize;
+    return pagesize;
 }
 
 CAT_API void *cat_getpageof(const void *ptr)

@@ -95,7 +95,18 @@ CAT_API void *cat_realloc_function(void *ptr, size_t size);
 CAT_API void cat_free_function(void *ptr);
 CAT_API void cat_freep_function(void *ptr); /* free(ptr->ptr) */
 
-CAT_API size_t cat_getpagesize(void);
+extern CAT_API size_t cat_pagesize;
+
+CAT_API size_t cat_getpagesize_slow(void);
+
+static cat_always_inline size_t cat_getpagesize(void)
+{
+    if (unlikely(cat_pagesize == 0)) {
+        cat_pagesize = cat_getpagesize_slow();
+    }
+    return cat_pagesize;
+}
+
 CAT_API void *cat_getpageof(const void *ptr);
 
 CAT_API unsigned int cat_bit_count(uintmax_t num);
