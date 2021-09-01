@@ -22,7 +22,7 @@
 /* Note: ASan can not work well with mmap()/VirtualAlloc(),
  * Using sys_malloc() so we can get better memory log.
  * and on OpenBSD we must use mmap() with MAP_STACK */
-#if defined(__SANITIZE_ADDRESS__) && !defined(__OpenBSD__)
+#if defined(CAT_HAVE_ASAN) && !defined(__OpenBSD__)
 # define CAT_COROUTINE_USE_SYS_MALLOC 1
 #elif !defined(CAT_OS_WIN)
 # define CAT_COROUTINE_USE_MMAP 1
@@ -71,7 +71,7 @@
 # include <valgrind/valgrind.h>
 #endif
 
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
 // for warning -Wstrict-prototypes/C4255
 # define __sanitizer_acquire_crash_state() __sanitizer_acquire_crash_state(void)
 # ifndef _MSC_VER
@@ -175,7 +175,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 #ifdef CAT_HAVE_VALGRIND
         main_coroutine->valgrind_stack_id = UINT32_MAX;
 #endif
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
         main_coroutine->asan_fake_stack = NULL;
         main_coroutine->asan_stack = NULL;
         main_coroutine->asan_stack_size = 0;
@@ -342,7 +342,7 @@ CAT_API cat_coroutine_round_t cat_coroutine_get_current_round(void)
 static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
 {
     cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
     CAT_ASSERT(coroutine->asan_fake_stack == NULL);
     __sanitizer_finish_switch_fiber(coroutine->asan_fake_stack, &coroutine->from->asan_stack, &coroutine->from->asan_stack_size);
 #endif
@@ -497,7 +497,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #ifdef CAT_HAVE_VALGRIND
     coroutine->valgrind_stack_id = VALGRIND_STACK_REGISTER(stack_start, stack);
 #endif
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
     coroutine->asan_fake_stack = NULL;
     coroutine->asan_stack = stack;
     coroutine->asan_stack_size = stack_size;
@@ -569,7 +569,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
     __sanitizer_start_switch_fiber(
         current_coroutine->state != CAT_COROUTINE_STATE_FINISHED ? &current_coroutine->asan_fake_stack : NULL,
         coroutine->asan_stack, coroutine->asan_stack_size
@@ -588,7 +588,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     /* handle from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
-#ifdef __SANITIZE_ADDRESS__
+#ifdef CAT_HAVE_ASAN
     __sanitizer_finish_switch_fiber(current_coroutine->asan_fake_stack, &coroutine->asan_stack, &coroutine->asan_stack_size);
 #endif
 #ifndef CAT_COROUTINE_USE_UCONTEXT

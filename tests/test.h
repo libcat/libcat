@@ -180,7 +180,7 @@ namespace testing
 
     static inline bool is_valgrind(void)
     {
-#if defined(__SANITIZE_ADDRESS__) || ( defined(__has_feature) && __has_feature(address_sanitizer) )
+#ifdef CAT_HAVE_ASAN
         return true;
 #else
         return cat_env_is_true("USE_VALGRIND", cat_false);

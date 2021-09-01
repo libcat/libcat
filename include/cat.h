@@ -65,7 +65,7 @@ extern "C" {
 #include "cat_helper.h"
 
 #ifndef CAT_USE_BUG_DETECTOR
-# if !defined(CAT_DEBUG) && defined(CAT_OS_UNIX_LIKE) && defined(SIGSEGV) && !defined(__SANITIZE_ADDRESS__)
+# if !defined(CAT_DEBUG) && defined(CAT_OS_UNIX_LIKE) && defined(SIGSEGV) && !defined(CAT_HAVE_ASAN)
 # define CAT_USE_BUG_DETECTOR 1 /* report segment fault for user */
 # endif
 #endif
