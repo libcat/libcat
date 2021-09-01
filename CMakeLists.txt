@@ -151,7 +151,6 @@ if(ASAN)
     else()
         # asan cflags needs to be added in global cflags
         if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
-            add_definitions(-D__ASAN__=1)
             set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
             set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
             set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
