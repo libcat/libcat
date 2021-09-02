@@ -448,11 +448,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         cat_bool_t ret;
 # ifdef CAT_COROUTINE_USE_SYS_MALLOC
         /* mallocated memory is not aligned with the page */
-        page = cat_getpageof(page);
-        /* page cannot exceed the virtual memory range */
-        if (((uintptr_t) page) < ((uintptr_t) virtual_memory)) {
-            page = ((char *) page) + cat_getpagesize();
-        }
+        page = cat_getpageafter(page);
 # endif
 # ifndef CAT_OS_WIN
         ret = mprotect(page, cat_getpagesize(), PROT_NONE) == 0;
@@ -460,6 +456,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         DWORD old_protect;
         ret = VirtualProtect(page, cat_getpagesize(), PAGE_NOACCESS /* PAGE_READWRITE | PAGE_GUARD */, &old_protect) != 0;
 # endif
+        CAT_LOG_DEBUG(COROUTINE, "Protect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Protect stack page failed");
         }
@@ -520,6 +517,22 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
+#if defined(CAT_COROUTINE_USE_MEMORY_PROTECT) && defined(CAT_COROUTINE_USE_SYS_MALLOC)
+    do {
+        void *page = cat_getpageafter(coroutine->virtual_memory);
+        cat_bool_t ret;
+# ifndef CAT_OS_WIN
+        ret = mprotect(page, cat_getpagesize(), PROT_READ | PROT_WRITE) == 0;
+# else
+        DWORD old_protect;
+        ret = VirtualProtect(page, cat_getpagesize(), PAGE_READWRITE, &old_protect) != 0;
+# endif
+        CAT_LOG_DEBUG(COROUTINE, "Unprotect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
+        if (unlikely(!ret)) {
+            CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Unprotect stack page failed");
+        }
+    } while (0);
+#endif
 #if defined(CAT_COROUTINE_USE_MMAP)
     munmap(coroutine->virtual_memory, coroutine->virtual_memory_size);
 #elif defined(CAT_COROUTINE_USE_VIRTUAL_ALLOC)
