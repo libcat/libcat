@@ -152,6 +152,16 @@ CAT_API void *cat_getpageof(const void *ptr)
     return (void *) (((uintptr_t) ptr) & ~(cat_getpagesize() - 1));
 }
 
+CAT_API void *cat_getpageafter(const void *ptr)
+{
+    void *page = cat_getpageof(ptr);
+    /* page cannot exceed the virtual memory range */
+    if (((uintptr_t) page) < ((uintptr_t) ptr)) {
+        page = ((char *) page) + cat_getpagesize();
+    }
+    return page;
+}
+
 CAT_API unsigned int cat_bit_count(uintmax_t num)
 {
     uint8_t count = 0;

@@ -108,6 +108,7 @@ static cat_always_inline size_t cat_getpagesize(void)
 }
 
 CAT_API void *cat_getpageof(const void *ptr);
+CAT_API void *cat_getpageafter(const void *ptr);
 
 CAT_API unsigned int cat_bit_count(uintmax_t num);
 CAT_API int cat_bit_pos(uintmax_t num);
