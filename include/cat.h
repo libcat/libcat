@@ -90,6 +90,9 @@ CAT_GLOBALS_STRUCT_BEGIN(cat)
     cat_bool_t log_source_postion;
 #endif
     size_t log_str_size;
+#ifdef CAT_DEBUG
+    unsigned int log_debug_level;
+#endif
 CAT_GLOBALS_STRUCT_END(cat)
 
 extern CAT_API CAT_GLOBALS_DECLARE(cat)

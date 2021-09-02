@@ -456,7 +456,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         DWORD old_protect;
         ret = VirtualProtect(page, cat_getpagesize(), PAGE_NOACCESS /* PAGE_READWRITE | PAGE_GUARD */, &old_protect) != 0;
 # endif
-        CAT_LOG_DEBUG(COROUTINE, "Protect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
+        CAT_LOG_DEBUG_V2(COROUTINE, "Protect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Protect stack page failed");
         }
@@ -527,7 +527,7 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
         DWORD old_protect;
         ret = VirtualProtect(page, cat_getpagesize(), PAGE_READWRITE, &old_protect) != 0;
 # endif
-        CAT_LOG_DEBUG(COROUTINE, "Unprotect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
+        CAT_LOG_DEBUG_V2(COROUTINE, "Unprotect page at %p with %zu bytes %s", page, cat_getpagesize(), ret ? "successfully" : "failed");
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Unprotect stack page failed");
         }
