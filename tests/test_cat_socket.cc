@@ -678,7 +678,7 @@ TEST(cat_socket, init)
 {
     cat_socket_t socket;
     cat_socket_init(&socket);
-    ASSERT_EQ(CAT_SOCKET_TYPE_ANY, socket.type);
+    ASSERT_EQ(CAT_SOCKET_TYPE_ANY, cat_socket_get_type(&socket));
     ASSERT_EQ(nullptr, socket.internal);
 }
 
@@ -1319,7 +1319,7 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
 
 #ifdef CAT_SSL
     if (echo_client == &_echo_client &&
-        (echo_client->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
+        (cat_socket_get_type(echo_client) & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
         ASSERT_TRUE(io_functions.send(echo_client, CAT_STRL("SSL")));
         char ssl_greeter[CAT_STRLEN("SSL") + 1];
         ASSERT_EQ(io_functions.read(echo_client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
@@ -2031,7 +2031,7 @@ TEST(cat_socket, send_handle)
         cat_socket_init(&worker_client);
         ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
         DEFER(cat_socket_close(&worker_client));
-        ASSERT_EQ((worker_client.type & type), type);
+        ASSERT_EQ((cat_socket_get_type(&worker_client) & type), type);
 
         // invalid handle
         for (auto unavailable_type : std::array<cat_socket_type_t, 2>{ CAT_SOCKET_TYPE_PIPE, CAT_SOCKET_TYPE_UDP })  {
