@@ -30,7 +30,10 @@
 # define CAT_COROUTINE_USE_VIRTUAL_ALLOC 1
 #endif
 
-#ifdef CAT_DEBUG
+/** Note: LeakSanitizer will access protected page
+ * if memleak ocurred (e.g. fatal error),
+ * so we can not protect memory if ASan is enabled */
+#if defined(CAT_DEBUG) && !defined(CAT_HAVE_ASAN)
 # define CAT_COROUTINE_USE_MEMORY_PROTECT 1
 #endif
 
