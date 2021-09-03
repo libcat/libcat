@@ -19,6 +19,21 @@
 
 #include "test.h"
 
+#if 0
+TEST(cat_coroutine, stackoverflow)
+{
+    co([] {
+        std::function<void(void)> fn;
+        fn = [&fn] {
+            char buffer[CAT_BUFFER_DEFAULT_SIZE];
+            memset(buffer, 0, sizeof(buffer));
+            fn();
+        };
+        fn();
+    });
+}
+#endif
+
 TEST(cat_coroutine, set_default_stack_zero_size)
 {
     cat_coroutine_stack_size_t original_size = CAT_COROUTINE_G(default_stack_size);
