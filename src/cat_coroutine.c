@@ -67,7 +67,11 @@
 #  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 1
 # endif
 # else
-# define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT  0
+# ifdef CAT_HAVE_ASAN
+#  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 1
+# else
+#  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 0
+# endif
 #endif
 
 #ifdef CAT_HAVE_VALGRIND
@@ -82,6 +86,9 @@
 # else // workaround
 #  include <../crt/src/sanitizer/common_interface_defs.h>
 # endif
+// #include <sanitizer/asan_interface.h> can not work on MSVC
+void __asan_poison_memory_region(void const volatile *addr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #endif
 
 /* context */
@@ -465,6 +472,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         }
     } while (0);
 #endif
+#ifdef CAT_HAVE_ASAN
+    __asan_poison_memory_region(virtual_memory, cat_getpagesize());
+    CAT_LOG_DEBUG_V2(COROUTINE, "Posion stack page at %p with %zu bytes", virtual_memory, cat_getpagesize());
+#endif
 
     /* make context */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
@@ -520,6 +531,10 @@ CAT_API void cat_coroutine_close(cat_coroutine_t *coroutine)
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
+#ifdef CAT_HAVE_ASAN
+    __asan_unpoison_memory_region(coroutine->virtual_memory, cat_getpagesize());
+    CAT_LOG_DEBUG_V2(COROUTINE, "Unposion stack page at %p with %zu bytes", coroutine->virtual_memory, cat_getpagesize());
+#endif
 #if defined(CAT_COROUTINE_USE_MEMORY_PROTECT) && defined(CAT_COROUTINE_USE_SYS_MALLOC)
     do {
         void *page = cat_getpageafter(coroutine->virtual_memory);
