@@ -130,14 +130,12 @@ static cat_always_inline void cat_buffer__update(cat_buffer_t *buffer, size_t ne
 CAT_API size_t cat_buffer_align_size(size_t size, size_t alignment)
 {
     if (size == 0) {
-        size = CAT_MEMORY_ALIGNED_SIZE(1);
-    } else if (alignment == 0) {
-        size = CAT_MEMORY_ALIGNED_SIZE(size);
-    } else {
-        size = CAT_MEMORY_ALIGNED_SIZE_EX(size, alignment);
+        size = 1;
     }
-
-    return size;
+    if (alignment == 0) {
+        alignment = CAT_MEMORY_DEFAULT_ALIGNED_SIZE;
+    }
+    return CAT_MEMORY_ALIGNED_SIZE_EX(size, alignment);;
 }
 
 CAT_API void cat_buffer_init(cat_buffer_t *buffer)
