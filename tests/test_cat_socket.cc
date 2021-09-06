@@ -682,6 +682,29 @@ TEST(cat_socket, init)
     ASSERT_EQ(nullptr, socket.internal);
 }
 
+TEST(cat_socket, do_something_when_unavailable)
+{
+    cat_socket_t socket;
+    cat_socket_init(&socket);
+    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
+    cat_socket_close(&socket);
+    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_EQ(CAT_EBADF, cat_get_last_error_code());
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
+    DEFER(cat_socket_close(&socket));
+    cat_coroutine_t *coroutine = co([&] {
+        ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+    });
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+    // re-call after unrecoverable error
+    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 0));
+    ASSERT_EQ(CAT_EBADF, cat_get_last_error_code());
+}
+
 TEST(cat_socket, create_tcp)
 {
     cat_socket_t socket;

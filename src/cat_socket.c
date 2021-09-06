@@ -473,6 +473,18 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
     return cat_true;
 }
 
+static cat_never_inline const char *cat_socket_get_error_from_flags(cat_errno_t *error, cat_socket_flags_t flags)
+{
+    if (flags & CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR) {
+        return "Socket has been broken due to unrecoverable IO error";
+    } else if (flags & CAT_SOCKET_FLAG_CLOSED) {
+        return "Socket has been closed";
+    } else {
+        *error = CAT_EMISUSE;
+        return "Socket has not been constructed";
+    }
+}
+
 #define CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, _failure) \
     cat_socket_internal_t *_isocket = _socket->internal;\
     do { if (_isocket == NULL) { \
@@ -482,8 +494,8 @@ CAT_API cat_bool_t cat_socket_runtime_init(void)
 
 #define CAT_SOCKET_INTERNAL_GETTER(_socket, _isocket, _failure) \
         CAT_SOCKET_INTERNAL_GETTER_SILENT(_socket, _isocket, { \
-            cat_update_last_error(error, "Socket has been closed%s", \
-                (_socket->flags & CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR) ? " due to unrecoverable IO error" : ""); \
+            const char *error_message = cat_socket_get_error_from_flags(&error, _socket->flags); \
+            cat_update_last_error(error, "%s", error_message); \
             _failure; \
         })
 
@@ -3612,6 +3624,7 @@ static void cat_socket_internal_close(cat_socket_internal_t *isocket, cat_bool_t
         return;
     }
 
+    socket->flags |= CAT_SOCKET_FLAG_CLOSED;
     if (unlikely(unrecoverable_error)) {
         socket->flags |= CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
     }
