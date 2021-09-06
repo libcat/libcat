@@ -398,7 +398,7 @@ TEST(cat_buffer, truncate_start_gt_length)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
 
-    cat_buffer_sub(&buffer, buffer.length + 1, buffer.length);
+    cat_buffer_truncate_from(&buffer, buffer.length + 1, buffer.length);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(0, buffer.length);
     ASSERT_STREQ(data, buffer.value);
@@ -414,7 +414,7 @@ TEST(cat_buffer, truncate_length_eq_zero)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
 
-    cat_buffer_truncate_from(&buffer, 1);
+    cat_buffer_truncate_from(&buffer, 1, 0);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(sizeof(data), buffer.length + 1);
     ASSERT_STREQ(data + 1, buffer.value);
