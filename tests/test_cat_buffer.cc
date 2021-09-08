@@ -346,16 +346,15 @@ TEST(cat_buffer, write_greater_size)
     ASSERT_STREQ(data, buffer.value);
 }
 
-TEST(cat_buffer, write_not_allocted)
+TEST(cat_buffer, write_not_allocated)
 {
     cat_buffer_t buffer = { };
     char data[CAT_TEST_DEFAULT_BUFFER_SIZE];
 
-    buffer.size = CAT_TEST_DEFAULT_BUFFER_SIZE;
-
     ASSERT_EQ(data, cat_srand(CAT_STRS(data)));
-    ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
+    ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
     DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
     ASSERT_EQ(sizeof(data), buffer.length);
     ASSERT_NE(nullptr, buffer.value);
     ASSERT_STREQ(data, buffer.value);
