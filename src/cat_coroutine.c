@@ -429,9 +429,9 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 #if defined(CAT_COROUTINE_USE_MMAP)
     virtual_memory = mmap(NULL, virtual_memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
 #elif defined(CAT_COROUTINE_USE_VIRTUAL_ALLOC)
-	virtual_memory = VirtualAlloc(0, virtual_memory_size, MEM_COMMIT, PAGE_READWRITE);
+    virtual_memory = VirtualAlloc(0, virtual_memory_size, MEM_COMMIT, PAGE_READWRITE);
 #else // if defined(CAT_COROUTINE_USE_SYS_MALLOC)
-	virtual_memory = cat_sys_malloc(virtual_memory_size);
+    virtual_memory = cat_sys_malloc(virtual_memory_size);
 #endif
     if (unlikely(virtual_memory == CAT_COROUTINE_MEMORY_INVALID)) {
         cat_update_last_error_of_syscall("Allocate virtual memory for coroutine stack failed with size %zu", virtual_memory_size);
