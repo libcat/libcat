@@ -677,6 +677,19 @@ if (1)
     target_include_directories(cat_llhttp PRIVATE ${llhttp_dir}/include)
 endif()
 
+# multipart-parser dep
+if (1)
+    set(multipart_parser_dir "deps/multipart_parser")
+    add_library(cat_multipart_parser OBJECT
+        ${multipart_parser_dir}/multipart_parser.c
+    )
+    if(MSVC)
+        set_property(TARGET cat_multipart_parser PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
+    list(APPEND cat_includes ${multipart_parser_dir})
+    target_include_directories(cat_multipart_parser PRIVATE ${multipart_parser_dir})
+endif()
+
 # OpenSSL dep
 find_package(OpenSSL QUIET)
 if (NOT OPENSSL_FOUND AND PkgConfig_FOUND)
@@ -722,7 +735,7 @@ else()
     message(STATUS "cURL is not enabled")
 endif()
 
-add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> ${cat_sources})
+add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> $<TARGET_OBJECTS:cat_multipart_parser> ${cat_sources})
 if(MSVC)
     set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
