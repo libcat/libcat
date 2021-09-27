@@ -145,6 +145,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 {
     /* register coroutine resume */
     cat_coroutine_register_resume(cat_coroutine_resume_standard);
+    CAT_COROUTINE_G(original_resume) = NULL;
 
     /* init options */
     cat_coroutine_set_default_stack_size(CAT_COROUTINE_RECOMMENDED_STACK_SIZE);
@@ -224,9 +225,38 @@ CAT_API cat_bool_t cat_coroutine_set_dead_lock_log_type(cat_log_type_t type)
 
 CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume)
 {
-    cat_coroutine_resume_t origin_resume = cat_coroutine_resume;
+    cat_coroutine_resume_t original_resume = cat_coroutine_resume;
     cat_coroutine_resume = resume;
-    return origin_resume;
+    return original_resume;
+}
+
+static CAT_COLD cat_bool_t cat_coroutine_resume_deny(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
+{
+    (void) coroutine;
+    (void) data;
+    (void) retval;
+    cat_update_last_error(CAT_EMISUSE, "Unexpected coroutine switching");
+
+    return cat_false;
+}
+
+CAT_API cat_bool_t cat_coroutine_switch_blocked(void)
+{
+    return CAT_COROUTINE_G(resume) == cat_coroutine_resume_deny;
+}
+
+CAT_API void cat_coroutine_switch_block(void)
+{
+    CAT_COROUTINE_G(original_resume) = cat_coroutine_register_resume(cat_coroutine_resume_deny);
+}
+
+CAT_API void cat_coroutine_switch_unblock(void)
+{
+    if (CAT_COROUTINE_G(resume) != cat_coroutine_resume_deny) {
+        return;
+    }
+    cat_coroutine_register_resume(CAT_COROUTINE_G(original_resume));
+    CAT_COROUTINE_G(original_resume) = NULL;
 }
 
 CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine)
@@ -247,6 +277,7 @@ CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine)
 }
 
 /* globals */
+
 CAT_API cat_coroutine_stack_size_t cat_coroutine_get_default_stack_size(void)
 {
     return CAT_COROUTINE_G(default_stack_size);
@@ -686,7 +717,7 @@ CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 
     ret = cat_coroutine_resume(coroutine, data, retval);
 
-    CAT_ASSERT(ret && "Yield never fail");
+    CAT_ASSERT((ret || cat_coroutine_switch_blocked()) && "Yield never fail");
 
     return ret;
 }
