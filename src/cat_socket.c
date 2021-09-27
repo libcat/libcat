@@ -781,7 +781,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 #endif
         flags |= CAT_SOCKET_FLAG_ALLOCATED;
     }
-#ifndef CAT_DO_NOT_OPTIMIZE
+#ifndef CAT_DONT_OPTIMIZE
     /* dynamic memory allocation so we can save some space */
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
         isocket_size = cat_offsize_of(cat_socket_internal_t, u.tcp);
