@@ -26,6 +26,8 @@ extern "C" {
 
 #include "llhttp.h"
 
+#include "multipart_parser.h"
+
 #define CAT_HTTP_METHOD_MAP HTTP_METHOD_MAP
 
 enum cat_http_method_e
@@ -34,6 +36,14 @@ enum cat_http_method_e
     CAT_HTTP_METHOD_MAP(CAT_HTTP_METHOD_GEN)
 #undef CAT_HTTP_METHOD_GEN
     CAT_HTTP_METHOD_UNKNOWN
+};
+
+enum cat_multipart_status
+{
+    CAT_HTTP_MULTIPART_UNINIT = 0,
+    CAT_HTTP_MULTIPART_IN_CONTENT_TYPE,
+    CAT_HTTP_MULTIPART_NOT_MULTIPART,
+    CAT_HTTP_MULTIPART_STATUS_MAX,
 };
 
 typedef uint8_t cat_http_method_t;
@@ -116,6 +126,13 @@ CAT_API const char *cat_http_status_get_reason(cat_http_status_code_t status);
 
 /* parser */
 
+enum cat_http_errno_ext {
+  CAT_HTTP_ERRNO_START = HPE_USER,
+  CAT_HTTP_ERRNO_MULTIPART,
+  CAT_HTTP_ERRNO_DUPLICATE_CONTENT_TYPE,
+  CAT_HTTP_ERRNO_BAD_BOUNDARY,
+};
+
 typedef enum cat_http_parser_type_e {
     CAT_HTTP_PARSER_TYPE_BOTH     = HTTP_BOTH,
     CAT_HTTP_PARSER_TYPE_REQUEST  = HTTP_REQUEST,
@@ -127,10 +144,18 @@ typedef enum cat_http_parser_event_flag_e {
     CAT_HTTP_PARSER_EVENT_FLAG_LINE = 1 << 1, /* first line */
     CAT_HTTP_PARSER_EVENT_FLAG_DATA = 1 << 2, /* have data */
     CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE = 1 << 3, /* something completed */
-} cat_http_parser_event_flag_t; /* 1 ~ 15 */
+    CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART = 1 << 4 /* multipart */
+} cat_http_parser_event_flag_t; /* 1 ~ 8 */
 
 #define CAT_HTTP_PARSER_EVENT_MAP(XX) \
     XX(NONE,                  (0)) \
+    XX(MULTIPART_HEADER_FIELD,      (1 << 9) | CAT_HTTP_PARSER_EVENT_FLAG_DATA | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_HEADER_VALUE,      (1 << 10) | CAT_HTTP_PARSER_EVENT_FLAG_DATA | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_DATA,              (1 << 11) | CAT_HTTP_PARSER_EVENT_FLAG_DATA | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_DATA_BEGIN,        (1 << 12) | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_HEADERS_COMPLETE,  (1 << 13) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_DATA_END,          (1 << 14) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
+    XX(MULTIPART_BODY_END,          (1 << 15) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
     XX(MESSAGE_BEGIN,         (1 << 16)) \
     XX(URL,                   (1 << 17) | CAT_HTTP_PARSER_EVENT_FLAG_LINE | CAT_HTTP_PARSER_EVENT_FLAG_DATA) \
     XX(URL_COMPLETE,          (1 << 18) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE) \
@@ -152,8 +177,8 @@ typedef enum cat_http_parser_event_e {
 #undef CAT_HTTP_PARSER_EVENT_GEN
 } cat_http_parser_event_t; /* 16 ~ 31 */
 
-#define CAT_HTTP_PARSER_EVENTS_ALL_GEN(name, unused1)    CAT_HTTP_PARSER_EVENT_##name |
-#define CAT_HTTP_PARSER_EVENTS_ALL_VALUE                 CAT_HTTP_PARSER_EVENT_MAP(CAT_HTTP_PARSER_EVENTS_ALL_GEN) 0
+#define CAT_HTTP_PARSER_EVENTS_ALL_GEN(name, unused1)    | CAT_HTTP_PARSER_EVENT_##name
+#define CAT_HTTP_PARSER_EVENTS_ALL_VALUE (0 CAT_HTTP_PARSER_EVENT_MAP(CAT_HTTP_PARSER_EVENTS_ALL_GEN))
 
 typedef enum cat_http_parser_union_events_e {
     CAT_HTTP_PARSER_EVENTS_NONE = 0,
@@ -181,6 +206,10 @@ typedef struct cat_http_parser_s {
     uint64_t content_length;
     /* public readonly: keep alive (update on headers complete) */
     cat_bool_t keep_alive;
+    /* public readonly: multipart parser pointer */
+    const char *multipart_ptr;
+    /* private: multipart parser */
+    multipart_parser multipart;
 } cat_http_parser_t;
 
 CAT_API void cat_http_parser_init(cat_http_parser_t *parser);
