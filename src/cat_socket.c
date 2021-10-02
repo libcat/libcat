@@ -633,7 +633,7 @@ static int socket_create(int domain, int type, int protocol)
 
 static cat_always_inline cat_timeout_t cat_socket_internal_get_dns_timeout(const cat_socket_internal_t *isocket);
 static cat_always_inline cat_sa_family_t cat_socket_internal_get_af(const cat_socket_internal_t *isocket);
-static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(const cat_socket_internal_t *isocket);
+static const cat_sockaddr_info_t *cat_socket_internal_getname_fast(cat_socket_internal_t *isocket, cat_bool_t is_peer, int *error_ptr);
 
 static cat_bool_t cat_socket_internal_getaddrbyname(
     cat_socket_internal_t *isocket,
@@ -960,9 +960,21 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             cat_bool_t is_established;
             if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
                 is_established = cat_true;
+            } else if (type & CAT_SOCKET_TYPE_FLAG_STREAM) {
+                do {
+                    if ((type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE) {
+                        unsigned int flags = isocket->u.handle.flags & (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE);
+                        if (flags != 0 && flags != (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE)) {
+                            // pipe2() pipe
+                            is_established = cat_true;
+                            break;
+                        }
+                    }
+                    is_established = cat_socket_internal_getname_fast(isocket, cat_true, NULL) != NULL;
+                } while (0);
             } else {
-                cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
-                is_established = cat_poll_one(fd, POLLOUT, NULL, 0) == CAT_RET_OK;
+                /* non-connection types */
+                is_established = cat_false;
             }
             if (is_established) {
                 isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
