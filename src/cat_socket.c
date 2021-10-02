@@ -633,6 +633,7 @@ static int socket_create(int domain, int type, int protocol)
 
 static cat_always_inline cat_timeout_t cat_socket_internal_get_dns_timeout(const cat_socket_internal_t *isocket);
 static cat_always_inline cat_sa_family_t cat_socket_internal_get_af(const cat_socket_internal_t *isocket);
+static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(const cat_socket_internal_t *isocket);
 
 static cat_bool_t cat_socket_internal_getaddrbyname(
     cat_socket_internal_t *isocket,
@@ -836,6 +837,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     } else {
         af = AF_UNSPEC;
     }
+    if (ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) {
+        /* prevent uv from creating a new socket */
+        af = AF_UNSPEC;
+    }
 
     /* init handle */
     if ((type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
@@ -952,11 +957,12 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     if (ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) {
         const cat_sockaddr_info_t *address_info = NULL;
         if (check_connection) {
-            cat_bool_t is_established = cat_false;
+            cat_bool_t is_established;
             if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
                 is_established = cat_true;
-            } else if (isocket->u.handle.flags & (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE)) {
-                is_established = cat_true;
+            } else {
+                cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(isocket);
+                is_established = cat_poll_one(fd, POLLOUT, NULL, 0) == CAT_RET_OK;
             }
             if (is_established) {
                 isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
