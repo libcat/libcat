@@ -564,6 +564,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name,
 CAT_API cat_bool_t cat_socket_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
 CAT_API cat_bool_t cat_socket_connect_to_ex(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout);
 
+/* Notice: it returns true even if it's in progress, we should check it by socket_is_established() to get real state of it */
 CAT_API cat_bool_t cat_socket_try_connect(cat_socket_t *socket, const char *name, size_t name_length, int port);
 CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
 
