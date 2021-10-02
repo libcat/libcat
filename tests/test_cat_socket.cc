@@ -2098,17 +2098,28 @@ TEST(cat_socket, send_handle)
 TEST(cat_socket, open_os_socket)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t echo_client;
-    cat_socket_t echo_client2;
 
-    ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
-    DEFER(cat_socket_close(&echo_client));
-    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    for (auto n = 0; n < 2; n++) {
+        cat_socket_t echo_client;
+        cat_socket_t echo_client2;
 
-    ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
-    DEFER(cat_socket_close(&echo_client2));
+        ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP4), &echo_client);
+        DEFER(cat_socket_close(&echo_client));
+        if (n == 0) {
+            ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        }
 
-    echo_stream_client_tests(&echo_client2);
+        ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
+        DEFER(cat_socket_close(&echo_client2));
+        if (n == 1) {
+            char buffer[1];
+            ASSERT_EQ(cat_socket_recv(&echo_client2, buffer, sizeof(buffer)), -1);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTCONN);
+            ASSERT_TRUE(cat_socket_connect(&echo_client2, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        }
+
+        echo_stream_client_tests(&echo_client2);
+    }
 }
 
 TEST(cat_socket, move)
