@@ -147,3 +147,37 @@ CAT_API cat_bool_t cat_module_stop(cat_module_type_t type)
 
     return cat_true;
 }
+
+CAT_API cat_module_types_t cat_module_get_types_from_names(const char *names)
+{
+    const char *s = NULL, *e = names;
+    cat_module_types_t types = 0;
+
+    while (1) {
+        if (*e == ' ' || *e == ',' || *e == '\0') {
+            if (s) {
+                const char *name;
+                size_t name_length;
+#define CAT_MODULE_TYPE_GEN(_name, _unused) \
+                name = #_name; \
+                name_length = CAT_STRLEN(#_name); \
+                if ((size_t) (e - s) == name_length && cat_strncasecmp(s, name, name_length) == 0) { \
+                    types |= CAT_MODULE_TYPE_##_name; \
+                }
+                CAT_MODULE_TYPE_MAP(CAT_MODULE_TYPE_GEN)
+#undef CAT_MODULE_TYPE_GEN
+                s = NULL;
+            }
+        } else {
+            if (!s) {
+                s = e;
+            }
+        }
+        if (*e == '\0') {
+            break;
+        }
+        e++;
+    }
+
+    return types;
+}
