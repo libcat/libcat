@@ -38,7 +38,7 @@ extern "C" {
 
 /* sockaddr */
 
-#define CAT_SOCKET_DEFAULT_BACKLOG  128
+#define CAT_SOCKET_DEFAULT_BACKLOG  511
 
 #define CAT_SOCKET_IPV4_BUFFER_SIZE 16  /* >= 16 */
 #define CAT_SOCKET_IPV6_BUFFER_SIZE 48  /* >= 46 */
