@@ -121,7 +121,7 @@ static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, c
 /* parser */
 
 #define CALLBACK_ERROR(CODE, fmt, ...) do {\
-    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: " # fmt, __VA_ARGS__); \
+    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: " fmt, ##__VA_ARGS__); \
     return CAT_HTTP_ERRNO_ ## CODE;\
 } while(0)
 
