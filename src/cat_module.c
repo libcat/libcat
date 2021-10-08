@@ -18,6 +18,7 @@
 
 #include "cat.h"
 
+#ifdef CAT_NOT_IMPL
 CAT_API cat_module_info_t cat_module_info_map[CAT_MODULE_MAX_COUNT];
 
 CAT_API const cat_module_info_t *cat_module_get_info(cat_module_type_t type)
@@ -147,6 +148,7 @@ CAT_API cat_bool_t cat_module_stop(cat_module_type_t type)
 
     return cat_true;
 }
+#endif /* CAT_NOT_IMPL */
 
 CAT_API cat_module_types_t cat_module_get_types_from_names(const char *names)
 {
@@ -158,14 +160,14 @@ CAT_API cat_module_types_t cat_module_get_types_from_names(const char *names)
             if (s) {
                 const char *name;
                 size_t name_length;
-#define CAT_MODULE_TYPE_GEN(_name, _unused) \
+#define CAT_MODULE_TYPE_CMP_GEN(_name, _unused) \
                 name = #_name; \
                 name_length = CAT_STRLEN(#_name); \
                 if ((size_t) (e - s) == name_length && cat_strncasecmp(s, name, name_length) == 0) { \
                     types |= CAT_MODULE_TYPE_##_name; \
                 }
-                CAT_MODULE_TYPE_MAP(CAT_MODULE_TYPE_GEN)
-#undef CAT_MODULE_TYPE_GEN
+                CAT_MODULE_TYPE_MAP(CAT_MODULE_TYPE_CMP_GEN)
+#undef CAT_MODULE_TYPE_CMP_GEN
                 s = NULL;
             }
         } else {
