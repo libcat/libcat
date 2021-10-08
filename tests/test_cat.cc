@@ -132,7 +132,7 @@ TEST(cat, process_title)
 }
 
 #if CAT_USE_BUG_DETECTOR
-TEST(cat_event, bug_detection)
+TEST(cat, bug_detection)
 {
     ASSERT_DEATH_IF_SUPPORTED(([] {
         char *foo = nullptr;
@@ -140,3 +140,12 @@ TEST(cat_event, bug_detection)
     })(), "bug occurred");
 }
 #endif
+
+TEST(cat, module_get_types_from_names)
+{
+    ASSERT_EQ(
+        cat_module_get_types_from_names("coroutine, event, socket"),
+        CAT_MODULE_TYPE_COROUTINE | CAT_MODULE_TYPE_EVENT | CAT_MODULE_TYPE_SOCKET
+    );
+    ASSERT_EQ(cat_module_get_types_from_names("foo, bar, baz"), 0);
+}

@@ -91,3 +91,33 @@ TEST(cat_string, create)
     ASSERT_GT(string.length, 0);
     cat_string_close(&string);
 }
+
+TEST(cat_string, byte_to_hexstr)
+{
+    char out[3];
+    cat_byte_to_hexstr('x', out);
+    out[2] = '\0';
+    ASSERT_STREQ(out, "78");
+}
+
+TEST(cat_string, byte_is_printable)
+{
+    ASSERT_TRUE(cat_byte_is_printable('x'));
+    ASSERT_FALSE(cat_byte_is_printable('\0'));
+}
+
+TEST(cat_string, str_quote)
+{
+    char *new_str;
+    size_t new_length;
+    {
+        ASSERT_TRUE(cat_str_quote(CAT_STRL("foo"), &new_str, &new_length));
+        DEFER(cat_free(new_str));
+        ASSERT_STREQ(new_str, "\"foo\"");
+    }
+    {
+        ASSERT_TRUE(cat_str_quote(CAT_STRL("bar\0"), &new_str, &new_length));
+        DEFER(cat_free(new_str));
+        ASSERT_STREQ(new_str, "\"bar\\0\"");
+    }
+}
