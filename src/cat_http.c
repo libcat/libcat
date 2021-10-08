@@ -54,7 +54,7 @@ typedef union{
 static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
     cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
     parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
-    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser data on_" # name ": [%d]%.*s", length, length, at); \
+    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser data on_" # name ": [%zu]%.*s", length, length, at); \
     if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
         parser->data = at; \
         parser->data_length = length; \
@@ -120,8 +120,8 @@ static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, c
 
 /* parser */
 
-#define CALLBACK_ERROR(CODE, ...) do {\
-    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: %s", __VA_ARGS__); \
+#define CALLBACK_ERROR(CODE, fmt, ...) do {\
+    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: " # fmt, __VA_ARGS__); \
     return CAT_HTTP_ERRNO_ ## CODE;\
 } while(0)
 
@@ -171,15 +171,15 @@ CAT_HTTP_PARSER_ON_DATA (status,                 STATUS          )
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) {
     static const string_int content_type[] = {
-        {'c','o','n','t',},
-        {'e','n','t','-',},
-        {'t','y','p','e',},
+        {'c','o','n','t'},
+        {'e','n','t','-'},
+        {'t','y','p','e'}
     };
     static const string_int content_type_mask[] = {
         // 'A' | '\x20' (' ') => 'a'
-        {' ',' ',' ',' ',},
-        {' ',' ',' ','\0',},
-        {' ',' ',' ',' ',},
+        {' ',' ',' ',' '},
+        {' ',' ',' ','\0'},
+        {' ',' ',' ',' '}
     };
     if(
         1/*enable mp*/ &&
@@ -199,8 +199,8 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) {
 static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
 {
     static const string_int boundary[] = {
-        {'b','o','u','n',},
-        {'d','a','r','y',},
+        {'b','o','u','n'},
+        {'d','a','r','y'}
     };
     const char *ret, *at = *_at;
     size_t length = *_length;
@@ -294,7 +294,7 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
             cat_update_last_error(0, "no legal boundary found");
             return cat_false;
         }
-        CAT_LOG_DEBUG_V2(PROTOCOL, "http parser found multipart boundary: \"%.*s\"", i, ret);
+        CAT_LOG_DEBUG_V2(PROTOCOL, "http parser found multipart boundary: \"%.*s\"", (int) i, ret);
         // verify next
         consume(i);
         if(use_quote){
@@ -318,8 +318,8 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
     static const string_int multipart[] = {
-        {'m','u','l','t',},
-        {'i','p','a','r',},
+        {'m','u','l','t'},
+        {'i','p','a','r'}
     };
 
     if (1/*enable mp*/ && parser->multipart.mp_status == CAT_HTTP_MULTIPART_IN_CONTENT_TYPE) {
@@ -339,7 +339,7 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
             i = length - i;
             CAT_LOG_DEBUG_V3(PROTOCOL, "http parser header is multipart, parsing \"%.*s\"", (int)i, mp_at);
             if(!parse_boundary(&mp_at, &i)){
-                CALLBACK_ERROR(BAD_BOUNDARY, cat_get_last_error_message());
+                CALLBACK_ERROR(BAD_BOUNDARY, "%s", cat_get_last_error_message());
             }
             CAT_ASSERT(mp_at[0] > CAT_HTTP_MULTIPART_STATUS_MAX);
             if(i > 70){
