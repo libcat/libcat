@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef DEBUG_MULTIPART
 //#ifdef _DEBUG
