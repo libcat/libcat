@@ -49,9 +49,74 @@ typedef union{
     uint32_t u32;
 } string_int;
 
-static const multipart_parser_settings cat_http_multipart_parser_settings;
+#define CAT_HTTP_MULTIPART_CB_FNAME(name) cat_http_multipart_parser_on_##name
+#define CAT_HTTP_MULTIPART_ON_DATA(name, NAME) \
+static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
+    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
+    parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
+    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser data on_" # name ": [%d]%.*s", length, length, at); \
+    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
+        parser->data = at; \
+        parser->data_length = length; \
+        \
+        return MPPE_PAUSED; \
+    } \
+    return MPPE_OK; \
+}
 
-static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length);
+#define CAT_HTTP_MULTIPART_ON_EVENT(name, NAME) \
+static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p){ \
+    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
+    parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
+    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser notify on_" # name ); \
+    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
+        return MPPE_PAUSED; \
+    } \
+    return MPPE_OK; \
+}
+
+CAT_HTTP_MULTIPART_ON_DATA(header_field, MULTIPART_HEADER_FIELD)
+CAT_HTTP_MULTIPART_ON_DATA(header_value, MULTIPART_HEADER_VALUE)
+CAT_HTTP_MULTIPART_ON_DATA(part_data, MULTIPART_DATA)
+CAT_HTTP_MULTIPART_ON_EVENT(part_data_begin, MULTIPART_DATA_BEGIN)
+CAT_HTTP_MULTIPART_ON_EVENT(headers_complete, MULTIPART_HEADERS_COMPLETE)
+CAT_HTTP_MULTIPART_ON_EVENT(part_data_end, MULTIPART_DATA_END)
+
+static int CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p){
+    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart);
+    // escape mp parser
+    parser->event = CAT_HTTP_PARSER_EVENT_MULTIPART_BODY_END;
+    parser->multipart.mp_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
+    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) {
+        return MPPE_PAUSED;
+    }
+    return MPPE_OK;
+}
+
+const multipart_parser_settings cat_http_multipart_parser_settings = {
+    /* .calloc = */ NULL,
+    /* .free = */ NULL,
+    /* .on_header_field = */ CAT_HTTP_MULTIPART_CB_FNAME(header_field),
+    /* .on_header_value = */ CAT_HTTP_MULTIPART_CB_FNAME(header_value),
+    /* .on_part_data = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data),
+    /* .on_part_data_begin = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data_begin),
+    /* .on_headers_complete = */ CAT_HTTP_MULTIPART_CB_FNAME(headers_complete),
+    /* .on_part_data_end = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data_end),
+    /* .on_body_end = */ CAT_HTTP_MULTIPART_CB_FNAME(body_end),
+};
+
+static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
+
+    size_t len = 0;
+    if(0 == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
+        cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "HTTP-Parser execute failed: failed to parse multipart body");
+        return cat_false;
+    }
+    // add ptr
+    parser->multipart_ptr = data + len;
+    parser->parsed_length = len;
+    return cat_true;
+}
 
 /* parser */
 
@@ -582,75 +647,4 @@ CAT_API uint64_t cat_http_parser_get_content_length(const cat_http_parser_t *par
 CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser)
 {
     return !!parser->llhttp.upgrade;
-}
-
-/* multipart parser */
-
-#define CAT_HTTP_MULTIPART_CB_FNAME(name) cat_http_multipart_parser_on_##name
-#define CAT_HTTP_MULTIPART_ON_DATA(name, NAME) \
-static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
-    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
-    parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
-    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser data on_" # name ": [%d]%.*s", length, length, at); \
-    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
-        parser->data = at; \
-        parser->data_length = length; \
-        \
-        return MPPE_PAUSED; \
-    } \
-    return MPPE_OK; \
-}
-
-#define CAT_HTTP_MULTIPART_ON_EVENT(name, NAME) \
-static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p){ \
-    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
-    parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
-    CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser notify on_" # name ); \
-    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
-        return MPPE_PAUSED; \
-    } \
-    return MPPE_OK; \
-}
-
-CAT_HTTP_MULTIPART_ON_DATA(header_field, MULTIPART_HEADER_FIELD)
-CAT_HTTP_MULTIPART_ON_DATA(header_value, MULTIPART_HEADER_VALUE)
-CAT_HTTP_MULTIPART_ON_DATA(part_data, MULTIPART_DATA)
-CAT_HTTP_MULTIPART_ON_EVENT(part_data_begin, MULTIPART_DATA_BEGIN)
-CAT_HTTP_MULTIPART_ON_EVENT(headers_complete, MULTIPART_HEADERS_COMPLETE)
-CAT_HTTP_MULTIPART_ON_EVENT(part_data_end, MULTIPART_DATA_END)
-
-static int CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p){
-    cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart);
-    // escape mp parser
-    parser->event = CAT_HTTP_PARSER_EVENT_MULTIPART_BODY_END;
-    parser->multipart.mp_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
-    if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) {
-        return MPPE_PAUSED;
-    }
-    return MPPE_OK;
-}
-
-static const multipart_parser_settings cat_http_multipart_parser_settings = {
-    /* .calloc = */ NULL,
-    /* .free = */ NULL,
-    /* .on_header_field = */ CAT_HTTP_MULTIPART_CB_FNAME(header_field),
-    /* .on_header_value = */ CAT_HTTP_MULTIPART_CB_FNAME(header_value),
-    /* .on_part_data = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data),
-    /* .on_part_data_begin = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data_begin),
-    /* .on_headers_complete = */ CAT_HTTP_MULTIPART_CB_FNAME(headers_complete),
-    /* .on_part_data_end = */ CAT_HTTP_MULTIPART_CB_FNAME(part_data_end),
-    /* .on_body_end = */ CAT_HTTP_MULTIPART_CB_FNAME(body_end),
-};
-
-static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
-
-    size_t len = 0;
-    if(0 == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
-        cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "HTTP-Parser execute failed: failed to parse multipart body");
-        return cat_false;
-    }
-    // add ptr
-    parser->multipart_ptr = data + len;
-    parser->parsed_length = len;
-    return cat_true;
 }
