@@ -11,7 +11,6 @@
 #include <errno.h>
 
 #ifdef DEBUG_MULTIPART
-//#ifdef _DEBUG
 static void multipart_log(const char * format, ...)
 {
     va_list args;
@@ -25,17 +24,17 @@ static void multipart_log(const char * format, ...)
 #define multipart_log(format, ...)
 #endif
 
-#define NOTIFY_CB(FOR)                                                 \
+#define NOTIFY_CB(FOR, ni)                                             \
 do {                                                                   \
   if (p->settings->on_##FOR) {                                         \
     if ((ret = p->settings->on_##FOR(p)) == MPPE_OK) {                 \
         /* do nothing */                                               \
     } else if (ret == MPPE_PAUSED) {                                   \
         if (mark == 0) {                                               \
-            p->i = 1;                                                  \
+            p->i = ni;                                                  \
             return i;                                                  \
         }else {                                                        \
-            p->i = i-mark+1;                                           \
+            p->i = i-mark+ni;                                           \
             return mark;                                               \
         }                                                              \
     } else {                                                           \
@@ -174,7 +173,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                     }
                     p->index = 0;
                     p->state = s_header_field_start;
-                    NOTIFY_CB(part_data_begin);
+                    NOTIFY_CB(part_data_begin, 1);
                     break;
                 }
                 if (c != p->multipart_boundary[p->index]) {
@@ -244,7 +243,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 multipart_log("s_part_data_start");
                 mark = i;
                 p->state = s_part_data;
-                NOTIFY_CB(headers_complete);
+                NOTIFY_CB(headers_complete, 0);
                 /* fallthrough */
             case s_part_data:
                 multipart_log("s_part_data");
@@ -281,7 +280,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 p->lookbehind[2 + p->index] = c;
                 if ((++p->index) == p->boundary_length) {
                     p->state = s_part_data_almost_end;
-                    NOTIFY_CB(part_data_end);
+                    NOTIFY_CB(part_data_end, 1);
                 }
                 break;
             case s_part_data_almost_end:
@@ -298,7 +297,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
             case s_part_data_final_hyphen:
                 multipart_log("s_part_data_final_hyphen");
                 if (c == '-') {
-                    NOTIFY_CB(body_end);
+                    NOTIFY_CB(body_end, 1);
                     p->state = s_end;
                     break;
                 }
@@ -307,7 +306,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 multipart_log("s_part_data_end");
                 if (c == LF) {
                     p->state = s_header_field_start;
-                    NOTIFY_CB(part_data_begin);
+                    NOTIFY_CB(part_data_begin, 1);
                     break;
                 }
                 return i;
