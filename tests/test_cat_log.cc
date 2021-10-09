@@ -57,3 +57,13 @@ TEST(cat_log, core_error)
         CAT_CORE_ERROR(TEST, "core error log");
     }, "Core Error: <TEST> core error log in main" CAT_EOL);
 }
+
+TEST(cat_log, buffer_quote)
+{
+    char *tmp_str;
+    const char *str;
+    str = cat_log_buffer_quote(CAT_STRL("foo\r\n"), &tmp_str);
+    ASSERT_NE(str, nullptr);
+    ASSERT_STREQ(str, "\"foo\\r\\n\"");
+    cat_free(tmp_str);
+}

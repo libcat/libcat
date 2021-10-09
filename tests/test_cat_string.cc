@@ -120,4 +120,39 @@ TEST(cat_string, str_quote)
         DEFER(cat_free(new_str));
         ASSERT_STREQ(new_str, "\"bar\\0\"");
     }
+    {
+        cat_bool_t is_complete;
+        ASSERT_TRUE(cat_str_quote_ex(
+            CAT_STRL("baz\"\\\f\n\r\t\v"),
+            &new_str, &new_length,
+            CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES | CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT,
+            "z", &is_complete
+        ));
+        DEFER(cat_free(new_str));
+        ASSERT_STREQ(new_str, " /* ba\\172\\\"\\\\\\f\\n\\r\\t\\v */");
+    }
+    {
+        cat_bool_t is_complete;
+        ASSERT_TRUE(cat_str_quote_ex(
+            CAT_STRL("char"),
+            &new_str, &new_length,
+            CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES | CAT_STR_QUOTE_STYLE_FLAG_PRINT_ALL_STRINGS_IN_HEX,
+            NULL, &is_complete
+        ));
+        DEFER(cat_free(new_str));
+        ASSERT_STREQ(new_str, "\\x63\\x68\\x61\\x72");
+    }
+    {
+        char buffer[4] = "dua";
+        cat_bool_t is_complete;
+        buffer[3] = 0x7f;
+        ASSERT_TRUE(cat_str_quote_ex(
+            CAT_STRS(buffer),
+            &new_str, &new_length,
+            CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES | CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCILL_STRINGS_IN_HEX,
+            NULL, &is_complete
+        ));
+        DEFER(cat_free(new_str));
+        ASSERT_STREQ(new_str, "\\x64\\x75\\x61\\x7f");
+    }
 }
