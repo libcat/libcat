@@ -43,7 +43,8 @@ enum cat_multipart_status
     CAT_HTTP_MULTIPART_UNINIT = 0,
     CAT_HTTP_MULTIPART_IN_CONTENT_TYPE,
     CAT_HTTP_MULTIPART_NOT_MULTIPART,
-    CAT_HTTP_MULTIPART_STATUS_MAX,
+    CAT_HTTP_MULTIPART_BOUNDARY_OK,
+    CAT_HTTP_MULTIPART_IN_BODY,
 };
 
 typedef uint8_t cat_http_method_t;
@@ -206,6 +207,8 @@ typedef struct cat_http_parser_s {
     uint64_t content_length;
     /* public readonly: keep alive (update on headers complete) */
     cat_bool_t keep_alive;
+    /* private: multipart parser status */
+    char multipart_status;
     /* public readonly: multipart parser pointer */
     const char *multipart_ptr;
     /* private: multipart parser */

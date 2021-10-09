@@ -813,6 +813,7 @@ TEST(cat_http_parser, multipart_good)
         }
         // use create to avoid res/req change
         cat_http_parser_create(&parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
     }
 }
 
@@ -845,6 +846,7 @@ TEST(cat_http_parser, multipart_bad_boundaries)
             }
             // use create to avoid res/req change
             cat_http_parser_create(&parser);
+            cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
         }
     }
 }
@@ -879,6 +881,7 @@ TEST(cat_http_parser, multipart_bad_heads)
             }
             // use create to avoid res/req change
             cat_http_parser_create(&parser);
+            cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
         }
     }
 }

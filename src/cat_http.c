@@ -40,9 +40,6 @@ CAT_API const char *cat_http_status_get_reason(cat_http_status_code_t status)
 
 /* multipart parser things */
 
-#define mp_status multipart_boundary[0]
-#define mp_boundary multipart_boundary
-
 #define CAT_HTTP_MULTIPART_CB_FNAME(name) cat_http_multipart_parser_on_##name
 #define CAT_HTTP_MULTIPART_ON_DATA(name, NAME) \
 static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
@@ -78,9 +75,10 @@ CAT_HTTP_MULTIPART_ON_EVENT(part_data_end, MULTIPART_DATA_END)
 
 static int CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p){
     cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart);
+    CAT_ASSERT(parser->multipart_status == CAT_HTTP_MULTIPART_IN_BODY);
     // escape mp parser
     parser->event = CAT_HTTP_PARSER_EVENT_MULTIPART_BODY_END;
-    parser->multipart.mp_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
+    parser->multipart_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
     if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) {
         return MPPE_PAUSED;
     }
@@ -200,10 +198,15 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) {
         length >= 12 &&
         strcasecmp_content_type(at)
     ){
-        if(parser->multipart.mp_status != CAT_HTTP_MULTIPART_UNINIT){
+        CAT_ASSERT(
+            parser->multipart_status == CAT_HTTP_MULTIPART_BOUNDARY_OK || 
+            parser->multipart_status == CAT_HTTP_MULTIPART_NOT_MULTIPART ||
+            parser->multipart_status == CAT_HTTP_MULTIPART_UNINIT
+        );
+        if (parser->multipart_status != CAT_HTTP_MULTIPART_UNINIT) {
             CALLBACK_ERROR(DUPLICATE_CONTENT_TYPE, "duplicate content-type header");
         }
-        parser->multipart.mp_status = CAT_HTTP_MULTIPART_IN_CONTENT_TYPE;
+        parser->multipart_status = CAT_HTTP_MULTIPART_IN_CONTENT_TYPE;
     }
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
@@ -257,7 +260,6 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
         }else{
             ret = at;
         }
-        
         // peek to boundary end
         /*
         boundary syntax from RFC2046 section 5.1.1
@@ -328,7 +330,7 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
 strcasecmp_fast(multipart, "multipart/", "         \0");
  
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
-    if (1/*enable mp*/ && parser->multipart.mp_status == CAT_HTTP_MULTIPART_IN_CONTENT_TYPE) {
+    if (1/*enable mp*/ && parser->multipart_status == CAT_HTTP_MULTIPART_IN_CONTENT_TYPE) {
         CAT_LOG_DEBUG_V3(PROTOCOL, "http parser checking content-type header");
         size_t i = 0;
         // skip ows
@@ -344,15 +346,15 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
             if(!parse_boundary(&mp_at, &i)){
                 CALLBACK_ERROR(BAD_BOUNDARY, "%s", cat_get_last_error_message());
             }
-            CAT_ASSERT(mp_at[0] > CAT_HTTP_MULTIPART_STATUS_MAX);
             if(i > 70){
                 CALLBACK_ERROR(BAD_BOUNDARY, "multipart boundary is too long");
             }
             if (0 != multipart_parser_init(&parser->multipart, mp_at, i, &cat_http_multipart_parser_settings)){
                 CALLBACK_ERROR(MULTIPART, "failed initialize multipart parser: %d", errno);
             }
+            parser->multipart_status = CAT_HTTP_MULTIPART_BOUNDARY_OK;
         } else {
-            parser->multipart.mp_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
+            parser->multipart_status = CAT_HTTP_MULTIPART_NOT_MULTIPART;
         }
     }
 } CAT_HTTP_PARSER_ON_DATA_END()
@@ -362,12 +364,21 @@ CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
     parser->content_length = parser->llhttp.content_length;
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
-CAT_HTTP_PARSER_ON_DATA (body,                   BODY            )
+CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY){
+    CAT_ASSERT(
+        parser->multipart_status == CAT_HTTP_MULTIPART_BOUNDARY_OK ||
+        parser->multipart_status == CAT_HTTP_MULTIPART_NOT_MULTIPART ||
+        parser->multipart_status == CAT_HTTP_MULTIPART_UNINIT
+    );
+    if (parser->multipart_status == CAT_HTTP_MULTIPART_BOUNDARY_OK){
+        parser->multipart_status = CAT_HTTP_MULTIPART_IN_BODY;
+    }
+} CAT_HTTP_PARSER_ON_EVENT_END()
 CAT_HTTP_PARSER_ON_EVENT(chunk_header,           CHUNK_HEADER    )
 CAT_HTTP_PARSER_ON_EVENT(chunk_complete,         CHUNK_COMPLETE  )
 
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(message_complete,       MESSAGE_COMPLETE) {
-    parser->multipart.mp_status = CAT_HTTP_MULTIPART_UNINIT;
+    parser->multipart_status = CAT_HTTP_MULTIPART_UNINIT;
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 const llhttp_settings_t cat_http_parser_settings = {
@@ -393,7 +404,7 @@ static cat_always_inline void cat_http_parser__init(cat_http_parser_t *parser)
     parser->parsed_length = 0;
     parser->content_length = 0;
     parser->keep_alive = cat_false;
-    parser->multipart.mp_status = CAT_HTTP_MULTIPART_UNINIT;
+    parser->multipart_status = CAT_HTTP_MULTIPART_UNINIT;
 }
 
 CAT_API void cat_http_parser_init(cat_http_parser_t *parser)
@@ -460,7 +471,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     if (
         1/*enable mp*/ &&
         parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART &&
-        parser->multipart.mp_status == '-'
+        parser->multipart_status == CAT_HTTP_MULTIPART_IN_BODY
     ) {
         goto in_multipart;
     }
@@ -490,7 +501,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     if (
         1/*enable mp*/ &&
         parser->event == CAT_HTTP_PARSER_EVENT_BODY &&
-        parser->multipart.mp_status == '-'
+        parser->multipart_status == CAT_HTTP_MULTIPART_IN_BODY
     ) {
         in_multipart:
         return cat_http_multipart_parser_execute(parser, data, length);
@@ -571,7 +582,7 @@ CAT_API const char *cat_http_parser_get_current_pos(const cat_http_parser_t *par
     if (
         1/*enable mp*/ &&
         parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART &&
-        parser->multipart.mp_status == '-'
+        parser->multipart_status == CAT_HTTP_MULTIPART_IN_BODY
     ) {
         return parser->multipart_ptr;
     }
