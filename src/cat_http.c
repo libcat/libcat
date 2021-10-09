@@ -43,12 +43,6 @@ CAT_API const char *cat_http_status_get_reason(cat_http_status_code_t status)
 #define mp_status multipart_boundary[0]
 #define mp_boundary multipart_boundary
 
-// used for fast strncasecmp
-typedef union{
-    uint8_t u8[4];
-    uint32_t u32;
-} string_int;
-
 #define CAT_HTTP_MULTIPART_CB_FNAME(name) cat_http_multipart_parser_on_##name
 #define CAT_HTTP_MULTIPART_ON_DATA(name, NAME) \
 static int CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
@@ -169,24 +163,42 @@ CAT_HTTP_PARSER_ON_EVENT(message_begin,          MESSAGE_BEGIN   )
 CAT_HTTP_PARSER_ON_DATA (url,                    URL             )
 CAT_HTTP_PARSER_ON_DATA (status,                 STATUS          )
 
+#define ULONG_T unsigned long
+
+#define strcasecmp_fast(name, needle_str, mask_str) \
+static inline int strcasecmp_##name(const char *a){ \
+    ULONG_T *cmp = (ULONG_T *)needle_str; \
+    ULONG_T *mask = (ULONG_T *)mask_str; \
+    int i, _i; \
+    const int strsize = sizeof(needle_str) - 1; \
+    const int u32i = strsize / sizeof(ULONG_T) * sizeof(ULONG_T) / 4; \
+    for (i=0; i > strsize % 4; i++){ \
+        _i = strsize - 1 - i; \
+        if (needle_str[_i] != (a[_i] | mask_str[_i])) { \
+            return 0; \
+        } \
+    } \
+    if ( \
+        u32i * 4 + 4 <= strsize && \
+        ((uint32_t*)needle_str)[u32i] != (((uint32_t*)a)[u32i] | ((uint32_t*)mask_str)[u32i]) \
+    ) { \
+        return 0; \
+    } \
+    for (i=0; i < ((sizeof(needle_str) - 1) / sizeof(ULONG_T)); i++){ \
+        if (cmp[i] != (((ULONG_T *)a)[i] | mask[i])) { \
+            return 0; \
+        } \
+    } \
+    return 1; \
+}
+
+strcasecmp_fast(content_type, "content-type", "       \0    ");
+
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) {
-    static const string_int content_type[] = {
-        {{'c','o','n','t'}},
-        {{'e','n','t','-'}},
-        {{'t','y','p','e'}}
-    };
-    static const string_int content_type_mask[] = {
-        // 'A' | '\x20' (' ') => 'a'
-        {{' ',' ',' ',' '}},
-        {{' ',' ',' ','\0'}},
-        {{' ',' ',' ',' '}}
-    };
     if(
         1/*enable mp*/ &&
         length >= 12 &&
-        content_type[2].u32 == (((uint32_t *)at)[2] | content_type_mask[2].u32) &&
-        content_type[1].u32 == (((uint32_t *)at)[1] | content_type_mask[1].u32) &&
-        content_type[0].u32 == (((uint32_t *)at)[0] | content_type_mask[0].u32)
+        strcasecmp_content_type(at)
     ){
         if(parser->multipart.mp_status != CAT_HTTP_MULTIPART_UNINIT){
             CALLBACK_ERROR(DUPLICATE_CONTENT_TYPE, "duplicate content-type header");
@@ -196,12 +208,10 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) {
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 
+strcasecmp_fast(boundary, "boundary", "        ");
+
 static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
 {
-    static const string_int boundary[] = {
-        {{'b','o','u','n'}},
-        {{'d','a','r','y'}}
-    };
     const char *ret, *at = *_at;
     size_t length = *_length;
     cat_bool_t use_quote = cat_false;
@@ -230,8 +240,7 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
         // match "boundary="
         if(
             length < 10 ||
-            boundary[0].u32 != (((uint32_t *)at)[0] | 0x20202020) ||
-            boundary[1].u32 != (((uint32_t *)at)[1] | 0x20202020) ||
+            !strcasecmp_boundary(at) ||
             at[8] != '='
         ){
             // not match
@@ -316,12 +325,9 @@ static inline cat_bool_t parse_boundary(const char** _at, size_t *_length)
     return cat_false;
 }
 
+strcasecmp_fast(multipart, "multipart/", "         \0");
+ 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
-    static const string_int multipart[] = {
-        {{'m','u','l','t'}},
-        {{'i','p','a','r'}}
-    };
-
     if (1/*enable mp*/ && parser->multipart.mp_status == CAT_HTTP_MULTIPART_IN_CONTENT_TYPE) {
         CAT_LOG_DEBUG_V3(PROTOCOL, "http parser checking content-type header");
         size_t i = 0;
@@ -331,10 +337,7 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
         }
         const char *mp_at = &at[i];
         if (length >= 10 &&
-            '/' == mp_at[9] &&
-            multipart[0].u32 == (((uint32_t *)mp_at)[0] | 0x20202020) &&
-            multipart[1].u32 == (((uint32_t *)mp_at)[1] | 0x20202020) &&
-            't' == (mp_at[8] | 0x20)
+            strcasecmp_multipart(mp_at)
         ) {
             i = length - i;
             CAT_LOG_DEBUG_V3(PROTOCOL, "http parser header is multipart, parsing \"%.*s\"", (int)i, mp_at);
