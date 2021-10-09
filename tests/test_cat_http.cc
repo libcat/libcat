@@ -720,14 +720,16 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
 );
 
 #define ASSERT_DATA(NAME, expect) do { \
-    ASSERT_TRUE(cat_http_parser_execute(&parser, (p = cat_http_parser_get_current_pos(&parser)), pe - p)); \
+    p = cat_http_parser_get_current_pos(&parser); \
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
     ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MULTIPART_##NAME); \
     ASSERT_EQ(parser.data_length, sizeof(expect) - 1); \
     ASSERT_EQ(std::string(parser.data, parser.data_length), std::string(expect)); \
 } while(0)
 
 #define ASSERT_EVENT(NAME) do { \
-    ASSERT_TRUE(cat_http_parser_execute(&parser, (p = cat_http_parser_get_current_pos(&parser)), pe - p)); \
+    p = cat_http_parser_get_current_pos(&parser); \
+    ASSERT_TRUE(cat_http_parser_execute(&parser, cat_http_parser_get_current_pos(&parser), pe - p)); \
     ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MULTIPART_##NAME); \
 } while(0)
 
