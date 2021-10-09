@@ -182,7 +182,7 @@ static inline int strcasecmp_##name(const char *a){ \
     ) { \
         return 0; \
     } \
-    for (i=0; i < ((sizeof(needle_str) - 1) / sizeof(ULONG_T)); i++){ \
+    for (i=0; i < (int)((sizeof(needle_str) - 1) / sizeof(ULONG_T)); i++){ \
         if (cmp[i] != (((ULONG_T *)a)[i] | mask[i])) { \
             return 0; \
         } \

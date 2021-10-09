@@ -749,7 +749,8 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
     ASSERT_DATA(DATA, "content of the uploaded file foo.txt"); \
     ASSERT_EVENT(DATA_END); \
     ASSERT_EVENT(BODY_END); \
-    ASSERT_TRUE(cat_http_parser_execute(&parser, (p = cat_http_parser_get_current_pos(&parser)), pe - p)); \
+    p = cat_http_parser_get_current_pos(&parser); \
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
     ASSERT_TRUE(cat_http_parser_is_completed(&parser)); \
 } while(0)
 
