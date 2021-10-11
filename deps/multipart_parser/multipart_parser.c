@@ -11,15 +11,10 @@
 #include <errno.h>
 
 #ifdef DEBUG_MULTIPART
-static void multipart_log(const char * format, ...)
-{
-    va_list args;
-    va_start(args, format);
-
-    fprintf(stderr, "[HTTP_MULTIPART_PARSER] %s:%d: ", __FILE__, __LINE__);
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
-}
+//#ifdef _DEBUG
+#define multipart_log(format, ...) do {\
+    fprintf(stderr, "[HTTP_MULTIPART_PARSER] %s:%d: " format "\n", __FILE__, __LINE__, __VA_ARGS__); \
+} while(0)
 #else
 #define multipart_log(format, ...)
 #endif
@@ -31,14 +26,14 @@ do {                                                                   \
         /* do nothing */                                               \
     } else if (ret == MPPE_PAUSED) {                                   \
         if (mark == 0) {                                               \
-            p->i = ni;                                                  \
+            p->i = ni;                                                 \
             return i;                                                  \
         }else {                                                        \
-            p->i = i-mark+ni;                                           \
+            p->i = i-mark+ni;                                          \
             return mark;                                               \
         }                                                              \
     } else {                                                           \
-        return i;                                                      \
+        return SIZE_MAX;                                               \
     }                                                                  \
   }                                                                    \
 } while (0)
@@ -52,7 +47,7 @@ do {                                                                   \
         p->i = 1;                                                      \
         return i;                                                      \
     } else {                                                           \
-        return i;                                                      \
+        return SIZE_MAX;                                               \
     }                                                                  \
   }                                                                    \
 } while (0)
@@ -95,6 +90,7 @@ int multipart_parser_init(multipart_parser *mp, const char *boundary, size_t bou
         memset(&mp->multipart_boundary[2 + boundary_length], 0, sizeof(mp->multipart_boundary) - 2 - boundary_length);
     }
     mp->lookbehind = (mp->multipart_boundary + mp->boundary_length + 1);
+    mp->i = 0;
     mp->index = 0;
     mp->state = s_start;
     if (settings != NULL) {

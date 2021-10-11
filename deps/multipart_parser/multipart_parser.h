@@ -33,15 +33,15 @@ typedef void* (*multipart_calloc_func)(size_t size, size_t count);
 typedef void (*multipart_free_func)(void *ptr);
 
 /*
-* data callback called at events, return MPE_OK to contnue parser,
+* data callback called at events, return MPE_OK to continue parser,
 * MPE_PAUSED for making parser paused
 */
-typedef int (*multipart_data_cb) (multipart_parser*, const char *at, size_t length);
+typedef long (*multipart_data_cb) (multipart_parser*, const char *at, size_t length);
 /*
-* notification callback called at events, return MPE_OK to contnue parser,
+* notification callback called at events, return MPE_OK to continue parser,
 * MPE_PAUSED for making parser paused
 */
-typedef int (*multipart_notify_cb) (multipart_parser*);
+typedef long (*multipart_notify_cb) (multipart_parser*);
 
 // from RFC2046
 #define BOUNDARY_MAX_LEN 70
