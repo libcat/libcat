@@ -100,7 +100,7 @@ const multipart_parser_settings cat_http_multipart_parser_settings = {
 static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
 
     size_t len = 0;
-    if(0 == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
+    if(SIZE_MAX == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
         cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "HTTP-Parser execute failed: failed to parse multipart body");
         return cat_false;
     }

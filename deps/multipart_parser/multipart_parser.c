@@ -315,7 +315,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 break;
             default:
                 multipart_log("Multipart parser unrecoverable error");
-                return 0;
+                return SIZE_MAX;
         }
         ++i;
     }

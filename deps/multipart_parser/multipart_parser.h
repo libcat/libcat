@@ -105,10 +105,11 @@ multipart_parser* multipart_parser_alloc(
 void multipart_parser_free(multipart_parser* p);
 
 /*
-*   execute data buf size len
+*   execute data buf with size len
 *   @param p multipart parser to be used
 *   @param buf buffer for consuming
 *   @param len buffer size
+*   @return parsed length in bytes, SIZE_MAX for error
 */
 size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len);
 

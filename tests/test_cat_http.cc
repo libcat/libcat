@@ -706,19 +706,6 @@ static const char *boundaries_bad[] = {
     ASSERT_EQ(parser.) \
 }
 
-static const cat_const_string_t multipart_req_body = cat_const_string(
-    "--%s\r\n"
-    "Content-Disposition: form-data; name=\"description\"\r\n"
-    "\r\n"
-    "some text\r\n"
-    "--%s\r\n"
-    "Content-Disposition: form-data; name=\"myFile\"; filename=\"foo.txt\"\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "content of the uploaded file foo.txt\r\n"
-    "--%s--"
-);
-
 #define ASSERT_DATA(NAME, expect) do { \
     p = cat_http_parser_get_current_pos(&parser); \
     ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
@@ -732,6 +719,20 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
     ASSERT_TRUE(cat_http_parser_execute(&parser, cat_http_parser_get_current_pos(&parser), pe - p)); \
     ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MULTIPART_##NAME); \
 } while(0)
+
+
+static const cat_const_string_t multipart_req_body = cat_const_string(
+    "--%s\r\n"
+    "Content-Disposition: form-data; name=\"description\"\r\n"
+    "\r\n"
+    "some text\r\n"
+    "--%s\r\n"
+    "Content-Disposition: form-data; name=\"myFile\"; filename=\"foo.txt\"\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "content of the uploaded file foo.txt\r\n"
+    "--%s--"
+);
 
 #define ASSERT_MULTIPART_FLOW() do { \
     ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_BEGIN); \
@@ -816,6 +817,72 @@ TEST(cat_http_parser, multipart_good)
         cat_http_parser_create(&parser);
         cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
     }
+}
+
+// from firefox
+static const cat_const_string_t multipart_req_body_empty_body = cat_const_string(
+    "-----------------------------6169044094038990135731635364\r\n"
+    "Content-Disposition: form-data; name=\"Text\"\r\n"
+    "\r\n"
+    "foo bar\r\n"
+    "-----------------------------6169044094038990135731635364\r\n"
+    "Content-Disposition: form-data; name=\"Ceshi\"; filename=\"\"\r\n"
+    "Content-Type: application/octet-stream\r\n"
+    "\r\n"
+    "\r\n"
+    "-----------------------------6169044094038990135731635364--\r\n"
+);
+
+#define ASSERT_MULTIPART_FLOW_EMPTY_BODY() do { \
+    ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_BEGIN); \
+    ASSERT_DATA(HEADER_FIELD, "Content-Disposition"); \
+    ASSERT_DATA(HEADER_VALUE, "form-data; name=\"Text\""); \
+    ASSERT_EVENT(HEADERS_COMPLETE); \
+    ASSERT_DATA(DATA, "foo bar"); \
+    ASSERT_EVENT(DATA_END); \
+    ASSERT_EVENT(DATA_BEGIN); \
+    ASSERT_DATA(HEADER_FIELD, "Content-Disposition"); \
+    ASSERT_DATA(HEADER_VALUE, "form-data; name=\"Ceshi\"; filename=\"\""); \
+    ASSERT_DATA(HEADER_FIELD, "Content-Type"); \
+    ASSERT_DATA(HEADER_VALUE, "application/octet-stream"); \
+    ASSERT_EVENT(HEADERS_COMPLETE); \
+    ASSERT_DATA(DATA, ""); \
+    ASSERT_EVENT(DATA_END); \
+    ASSERT_EVENT(BODY_END); \
+    ASSERT_TRUE(cat_http_parser_execute(&parser, (p = cat_http_parser_get_current_pos(&parser)), pe - p)); \
+    ASSERT_TRUE(cat_http_parser_is_completed(&parser)); \
+} while(0)
+
+TEST(cat_http_parser, multipart_empty_body)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    char head_buf[8192];
+
+    const char *boundary = "---------------------------6169044094038990135731635364";
+    int head_len = sprintf(head_buf, multipart_req_heads[0].data, multipart_req_body_empty_body.length, boundary);
+    memcpy(&head_buf[head_len], multipart_req_body_empty_body.data, multipart_req_body_empty_body.length);
+    head_buf[head_len + multipart_req_body_empty_body.length] = '\0';
+
+    // firefox test
+    const char *p = head_buf;
+    const char *pe = &head_buf[head_len + multipart_req_body_empty_body.length];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", head_len + multipart_req_body_empty_body.length, head_buf);
+    while (true) {
+        ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+            ASSERT_MULTIPART_FLOW_EMPTY_BODY();
+        }
+        if (cat_http_parser_is_completed(&parser)) {
+            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            break;
+        }
+        ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+        p = cat_http_parser_get_current_pos(&parser);
+    }
+    return;
 }
 
 TEST(cat_http_parser, multipart_bad_boundaries)
