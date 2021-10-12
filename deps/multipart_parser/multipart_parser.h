@@ -55,7 +55,6 @@ struct multipart_parser {
 
     unsigned char state;
 
-    char* lookbehind;
     char multipart_boundary[(2 + BOUNDARY_MAX_LEN)*2 + 9];
 };
 

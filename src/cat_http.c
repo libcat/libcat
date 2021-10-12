@@ -102,14 +102,18 @@ const multipart_parser_settings cat_http_multipart_parser_settings = {
 static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
 
     size_t len = 0;
-    
+
+    parser->event = CAT_HTTP_PARSER_EVENT_NONE;
     if(SIZE_MAX == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
         cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "HTTP-Parser execute failed: failed to parse multipart body");
         return cat_false;
     }
 
     CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser_execute returns %d, parsed \"%.*s\"", len, (int)len, data);
-    CAT_ASSERT(parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART);
+    CAT_ASSERT(
+        parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART || 
+        parser->event == CAT_HTTP_PARSER_EVENT_NONE
+    );
     // add ptr
     parser->multipart_ptr = data + len;
     parser->parsed_length = len;

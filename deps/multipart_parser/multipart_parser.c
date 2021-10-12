@@ -12,11 +12,20 @@
 
 #ifdef DEBUG_MULTIPART
 //#ifdef _DEBUG
+#include <ctype.h>
 #define multipart_log(format, ...) do {\
-    fprintf(stderr, "[HTTP_MULTIPART_PARSER] %s:%d: " format "\n", __FILE__, __LINE__, __VA_ARGS__); \
+    fprintf(stderr, "[MULTIPART_PARSER] line %d: " format "\n", __LINE__, __VA_ARGS__); \
+} while(0)
+#define multipart_log_c(format) do {\
+    if (isprint(c)) { \
+        multipart_log("parsing '%c' " format, c); \
+    } else { \
+        multipart_log("parsing '\\x%0.2x' " format, c); \
+    } \
 } while(0)
 #else
 #define multipart_log(format, ...)
+#define multipart_log_c(format, ...)
 #endif
 
 #define NOTIFY_CB(FOR, ni)                                             \
@@ -28,7 +37,7 @@ do {                                                                   \
         if (mark == 0) {                                               \
             p->i = ni;                                                 \
             return i;                                                  \
-        }else {                                                        \
+        } else {                                                       \
             p->i = i-mark+ni;                                          \
             return mark;                                               \
         }                                                              \
@@ -70,6 +79,7 @@ enum state
     s_part_data,
     s_part_data_almost_boundary,
     s_part_data_boundary,
+    s_part_data_almost_almost_end,
     s_part_data_almost_end,
     s_part_data_end,
     s_part_data_final_hyphen,
@@ -89,7 +99,7 @@ int multipart_parser_init(multipart_parser *mp, const char *boundary, size_t bou
         // set \0
         memset(&mp->multipart_boundary[2 + boundary_length], 0, sizeof(mp->multipart_boundary) - 2 - boundary_length);
     }
-    mp->lookbehind = (mp->multipart_boundary + mp->boundary_length + 1);
+    //mp->lookbehind = (mp->multipart_boundary + mp->boundary_length + 1);
     mp->i = 0;
     mp->index = 0;
     mp->state = s_start;
@@ -142,30 +152,48 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
 {
     size_t i = p->i;
     size_t mark = 0;
+    size_t mark_end = 0;
+    int state_back = 0;
     char c, cl;
     int is_last = 0;
     int ret;
+
+#define ERROR_OUT() do {\
+    p->i = i; \
+    return SIZE_MAX; \
+} while(0)
+
+#define ERROR_EXPECT(ch) do {\
+    if(ch == LF){ \
+        multipart_log("expecting LF at %zu, but it's \\x%0.2x", i, c); \
+    } else if (ch == CR){ \
+        multipart_log("expecting CR at %zu, but it's \\x%0.2x", i, c); \
+    } else { \
+        multipart_log("expecting '%c' at %zu, but it's \\x%0.2x", ch, i, c); \
+    } \
+    ERROR_OUT(); \
+} while(0)
 
     while (i < len) {
         c = buf[i];
         is_last = (i == (len - 1));
         switch (p->state) {
             case s_start:
-                multipart_log("s_start");
+                multipart_log_c("s_start");
                 p->index = 0;
                 p->state = s_start_boundary;
                 /* fallthrough */
             case s_start_boundary:
-                multipart_log("s_start_boundary");
+                multipart_log_c("s_start_boundary");
                 if (p->index == p->boundary_length) {
                     if (c != CR) {
-                        return i;
+                        ERROR_EXPECT(CR);
                     }
                     p->index++;
                     break;
                 } else if (p->index == (p->boundary_length + 1)) {
                     if (c != LF) {
-                        return i;
+                        ERROR_EXPECT(LF);
                     }
                     p->index = 0;
                     p->state = s_header_field_start;
@@ -173,17 +201,17 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                     break;
                 }
                 if (c != p->multipart_boundary[p->index]) {
-                    return i;
+                    ERROR_EXPECT(p->multipart_boundary[p->index]);
                 }
                 p->index++;
                 break;
             case s_header_field_start:
-                multipart_log("s_header_field_start");
+                multipart_log_c("s_header_field_start");
                 mark = i;
                 p->state = s_header_field;
                 /* fallthrough */
             case s_header_field:
-                multipart_log("s_header_field");
+                multipart_log_c("s_header_field");
                 if (c == CR) {
                     p->state = s_headers_almost_done;
                     break;
@@ -199,20 +227,20 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 cl = c | 0x20;
                 if (cl < 'a' || cl > 'z') {
                     multipart_log("invalid character in header name");
-                    return i;
+                    ERROR_OUT();
                 }
                 if (is_last)
                     EMIT_DATA_CB(header_field, buf + mark, (i - mark) + 1);
                 break;
             case s_headers_almost_done:
-                multipart_log("s_headers_almost_done");
+                multipart_log_c("s_headers_almost_done");
                 if (c != LF) {
-                    return i;
+                    ERROR_EXPECT(LF);
                 }
                 p->state = s_part_data_start;
                 break;
             case s_header_value_start:
-                multipart_log("s_header_value_start");
+                multipart_log_c("s_header_value_start");
                 if (c == ' ') {
                     break;
                 }
@@ -220,7 +248,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 p->state = s_header_value;
                 /* fallthrough */
             case s_header_value:
-                multipart_log("s_header_value");
+                multipart_log_c("s_header_value");
                 if (c == CR) {
                     p->state = s_header_value_almost_done;
                     EMIT_DATA_CB(header_value, buf + mark, i - mark);
@@ -229,58 +257,59 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                     EMIT_DATA_CB(header_value, buf + mark, (i - mark) + 1);
                 break;
             case s_header_value_almost_done:
-                multipart_log("s_header_value_almost_done");
+                multipart_log_c("s_header_value_almost_done");
                 if (c != LF) {
-                    return i;
+                    ERROR_EXPECT(LF);
                 }
                 p->state = s_header_field_start;
                 break;
             case s_part_data_start:
-                multipart_log("s_part_data_start");
+                multipart_log_c("s_part_data_start");
                 mark = i;
                 p->state = s_part_data;
                 NOTIFY_CB(headers_complete, 0);
                 /* fallthrough */
             case s_part_data:
-                multipart_log("s_part_data");
+                multipart_log_c("s_part_data");
                 if (c == CR) {
                     p->state = s_part_data_almost_boundary;
-                    p->lookbehind[0] = CR;
-                    EMIT_DATA_CB(part_data, buf + mark, i - mark);
-                    mark = i;
+                    mark_end = i;
                     break;
                 }
-                if (is_last)
-                    EMIT_DATA_CB(part_data, buf + mark, (i - mark) + 1);
+                if (is_last) {
+                    i = mark_end;
+                    EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                }
                 break;
             case s_part_data_almost_boundary:
-                multipart_log("s_part_data_almost_boundary");
+                multipart_log_c("s_part_data_almost_boundary");
                 if (c == LF) {
                     p->state = s_part_data_boundary;
-                    p->lookbehind[1] = LF;
                     p->index = 0;
                     break;
                 }
                 p->state = s_part_data;
-                mark = i--;
-                EMIT_DATA_CB(part_data, p->lookbehind, 1);
+                mark_end = i--;
                 break;
             case s_part_data_boundary:
-                multipart_log("s_part_data_boundary");
+                multipart_log_c("s_part_data_boundary");
                 if (p->multipart_boundary[p->index] != c) {
                     p->state = s_part_data;
-                    mark = i--;
-                    EMIT_DATA_CB(part_data, p->lookbehind, 2 + p->index);
+                    mark_end = i--;
                     break;
                 }
-                p->lookbehind[2 + p->index] = c;
                 if ((++p->index) == p->boundary_length) {
-                    p->state = s_part_data_almost_end;
-                    NOTIFY_CB(part_data_end, 1);
+                    p->state = s_part_data_almost_almost_end;
+                    EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
                 }
                 break;
+            case s_part_data_almost_almost_end:
+                multipart_log_c("s_part_data_almost_almost_end");
+                p->state = s_part_data_almost_end;
+                NOTIFY_CB(part_data_end, 0);
+                /* fallthrough */
             case s_part_data_almost_end:
-                multipart_log("s_part_data_almost_end");
+                multipart_log_c("s_part_data_almost_end");
                 if (c == '-') {
                     p->state = s_part_data_final_hyphen;
                     break;
@@ -289,29 +318,33 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                     p->state = s_part_data_end;
                     break;
                 }
-                return i;
+                // should be end or another part
+                multipart_log("expecting '-' or CR at %zu but it's \\x%0.2x", i, c);
+                ERROR_OUT();
             case s_part_data_final_hyphen:
-                multipart_log("s_part_data_final_hyphen");
+                multipart_log_c("s_part_data_final_hyphen");
                 if (c == '-') {
                     NOTIFY_CB(body_end, 1);
                     p->state = s_end;
                     break;
                 }
-                return i;
+                // should be -
+                ERROR_EXPECT('-');
             case s_part_data_end:
-                multipart_log("s_part_data_end");
+                multipart_log_c("s_part_data_end");
                 if (c == LF) {
                     p->state = s_header_field_start;
                     NOTIFY_CB(part_data_begin, 1);
                     break;
                 }
-                return i;
+                // should be -
+                ERROR_EXPECT('-');
             case s_end:
-                multipart_log("s_end: %02X", (int) c);
+                multipart_log_c("s_end");
                 break;
             default:
-                multipart_log("Multipart parser unrecoverable error");
-                return SIZE_MAX;
+                multipart_log_c("Multipart parser unrecoverable error");
+                ERROR_OUT();
         }
         ++i;
     }

@@ -758,7 +758,7 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
     ASSERT_COMPLETE(); \
 } while(0)
 
-TEST(cat_http_parser, multipart_good)
+TEST(cat_http_parser, multipart)
 {
     cat_http_parser_t parser;
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
@@ -823,7 +823,7 @@ TEST(cat_http_parser, multipart_good)
     }
 }
 
-TEST(cat_http_parser, multipart_good_2)
+TEST(cat_http_parser, multipart_only_data_cb)
 {
     cat_http_parser_t parser;
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
@@ -906,6 +906,135 @@ TEST(cat_http_parser, multipart_empty_body)
             ASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
             ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
             ASSERT_DATA(MULTIPART_DATA, "");
+            ASSERT_EVENT(MULTIPART_DATA_END);
+            ASSERT_COMPLETE();
+        }
+        if (cat_http_parser_is_completed(&parser)) {
+            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            break;
+        }
+        ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+        p = cat_http_parser_get_current_pos(&parser);
+    }
+    return;
+}
+
+
+// from firefox
+static const cat_const_string_t multipart_req_body_multiline = cat_const_string(
+    "-----------------------------6169044094038990135731635364\r\n"
+    "Content-Disposition: form-data; name=\"Text\"\r\n"
+    "\r\n"
+    "foo bar\r\n"
+    "-----------------------------6169044094038990135731635364\r\n"
+    "Content-Disposition: form-data; name=\"Ceshi\"; filename=\"\"\r\n"
+    "Content-Type: application/octet-stream\r\n"
+    "\r\n"
+    "cesh\ni2\r\n"
+    "ceshi\r1\r\n"
+    "ces\r\n--hi3\r\n"
+    "-----------------------------6169044094038990135731635364--\r\n"
+);
+
+TEST(cat_http_parser, multipart_multiline)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    char head_buf[8192];
+
+    const char *boundary = "---------------------------6169044094038990135731635364";
+    int head_len = sprintf(head_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+    memcpy(&head_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
+    head_buf[head_len + multipart_req_body_multiline.length] = '\0';
+
+    // multi line multipart contents
+    const char *p = head_buf;
+    const char *pe = &head_buf[head_len + multipart_req_body_multiline.length];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", head_len + multipart_req_body_multiline.length, head_buf);
+    while (true) {
+        ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+            ASSERT_EVENT(MULTIPART_DATA_BEGIN);
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
+            ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+            ASSERT_DATA(MULTIPART_DATA, "foo bar");
+            ASSERT_EVENT(MULTIPART_DATA_END);
+            ASSERT_EVENT(MULTIPART_DATA_BEGIN);
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Ceshi\"; filename=\"\"");
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
+            ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+            ASSERT_DATA(MULTIPART_DATA, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3");
+            ASSERT_EVENT(MULTIPART_DATA_END);
+            ASSERT_COMPLETE();
+        }
+        if (cat_http_parser_is_completed(&parser)) {
+            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            break;
+        }
+        ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+        p = cat_http_parser_get_current_pos(&parser);
+    }
+    return;
+}
+
+TEST(cat_http_parser, multipart_stream)
+{
+    return;
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    char head_buf[8192];
+
+    const char *boundary = "---------------------------6169044094038990135731635364";
+    int head_len = sprintf(head_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+    memcpy(&head_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
+    head_buf[head_len + multipart_req_body_multiline.length] = '\0';
+
+    // multi line multipart contents
+    const char *p = head_buf;
+    const char *pe = &head_buf[head_len + multipart_req_body_multiline.length];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", head_len + multipart_req_body_multiline.length, head_buf);
+
+    size_t slice_a_len = 20;
+    size_t slice_b_len = pe - p - slice_a_len;
+    int state = 0;
+
+#define SASSERT_(TYPE, _state, ...) \
+    case _state: \
+        ASSERT_##TYPE(__VA_ARGS__); \
+        state++; \
+        break;
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+    while(true){
+        if (CAT_HTTP_PARSER_EVENT_NONE == parser.event){
+            break;
+        }
+        switch(state) {
+            SASSERT_(EVENT, 0, MULTIPART_DATA_BEGIN)
+            default:
+                GTEST_FAIL();
+        }
+
+        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+            ASSERT_EVENT(MULTIPART_DATA_BEGIN);
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
+            ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+            ASSERT_DATA(MULTIPART_DATA, "foo bar");
+            ASSERT_EVENT(MULTIPART_DATA_END);
+            ASSERT_EVENT(MULTIPART_DATA_BEGIN);
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Ceshi\"; filename=\"\"");
+            ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
+            ASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
+            ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+            ASSERT_DATA(MULTIPART_DATA, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3");
             ASSERT_EVENT(MULTIPART_DATA_END);
             ASSERT_COMPLETE();
         }
