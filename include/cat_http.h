@@ -38,14 +38,23 @@ enum cat_http_method_e
     CAT_HTTP_METHOD_UNKNOWN
 };
 
-enum cat_multipart_status
+#ifndef CAT_SHARED_USE
+// private use only
+enum cat_multipart_state
 {
     CAT_HTTP_MULTIPART_UNINIT = 0,
     CAT_HTTP_MULTIPART_IN_CONTENT_TYPE,
+    CAT_HTTP_MULTIPART_TYPE_IS_MULTIPART,
+    CAT_HTTP_MULTIPART_ALMOST_BOUNDARY,
+    CAT_HTTP_MULTIPART_BOUNDARY_QUOTED_START,
+    CAT_HTTP_MULTIPART_BOUNDARY_START,
+    CAT_HTTP_MULTIPART_BOUNDARY_END,
+    CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE,
     CAT_HTTP_MULTIPART_NOT_MULTIPART,
     CAT_HTTP_MULTIPART_BOUNDARY_OK,
     CAT_HTTP_MULTIPART_IN_BODY,
 };
+#endif
 
 typedef uint8_t cat_http_method_t;
 
@@ -211,8 +220,12 @@ typedef struct cat_http_parser_s {
     uint64_t content_length;
     /* public readonly: keep alive (update on headers complete) */
     cat_bool_t keep_alive;
-    /* private: multipart parser status */
-    char multipart_status;
+    /* private: multipart parser header parser index */
+    uint8_t multipart_header_index;
+    /* private: multipart parser header parser buffer */
+    char multipart_header[12];
+    /* private: multipart parser state*/
+    char multipart_state;
     /* public readonly: multipart parser pointer */
     const char *multipart_ptr;
     /* private: multipart parser */
