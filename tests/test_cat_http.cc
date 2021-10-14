@@ -583,6 +583,16 @@ static const cat_const_string_t multipart_req_heads[] = {
         "Content-Type: multipart/byteranges;\t charsEt=utF-8      ; boundarY=%s\r\n"
         "\r\n"
     ),
+    // normal 206 2 with strange parameter
+    cat_const_string(
+        "HTTP/1.1 206 Partial Content\r\n"
+        "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
+        "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
+        "Server: SomeBadServer/5\r\n"
+        "Content-Length: %d\r\n"
+        "Content-Type: multipart/byteranges;\t foo; boundarY=%s\r\n"
+        "\r\n"
+    ),
 };
 
 static const cat_const_string_t multipart_req_heads_bad[] = {
@@ -627,6 +637,16 @@ static const cat_const_string_t multipart_req_heads_bad[] = {
         "Content-Length: %d\r\n"
         "Content-Type: multipart/byteranges;\t boundary=%s\r\n"
         "Content-Type: application/json\r\n"
+        "\r\n"
+    ),
+    // duplicate boundary
+    cat_const_string(
+        "HTTP/1.1 206 Partial Content\r\n"
+        "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
+        "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
+        "Server: SomeBadServer/5\r\n"
+        "Content-Length: %d\r\n"
+        "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
         "\r\n"
     ),
 };
@@ -786,7 +806,7 @@ TEST(cat_http_parser, multipart)
                 ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
                 if (parser.event == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE) {
                     // test only, this should be private!
-                    ASSERT_EQ(std::string(boundaries[j].real), std::string(parser.multipart.multipart_boundary + 2));
+                    ASSERT_EQ(std::string(boundaries[j].real), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
                 }
                 if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
                     ASSERT_MULTIPART_FLOW();
@@ -806,7 +826,7 @@ TEST(cat_http_parser, multipart)
                 ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
                 if (parser.event == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE) {
                     // test only, this should be private!
-                    ASSERT_EQ(std::string(boundaries[j].real), std::string(parser.multipart.multipart_boundary + 2));
+                    ASSERT_EQ(std::string(boundaries[j].real), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
                 }
                 if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
                     ASSERT_MULTIPART_FLOW();

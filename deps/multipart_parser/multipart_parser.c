@@ -88,7 +88,7 @@ enum state
 
 int multipart_parser_init(multipart_parser *mp, const char *boundary, size_t boundary_length, const multipart_parser_settings* settings)
 {
-    if (boundary_length < 1 || boundary_length > BOUNDARY_MAX_LEN) {
+    if (boundary_length > BOUNDARY_MAX_LEN) {
         errno = EINVAL;
         return -1;
     }
@@ -96,9 +96,9 @@ int multipart_parser_init(multipart_parser *mp, const char *boundary, size_t bou
         memcpy(mp->multipart_boundary, "--", 2);
         memcpy(mp->multipart_boundary + 2, boundary, boundary_length);
         mp->boundary_length = (unsigned char)(boundary_length + 2);
-        // set \0
-        memset(&mp->multipart_boundary[2 + boundary_length], 0, sizeof(mp->multipart_boundary) - 2 - boundary_length);
     }
+    // set \0
+    memset(&mp->multipart_boundary[mp->boundary_length], 0, sizeof(mp->multipart_boundary) - mp->boundary_length);
     //mp->lookbehind = (mp->multipart_boundary + mp->boundary_length + 1);
     mp->i = 0;
     mp->index = 0;
