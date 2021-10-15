@@ -185,7 +185,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
         parser->parsed_length = llhttp_get_error_pos(&parser->llhttp) - data;
         if (unlikely(error != HPE_PAUSED)) {
             if (unlikely(error != HPE_PAUSED_UPGRADE)) {
-                cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_errno_name(error));
+                cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_get_error_reason(&parser->llhttp));
                 return cat_false;
             } else {
                 llhttp_resume_after_upgrade(&parser->llhttp);
