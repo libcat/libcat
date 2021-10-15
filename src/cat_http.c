@@ -261,7 +261,6 @@ static int parse_content_type(cat_http_parser_t *parser, const char *at, size_t 
     size_t mp_size;
     const char *mp_c;
     cat_bool_t mp_bool;
-    char mp_buf[12];
 #define DEBUG_STATE(name) do { \
     CAT_LOG_DEBUG_V3(PROTOCOL, "mpct parser " #name " [%zu]%.*s", mp_length, (int) mp_length, mp_at); \
 } while(0)
@@ -341,6 +340,7 @@ s_mime_type_end:
             mp_state = CAT_HTTP_MULTIPART_ALMOST_BOUNDARY;
             /* fallthrough */
         case CAT_HTTP_MULTIPART_ALMOST_BOUNDARY:
+s_almost_boundary:
             // s_almost_boundary "almost 'boundary='"
             DEBUG_STATE(s_almost_boundary);
             // skip ows
@@ -349,7 +349,6 @@ s_mime_type_end:
             mp_state = CAT_HTTP_MULTIPART_BOUNDARY;
             /* fallthrough */
         case CAT_HTTP_MULTIPART_BOUNDARY:
-s_boundary:
             // s_boundary "boundary="
             DEBUG_STATE(s_boundary);
             CONSUME_BUF(9);
@@ -357,22 +356,16 @@ s_boundary:
             // if "multipart/dasd; foo; boundary=";
             //       header buf is ^ -----> ^
             // so skip to semicolon
-            mp_bool = cat_false;
             for (mp_c = parser->multipart_header + 9 - 1; mp_c >= parser->multipart_header; mp_c--) {
                 if (*mp_c == ';') {
-                    mp_bool = cat_true;
                     break;
                 }
             }
-            if (mp_bool) {
-                // drop mp_c - parser->multipart_header
-                mp_size = mp_c + 1 - parser->multipart_header;
-                memcpy(mp_buf, mp_c + 1, 9 - mp_size);
-                memcpy(parser->multipart_header, mp_buf, 9 - mp_size);
-                CAT_ASSERT(mp_size < parser->multipart_header_index);
-                parser->multipart_header_index -= (uint8_t)mp_size;
-                // then consume again
-                goto s_boundary;
+            if (mp_c >= parser->multipart_header) {
+                mp_c++; /* ';' */
+                // sizeof new things
+                mp_length += parser->multipart_header + 9 - mp_c;
+                goto s_almost_boundary;
             }
 
             if (!strcasecmp_boundary_eq(parser->multipart_header)) {
@@ -528,7 +521,7 @@ static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
 {
     cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp);
 
-    printf("on hc complete %d\n", parser->multipart_state);
+    //printf("on hc complete %d\n", parser->multipart_state);
     if (
         (parser->multipart_state >= CAT_HTTP_MULTIPART_IN_CONTENT_TYPE && parser->multipart_state < CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE)
     ){
@@ -538,7 +531,6 @@ static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
             CALLBACK_ERROR(MULTIPART, "unexpected EOF on parsing content-type header");
         }
         shrink_boundary(parser);
-        printf("cao 2 %.*s\n", (int) parser->multipart.boundary_length, parser->multipart.multipart_boundary);
 
         if(parser->multipart.boundary_length <= 2){
             CALLBACK_ERROR(MULTIPART, "empty boundary");
@@ -563,7 +555,7 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY){
         parser->multipart_state == CAT_HTTP_MULTIPART_NOT_MULTIPART ||
         parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK
     );
-    printf("on body %d\n", parser->multipart_state);
+    //printf("on body %d\n", parser->multipart_state);
     if ((parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) && parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK){
         return HPE_PAUSED;
     }
@@ -571,12 +563,7 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY){
 } CAT_HTTP_PARSER_ON_EVENT_END()
 CAT_HTTP_PARSER_ON_EVENT(chunk_header,           CHUNK_HEADER    )
 CAT_HTTP_PARSER_ON_EVENT(chunk_complete,         CHUNK_COMPLETE  )
-
-CAT_HTTP_PARSER_ON_EVENT_BEGIN(message_complete,       MESSAGE_COMPLETE) {
-    parser->multipart_state = CAT_HTTP_MULTIPART_UNINIT;
-    parser->multipart_header_index = 0;
-    parser->multipart.boundary_length = 0;
-} CAT_HTTP_PARSER_ON_EVENT_END()
+CAT_HTTP_PARSER_ON_EVENT(message_complete,       MESSAGE_COMPLETE)
 
 const llhttp_settings_t cat_http_parser_settings = {
     cat_http_parser_on_message_begin,
@@ -696,6 +683,7 @@ static cat_bool_t cat_http_llhttp_execute(cat_http_parser_t *parser, const char 
 CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char *data, size_t length)
 {
     cat_bool_t ret;
+    size_t parsed_length;
 
     if (
         1/*enable mp*/ &&
@@ -706,6 +694,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     } else {
         // if not in multipart body
         ret = cat_http_llhttp_execute(parser, data, length);
+        printf("%d %d\n", ret, parser->parsed_length);
 
         if (
             1/*enable mp*/ &&
@@ -713,9 +702,17 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
             parser->event == CAT_HTTP_PARSER_EVENT_BODY &&
             parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK
         ) {
-            // if entering body with multipart boundary is OK, execute multipart_parser
-            ret = cat_http_multipart_parser_execute(parser, parser->data, parser->data_length);
-            parser->parsed_length += parser->data - data;
+            // update llhttp status
+            // a little hacky here: llhttp wont check the body it got
+            ret = cat_http_llhttp_execute(parser, NULL, parser->content_length - parser->parsed_length);
+            CAT_ASSERT(ret);
+            if (parser->event == CAT_HTTP_PARSER_EVENT_BODY) {
+                ret = cat_http_llhttp_execute(parser, NULL, 1);
+                CAT_ASSERT(ret);
+            }
+            CAT_ASSERT(parser->event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
+            // if body with multipart boundary is OK, execute multipart_parser
+            ret = cat_http_multipart_parser_execute(parser, data, length);
             parser->multipart_state = CAT_HTTP_MULTIPART_IN_BODY;
         }
     }
@@ -724,11 +721,20 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
         1/*enable mp*/ &&
         parser->event == _CAT_HTTP_PARSER_EVENT_MULTIPART_BODY_END
     ) {
-        // if MULTIPART_BODY_END, skip it by redo call cat_http_llhttp_execute
-
-        ret = cat_http_llhttp_execute(parser, data + parser->parsed_length, length - parser->parsed_length);
+        // if MULTIPART_BODY_END, return llhttp event
+        parser->event = CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE;
+        // reset mpp
+        parser->multipart_state = CAT_HTTP_MULTIPART_UNINIT;
+        parser->multipart_header_index = 0;
+        parser->multipart.boundary_length = 0;
     }
 
+    if (parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+        CAT_LOG_DEBUG_V2(PROTOCOL, "http_parser_execute return %s [%zu]%.*s", cat_http_parser_event_name(parser->event),
+            parser->data_length, (int)parser->data_length, parser->data);
+    } else {
+        CAT_LOG_DEBUG_V2(PROTOCOL, "http_parser_execute return %s", cat_http_parser_event_name(parser->event));
+    }
     return ret;
 }
 

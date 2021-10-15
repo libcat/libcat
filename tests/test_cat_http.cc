@@ -732,13 +732,8 @@ static const char *boundaries_bad[] = {
 };
 
 #define CONTINUE_PARSE() do {\
-    p = cat_http_parser_get_current_pos(&parser); \
+    p += cat_http_parser_get_parsed_length(&parser); \
     ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
-    if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) { \
-        CAT_LOG_DEBUG_V3(TEST, "Paused, event: %s, data %.*s", cat_http_parser_event_name(parser.event), (int)parser.data_length, parser.data); \
-    } else { \
-        CAT_LOG_DEBUG_V3(TEST, "Paused, event: %s", cat_http_parser_event_name(parser.event)); \
-    } \
 } while(0)
 
 #define ASSERT_DATA(NAME, expect) do { \
@@ -965,6 +960,11 @@ static const cat_const_string_t multipart_req_body_multiline = cat_const_string(
     "cesh\ni2\r\n"
     "ceshi\r1\r\n"
     "ces\r\n--hi3\r\n"
+    "-----------------------------6169044094038990135731635364\r\n"
+    "Content-Disposition: form-data; name=\"Empty\"; filename=\"\"\r\n"
+    "Content-Type: application/octet-stream\r\n"
+    "\r\n"
+    "\r\n"
     "-----------------------------6169044094038990135731635364--\r\n"
 );
 
@@ -1014,28 +1014,105 @@ TEST(cat_http_parser, multipart_multiline)
     return;
 }
 
-#define SASSERT_DATA(ev, data) \
+#define LINE_TAG(x) _LINE_TAG(x)
+#define _LINE_TAG(x) s_ ## x
+
+#define SASSERT_DATA(ev, expected) \
     if (__LINE__ >= state) { \
-        ASSERT_DATA(ev, data); \
-        state = __LINE__ + 1; \
+        /*LINE_TAG(__LINE__):*/ \
+        ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
+        if (parser.event == CAT_HTTP_PARSER_EVENT_NONE) { \
+            break; \
+        } \
+        /* last data callback leftover */ \
+        if (parser.event != CAT_HTTP_PARSER_EVENT_##ev && (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA)) { \
+            printf("leftover " #ev " vs actual %s\n", cat_http_parser_event_name(parser.event)); \
+            ASSERT_EQ(parser.data_length, 0); \
+        } else { \
+            ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_##ev); \
+            memcpy(&assert_buf[assert_i], parser.data, parser.data_length); \
+            assert_i += parser.data_length; \
+            printf("%zu, %zu\n", sizeof(expected) - 1, assert_i); \
+            if (sizeof(expected) - 1 <= assert_i) { \
+                /* enough */ \
+                printf("enough\n"); \
+                ASSERT_EQ(std::string(expected), std::string(assert_buf, assert_i)); \
+                assert_i = 0; \
+                state = __LINE__ + 1; \
+            } \
+        } \
+        if (pe - p > cat_http_parser_get_parsed_length(&parser)) { \
+            printf("mp cannot determine data type \n"); \
+            leftover = pe - p - cat_http_parser_get_parsed_length(&parser); \
+            break; \
+        } \
+        p += cat_http_parser_get_parsed_length(&parser); \
+        if (p == pe) { \
+            leftover = 0; \
+            break; \
+        } \
         continue; \
     }
 #define SASSERT_EVENT(ev) \
     if (__LINE__ >= state) { \
-        ASSERT_EVENT(ev); \
-        state = __LINE__ + 1; \
+        printf(#ev "\n"); \
+        ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p)); \
+        if (parser.event == CAT_HTTP_PARSER_EVENT_NONE) { \
+            leftover = 0; \
+            break; \
+        } \
+        /* last data callback leftover */ \
+        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) { \
+            printf("leftover " #ev " vs actual %s\n", cat_http_parser_event_name(parser.event)); \
+            ASSERT_EQ(parser.data_length, 0); \
+        } else { \
+            ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_##ev); \
+            state = __LINE__ + 1; \
+        } \
+        if (pe - p > cat_http_parser_get_parsed_length(&parser)) { \
+            printf("mp cannot determine data type \n"); \
+            leftover = pe - p - cat_http_parser_get_parsed_length(&parser); \
+            break; \
+        } \
+        p += cat_http_parser_get_parsed_length(&parser); \
+        printf("p is %p, pe is %p\n", p, pe);\
+        if (p == pe) { \
+            leftover = 0; \
+            break;\
+        } \
         continue; \
     }
+
+
+#ifdef CAT_HAVE_ASAN
+extern "C" {
+    void __asan_poison_memory_region(void const volatile *addr, size_t size);
+}
+#endif
 
 TEST(cat_http_parser, multipart_stream)
 {
     cat_http_parser_t parser;
+    DEFER({
+        CAT_LOG_DEBUG(TEST, "parser event is %s", cat_http_parser_event_name(parser.event));
+    });
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
     cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
 
+    char canary1[8192];
     char http_buf[8192];
-    char body_buf[8192];
+    char canary2[8192];
+    char http_buf_2[8192+8192];
+
+#ifdef CAT_HAVE_ASAN
+    __asan_poison_memory_region(&canary1, sizeof(canary1));
+    __asan_poison_memory_region(&canary2, sizeof(canary2));
+#endif
+
+    char assert_buf[8192];
+    size_t assert_i = 0;
     size_t body_i = 0;
+    size_t leftover;
 
     const char *boundary = "---------------------------6169044094038990135731635364";
     int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
@@ -1043,91 +1120,80 @@ TEST(cat_http_parser, multipart_stream)
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
 
     // multi line multipart contents
-    const char *p = http_buf;
-    const char *pe = &http_buf[head_len + multipart_req_body_multiline.length];
+    const char *p;
+    const char *pe;
 
-    size_t slice_a_len = 128;
-    size_t slice_b_len = pe - p - slice_a_len;
-    int state = 0;
+    for (
+        size_t slice_a_len = 1;
+        slice_a_len < head_len + multipart_req_body_multiline.length;
+        slice_a_len++
+    ) {
+        DEFER({
+            CAT_LOG_DEBUG(TEST, "slice size %d", slice_a_len);
+        });
+        int state = 0;
+        p = http_buf;
+        pe = http_buf + slice_a_len;
 
-    pe = p + slice_a_len;
+        CAT_LOG_DEBUG_V3(TEST, "Parsing data slice A:\n%.*s\n\n", slice_a_len, p);
 
-    CAT_LOG_DEBUG_V3(TEST, "Parsing data slice A:\n%.*s\n\n", slice_a_len, p);
-    CAT_LOG_DEBUG_V3(TEST, "Parsing data slice B:\n%.*s\n\n", slice_b_len, p + slice_a_len);
-
-    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
-    CAT_LOG_DEBUG_V3(TEST, "Paused, event: %s", cat_http_parser_event_name(parser.event));
-    while (true) {
-        if (CAT_HTTP_PARSER_EVENT_NONE == parser.event) {
-            // slice done
-            break;
-        }
-        SASSERT_EVENT(MESSAGE_BEGIN);
-        SASSERT_DATA(URL, "/upload");
-        SASSERT_DATA(HEADER_FIELD, "Host");
-        SASSERT_DATA(HEADER_VALUE, "www.foo.com");
-        SASSERT_DATA(HEADER_FIELD, "User-Agent");
-        SASSERT_DATA(HEADER_VALUE, "SomeBadBot/1");
-        SASSERT_DATA(HEADER_FIELD, "Accept");
-        SASSERT_DATA(HEADER_VALUE, "*/*");
-        SASSERT_DATA(HEADER_FIELD, "Content-Length");
-        SASSERT_DATA(HEADER_VALUE, "366");
-        SASSERT_DATA(HEADER_FIELD, "Content-Type");
-        CONTINUE_PARSE();
-        CONTINUE_PARSE();
-        CONTINUE_PARSE();
-        CONTINUE_PARSE();
-        CONTINUE_PARSE();
-        CONTINUE_PARSE();
-        SASSERT_DATA(HEADER_VALUE, "multipart/form; boundary=---------------------------6169044094038990135731635364");
-        SASSERT_EVENT(MULTIPART_DATA_BEGIN);
-        SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
-        SASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
-        SASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
-        if (state <= __LINE__) {
-            if (parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_END) {
-                // check data
-                ASSERT_EQ(std::string("foo bar"), std::string(body_buf, body_i));
-                body_i = 0;
-            } else if (parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA) {
-                // save read data
-                memcpy(body_buf + body_i, parser.data, parser.data_length);
-                body_i += parser.data_length;
-                continue;
-            } else {
-                ASSERT_TRUE(
-                    parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_END ||
-                    parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA);
+        for (int _x = 0; _x < 2; _x++) {
+            while (true) {
+                SASSERT_EVENT(MESSAGE_BEGIN);
+                SASSERT_DATA(URL, "/upload");
+                SASSERT_DATA(HEADER_FIELD, "Host");
+                SASSERT_DATA(HEADER_VALUE, "www.foo.com");
+                SASSERT_DATA(HEADER_FIELD, "User-Agent");
+                SASSERT_DATA(HEADER_VALUE, "SomeBadBot/1");
+                SASSERT_DATA(HEADER_FIELD, "Accept");
+                SASSERT_DATA(HEADER_VALUE, "*/*");
+                SASSERT_DATA(HEADER_FIELD, "Content-Length");
+                SASSERT_DATA(HEADER_VALUE, "528");
+                SASSERT_DATA(HEADER_FIELD, "Content-Type");
+                SASSERT_DATA(HEADER_VALUE, "multipart/form; boundary=---------------------------6169044094038990135731635364");
+                SASSERT_EVENT(HEADERS_COMPLETE);
+                if (__LINE__ >= state) {
+                    // test only, this should be private!
+                    ASSERT_EQ(std::string(boundary), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
+                    state = __LINE__ + 1;
+                    continue;
+                }
+                SASSERT_EVENT(MULTIPART_DATA_BEGIN);
+                SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+                SASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
+                SASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+                SASSERT_DATA(MULTIPART_DATA, "foo bar");
+                SASSERT_EVENT(MULTIPART_DATA_END);
+                SASSERT_EVENT(MULTIPART_DATA_BEGIN);
+                SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+                SASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Ceshi\"; filename=\"\"");
+                SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
+                SASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
+                SASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+                SASSERT_DATA(MULTIPART_DATA, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3");
+                SASSERT_EVENT(MULTIPART_DATA_END);
+                SASSERT_EVENT(MULTIPART_DATA_BEGIN);
+                SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
+                SASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Empty\"; filename=\"\"");
+                SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
+                SASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
+                SASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
+                SASSERT_DATA(MULTIPART_DATA, "");
+                SASSERT_EVENT(MULTIPART_DATA_END);
+                SASSERT_EVENT(MESSAGE_COMPLETE);
+                break;
             }
-        }
-        SASSERT_EVENT(MULTIPART_DATA_END);
-        SASSERT_EVENT(MULTIPART_DATA_BEGIN);
-        SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
-        SASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Ceshi\"; filename=\"\"");
-        SASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
-        SASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
-        SASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
-        if (state <= __LINE__) {
-            if (parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_END) {
-                // check data
-                ASSERT_EQ(std::string("cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3"), std::string(body_buf, body_i));
-                body_i = 0;
-            } else if (parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA) {
-                // save read data
-                memcpy(body_buf + body_i, parser.data, parser.data_length);
-                body_i += parser.data_length;
+            // swap slice
+            if (_x > 0) {
                 continue;
-            } else {
-                ASSERT_TRUE(
-                    parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA_END ||
-                    parser.event == CAT_HTTP_PARSER_EVENT_MULTIPART_DATA);
             }
+            memcpy(http_buf_2, http_buf + slice_a_len - leftover, head_len + multipart_req_body_multiline.length - slice_a_len + leftover);
+            p = http_buf_2;
+            pe = http_buf_2 + head_len + multipart_req_body_multiline.length - slice_a_len + leftover;
+            CAT_LOG_DEBUG_V3(TEST, "Parsing data slice B:\n%.*s\nstate %d\n", (int)(pe - p), p, state);
         }
-        SASSERT_EVENT(MULTIPART_DATA_END);
-        ASSERT_EQ(parser.event, CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
         ASSERT_TRUE(cat_http_parser_is_completed(&parser));
     }
-    ASSERT_TRUE(cat_http_parser_is_completed(&parser));
 }
 
 TEST(cat_http_parser, multipart_bad_boundaries)
