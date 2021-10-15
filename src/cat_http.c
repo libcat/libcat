@@ -180,7 +180,6 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     llhttp_errno_t error;
 
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
-    llhttp_resume(&parser->llhttp);
     error = llhttp_execute(&parser->llhttp, data, length);
     if (error != HPE_OK) {
         parser->parsed_length = llhttp_get_error_pos(&parser->llhttp) - data;
@@ -191,6 +190,8 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
             } else {
                 llhttp_resume_after_upgrade(&parser->llhttp);
             }
+        } else {
+            llhttp_resume(&parser->llhttp);
         }
     } else {
         parser->parsed_length = length;

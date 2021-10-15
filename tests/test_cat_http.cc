@@ -507,3 +507,37 @@ TEST(cat_http_parser, all)
     }
 }
 
+TEST(cat_http_parser, byte_by_byte)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    size_t step_length = 1;
+    const char *p = request_post.data;
+    const char *pe = p + step_length;
+    const char *de = request_post.data + request_post.length;
+    while (true) {
+        ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+        p += cat_http_parser_get_parsed_length(&parser);
+        CAT_LOG_DEBUG(TEST, "parsed %zu bytes", cat_http_parser_get_parsed_length(&parser));
+        if (p == pe || parser.event == CAT_HTTP_PARSER_EVENT_NONE) {
+            pe += step_length; // recv more bytes
+            if (pe > de) {
+                pe = de;
+            }
+        }
+        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+            CAT_LOG_DEBUG(TEST, "%s: \"%.*s\"", cat_http_parser_get_event_name(&parser), (int ) parser.data_length, parser.data);
+        } else {
+            CAT_LOG_DEBUG(TEST, "%s", cat_http_parser_get_event_name(&parser));
+        }
+        if (cat_http_parser_is_completed(&parser)) {
+            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            ASSERT_EQ(cat_http_parser_get_major_version(&parser), 1);
+            ASSERT_EQ(cat_http_parser_get_minor_version(&parser), 1);
+            ASSERT_EQ(cat_http_parser_get_method(&parser), CAT_HTTP_METHOD_POST);
+            break;
+        }
+    }
+}
