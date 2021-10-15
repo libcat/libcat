@@ -593,6 +593,16 @@ static const cat_const_string_t multipart_req_heads[] = {
         "Content-Type: multipart/byteranges;\t foo; boundarY=%s\r\n"
         "\r\n"
     ),
+    // normal 206 2 with strange ows
+    cat_const_string(
+        "HTTP/1.1 206 Partial Content\r\n"
+        "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
+        "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
+        "Server: SomeBadServer/5\r\n"
+        "Content-Length: %d\r\n"
+        "Content-Type:   \t  multipart/byteranges;\t foo; boundarY=%s\r\n"
+        "\r\n"
+    ),
 };
 
 static const cat_const_string_t multipart_req_heads_bad[] = {

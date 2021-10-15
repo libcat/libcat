@@ -219,9 +219,9 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) do {
 #endif
 } while(0); CAT_HTTP_PARSER_ON_EVENT_END()
 
+#if 1/*enable mp*/
 static int cat_http_parser_on_header_field_complete(llhttp_t *llhttp)
 {
-#if 1/*enable mp*/
     cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp);
     if (
         parser->multipart_header_index == 12 &&
@@ -234,14 +234,20 @@ static int cat_http_parser_on_header_field_complete(llhttp_t *llhttp)
         parser->multipart_state = CAT_HTTP_MULTIPART_IN_CONTENT_TYPE;
     }
     parser->multipart_header_index = 0;
-#endif
     return HPE_OK;
 }
+#endif
 
 strcasecmp_fast(boundary_eq, "boundary=", "        \0");
 strcasecmp_fast(multipart_dash, "multipart/", "         \0");
  
 #if 1/*enable mp*/
+#define shrink_boundary(parser) for(; \
+        parser->multipart.boundary_length > 2 && \
+        (parser->multipart.multipart_boundary[parser->multipart.boundary_length - 1] == '\t' || \
+        parser->multipart.multipart_boundary[parser->multipart.boundary_length - 1] == ' ') \
+    ;parser->multipart.boundary_length--)
+
 static int parse_content_type(cat_http_parser_t *parser, const char *at, size_t length)
 {
     // global variables
@@ -257,7 +263,7 @@ static int parse_content_type(cat_http_parser_t *parser, const char *at, size_t 
     cat_bool_t mp_bool;
     char mp_buf[12];
 #define DEBUG_STATE(name) do { \
-    CAT_LOG_DEBUG_V3(PROTOCOL, "mpct parser " #name " data [%zu]%.*s", mp_length, (int) mp_length, mp_at); \
+    CAT_LOG_DEBUG_V3(PROTOCOL, "mpct parser " #name " [%zu]%.*s", mp_length, (int) mp_length, mp_at); \
 } while(0)
 // consume specified length
 #define CONSUME_BUF(len) do { \
@@ -277,19 +283,37 @@ static int parse_content_type(cat_http_parser_t *parser, const char *at, size_t 
         } while(0)
 // consume until condition
 #define CONSUME_UNTIL(cond) do { \
-            mp_bool = cat_false; \
             for (mp_c = mp_at; mp_c < mp_endp; mp_c++) { \
                 if (cond) { \
-                    mp_bool = cat_true; \
                     break; \
                 } \
             } \
-            if (!mp_bool) { \
+            if (mp_c == mp_endp) { \
                 return HPE_OK; \
             } \
             /* update mp_length */ \
             mp_length = mp_endp - mp_c; \
         } while(0)
+    /*
+    boundary syntax from RFC2046 section 5.1.1
+    boundary := 0*69<bchars> bcharsnospace
+    bchars := bcharsnospace / " "
+    bcharsnospace := DIGIT / ALPHA / "'" / "(" / ")" /
+        "+" / "_" / "," / "-" / "." /
+        "/" / ":" / "=" / "?"
+    */
+#define is_legal_boundary_char(ch) (\
+    /* '\'', '(' ')' */ \
+    ('\'' <= (ch) && (ch) <= ')') || \
+    /* '+', ',', '-', '.', '/', NUM, ':' */ \
+    ('+' <= (ch) && (ch) <= ':') || \
+    (ch) == '=' || \
+    (ch) == '?' || \
+    ('A' <= (ch) && (ch) <= 'Z') || \
+    (ch) == '_' || \
+    ('a' <= (ch) && (ch) <= 'z') || \
+    (ch) == ' ' \
+)
 
     switch (mp_state) {
         case CAT_HTTP_MULTIPART_IN_CONTENT_TYPE:
@@ -364,7 +388,7 @@ s_boundary:
             mp_state = CAT_HTTP_MULTIPART_BOUNDARY_START;
             /* fallthrough */
         case CAT_HTTP_MULTIPART_BOUNDARY_START:
-            // s_boundary_data "boundary data"
+            // s_boundary_data "boundary data" NOT_ACCEPTABLE
             DEBUG_STATE(s_boundary_data);
             if (mp_length == 0) {
                 return HPE_OK;
@@ -375,103 +399,106 @@ s_boundary:
             parser->multipart.multipart_boundary[1] = '-';
 
             // goto next state
-            mp_state = CAT_HTTP_MULTIPART_BOUNDARY_COMMON_START;
+            mp_state = CAT_HTTP_MULTIPART_BOUNDARY_COMMON;
             if (mp_at[0] == '"') {
                 mp_length--;
-                mp_state = CAT_HTTP_MULTIPART_BOUNDARY_QUOTED_START;
+                mp_state = CAT_HTTP_MULTIPART_BOUNDARY_QUOTED;
+                goto s_boundary_quoted_data;
             }
             /* fallthrough */
-        case CAT_HTTP_MULTIPART_BOUNDARY_COMMON_START:
-            /* fallthrough */
-        case CAT_HTTP_MULTIPART_BOUNDARY_QUOTED_START:
-            // s_boundary_data_start "boundary common|quoted start"
-            DEBUG_STATE(s_boundary_data_start);
-            if (mp_length == 0) {
+        case CAT_HTTP_MULTIPART_BOUNDARY_COMMON:
+            // s_boundary_common_data "boundary common data"
+            DEBUG_STATE(s_boundary_common_data);
+
+            // find parsed size
+            for (mp_c = mp_at; mp_c < mp_endp; mp_c++) {
+                if (!is_legal_boundary_char(*mp_c)) {
+                    break;
+                }
+            }
+            mp_size = mp_c - mp_at;
+
+            // should we keep on the state
+            mp_bool = cat_true;
+            if (mp_size + parser->multipart.boundary_length > BOUNDARY_MAX_LEN + 2) {
+                // out of range
+                mp_size = BOUNDARY_MAX_LEN + 2 - parser->multipart.boundary_length;
+            }
+            if (mp_size != mp_length) {
+                // break at middle
+                mp_bool = cat_false;
+            }
+            memcpy(parser->multipart.multipart_boundary + parser->multipart.boundary_length, mp_at, mp_size);
+            parser->multipart.boundary_length += (uint8_t)mp_size;
+            mp_length -= mp_size;
+
+            if (mp_bool) {
                 return HPE_OK;
             }
 
-            // copy to boundary buf
-            // consumed length
-            mp_size = parser->multipart.boundary_length + mp_length > 73 ?
-                73 - parser->multipart.boundary_length :
-                parser->multipart.boundary_length + mp_length - 2;
-            CAT_ASSERT(mp_size <= 73);
-            memcpy(parser->multipart.multipart_boundary + 2, mp_at, mp_size);
-
-            // if boundary ends in 73 bytes
-            mp_bool = cat_false;
-            for (
-                mp_c = parser->multipart.multipart_boundary + parser->multipart.boundary_length;
-                mp_c < parser->multipart.multipart_boundary + parser->multipart.boundary_length + mp_size;
-                mp_c++
-            ) {
-                /*
-                boundary syntax from RFC2046 section 5.1.1
-                boundary := 0*69<bchars> bcharsnospace
-                bchars := bcharsnospace / " "
-                bcharsnospace := DIGIT / ALPHA / "'" / "(" / ")" /
-                    "+" / "_" / "," / "-" / "." /
-                    "/" / ":" / "=" / "?"
-                */
-                if (
-                    ('\'' <= mp_c[0] && mp_c[0] <= ')') || // '\'', '(' ')'
-                    ('+' <= mp_c[0] && mp_c[0] <= ':') || // '+', ',', '-', '.', '/', NUM, ':'
-                    mp_c[0] == '=' ||
-                    mp_c[0] == '?' ||
-                    ('A' <= mp_c[0] && mp_c[0] <= 'Z') ||
-                    mp_c[0] == '_' ||
-                    ('a' <= mp_c[0] && mp_c[0] <= 'z') ||
-                    mp_c[0] == ' '
-                ) {
-                    continue;
-                }
-                // not legal boundary char
-                mp_bool = cat_true;
-                break;
-            }
-            if (!mp_bool) {
-                printf("not end %d, %d\n", mp_bool, parser->multipart.boundary_length + mp_size);
-                // update boundary length
-                CAT_ASSERT(mp_c - parser->multipart.multipart_boundary + 1 < 73);
-                parser->multipart.boundary_length = (uint8_t)(mp_c - parser->multipart.multipart_boundary);
-                break;
-            }
-            // roll back mp_c
-            --mp_c;
-            // we consume such size
-            mp_length -= (mp_c - parser->multipart.multipart_boundary + 1 /* real read */) - parser->multipart.boundary_length;
-            if (mp_state == CAT_HTTP_MULTIPART_BOUNDARY_QUOTED_START){
-                if (*(mp_c+1) != '"') {
-                    CALLBACK_ERROR(MULTIPART, "boundary is too long or quote not end");
-                }
-                if (*mp_c == '\t' || *mp_c == ' ') {
-                    CALLBACK_ERROR(MULTIPART, "boundary ends with space");
-                }
-                // consume '"'
-                mp_length--;
-            } else {
-                // roll back ows at boundary ending
-                for (; mp_c >= parser->multipart.multipart_boundary + 2; mp_c--){
-                    if (*mp_c != '\t' || *mp_c != ' ') {
-                        break;
-                    }
-                }
-            }
-            CAT_ASSERT(mp_c >= parser->multipart.multipart_boundary + 1);
-            if (mp_c == parser->multipart.multipart_boundary + 1) {
+            shrink_boundary(parser);
+            if(parser->multipart.boundary_length == 0){
                 CALLBACK_ERROR(MULTIPART, "empty boundary");
             }
-            // mp_c is now pointing to last byte of (maybe) boundary
-            CAT_ASSERT(mp_c - parser->multipart.multipart_boundary + 1 < 73);
-            parser->multipart.boundary_length = (uint8_t)(mp_c - parser->multipart.multipart_boundary + 1);
-            printf("end, len %d\n", parser->multipart.boundary_length);
-            // goto final check
+
+            mp_state = CAT_HTTP_MULTIPART_BOUNDARY_END;
+            /* fallthrough */
+        case CAT_HTTP_MULTIPART_BOUNDARY_END:
+s_boundary_end:
+            // s_boundary_end "boundary end"
+            DEBUG_STATE(s_boundary_end);
+
+            // consume to semicolon
+            CONSUME_UNTIL((*mp_c) != '\t' && (*mp_c) != ' ');
+
+            if (*mp_c != ';') {
+                CALLBACK_ERROR(MULTIPART, "extra char at boundary end");
+            }
+            length--;
             mp_state = CAT_HTTP_MULTIPART_TYPE_IS_MULTIPART;
             goto s_mime_type_end;
+        case CAT_HTTP_MULTIPART_BOUNDARY_QUOTED:
+s_boundary_quoted_data:
+            // s_boundary_quoted_data "boundary quoted data" NOT_ACCEPTABLE
+            DEBUG_STATE(s_boundary_quoted_data);
+            
+            // find parsed size
+            for (mp_c = mp_at; mp_c < mp_endp; mp_c++) {
+                if (!is_legal_boundary_char(*mp_c)) {
+                    break;
+                }
+            }
+            mp_size = mp_c - mp_at;
+
+            if (mp_size + parser->multipart.boundary_length > BOUNDARY_MAX_LEN + 2) {
+                CALLBACK_ERROR(MULTIPART, "boundary is too long");
+            }
+            // copy to buf
+            memcpy(parser->multipart.multipart_boundary + parser->multipart.boundary_length, mp_at, mp_size);
+            parser->multipart.boundary_length += (uint8_t)mp_size;
+
+            if (mp_length == mp_size) {
+                // not end
+                return HPE_OK;
+            }
+            
+            // ending
+            mp_length -= mp_size + 1;
+            if (*mp_c != '"') {
+                CALLBACK_ERROR(MULTIPART, "illegal char %c in boundary", *mp_c);
+            }
+
+            if (parser->multipart.multipart_boundary[parser->multipart.boundary_length] == ' ') {
+                CALLBACK_ERROR(MULTIPART, "boundary ends with space");
+            }
+            mp_state = CAT_HTTP_MULTIPART_BOUNDARY_END;
+            goto s_boundary_end;
         default:
             // never here
             cat_abort();
     }
+    // never here
+    cat_abort();
     return HPE_OK;
 #undef DEBUG_STATE
 #undef CONSUME_BUF
@@ -496,6 +523,35 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value,           HEADER_VALUE    ) {
     }
 } CAT_HTTP_PARSER_ON_DATA_END()
 
+#if 1/*enable mp*/
+static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
+{
+    cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp);
+
+    printf("on hc complete %d\n", parser->multipart_state);
+    if (
+        (parser->multipart_state >= CAT_HTTP_MULTIPART_IN_CONTENT_TYPE && parser->multipart_state < CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE)
+    ){
+        if (
+            parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_QUOTED ||
+            parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_START) {
+            CALLBACK_ERROR(MULTIPART, "unexpected EOF on parsing content-type header");
+        }
+        shrink_boundary(parser);
+        printf("cao 2 %.*s\n", (int) parser->multipart.boundary_length, parser->multipart.multipart_boundary);
+
+        if(parser->multipart.boundary_length <= 2){
+            CALLBACK_ERROR(MULTIPART, "empty boundary");
+        }
+        if (0 != multipart_parser_init(&parser->multipart, NULL, 0, &cat_http_multipart_parser_settings)) {
+            CALLBACK_ERROR(MULTIPART, "multipart_parser_init failed");
+        }
+        parser->multipart_state = CAT_HTTP_MULTIPART_BOUNDARY_OK;
+    }
+    return HPE_OK;
+}
+#endif
+
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
     parser->keep_alive = !!llhttp_should_keep_alive(&parser->llhttp);
     parser->content_length = parser->llhttp.content_length;
@@ -505,22 +561,10 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY){
 #if 1 /* enable mp */
     CAT_ASSERT(
         parser->multipart_state == CAT_HTTP_MULTIPART_NOT_MULTIPART ||
-        parser->multipart_state < CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE
+        parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK
     );
-    printf("cap %d\n", parser->multipart_state);
-    if (
-        (parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) &&
-        (parser->multipart_state >= CAT_HTTP_MULTIPART_IN_CONTENT_TYPE && parser->multipart_state < CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE)
-    ){
-        printf("test %d\n", parser->multipart.boundary_length);
-
-        if (parser->multipart.boundary_length <= 2) {
-            CALLBACK_ERROR(MULTIPART, "bad content type header for multipart");
-        }
-        if (0 != multipart_parser_init(&parser->multipart, NULL, 0, &cat_http_multipart_parser_settings)) {
-            CALLBACK_ERROR(MULTIPART, "multipart_parser_init failed");
-        }
-        parser->multipart_state = CAT_HTTP_MULTIPART_BOUNDARY_OK;
+    printf("on body %d\n", parser->multipart_state);
+    if ((parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) && parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK){
         return HPE_PAUSED;
     }
 #endif
@@ -547,7 +591,7 @@ const llhttp_settings_t cat_http_parser_settings = {
     cat_http_parser_on_chunk_complete,
     NULL, NULL,
     cat_http_parser_on_header_field_complete,
-    NULL
+    cat_http_parser_on_header_value_complete
 };
 
 static cat_always_inline void cat_http_parser__init(cat_http_parser_t *parser)
