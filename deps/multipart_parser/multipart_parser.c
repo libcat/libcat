@@ -14,7 +14,7 @@
 #include <errno.h>
 
 #ifdef DEBUG_MULTIPART
-//#ifdef _DEBUG
+//#if 1
 #include <ctype.h>
 #define multipart_log(format, ...) do {\
     fprintf(stderr, "[MULTIPART_PARSER] line %d: " format "\n", __LINE__, __VA_ARGS__); \
@@ -163,7 +163,7 @@ int multipart_parser_error_msg(multipart_parser* p, char *buf, size_t len) {
             ret += snprintf(buf + ret, len - ret, "expecting LF ");
             break;
         default:
-            ret += snprintf(buf + ret, len - ret, "expecting %c ", p->error_expected);
+            ret += snprintf(buf + ret, len - ret, "expecting '%c' ", p->error_expected);
             break;
     }
     if (ret >= len) {
@@ -253,6 +253,7 @@ do { \
                     p->state = s_header_field_start;
                     i++;
                     NOTIFY_CB(part_data_begin);
+                    i--;
                     break;
                 }
                 if (c != p->multipart_boundary[p->index]) {
@@ -284,7 +285,7 @@ do { \
                 }
                 cl = c | 0x20;
                 if (cl < 'a' || cl > 'z') {
-                    multipart_log("invalid character in header field");
+                    multipart_log_c("invalid character in header field");
                     p->error_unexpected = c;
                     ERROR_OUT(MPPE_INVALID_HEADER_FIELD_CHAR);
                 }
@@ -424,6 +425,7 @@ do { \
                     p->state = s_header_field_start;
                     i++;
                     NOTIFY_CB(part_data_begin);
+                    i--;
                     break;
                 }
                 // should be -
