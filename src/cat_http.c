@@ -501,8 +501,7 @@ s_boundary_quoted_data:
             if (*mp_c != '"') {
                 CALLBACK_ERROR(MULTIPART_HEADER, "illegal char %c in boundary", *mp_c);
             }
-
-            if (parser->multipart.multipart_boundary[parser->multipart.boundary_length] == ' ') {
+            if (parser->multipart.multipart_boundary[parser->multipart.boundary_length - 1] == ' ') {
                 CALLBACK_ERROR(MULTIPART_HEADER, "boundary ends with space");
             }
             mp_state = CAT_HTTP_MULTIPART_BOUNDARY_END;
