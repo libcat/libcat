@@ -102,10 +102,18 @@ const multipart_parser_settings cat_http_multipart_parser_settings = {
 static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
 
     size_t len = 0;
+    char err_buf[4096];
+    size_t ret;
 
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
-    if(SIZE_MAX == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
-        cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "HTTP-Parser execute failed: failed to parse multipart body");
+    if(MPPE_ERROR == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
+        ret = multipart_parser_error_msg(&parser->multipart, err_buf, sizeof(err_buf));
+        if (ret == 0 || ret > 4095) {
+#ifdef CAT_DEBUG
+            CAT_ASSERT(0 && "multipart_parser_error_msg returns bad result");
+#endif
+        }
+        cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART, "failed to parse multipart body: %.*s", (int)ret, err_buf);
         return cat_false;
     }
 
@@ -123,7 +131,8 @@ static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, c
 /* parser */
 
 #define CALLBACK_ERROR(CODE, fmt, ...) do {\
-    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: " fmt, ##__VA_ARGS__); \
+    /* cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, "HTTP-Parser execute failed: " fmt, ##__VA_ARGS__); */ \
+    cat_update_last_error(CAT_HTTP_ERRNO_ ## CODE, fmt, ##__VA_ARGS__); \
     return CAT_HTTP_ERRNO_ ## CODE;\
 } while(0)
 
@@ -662,7 +671,7 @@ static cat_bool_t cat_http_llhttp_execute(cat_http_parser_t *parser, const char 
         if (unlikely(error != HPE_PAUSED)) {
             if (unlikely(error != HPE_PAUSED_UPGRADE)) {
                 if (error > HPE_USER){
-                    cat_update_last_error(error, "%s", cat_get_last_error_message());
+                    cat_update_last_error(error, "HTTP-Parser execute failed: %s", cat_get_last_error_message());
                 } else {
                     cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_errno_name(error));
                 }

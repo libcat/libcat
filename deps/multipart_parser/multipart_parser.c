@@ -3,6 +3,9 @@
  * MIT License - http://www.opensource.org/licenses/mit-license.php
  */
 
+// TODO: MPPE_OK mode maybe not usable
+// TODO: reduce state and logics
+
 #include "multipart_parser.h"
 
 #include <stdio.h>
@@ -10,8 +13,8 @@
 #include <string.h>
 #include <errno.h>
 
-//#ifdef DEBUG_MULTIPART
-#ifdef _DEBUG
+#ifdef DEBUG_MULTIPART
+//#ifdef _DEBUG
 #include <ctype.h>
 #define multipart_log(format, ...) do {\
     fprintf(stderr, "[MULTIPART_PARSER] line %d: " format "\n", __LINE__, __VA_ARGS__); \
@@ -27,39 +30,6 @@
 #define multipart_log(format, ...)
 #define multipart_log_c(format, ...)
 #endif
-
-#define NOTIFY_CB(FOR, ni)                                             \
-do {                                                                   \
-  if (p->settings->on_##FOR) {                                         \
-    if ((ret = p->settings->on_##FOR(p)) == MPPE_OK) {                 \
-        /* do nothing */                                               \
-    } else if (ret == MPPE_PAUSED) {                                   \
-        if (mark == 0) {                                               \
-            p->i = ni;                                                 \
-            return i;                                                  \
-        } else {                                                       \
-            p->i = i-mark+ni;                                          \
-            return mark;                                               \
-        }                                                              \
-    } else {                                                           \
-        return SIZE_MAX;                                               \
-    }                                                                  \
-  }                                                                    \
-} while (0)
-
-#define EMIT_DATA_CB(FOR, ni, ptr, len)                                \
-do {                                                                   \
-  if (p->settings->on_##FOR) {                                         \
-    if ((ret = p->settings->on_##FOR(p, ptr, len)) == MPPE_OK) {       \
-        /* do nothing */                                               \
-    } else if (ret == MPPE_PAUSED) {                                   \
-        p->i = ni;                                                     \
-        return i;                                                      \
-    } else {                                                           \
-        return SIZE_MAX;                                               \
-    }                                                                  \
-  }                                                                    \
-} while (0)
 
 #define LF 10
 #define CR 13
@@ -99,10 +69,12 @@ int multipart_parser_init(multipart_parser *mp, const char *boundary, size_t bou
     }
     // set \0
     memset(&mp->multipart_boundary[mp->boundary_length], 0, sizeof(mp->multipart_boundary) - mp->boundary_length);
-    //mp->lookbehind = (mp->multipart_boundary + mp->boundary_length + 1);
-    mp->i = 0;
     mp->index = 0;
     mp->state = s_start;
+    mp->error_i = 0;
+    mp->error_unexpected = 0;
+    mp->error_expected = 0;
+    mp->error_reason = MPPE_OK;
     if (settings != NULL) {
         mp->settings = settings;
     }
@@ -137,7 +109,6 @@ multipart_parser* multipart_parser_alloc(const char *boundary, size_t boundary_l
     return p;
 }
 
-
 void multipart_parser_free(multipart_parser* p)
 {
     multipart_free_func free_func = p->settings->free;
@@ -148,9 +119,67 @@ void multipart_parser_free(multipart_parser* p)
     free_func(p);
 }
 
+int multipart_parser_error_msg(multipart_parser* p, char *buf, size_t len) {
+    int ret;
+    switch (p->error_reason) {
+        case MPPE_OK:
+            errno = 0;
+            return 0;
+        case MPPE_PAUSED:
+            return snprintf(buf, len, "parser paused");
+        case MPPE_UNKNOWN:
+        default:
+            abort();
+            return 0;
+        case MPPE_BOUNDARY_END_NO_CRLF:
+            ret = snprintf(buf, len, "no CRLF at first boundary end: ");
+            break;
+        case MPPE_BAD_START_BOUNDARY:
+            ret = snprintf(buf, len, "first boundary mismatching: ");
+            break;
+        case MPPE_INVALID_HEADER_FIELD_CHAR:
+            ret = snprintf(buf, len, "invalid char in header field: ");
+            break;
+        case MPPE_INVALID_HEADER_VALUE_CHAR:
+            ret = snprintf(buf, len, "invalid char in header value: ");
+            break;
+        case MPPE_BAD_PART_END:
+            ret = snprintf(buf, len, "no next part or final hyphen: expecting CR or '-' ");
+            break;
+        case MPPE_END_BOUNDARY_NO_DASH:
+            ret = snprintf(buf, len, "bad final hyphen: ");
+            break;
+    }
+    if (ret >= len) {
+        return ret;
+    }
+    switch (p->error_expected) {
+        case '\0':
+            break;
+        case CR:
+            ret += snprintf(buf + ret, len - ret, "expecting CR ");
+            break;
+        case LF:
+            ret += snprintf(buf + ret, len - ret, "expecting LF ");
+            break;
+        default:
+            ret += snprintf(buf + ret, len - ret, "expecting %c ", p->error_expected);
+            break;
+    }
+    if (ret >= len) {
+        return ret;
+    }
+    if (isprint(p->error_unexpected)) {
+        ret += snprintf(buf + ret, len - ret, "at %zu, but it is '%c'", p->error_i, p->error_unexpected);
+    } else {
+        ret += snprintf(buf + ret, len - ret, "at %zu, but it is '\\x%0.2x'", p->error_i, p->error_unexpected);
+    }
+    return ret;
+}
+
 size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len)
 {
-    size_t i = p->i;
+    size_t i = 0;
     size_t mark = 0;
     size_t mark_end = 0;
     int state_back = 0;
@@ -158,12 +187,37 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
     int is_last = 0;
     int ret;
 
-#define ERROR_OUT() do {\
-    p->i = i; \
-    return SIZE_MAX; \
+#define NOTIFY_CB(FOR) \
+do { \
+  if (p->settings->on_##FOR) { \
+    if ((ret = p->settings->on_##FOR(p)) == MPPE_PAUSED) { \
+        return i; \
+    } else if (ret != MPPE_OK) { \
+        return MPPE_ERROR; \
+    } \
+  } \
+} while (0)
+
+#define EMIT_DATA_CB(FOR, ptr, len) \
+do { \
+  if (p->settings->on_##FOR) { \
+    if ((ret = p->settings->on_##FOR(p, ptr, len)) == MPPE_PAUSED) { \
+        return i; \
+    } else if (ret != MPPE_OK) { \
+        return MPPE_ERROR; \
+    } \
+  } \
+} while (0)
+
+#define ERROR_OUT(reason) do { \
+    p->error_i = i; \
+    p->error_reason = reason; \
+    return MPPE_ERROR; \
 } while(0)
 
-#define ERROR_EXPECT(ch) do {\
+#define ERROR_EXPECT(reason, ch) do { \
+    p->error_unexpected = c; \
+    p->error_expected = ch; \
     if(ch == LF){ \
         multipart_log("expecting LF at %zu, but it's \\x%0.2x", i, c); \
     } else if (ch == CR){ \
@@ -171,7 +225,7 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
     } else { \
         multipart_log("expecting '%c' at %zu, but it's \\x%0.2x", ch, i, c); \
     } \
-    ERROR_OUT(); \
+    ERROR_OUT(reason); \
 } while(0)
 
     while (i < len) {
@@ -187,22 +241,22 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 multipart_log_c("s_start_boundary");
                 if (p->index == p->boundary_length) {
                     if (c != CR) {
-                        ERROR_EXPECT(CR);
+                        ERROR_EXPECT(MPPE_BOUNDARY_END_NO_CRLF, CR);
                     }
                     p->index++;
                     break;
                 } else if (p->index == (p->boundary_length + 1)) {
                     if (c != LF) {
-                        ERROR_EXPECT(LF);
+                        ERROR_EXPECT(MPPE_BOUNDARY_END_NO_CRLF, LF);
                     }
                     p->index = 0;
                     p->state = s_header_field_start;
                     i++;
-                    NOTIFY_CB(part_data_begin, 0);
+                    NOTIFY_CB(part_data_begin);
                     break;
                 }
                 if (c != p->multipart_boundary[p->index]) {
-                    ERROR_EXPECT(p->multipart_boundary[p->index]);
+                    ERROR_EXPECT(MPPE_BAD_START_BOUNDARY, p->multipart_boundary[p->index]);
                 }
                 p->index++;
                 break;
@@ -219,28 +273,29 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 }
                 if (c == '-') {
                     if (is_last) {
-                        EMIT_DATA_CB(header_field, 0, buf + mark, ((i++) - mark) + 1);
+                        EMIT_DATA_CB(header_field, buf + mark, ((i++) - mark) + 1);
                     }
                     break;
                 }
                 if (c == ':') {
                     p->state = s_header_value_start;
-                    EMIT_DATA_CB(header_field, 0, buf + mark, (i++) - mark);
+                    EMIT_DATA_CB(header_field, buf + mark, (i++) - mark);
                     break;
                 }
                 cl = c | 0x20;
                 if (cl < 'a' || cl > 'z') {
-                    multipart_log("invalid character in header name");
-                    ERROR_OUT();
+                    multipart_log("invalid character in header field");
+                    p->error_unexpected = c;
+                    ERROR_OUT(MPPE_INVALID_HEADER_FIELD_CHAR);
                 }
                 if (is_last) {
-                    EMIT_DATA_CB(header_field, 0, buf + mark, ((i++) - mark) + 1);
+                    EMIT_DATA_CB(header_field, buf + mark, ((i++) - mark) + 1);
                 }
                 break;
             case s_headers_almost_done:
                 multipart_log_c("s_headers_almost_done");
                 if (c != LF) {
-                    ERROR_EXPECT(LF);
+                    ERROR_EXPECT(MPPE_INVALID_HEADER_VALUE_CHAR, LF);
                 }
                 p->state = s_part_data_start;
                 break;
@@ -256,16 +311,16 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 multipart_log_c("s_header_value");
                 if (c == CR) {
                     p->state = s_header_value_almost_done;
-                    EMIT_DATA_CB(header_value, 0, buf + mark, (i++) - mark);
+                    EMIT_DATA_CB(header_value, buf + mark, (i++) - mark);
                 }
                 if (is_last) {
-                    EMIT_DATA_CB(header_value, 0, buf + mark, ((i++) - mark) + 1);
+                    EMIT_DATA_CB(header_value, buf + mark, ((i++) - mark) + 1);
                 }
                 break;
             case s_header_value_almost_done:
                 multipart_log_c("s_header_value_almost_done");
                 if (c != LF) {
-                    ERROR_EXPECT(LF);
+                    ERROR_EXPECT(MPPE_INVALID_HEADER_VALUE_CHAR, LF);
                 }
                 p->state = s_header_field_start;
                 break;
@@ -273,48 +328,73 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 multipart_log_c("s_part_data_start");
                 mark = i;
                 p->state = s_part_data;
-                NOTIFY_CB(headers_complete, 0);
+                NOTIFY_CB(headers_complete);
                 /* fallthrough */
             case s_part_data:
+                data_rollback:
                 multipart_log_c("s_part_data");
+                mark_end = i + 1;
                 if (c == CR) {
+                    mark_end--;
+                    if (is_last) {
+                        if (i > 1) {
+                            EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                        } else {
+                            // donot trig callback
+                            return 0;
+                        }
+                    }
                     p->state = s_part_data_almost_boundary;
-                    mark_end = i;
-                    // roll back parsed index
-                    i--;
                     break;
                 }
                 if (is_last) {
-                    i = mark_end;
-                    EMIT_DATA_CB(part_data, 1, buf + mark, mark_end - mark);
+                    i++;
+                    EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
                 }
                 break;
             case s_part_data_almost_boundary:
                 multipart_log_c("s_part_data_almost_boundary");
                 if (c == LF) {
+                    if (is_last) {
+                        if (i > 2) {
+                            i = mark_end;
+                            EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                        } else {
+                            // donot trig callback
+                            return 0;
+                        }
+                    }
                     p->state = s_part_data_boundary;
                     p->index = 0;
                     break;
                 }
                 p->state = s_part_data;
-                mark_end = i--;
-                break;
+                goto data_rollback;
             case s_part_data_boundary:
                 multipart_log_c("s_part_data_boundary");
                 if (p->multipart_boundary[p->index] != c) {
                     p->state = s_part_data;
-                    mark_end = i--;
-                    break;
+                    goto data_rollback;
+                }
+                if (is_last) {
+                    if (i > p->index + 2) {
+                        i -= p->index + 2;
+                        EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                    } else {
+                        // donot trig callback
+                        return 0;
+                    }
                 }
                 if ((++p->index) == p->boundary_length) {
                     p->state = s_part_data_almost_almost_end;
-                    EMIT_DATA_CB(part_data, 1, buf + mark, mark_end - mark);
+                    i++;
+                    EMIT_DATA_CB(part_data, buf + mark, i - p->boundary_length - 2 - mark);
                 }
                 break;
             case s_part_data_almost_almost_end:
                 multipart_log_c("s_part_data_almost_almost_end");
                 p->state = s_part_data_almost_end;
-                NOTIFY_CB(part_data_end, 0);
+                NOTIFY_CB(part_data_end);
                 /* fallthrough */
             case s_part_data_almost_end:
                 multipart_log_c("s_part_data_almost_end");
@@ -328,31 +408,32 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
                 }
                 // should be end or another part
                 multipart_log("expecting '-' or CR at %zu but it's \\x%0.2x", i, c);
-                ERROR_OUT();
+                ERROR_OUT(MPPE_BAD_PART_END);
             case s_part_data_final_hyphen:
                 multipart_log_c("s_part_data_final_hyphen");
                 if (c == '-') {
-                    NOTIFY_CB(body_end, 1);
                     p->state = s_end;
+                    NOTIFY_CB(body_end);
                     break;
                 }
                 // should be -
-                ERROR_EXPECT('-');
+                ERROR_EXPECT(MPPE_END_BOUNDARY_NO_DASH, '-');
             case s_part_data_end:
                 multipart_log_c("s_part_data_end");
                 if (c == LF) {
                     p->state = s_header_field_start;
-                    NOTIFY_CB(part_data_begin, 1);
+                    i++;
+                    NOTIFY_CB(part_data_begin);
                     break;
                 }
                 // should be -
-                ERROR_EXPECT('-');
+                ERROR_EXPECT(MPPE_END_BOUNDARY_NO_DASH, '-');
             case s_end:
                 multipart_log_c("s_end");
                 break;
             default:
                 multipart_log_c("Multipart parser unrecoverable error");
-                ERROR_OUT();
+                ERROR_OUT(MPPE_UNKNOWN);
         }
         ++i;
     }
