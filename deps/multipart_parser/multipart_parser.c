@@ -172,7 +172,7 @@ int multipart_parser_error_msg(multipart_parser* p, char *buf, size_t len) {
     if (isprint(p->error_unexpected)) {
         ret += snprintf(buf + ret, len - ret, "at %zu, but it is '%c'", p->error_i, p->error_unexpected);
     } else {
-        ret += snprintf(buf + ret, len - ret, "at %zu, but it is '\\x%0.2x'", p->error_i, p->error_unexpected);
+        ret += snprintf(buf + ret, len - ret, "at %zu, but it is '\\x%.2x'", p->error_i, p->error_unexpected);
     }
     return ret;
 }
@@ -219,11 +219,11 @@ do { \
     p->error_unexpected = c; \
     p->error_expected = ch; \
     if(ch == LF){ \
-        multipart_log("expecting LF at %zu, but it's \\x%0.2x", i, c); \
+        multipart_log("expecting LF at %zu, but it's \\x%.2x", i, c); \
     } else if (ch == CR){ \
-        multipart_log("expecting CR at %zu, but it's \\x%0.2x", i, c); \
+        multipart_log("expecting CR at %zu, but it's \\x%.2x", i, c); \
     } else { \
-        multipart_log("expecting '%c' at %zu, but it's \\x%0.2x", ch, i, c); \
+        multipart_log("expecting '%c' at %zu, but it's \\x%.2x", ch, i, c); \
     } \
     ERROR_OUT(reason); \
 } while(0)
