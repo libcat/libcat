@@ -413,7 +413,7 @@ TEST(cat_buffer, truncate_length_eq_zero)
     DEFER(cat_buffer_close(&buffer));
     ASSERT_TRUE(cat_buffer_write(&buffer, 0, data, sizeof(data)));
 
-    cat_buffer_truncate_from(&buffer, 1, 0);
+    cat_buffer_truncate_from(&buffer, 1, SIZE_MAX);
     ASSERT_EQ(CAT_MEMORY_DEFAULT_ALIGNED_SIZE * 2, buffer.size);
     ASSERT_EQ(sizeof(data), buffer.length + 1);
     ASSERT_STREQ(data + 1, buffer.value);

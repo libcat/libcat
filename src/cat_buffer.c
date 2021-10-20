@@ -254,7 +254,7 @@ CAT_API void cat_buffer_truncate_from(cat_buffer_t *buffer, size_t offset, size_
         cat_buffer_clear(buffer);
         return;
     }
-    if (offset + length > buffer->length) {
+    if (length > buffer->length - offset) {
         length = buffer->length - offset;
     }
     if (offset != 0) {
