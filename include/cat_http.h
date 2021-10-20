@@ -122,7 +122,6 @@ enum cat_http_errno_ext {
   CAT_HTTP_ERRNO_START = HPE_USER,
   CAT_HTTP_ERRNO_MULTIPART_HEADER,
   CAT_HTTP_ERRNO_DUPLICATE_CONTENT_TYPE,
-  CAT_HTTP_ERRNO_BAD_BOUNDARY,
   CAT_HTTP_ERRNO_MULTIPART_BODY,
 };
 
@@ -217,35 +216,135 @@ typedef struct cat_http_parser_s {
     multipart_parser multipart;
 } cat_http_parser_t;
 
+/*
+* prepare parser for new parsing and clear subscripted events
+*/
 CAT_API void cat_http_parser_init(cat_http_parser_t *parser);
+/*
+* prepare parser for new parsing
+*/
 CAT_API void cat_http_parser_reset(cat_http_parser_t *parser);
+/*
+* create parser for new parsing, if parser is NULL, allocate memory for parser using cat_malloc
+* @return returns newly allocated parser if parser arg is NULL, else return prepared parser
+*/
 CAT_API cat_http_parser_t *cat_http_parser_create(cat_http_parser_t *parser);
+/*
+* get parser type, type may be CAT_HTTP_PARSER_TYPE_BOTH or CAT_HTTP_PARSER_TYPE_REQUEST or CAT_HTTP_PARSER_TYPE_RESPONSE
+*/
 CAT_API cat_http_parser_type_t cat_http_parser_get_type(const cat_http_parser_t *parser);
+/*
+* set parser type, type may be CAT_HTTP_PARSER_TYPE_BOTH or CAT_HTTP_PARSER_TYPE_REQUEST or CAT_HTTP_PARSER_TYPE_RESPONSE
+*/
 CAT_API cat_bool_t cat_http_parser_set_type(cat_http_parser_t *parser, cat_http_parser_type_t type);
+/*
+* get parser subscripted events
+*/
 CAT_API cat_http_parser_events_t cat_http_parser_get_events(const cat_http_parser_t *parser);
+/*
+* set parser subscripted events
+* parser will pause at subscripted event, parser->event will be set at any event even it is not been subscripted
+*/
 CAT_API void cat_http_parser_set_events(cat_http_parser_t *parser, cat_http_parser_events_t events);
+/*
+* execute parser with data
+* parser will pause at subscripted event, parser->event will be set at any event even it is not been subscripted;
+* parser will pause at specified data end, parsed data length can be got via cat_http_parser_get_parsed_length.
+* @param data pointer to the input buffer
+* @param length input buffer size in bytes
+* @return cat_true when parser paused or stopped without error otherwise return cat_false
+*/
 CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char *data, size_t length);
+/*
+* get parser event name string for event code
+*/
 CAT_API const char *cat_http_parser_event_name(cat_http_parser_event_t event);
+/*
+* get event code of parser
+*/
 CAT_API cat_http_parser_event_t cat_http_parser_get_event(const cat_http_parser_t *parser);
+/*
+* get event name string for event code of parser
+*/
 CAT_API const char* cat_http_parser_get_event_name(const cat_http_parser_t *parser);
+/*
+* get data for data event
+* when a data event emitted, parser.data is pointed to data start
+* data returned should be in range of inputed buffer in last execution
+*/
 CAT_API const char* cat_http_parser_get_data(const cat_http_parser_t *parser);
+/*
+* get data length for data event
+* when a data event emitted, parser.data_length is setted to data length
+*/
 CAT_API size_t cat_http_parser_get_data_length(const cat_http_parser_t *parser);
+/*
+* tell should we keep alive: "if there might be any other messages following the last that was successfully parsed"
+*/
 CAT_API cat_bool_t cat_http_parser_should_keep_alive(const cat_http_parser_t *parser);
+/*
+* finish parser: "This method should be called when the other side has no further bytes to send (e.g. shutdown of readable side of the TCP connection.)"
+*/
 CAT_API cat_bool_t cat_http_parser_finish(cat_http_parser_t *parser);
+/*
+* get error code
+*/
 CAT_API llhttp_errno_t cat_http_parser_get_error_code(const cat_http_parser_t *parser);
+/*
+* get error message
+*/
 CAT_API const char *cat_http_parser_get_error_message(const cat_http_parser_t *parser);
+/*
+* tell if parser is completed
+*/
 CAT_API cat_bool_t cat_http_parser_is_completed(const cat_http_parser_t *parser);
+/*
+* get current position
+*/
 CAT_API const char *cat_http_parser_get_current_pos(const cat_http_parser_t *parser);
+/*
+* get current offset
+*/
 CAT_API size_t cat_http_parser_get_current_offset(const cat_http_parser_t *parser, const char *data);
+/*
+* get last execution parsed length
+*/
 CAT_API size_t cat_http_parser_get_parsed_length(const cat_http_parser_t *parser);
+/*
+* get http method
+*/
 CAT_API cat_http_method_t cat_http_parser_get_method(const cat_http_parser_t *parser);
+/*
+* get http method name
+*/
 CAT_API const char  *cat_http_parser_get_method_name(const cat_http_parser_t *parser);
+/*
+* get http major version
+*/
 CAT_API uint8_t cat_http_parser_get_major_version(const cat_http_parser_t *parser);
+/*
+* get http minor version
+*/
 CAT_API uint8_t cat_http_parser_get_minor_version(const cat_http_parser_t *parser);
+/*
+* get http protocol version in string
+*/
 CAT_API const char *cat_http_parser_get_protocol_version(const cat_http_parser_t *parser);
+/*
+* get http status code
+*/
 CAT_API cat_http_status_code_t cat_http_parser_get_status_code(const cat_http_parser_t *parser);
+/*
+* get http status reason phrase
+*/
 CAT_API const char *cat_http_parser_get_reason_phrase(const cat_http_parser_t *parser);
+/*
+* get http content-length header value
+*/
 CAT_API uint64_t cat_http_parser_get_content_length(const cat_http_parser_t *parser);
+/*
+* tell if needs protocol upgrade
+*/
 CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser);
 
 #ifdef __cplusplus

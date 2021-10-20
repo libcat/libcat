@@ -187,22 +187,22 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
     int is_last = 0;
     int ret;
 
-#define NOTIFY_CB(FOR) \
+#define NOTIFY_CB(FOR, r) \
 do { \
   if (p->settings->on_##FOR) { \
     if ((ret = p->settings->on_##FOR(p)) == MPPE_PAUSED) { \
-        return i; \
+        return r; \
     } else if (ret != MPPE_OK) { \
         return MPPE_ERROR; \
     } \
   } \
 } while (0)
 
-#define EMIT_DATA_CB(FOR, ptr, len) \
+#define EMIT_DATA_CB(FOR, r, ptr, len) \
 do { \
   if (p->settings->on_##FOR) { \
     if ((ret = p->settings->on_##FOR(p, ptr, len)) == MPPE_PAUSED) { \
-        return i; \
+        return r; \
     } else if (ret != MPPE_OK) { \
         return MPPE_ERROR; \
     } \
@@ -210,13 +210,13 @@ do { \
 } while (0)
 
 #define ERROR_OUT(reason) do { \
+    p->error_unexpected = c; \
     p->error_i = i; \
     p->error_reason = reason; \
     return MPPE_ERROR; \
 } while(0)
 
 #define ERROR_EXPECT(reason, ch) do { \
-    p->error_unexpected = c; \
     p->error_expected = ch; \
     if(ch == LF){ \
         multipart_log("expecting LF at %zu, but it's \\x%.2x", i, c); \
@@ -251,9 +251,7 @@ do { \
                     }
                     p->index = 0;
                     p->state = s_header_field_start;
-                    i++;
-                    NOTIFY_CB(part_data_begin);
-                    i--;
+                    NOTIFY_CB(part_data_begin, i + 1);
                     break;
                 }
                 if (c != p->multipart_boundary[p->index]) {
@@ -274,13 +272,13 @@ do { \
                 }
                 if (c == '-') {
                     if (is_last) {
-                        EMIT_DATA_CB(header_field, buf + mark, ((i++) - mark) + 1);
+                        EMIT_DATA_CB(header_field, i + 1, buf + mark, i - mark + 1);
                     }
                     break;
                 }
                 if (c == ':') {
                     p->state = s_header_value_start;
-                    EMIT_DATA_CB(header_field, buf + mark, (i++) - mark);
+                    EMIT_DATA_CB(header_field, i + 1, buf + mark, i - mark);
                     break;
                 }
                 cl = c | 0x20;
@@ -290,7 +288,7 @@ do { \
                     ERROR_OUT(MPPE_INVALID_HEADER_FIELD_CHAR);
                 }
                 if (is_last) {
-                    EMIT_DATA_CB(header_field, buf + mark, ((i++) - mark) + 1);
+                    EMIT_DATA_CB(header_field, i + 1, buf + mark, i - mark + 1);
                 }
                 break;
             case s_headers_almost_done:
@@ -312,10 +310,10 @@ do { \
                 multipart_log_c("s_header_value");
                 if (c == CR) {
                     p->state = s_header_value_almost_done;
-                    EMIT_DATA_CB(header_value, buf + mark, (i++) - mark);
+                    EMIT_DATA_CB(header_value, i + 1, buf + mark, i - mark);
                 }
                 if (is_last) {
-                    EMIT_DATA_CB(header_value, buf + mark, ((i++) - mark) + 1);
+                    EMIT_DATA_CB(header_value, i + 1, buf + mark, i - mark + 1);
                 }
                 break;
             case s_header_value_almost_done:
@@ -329,7 +327,7 @@ do { \
                 multipart_log_c("s_part_data_start");
                 mark = i;
                 p->state = s_part_data;
-                NOTIFY_CB(headers_complete);
+                NOTIFY_CB(headers_complete, i);
                 /* fallthrough */
             case s_part_data:
                 data_rollback:
@@ -339,7 +337,7 @@ do { \
                     mark_end--;
                     if (is_last) {
                         if (i > 1) {
-                            EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                            EMIT_DATA_CB(part_data, i, buf + mark, mark_end - mark);
                         } else {
                             // donot trig callback
                             return 0;
@@ -349,8 +347,7 @@ do { \
                     break;
                 }
                 if (is_last) {
-                    i++;
-                    EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                    EMIT_DATA_CB(part_data, i + 1, buf + mark, mark_end - mark);
                 }
                 break;
             case s_part_data_almost_boundary:
@@ -358,8 +355,7 @@ do { \
                 if (c == LF) {
                     if (is_last) {
                         if (i > 2) {
-                            i = mark_end;
-                            EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                            EMIT_DATA_CB(part_data, mark_end, buf + mark, mark_end - mark);
                         } else {
                             // donot trig callback
                             return 0;
@@ -379,8 +375,7 @@ do { \
                 }
                 if (is_last) {
                     if (i > p->index + 2) {
-                        i -= p->index + 2;
-                        EMIT_DATA_CB(part_data, buf + mark, mark_end - mark);
+                        EMIT_DATA_CB(part_data, i - p->index - 2, buf + mark, mark_end - mark);
                     } else {
                         // donot trig callback
                         return 0;
@@ -388,14 +383,13 @@ do { \
                 }
                 if ((++p->index) == p->boundary_length) {
                     p->state = s_part_data_almost_almost_end;
-                    i++;
-                    EMIT_DATA_CB(part_data, buf + mark, i - p->boundary_length - 2 - mark);
+                    EMIT_DATA_CB(part_data, i + 1, buf + mark, i + 1 - p->boundary_length - 2 - mark);
                 }
                 break;
             case s_part_data_almost_almost_end:
                 multipart_log_c("s_part_data_almost_almost_end");
                 p->state = s_part_data_almost_end;
-                NOTIFY_CB(part_data_end);
+                NOTIFY_CB(part_data_end, i);
                 /* fallthrough */
             case s_part_data_almost_end:
                 multipart_log_c("s_part_data_almost_end");
@@ -414,7 +408,7 @@ do { \
                 multipart_log_c("s_part_data_final_hyphen");
                 if (c == '-') {
                     p->state = s_end;
-                    NOTIFY_CB(body_end);
+                    NOTIFY_CB(body_end, i);
                     break;
                 }
                 // should be -
@@ -423,9 +417,7 @@ do { \
                 multipart_log_c("s_part_data_end");
                 if (c == LF) {
                     p->state = s_header_field_start;
-                    i++;
-                    NOTIFY_CB(part_data_begin);
-                    i--;
+                    NOTIFY_CB(part_data_begin, i + 1);
                     break;
                 }
                 // should be -

@@ -63,11 +63,10 @@ enum cat_multipart_state
 static long CAT_HTTP_MULTIPART_CB_FNAME(name)(multipart_parser *p, const char *at, size_t length){ \
     cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart); \
     parser->event = CAT_HTTP_PARSER_EVENT_##NAME; \
+    parser->data = at; \
+    parser->data_length = length; \
     CAT_LOG_DEBUG_V2(PROTOCOL, "http multipart parser data on_" # name ": [%zu]%.*s", length, (int)length, at); \
     if (((cat_http_parser_event_t) (parser->events & parser->event)) == parser->event) { \
-        parser->data = at; \
-        parser->data_length = length; \
-        \
         return MPPE_PAUSED; \
     } \
     return MPPE_OK; \
@@ -93,7 +92,7 @@ CAT_HTTP_MULTIPART_ON_EVENT(part_data_end, MULTIPART_DATA_END)
 
 static long CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p){
     cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart);
-    CAT_ASSERT(parser->multipart_state == CAT_HTTP_MULTIPART_IN_BODY);
+    CAT_ASSERT(!(parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) || parser->multipart_state == CAT_HTTP_MULTIPART_IN_BODY);
     // escape mp parser
     parser->event = _CAT_HTTP_PARSER_EVENT_MULTIPART_BODY_END;
     parser->multipart_state = CAT_HTTP_MULTIPART_NOT_MULTIPART;
@@ -131,8 +130,14 @@ static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, c
         cat_update_last_error(CAT_HTTP_ERRNO_MULTIPART_BODY, "failed to parse multipart body: %.*s", (int)ret, err_buf);
         return cat_false;
     }
-
     CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser_execute returns %zu, parsed \"%.*s\"", len, (int)len, data);
+
+    // printf("dl:%zu l:%zu\n", parser->data_length, len);
+    CAT_ASSERT(
+        (!(parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA)) || 
+        parser->data_length <= len
+    );
+
     CAT_ASSERT(
         parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART || 
         parser->event == CAT_HTTP_PARSER_EVENT_NONE
@@ -755,7 +760,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
             ret = cat_http_llhttp_execute(parser, NULL, parser->content_length - parser->data_length);
             CAT_ASSERT(ret);
             if (parser->event == CAT_HTTP_PARSER_EVENT_BODY) {
-                ret = cat_http_llhttp_execute(parser, NULL, 1);
+                ret = cat_http_llhttp_execute(parser, NULL, 0);
                 CAT_ASSERT(ret);
             }
             CAT_ASSERT(parser->event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
