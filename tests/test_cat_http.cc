@@ -1068,7 +1068,7 @@ TEST(cat_http_parser, multipart_stream)
 
     char assert_buf[8192];
     size_t assert_i = 0;
-    size_t leftover;
+    size_t leftover = 0;
 
     const char *boundary = "---------------------------6169044094038990135731635364";
     int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
@@ -1195,7 +1195,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
 
     char assert_buf[8192];
     size_t assert_i = 0;
-    size_t leftover;
+    size_t leftover = 0;
 
     const char *boundary = "---------------------------6169044094038990135731635364";
     int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
