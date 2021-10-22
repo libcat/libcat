@@ -799,10 +799,10 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
                 parser->content_length >= parser->data_length ||
                 (
                     parser->content_length == 0 &&
-                    cat_http_parser_get_type(parser) == HTTP_RESPONSE
+                    cat_http_parser_get_type(parser) == CAT_HTTP_PARSER_TYPE_RESPONSE
                 )
             );
-            if (parser->content_length == 0 && cat_http_parser_get_type(parser) == HTTP_RESPONSE) {
+            if (parser->content_length == 0 && cat_http_parser_get_type(parser) == CAT_HTTP_PARSER_TYPE_RESPONSE) {
                 // TODO: implement full support for multipart/byterange
                 llhttp_finish(&parser->llhttp);
                 return cat_false;
