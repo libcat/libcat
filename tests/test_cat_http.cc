@@ -605,6 +605,16 @@ static const cat_const_string_t multipart_req_heads[] = {
     ),
 };
 
+const cat_const_string_t common_head = cat_const_string(
+    "GET / HTTP/1.1\r\n"
+    "Host: www.foo.com\r\n"
+    "User-Agent: SomeBadBot/0\r\n"
+    "Content-Type: notmultipart/nothing\r\n"
+    "Content-Length: %d\r\n"
+    "Accept: */*\r\n"
+    "\r\n"
+);
+
 static struct {
     const cat_const_string_t head;
     int error;
@@ -840,6 +850,62 @@ TEST(cat_http_parser, multipart)
         cat_http_parser_create(&parser);
         cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
     }
+}
+
+/*
+* multipart and common http request at same parser
+*/
+TEST(cat_http_parser, multipart_after_common)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    char mp_head_buf[8192];
+    char plain_head_buf[8192];
+    char body_buf[8192];
+    const char *boundary = "cafebabe";
+    int body_len = sprintf(body_buf, multipart_req_body.data, boundary, boundary, boundary);
+    int mp_head_len = sprintf(mp_head_buf, multipart_req_heads[0].data, body_len, boundary);
+    memcpy(&mp_head_buf[mp_head_len], body_buf, body_len);
+
+    int plain_head_len = sprintf(plain_head_buf, common_head.data, body_len);
+    memcpy(&plain_head_buf[plain_head_len], body_buf, body_len);
+
+    const char *p, *pe;
+
+    p = plain_head_buf;
+    pe = &plain_head_buf[plain_head_len + body_len];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", (int)(plain_head_len + body_len), plain_head_buf);
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+    while (pe > p && parser.event != CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
+        CONTINUE_PARSE();
+    }
+
+    p = mp_head_buf;
+    pe = &mp_head_buf[mp_head_len + body_len];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", (int)(mp_head_len + body_len), mp_head_buf);
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+    while (pe > p && parser.event != CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
+        CONTINUE_PARSE();
+    }
+
+    p = plain_head_buf;
+    pe = &plain_head_buf[plain_head_len + body_len];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", (int)(plain_head_len + body_len), plain_head_buf);
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+    while (pe > p && parser.event != CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
+        CONTINUE_PARSE();
+    }
+
+    p = mp_head_buf;
+    pe = &mp_head_buf[mp_head_len + body_len];
+    CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", (int)(mp_head_len + body_len), mp_head_buf);
+    ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
+    while (pe > p && parser.event != CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
+        CONTINUE_PARSE();
+    }
+
 }
 
 /*

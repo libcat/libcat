@@ -210,6 +210,8 @@ typedef struct cat_http_parser_s {
     uint8_t multipart_header_index;
     /* private: multipart parser state*/
     char multipart_state;
+    /* private: callback complete state */
+    uint8_t complete_state;
     /* public readonly: multipart parser pointer */
     const char *multipart_ptr;
     /* private: multipart parser */
