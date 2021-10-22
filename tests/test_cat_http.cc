@@ -1041,6 +1041,7 @@ TEST(cat_http_parser, multipart_subscript_one)
 #ifdef CAT_HAVE_ASAN
 extern "C" {
     void __asan_poison_memory_region(void const volatile *addr, size_t size);
+    void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 }
 #endif
 
@@ -1062,8 +1063,12 @@ TEST(cat_http_parser, multipart_stream)
     char http_buf_2[8192+8192];
 
 #ifdef CAT_HAVE_ASAN
-    __asan_poison_memory_region(&canary1, sizeof(canary1));
-    __asan_poison_memory_region(&canary2, sizeof(canary2));
+    __asan_poison_memory_region(canary1, sizeof(canary1));
+    __asan_poison_memory_region(canary2, sizeof(canary2));
+    DEFER({
+        __asan_unpoison_memory_region(canary1, sizeof(canary1));
+        __asan_unpoison_memory_region(canary2, sizeof(canary2));
+    });
 #endif
 
     char assert_buf[8192];
@@ -1076,7 +1081,10 @@ TEST(cat_http_parser, multipart_stream)
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
     
 #ifdef CAT_HAVE_ASAN
-    __asan_poison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len + multipart_req_body_multiline.length);
+    __asan_poison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len - multipart_req_body_multiline.length);
+    DEFER({
+        __asan_unpoison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len - multipart_req_body_multiline.length);
+    });
 #endif
 
     // multi line multipart contents
@@ -1189,8 +1197,12 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
     char http_buf_2[8192+8192];
 
 #ifdef CAT_HAVE_ASAN
-    __asan_poison_memory_region(&canary1, sizeof(canary1));
-    __asan_poison_memory_region(&canary2, sizeof(canary2));
+    __asan_poison_memory_region(canary1, sizeof(canary1));
+    __asan_poison_memory_region(canary2, sizeof(canary2));
+    DEFER({
+        __asan_unpoison_memory_region(canary1, sizeof(canary1));
+        __asan_unpoison_memory_region(canary2, sizeof(canary2));
+    });
 #endif
 
     char assert_buf[8192];
@@ -1203,7 +1215,10 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
 
 #ifdef CAT_HAVE_ASAN
-    __asan_poison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len + multipart_req_body_multiline.length);
+    __asan_poison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len - multipart_req_body_multiline.length);
+    DEFER({
+        __asan_unpoison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len - multipart_req_body_multiline.length);
+    });
 #endif
 
     // multi line multipart contents
