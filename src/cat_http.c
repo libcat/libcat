@@ -795,7 +795,18 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
 
             // update llhttp status
             // a little hacky here: llhttp wont check the body it got
-            CAT_ASSERT(parser->content_length >= parser->data_length);
+            CAT_ASSERT(
+                parser->content_length >= parser->data_length ||
+                (
+                    parser->content_length == 0 &&
+                    cat_http_parser_get_type(parser) == HTTP_RESPONSE
+                )
+            );
+            if (parser->content_length == 0 && cat_http_parser_get_type(parser) == HTTP_RESPONSE) {
+                // TODO: implement full support for multipart/byterange
+                llhttp_finish(&parser->llhttp);
+                return cat_false;
+            }
             ret = cat_http_llhttp_execute(parser, NULL, parser->content_length - parser->data_length);
             CAT_ASSERT(ret);
             if (parser->event == CAT_HTTP_PARSER_EVENT_BODY) {
