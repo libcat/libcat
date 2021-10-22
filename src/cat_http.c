@@ -598,13 +598,12 @@ static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
             parser->multipart_state = CAT_HTTP_MULTIPART_BOUNDARY_OK;
             return HPE_OK;
         case CAT_HTTP_MULTIPART_UNINIT:
+        case CAT_HTTP_MULTIPART_BOUNDARY_OK:
         case CAT_HTTP_MULTIPART_NOT_MULTIPART:
             return HPE_OK;
         case CAT_HTTP_MULTIPART_BOUNDARY_START:
         case CAT_HTTP_MULTIPART_BOUNDARY_QUOTED:
             CALLBACK_ERROR(MULTIPART_HEADER, "unexpected EOF on parsing content-type header");
-        case CAT_HTTP_MULTIPART_BOUNDARY_OK:
-            CAT_ASSERT(0 && "strange state");
         case CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE:
             CAT_ASSERT(0 && "never used CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE");
         case CAT_HTTP_MULTIPART_IN_BODY:
