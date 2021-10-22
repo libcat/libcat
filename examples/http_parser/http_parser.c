@@ -26,7 +26,7 @@
 int main(int argc, const char **argv) {
     char buf[8192];
     ssize_t red;
-    const char *p, *pe;
+    const char *p, *pe, *dp, *dpe;
     cat_init_all();
 
     // a parser can be simply on stack
@@ -59,14 +59,17 @@ int main(int argc, const char **argv) {
             fprintf(stderr, "failed to parse\n");
             return -1;
         }
-        // parsed length is parser read size, may be smaller than full requested size
-        p += cat_http_parser_get_parsed_length(&parser);
 
         printf("[EVENT] %s\n", cat_http_parser_get_event_name(&parser));
         if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+            dp = parser.data;
+            dpe = parser.data + parser.data_length;
+            //printf("%p,%p,%p,%p\n", p, pe, dp, dpe);
+            CAT_ASSERT(dp >= p && (dp < pe || parser.data_length == 0));
+            CAT_ASSERT(dpe >= p && dpe <= pe);
             printf("[DATA] [%zu]%.*s\n", parser.data_length, (int)parser.data_length, parser.data);
         }
-        
+
         if (parser.event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE) {
             // successfully parsed, exit
             return 0;
@@ -83,5 +86,8 @@ int main(int argc, const char **argv) {
             fprintf(stderr, "body not end\n");
             return 1;
         }
+
+        // parsed length is parser read size, may be smaller than full requested size
+        p += cat_http_parser_get_parsed_length(&parser);
     }
 }
