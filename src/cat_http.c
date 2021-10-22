@@ -90,7 +90,7 @@ CAT_HTTP_MULTIPART_ON_EVENT(part_data_begin, MULTIPART_DATA_BEGIN)
 CAT_HTTP_MULTIPART_ON_EVENT(headers_complete, MULTIPART_HEADERS_COMPLETE)
 CAT_HTTP_MULTIPART_ON_EVENT(part_data_end, MULTIPART_DATA_END)
 
-static long CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p){
+static long CAT_HTTP_MULTIPART_CB_FNAME(body_end)(multipart_parser *p) {
     cat_http_parser_t* parser = cat_container_of(p, cat_http_parser_t, multipart);
     CAT_ASSERT(!(parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) || parser->multipart_state == CAT_HTTP_MULTIPART_IN_BODY);
     // escape mp parser
@@ -113,14 +113,15 @@ const multipart_parser_settings cat_http_multipart_parser_settings = {
 };
 
 // TODO: maybe export-able? for email protocols usage?
-static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length){
+static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length)
+{
 
     size_t len = 0;
     char err_buf[4096];
     size_t ret;
 
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
-    if(MPPE_ERROR == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))){
+    if (MPPE_ERROR == (len = multipart_parser_execute((multipart_parser*)&parser->multipart, data, length))) {
         ret = multipart_parser_error_msg(&parser->multipart, err_buf, sizeof(err_buf));
         if (ret == 0 || ret > 4095) {
 #ifdef CAT_DEBUG
@@ -134,12 +135,12 @@ static cat_bool_t cat_http_multipart_parser_execute(cat_http_parser_t *parser, c
 
     // printf("dl:%zu l:%zu\n", parser->data_length, len);
     CAT_ASSERT(
-        (!(parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA)) || 
+        (!(parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA)) ||
         parser->data_length <= len
     );
 
     CAT_ASSERT(
-        parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART || 
+        parser->event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART ||
         parser->event == CAT_HTTP_PARSER_EVENT_NONE
     );
     // add ptr
@@ -263,9 +264,9 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field,           HEADER_FIELD    ) do {
 
 strcasecmp_fast(boundary_eq, "boundary=", "        \0");
 strcasecmp_fast(multipart_dash, "multipart/", "         \0");
- 
+
 #if 1/*enable mp*/
-#define shrink_boundary(parser) for(; \
+#define shrink_boundary(parser) for (; \
         parser->multipart.boundary_length > 2 && \
         (parser->multipart.multipart_boundary[parser->multipart.boundary_length - 1] == '\t' || \
         parser->multipart.multipart_boundary[parser->multipart.boundary_length - 1] == ' '); \
@@ -346,7 +347,7 @@ static int parse_content_type(cat_http_parser_t *parser, const char *at, size_t 
             CONSUME_BUF(10);
 
             //printf("parser->multipart_header is %.*s\n", 10, parser->multipart_header);
-            if(!strcasecmp_multipart_dash(parser->multipart_header)){
+            if (!strcasecmp_multipart_dash(parser->multipart_header)) {
                 // not mp
                 mp_state = CAT_HTTP_MULTIPART_NOT_MULTIPART;
                 return HPE_OK;
@@ -456,7 +457,7 @@ s_almost_boundary:
             }
 
             shrink_boundary(parser);
-            if(parser->multipart.boundary_length == 0){
+            if (parser->multipart.boundary_length == 0) {
                 CALLBACK_ERROR(MULTIPART_HEADER, "empty boundary");
             }
 
@@ -480,7 +481,7 @@ s_boundary_end:
 s_boundary_quoted_data:
             // s_boundary_quoted_data "boundary quoted data" NOT_ACCEPTABLE
             DEBUG_STATE(s_boundary_quoted_data);
-            
+
             // find parsed size
             for (mp_c = mp_at; mp_c < mp_endp; mp_c++) {
                 if (!is_legal_boundary_char(*mp_c)) {
@@ -500,7 +501,7 @@ s_boundary_quoted_data:
                 // not end
                 return HPE_OK;
             }
-            
+
             // ending
             mp_length -= mp_size + 1;
             if (*mp_c != '"') {
@@ -560,7 +561,7 @@ static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
     //printf("on hc complete %d\n", parser->multipart_state);
     if (
         (parser->multipart_state >= CAT_HTTP_MULTIPART_IN_CONTENT_TYPE && parser->multipart_state < CAT_HTTP_MULTIPART_OUT_CONTENT_TYPE)
-    ){
+    ) {
         if (
             parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_QUOTED ||
             parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_START) {
@@ -568,7 +569,7 @@ static int cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
         }
         shrink_boundary(parser);
 
-        if(parser->multipart.boundary_length <= 2){
+        if (parser->multipart.boundary_length <= 2) {
             CALLBACK_ERROR(MULTIPART_HEADER, "empty boundary on EOL");
         }
         if (0 != multipart_parser_init(&parser->multipart, NULL, 0, &cat_http_multipart_parser_settings)) {
@@ -591,14 +592,14 @@ CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
 #endif
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
-CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY){
+CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY) {
 #if 1 /* enable mp */
     //printf("on body %d\n", parser->multipart_state);
     CAT_ASSERT(
         parser->multipart_state == CAT_HTTP_MULTIPART_NOT_MULTIPART ||
         parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK
     );
-    if ((parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) && parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK){
+    if ((parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) && parser->multipart_state == CAT_HTTP_MULTIPART_BOUNDARY_OK) {
         return HPE_PAUSED;
     }
 #endif
@@ -702,7 +703,7 @@ static cat_bool_t cat_http_llhttp_execute(cat_http_parser_t *parser, const char 
         parser->parsed_length = llhttp_get_error_pos(&parser->llhttp) - data;
         if (unlikely(error != HPE_PAUSED)) {
             if (unlikely(error != HPE_PAUSED_UPGRADE)) {
-                if (parser->libcat_error != 0){
+                if (parser->libcat_error != 0) {
                     cat_update_last_error(parser->libcat_error, "HTTP-Parser execute failed: %s", cat_get_last_error_message());
                 } else {
                     cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_get_error_reason(&parser->llhttp));
@@ -868,7 +869,7 @@ CAT_API cat_bool_t cat_http_parser_is_completed(const cat_http_parser_t *parser)
 
 CAT_API const char *cat_http_parser_get_current_pos(const cat_http_parser_t *parser)
 {
-    
+
     // bypass llhttp_get_error_pos if in multipart body
     if (
         1/*enable mp*/ &&

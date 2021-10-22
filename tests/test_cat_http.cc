@@ -664,7 +664,7 @@ static struct {
     ), CAT_HTTP_ERRNO_MULTIPART_HEADER },
 };
 
-static struct{
+static struct {
     const char *literal;
     const char *real;
 } boundaries[] = {
@@ -799,8 +799,8 @@ TEST(cat_http_parser, multipart)
     char head_buf[8192];
     char body_buf[8192];
 
-    for(int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++){
-        for(int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++){
+    for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++) {
+        for (int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++) {
             const char *boundary = boundaries[j].literal;
             const char *boundary_real = boundaries[j].real;
             int body_len = sprintf(body_buf, multipart_req_body.data, boundary_real, boundary_real, boundary_real);
@@ -1021,7 +1021,7 @@ TEST(cat_http_parser, multipart_subscript_one)
         CAT_LOG_DEBUG_V3(TEST, "Parsing data:\n%.*s\n\n", (int)(head_len + multipart_req_body_multiline.length), head_buf);
         const char *p = head_buf;
         const char *pe = &head_buf[head_len + multipart_req_body_multiline.length];
-        for (int j = 0; j < CAT_ARRAY_SIZE(multipart_stream_events); j++){
+        for (int j = 0; j < CAT_ARRAY_SIZE(multipart_stream_events); j++) {
             if (multipart_stream_events[j].event != events) {
                 continue;
             }
@@ -1331,8 +1331,8 @@ TEST(cat_http_parser, multipart_bad_boundaries)
     char head_buf[8192];
     char body_buf[8192];
     // bad boundaries
-    for(int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++){
-        for(int j = 0; j < CAT_ARRAY_SIZE(boundaries_bad); j++){
+    for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++) {
+        for (int j = 0; j < CAT_ARRAY_SIZE(boundaries_bad); j++) {
             const char *boundary = boundaries_bad[j];
             int body_len = sprintf(body_buf, multipart_req_body.data, boundary, boundary, boundary);
             int head_len = sprintf(head_buf, multipart_req_heads[i].data, body_len, boundary);
@@ -1342,7 +1342,7 @@ TEST(cat_http_parser, multipart_bad_boundaries)
             const char *p = head_buf;
             const char *pe = &head_buf[head_len + body_len];
             while (true) {
-                if(!cat_http_parser_execute(&parser, p, pe - p)){
+                if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
                     ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_ERRNO_MULTIPART_HEADER);
                     break;
@@ -1369,8 +1369,8 @@ TEST(cat_http_parser, multipart_bad_heads)
     char head_buf[8192];
     char body_buf[8192];
     // bad heads
-    for(int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads_bad); i++){
-        for(int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++){
+    for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads_bad); i++) {
+        for (int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++) {
             const char *boundary = boundaries[j].literal;
             const char *boundary_real = boundaries[j].real;
             int body_len = sprintf(body_buf, multipart_req_body.data, boundary_real, boundary_real, boundary_real);
@@ -1381,7 +1381,7 @@ TEST(cat_http_parser, multipart_bad_heads)
             const char *p = head_buf;
             const char *pe = &head_buf[head_len + body_len];
             while (true) {
-                if(!cat_http_parser_execute(&parser, p, pe - p)){
+                if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
                     ASSERT_EQ(cat_get_last_error_code(), multipart_req_heads_bad[i].error);
                     break;
