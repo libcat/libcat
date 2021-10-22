@@ -705,7 +705,7 @@ static cat_bool_t cat_http_llhttp_execute(cat_http_parser_t *parser, const char 
                 if (parser->libcat_error != 0){
                     cat_update_last_error(parser->libcat_error, "HTTP-Parser execute failed: %s", cat_get_last_error_message());
                 } else {
-                    cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_errno_name(error));
+                    cat_update_last_error(error, "HTTP-Parser execute failed: %s", llhttp_get_error_reason(&parser->llhttp));
                 }
                 return cat_false;
             } else {
