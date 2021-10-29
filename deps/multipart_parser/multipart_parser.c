@@ -14,7 +14,6 @@
 #include <errno.h>
 
 #ifdef DEBUG_MULTIPART
-//#if 1
 #include <ctype.h>
 #define multipart_log(format, ...) do {\
     fprintf(stderr, "[MULTIPART_PARSER] line %d: " format "\n", __LINE__, __VA_ARGS__); \
