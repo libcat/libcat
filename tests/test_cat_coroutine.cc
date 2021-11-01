@@ -278,16 +278,6 @@ TEST(cat_coroutine, get_opcode)
     cat_coroutine_set_opcodes(coroutine, cat_coroutine_get_opcodes(coroutine));
 }
 
-TEST(cat_coroutine, init)
-{
-    cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        return nullptr;
-    });
-    DEFER(cat_coroutine_close(coroutine));
-    cat_coroutine_init(coroutine);
-    ASSERT_EQ(CAT_COROUTINE_STATE_INIT, coroutine->state);
-}
-
 TEST(cat_coroutine, get_id_main)
 {
     cat_coroutine_id_t id;
@@ -332,33 +322,32 @@ TEST(cat_coroutine, get_stack_size)
 
 TEST(cat_coroutine, state_name)
 {
-    ASSERT_STREQ("init", cat_coroutine_state_name(CAT_COROUTINE_STATE_INIT));
-    ASSERT_STREQ("ready", cat_coroutine_state_name(CAT_COROUTINE_STATE_READY));
+    ASSERT_STREQ("none", cat_coroutine_state_name(CAT_COROUTINE_STATE_NONE));
     ASSERT_STREQ("running", cat_coroutine_state_name(CAT_COROUTINE_STATE_RUNNING));
     ASSERT_STREQ("waiting", cat_coroutine_state_name(CAT_COROUTINE_STATE_WAITING));
-    ASSERT_STREQ("locked", cat_coroutine_state_name(CAT_COROUTINE_STATE_LOCKED));
-    ASSERT_STREQ("finished", cat_coroutine_state_name(CAT_COROUTINE_STATE_FINISHED));
     ASSERT_STREQ("dead", cat_coroutine_state_name(CAT_COROUTINE_STATE_DEAD));
 }
 
-TEST(cat_coroutine, get_state)
+TEST(cat_coroutine, get_state_and_state_name)
 {
-    cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
+    cat_coroutine_t coroutine;
+    coroutine.state = CAT_COROUTINE_STATE_NONE;
+    ASSERT_EQ(CAT_COROUTINE_STATE_NONE, cat_coroutine_get_state(&coroutine));
+    ASSERT_STREQ("none", cat_coroutine_get_state_name(&coroutine));
+    ASSERT_EQ(cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* {
+        EXPECT_EQ(CAT_COROUTINE_STATE_RUNNING, cat_coroutine_get_state(cat_coroutine_get_current()));
+        EXPECT_STREQ("running", cat_coroutine_get_state_name(cat_coroutine_get_current()));
+        EXPECT_TRUE(cat_coroutine_yield(nullptr, nullptr));
         return nullptr;
-    });
-    DEFER(cat_coroutine_close(coroutine));
-    cat_coroutine_init(coroutine);
-    ASSERT_EQ(CAT_COROUTINE_STATE_INIT, cat_coroutine_get_state(coroutine));
-}
-
-TEST(cat_coroutine, get_state_name)
-{
-    cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        return nullptr;
-    });
-    DEFER(cat_coroutine_close(coroutine));
-    cat_coroutine_init(coroutine);
-    ASSERT_STREQ("init", cat_coroutine_get_state_name(coroutine));
+    }), &coroutine);
+    ASSERT_EQ(CAT_COROUTINE_STATE_WAITING, cat_coroutine_get_state(&coroutine));
+    ASSERT_STREQ("waiting", cat_coroutine_get_state_name(&coroutine));
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_EQ(CAT_COROUTINE_STATE_WAITING, cat_coroutine_get_state(&coroutine));
+    ASSERT_STREQ("waiting", cat_coroutine_get_state_name(&coroutine));
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_EQ(CAT_COROUTINE_STATE_DEAD, cat_coroutine_get_state(&coroutine));
+    ASSERT_STREQ("dead", cat_coroutine_get_state_name(&coroutine));
 }
 
 TEST(cat_coroutine, get_start_time)
@@ -398,7 +387,7 @@ TEST(cat_coroutine, get_elapsed_zero)
             }
         ), nullptr
     );
-    DEFER(cat_coroutine_close(&coroutine));
+    DEFER(ASSERT_TRUE(cat_coroutine_close(&coroutine)));
 
     ASSERT_EQ(cat_coroutine_get_elapsed(&coroutine), 0);
     elapsed = cat_coroutine_get_elapsed_as_string(&coroutine);
@@ -406,12 +395,12 @@ TEST(cat_coroutine, get_elapsed_zero)
     cat_free(elapsed);
 }
 
-TEST(cat_coroutine, get_elapsed_not_init)
+TEST(cat_coroutine, get_elapsed_without_start)
 {
     cat_coroutine_t *coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
         return nullptr;
     });
-    DEFER(cat_coroutine_close(coroutine));
+    DEFER(ASSERT_TRUE(cat_coroutine_close(coroutine)));
 
     ASSERT_EQ(0, cat_coroutine_get_elapsed(coroutine));
 }
@@ -462,7 +451,7 @@ TEST(cat_coroutine, unlock_unlocked_coroutine)
     new_coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
         return nullptr;
     });
-    DEFER(cat_coroutine_close(new_coroutine));
+    DEFER(ASSERT_TRUE(cat_coroutine_close(new_coroutine)));
 
     ASSERT_FALSE(cat_coroutine_unlock(new_coroutine));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
