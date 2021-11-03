@@ -672,11 +672,22 @@ CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
 
     switch (coroutine->state) {
         case CAT_COROUTINE_STATE_WAITING:
+            if (unlikely((coroutine->opcodes & (CAT_COROUTINE_OPCODE_LOCKED | CAT_COROUTINE_OPCODE_UNLOCKING)) == CAT_COROUTINE_OPCODE_LOCKED)) {
+                cat_update_last_error(CAT_ELOCKED, "Coroutine is locked");
+                return cat_false;
+            }
+            if (unlikely((coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) && (current_coroutine != coroutine->waiter.coroutine))) {
+                cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
+                return cat_false;
+            }
             break;
         case CAT_COROUTINE_STATE_RUNNING:
             cat_update_last_error(CAT_EBUSY, "Coroutine is running");
             return cat_false;
         case CAT_COROUTINE_STATE_DEAD:
+            if (coroutine->opcodes & CAT_COROUTINE_OPCODE_UNLOCKING) {
+                break;
+            }
             cat_update_last_error(CAT_ESRCH, "Coroutine is dead");
             return cat_false;
         case CAT_COROUTINE_STATE_NONE:
@@ -684,15 +695,6 @@ CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
             return cat_false;
         default:
             CAT_NEVER_HERE("Unknown state");
-    }
-
-    if (unlikely((coroutine->opcodes & (CAT_COROUTINE_OPCODE_LOCKED | CAT_COROUTINE_OPCODE_UNLOCKING)) == CAT_COROUTINE_OPCODE_LOCKED)) {
-        cat_update_last_error(CAT_ELOCKED, "Coroutine is locked");
-        return cat_false;
-    }
-    if (unlikely((coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) && (current_coroutine != coroutine->waiter.coroutine))) {
-        cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
-        return cat_false;
     }
 
     return cat_true;
@@ -1002,12 +1004,14 @@ CAT_API cat_bool_t cat_coroutine_lock(void)
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
     cat_bool_t ret;
 
+    current_coroutine->state = CAT_COROUTINE_STATE_DEAD;
     current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_LOCKED;
     CAT_COROUTINE_G(count)--;
 
     ret = cat_coroutine_yield(NULL, NULL);
 
     CAT_COROUTINE_G(count)++;
+    current_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
 
     if (!ret) {
         current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_LOCKED;
