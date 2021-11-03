@@ -65,9 +65,9 @@ TEST(cat_event, defer_in_defer)
 
 TEST(cat_event, defer_not_blocking)
 {
-    cat_event_wait();
+    cat_event_wait_all();
     ASSERT_TRUE(defer([]{}));
-    cat_event_wait(); // not blocking
+    cat_event_wait_all(); // not blocking
 }
 
 // defer tasks should have no affect on backend time
@@ -75,12 +75,12 @@ TEST(cat_event, defer_backend_time)
 {
     int timeout;
 
-    cat_event_wait();
+    cat_event_wait_all();
     timeout = uv_backend_timeout(cat_event_loop);
     ASSERT_TRUE(defer([]{}));
     ASSERT_EQ(uv_backend_timeout(cat_event_loop), timeout);
 
-    cat_event_wait();
+    cat_event_wait_all();
     timeout = uv_backend_timeout(cat_event_loop);
     co([] {
         ASSERT_TRUE(cat_time_delay(1));
@@ -98,7 +98,7 @@ TEST(cat_event, wait)
         ASSERT_TRUE(cat_time_delay(1));
         done = true;
     });
-    cat_event_wait();
+    cat_event_wait_all();
     ASSERT_TRUE(done);
 }
 

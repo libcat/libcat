@@ -929,7 +929,7 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void)
         return NULL;
     }
 
-    cat_coroutine_wait();
+    cat_coroutine_wait_all();
 
     /* remove it from the root */
     cat_coroutine_get_by_index(1)->previous = NULL;
@@ -944,7 +944,7 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void)
     return coroutine;
 }
 
-CAT_API cat_bool_t cat_coroutine_wait(void)
+CAT_API cat_bool_t cat_coroutine_wait_all(void)
 {
     cat_bool_t ret;
 

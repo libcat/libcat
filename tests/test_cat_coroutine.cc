@@ -615,7 +615,7 @@ TEST(cat_coroutine, dead_lock)
 
 TEST(cat_coroutine, get_by_index)
 {
-    cat_event_wait();
+    cat_event_wait_all();
     ASSERT_EQ(cat_coroutine_get_by_index((cat_coroutine_count_t) -1), nullptr);
     cat_coroutine_t *coroutine0 = cat_coroutine_get_previous(cat_coroutine_get_current());
     if (coroutine0 != nullptr) {

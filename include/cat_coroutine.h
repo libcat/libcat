@@ -263,7 +263,7 @@ CAT_API cat_coroutine_t *cat_coroutine_scheduler_run(cat_coroutine_t *coroutine,
 CAT_API cat_coroutine_t *cat_coroutine_scheduler_close(void); CAT_INTERNAL
 
 /* sync */
-CAT_API cat_bool_t cat_coroutine_wait(void);
+CAT_API cat_bool_t cat_coroutine_wait_all(void);
 CAT_API void cat_coroutine_notify_all(void); CAT_INTERNAL
 
 /* special */
