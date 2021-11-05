@@ -676,7 +676,7 @@ CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
                 cat_update_last_error(CAT_ELOCKED, "Coroutine is locked");
                 return cat_false;
             }
-            if (unlikely((coroutine->opcodes & CAT_COROUTINE_OPCODE_WAIT) && (current_coroutine != coroutine->waiter.coroutine))) {
+            if (unlikely((coroutine->opcodes & CAT_COROUTINE_OPCODE_WAITING_FOR) && (current_coroutine != coroutine->waiter.coroutine))) {
                 cat_update_last_error(CAT_EAGAIN, "Coroutine is waiting for someone else");
                 return cat_false;
             }
@@ -986,13 +986,13 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
     cat_bool_t ret;
 
-    current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_WAIT;
+    current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_WAITING_FOR;
     current_coroutine->waiter.coroutine = who;
 
     ret = cat_coroutine_yield(NULL, NULL);
 
     if (unlikely(!ret)) {
-        current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAIT;
+        current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAITING_FOR;
         return cat_false;
     }
 

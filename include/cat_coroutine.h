@@ -82,9 +82,9 @@ typedef enum cat_coroutine_opcode_e {
     /* built-in (0 ~ 7) */
     CAT_COROUTINE_OPCODE_NONE      = 0,
     CAT_COROUTINE_OPCODE_CHECKED   = 1 << 0, /* we have already checked if it is resumable */
-    CAT_COROUTINE_OPCODE_WAIT      = 1 << 1, /* wait for a specified coroutine to wake it up */
-    CAT_COROUTINE_OPCODE_LOCKED    = 1 << 2, /* can only be resumed by unlock() */
-    CAT_COROUTINE_OPCODE_UNLOCKING = 1 << 3, /* is in unlocking */
+    CAT_COROUTINE_OPCODE_LOCKED    = 1 << 1, /* can only be resumed by unlock() */
+    CAT_COROUTINE_OPCODE_UNLOCKING = 1 << 2, /* is in unlocking */
+    CAT_COROUTINE_OPCODE_WAITING_FOR = 1 << 3, /* waiting for a specified coroutine to wake it up */
     /* for user (8 ~ 15) */
 #define CAT_COROUTINE_OPCODE_USR_GEN(XX) \
     CAT_COROUTINE_OPCODE_USR##XX = 1 << (XX + (16 - 1 - 8))
