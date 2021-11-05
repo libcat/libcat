@@ -226,7 +226,7 @@ CAT_API cat_bool_t cat_coroutine_close(cat_coroutine_t *coroutine);
 /* switch (internal) */
 CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data);
 /* switch (external) */
-CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine);
+CAT_API cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *coroutine);
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 #define cat_coroutine_resume CAT_COROUTINE_G(resume)
 CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval);

@@ -662,7 +662,7 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     return data;
 }
 
-CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
+CAT_API cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *coroutine)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
 
@@ -703,7 +703,7 @@ CAT_API cat_bool_t cat_coroutine_is_resumable(const cat_coroutine_t *coroutine)
 CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
     if (likely(!(coroutine->opcodes & CAT_COROUTINE_OPCODE_CHECKED))) {
-        if (unlikely(!cat_coroutine_is_resumable(coroutine))) {
+        if (unlikely(!cat_coroutine_check_resumability(coroutine))) {
             return cat_false;
         }
     }
