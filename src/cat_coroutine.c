@@ -795,6 +795,19 @@ CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutin
     return cat_coroutine_state_name(coroutine->state);
 }
 
+CAT_API const char *cat_coroutine_get_debug_state_name(const cat_coroutine_t *coroutine)
+{
+    if (unlikely(coroutine->opcodes & CAT_COROUTINE_OPCODE_LOCKED)) {
+        return "locked";
+    }
+    if (unlikely(coroutine->opcodes & CAT_COROUTINE_OPCODE_WAITING_FOR)) {
+        if (coroutine->waiter.coroutine != CAT_COROUTINE_G(current)) {
+            return "uninterruptible";
+        }
+    }
+    return cat_coroutine_state_name(coroutine->state);
+}
+
 CAT_API cat_coroutine_opcodes_t cat_coroutine_get_opcodes(const cat_coroutine_t *coroutine)
 {
     return coroutine->opcodes;

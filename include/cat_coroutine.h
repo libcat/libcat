@@ -244,6 +244,7 @@ CAT_API cat_bool_t cat_coroutine_is_over(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_state_name(cat_coroutine_state_t state);
 CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine);
+CAT_API const char *cat_coroutine_get_debug_state_name(const cat_coroutine_t *coroutine);
 CAT_API cat_coroutine_opcodes_t cat_coroutine_get_opcodes(const cat_coroutine_t *coroutine);
 CAT_API void cat_coroutine_set_opcodes(cat_coroutine_t *coroutine, cat_coroutine_opcodes_t opcodes);
 CAT_API cat_coroutine_round_t cat_coroutine_get_round(const cat_coroutine_t *coroutine);
