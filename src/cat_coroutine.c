@@ -1004,7 +1004,6 @@ CAT_API cat_bool_t cat_coroutine_lock(void)
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
     cat_bool_t ret;
 
-    current_coroutine->state = CAT_COROUTINE_STATE_DEAD;
     current_coroutine->opcodes |= CAT_COROUTINE_OPCODE_LOCKED;
     CAT_COROUTINE_G(count)--;
 
