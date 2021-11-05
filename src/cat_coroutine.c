@@ -624,8 +624,6 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     }
     /* update state */
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
-    /* reset the opcode */
-    coroutine->opcodes = CAT_COROUTINE_OPCODE_NONE;
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
 #ifdef CAT_HAVE_ASAN
@@ -1004,8 +1002,10 @@ CAT_API cat_bool_t cat_coroutine_wait_for(cat_coroutine_t *who)
 
     ret = cat_coroutine_yield(NULL, NULL);
 
+    current_coroutine->waiter.coroutine = NULL;
+    current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAITING_FOR;
+
     if (unlikely(!ret)) {
-        current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_WAITING_FOR;
         return cat_false;
     }
 
@@ -1022,11 +1022,12 @@ CAT_API cat_bool_t cat_coroutine_lock(void)
 
     ret = cat_coroutine_yield(NULL, NULL);
 
+    CAT_ASSERT(current_coroutine->opcodes & CAT_COROUTINE_OPCODE_UNLOCKING);
+
     CAT_COROUTINE_G(count)++;
-    current_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
+    current_coroutine->opcodes ^= (CAT_COROUTINE_OPCODE_LOCKED | CAT_COROUTINE_OPCODE_UNLOCKING);
 
     if (!ret) {
-        current_coroutine->opcodes ^= CAT_COROUTINE_OPCODE_LOCKED;
         cat_update_last_error_with_previous("Coroutine lock failed");
         return cat_false;
     }
@@ -1047,10 +1048,11 @@ CAT_API cat_bool_t cat_coroutine_unlock(cat_coroutine_t *coroutine)
 
     ret = cat_coroutine_resume(coroutine, NULL, NULL);
 
+    /* this flag will be cleared after lock yield returned
+     * we can not clear it here, because the coroutine maybe dead here. */
+    // coroutine->opcodes ^= CAT_COROUTINE_OPCODE_UNLOCKING;
+
     CAT_ASSERT((ret || cat_coroutine_switch_blocked()) && "Unlock never fail");
-    if (!ret) {
-        coroutine->opcodes ^= CAT_COROUTINE_OPCODE_UNLOCKING;
-    }
 
     return ret;
 }
