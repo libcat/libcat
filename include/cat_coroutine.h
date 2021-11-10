@@ -171,9 +171,9 @@ CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void);
 /* register/options */
 /* return the original resume function ptr */
 CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume);
-CAT_API cat_bool_t cat_coroutine_switch_blocked(void);
-CAT_API void cat_coroutine_switch_block(void);
-CAT_API void cat_coroutine_switch_unblock(void);
+CAT_API cat_bool_t cat_coroutine_switch_denied(void);
+CAT_API void cat_coroutine_switch_deny(void);
+CAT_API void cat_coroutine_switch_allow(void);
 /* return the original main coroutine ptr */
 CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine);
 /* return the original stack size */

@@ -243,17 +243,17 @@ static CAT_COLD cat_bool_t cat_coroutine_resume_deny(cat_coroutine_t *coroutine,
     return cat_false;
 }
 
-CAT_API cat_bool_t cat_coroutine_switch_blocked(void)
+CAT_API cat_bool_t cat_coroutine_switch_denied(void)
 {
     return CAT_COROUTINE_G(resume) == cat_coroutine_resume_deny;
 }
 
-CAT_API void cat_coroutine_switch_block(void)
+CAT_API void cat_coroutine_switch_deny(void)
 {
     CAT_COROUTINE_G(original_resume) = cat_coroutine_register_resume(cat_coroutine_resume_deny);
 }
 
-CAT_API void cat_coroutine_switch_unblock(void)
+CAT_API void cat_coroutine_switch_allow(void)
 {
     if (CAT_COROUTINE_G(resume) != cat_coroutine_resume_deny) {
         return;
@@ -719,7 +719,7 @@ CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 
     ret = cat_coroutine_resume(coroutine, data, retval);
 
-    CAT_ASSERT((ret || cat_coroutine_switch_blocked()) && "Yield never fail");
+    CAT_ASSERT((ret || cat_coroutine_switch_denied()) && "Yield never fail");
 
     return ret;
 }
