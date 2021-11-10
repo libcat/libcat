@@ -59,7 +59,7 @@ TEST(cat_watch_dog, base)
 TEST(cat_watch_dog, single)
 {
     // recycle possible residual coroutines
-    cat_event_wait_all();
+    ASSERT_TRUE(cat_coroutine_wait_all());
 
     testing::internal::CaptureStderr();
 

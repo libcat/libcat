@@ -2204,7 +2204,7 @@ TEST(cat_socket, dump_all_and_close_all)
     {
         cat_socket_close_all();
         closed_all = true;
-        cat_event_wait_all();
+        ASSERT_TRUE(cat_coroutine_wait_all());
         testing::internal::CaptureStdout();
         cat_socket_dump_all();
         std::string output = testing::internal::GetCapturedStdout();

@@ -268,14 +268,14 @@ TEST(cat_coroutine, get_round)
     ASSERT_EQ(round + 2, cat_coroutine_get_round(cat_coroutine_get_current()));
 }
 
-TEST(cat_coroutine, get_opcode)
+TEST(cat_coroutine, get_and_set_flags)
 {
     cat_coroutine_t *coroutine = cat_coroutine_get_current();
 
-    ASSERT_EQ(cat_coroutine_get_opcodes(coroutine), coroutine->opcodes);
+    ASSERT_EQ(cat_coroutine_get_flags(coroutine), coroutine->flags);
 
     /* make lcov happy */
-    cat_coroutine_set_opcodes(coroutine, cat_coroutine_get_opcodes(coroutine));
+    cat_coroutine_set_flags(coroutine, cat_coroutine_get_flags(coroutine));
 }
 
 TEST(cat_coroutine, get_id_main)
@@ -304,12 +304,14 @@ TEST(cat_coroutine, get_from)
     ASSERT_EQ(cat_coroutine_get_main()->from, from);
 }
 
-TEST(cat_coroutine, get_previous)
+TEST(cat_coroutine, get_previous_and_next)
 {
-    cat_coroutine_t *previous;
-
-    previous = cat_coroutine_get_previous(cat_coroutine_get_main());
-    ASSERT_EQ(cat_coroutine_get_main()->previous, previous);
+    co([] {
+        ASSERT_EQ(
+            cat_coroutine_get_current(),
+            cat_coroutine_get_next(cat_coroutine_get_previous(cat_coroutine_get_current()))
+        );
+    });
 }
 
 TEST(cat_coroutine, get_stack_size)
@@ -423,40 +425,6 @@ TEST(cat_coroutine, scheduler_stop_duplicated)
     ASSERT_STREQ("No scheduler is available", cat_get_last_error_message());
 }
 
-TEST(cat_coroutine, wait_for)
-{
-    cat_coroutine_t *new_coroutine;
-
-    new_coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        cat_coroutine_t *from_coroutine = (cat_coroutine_t *) data;
-
-        /* switch to from_coroutine */
-        EXPECT_TRUE(cat_time_delay(0));
-
-        cat_coroutine_resume(from_coroutine, nullptr, nullptr);
-
-        return nullptr;
-    });
-
-    ASSERT_TRUE(cat_coroutine_resume(new_coroutine, cat_coroutine_get_current(), nullptr));
-
-    /* wait for new_coroutine to resume itself */
-    ASSERT_TRUE(cat_coroutine_wait_for(new_coroutine));
-}
-
-TEST(cat_coroutine, unlock_unlocked_coroutine)
-{
-    cat_coroutine_t *new_coroutine;
-
-    new_coroutine = cat_coroutine_create(nullptr, [](cat_data_t *data)->cat_data_t* {
-        return nullptr;
-    });
-    DEFER(ASSERT_TRUE(cat_coroutine_close(new_coroutine)));
-
-    ASSERT_FALSE(cat_coroutine_unlock(new_coroutine));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-}
-
 TEST(cat_coroutine, register_resume)
 {
     cat_coroutine_resume_t origin_resume = cat_coroutine_resume;
@@ -546,17 +514,6 @@ TEST(cat_coroutine, resume_current)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
 }
 
-TEST(cat_coroutine, resume_locked)
-{
-    cat_coroutine_t *coroutine = co([] {
-        cat_coroutine_lock();
-    });
-
-    ASSERT_FALSE(cat_coroutine_resume(coroutine, nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
-    ASSERT_TRUE(cat_coroutine_unlock(coroutine));
-}
-
 TEST(cat_coroutine, resume_dead)
 {
     cat_coroutine_t coroutine;
@@ -571,76 +528,31 @@ TEST(cat_coroutine, resume_running)
     co([] {
         co([] {
             cat_coroutine_t *coroutine = cat_coroutine_get_current();
-            ASSERT_FALSE(cat_coroutine_resume(
+            ASSERT_TRUE(cat_coroutine_resume(
                 cat_coroutine_get_previous(
                     cat_coroutine_get_previous(coroutine)
                 ), nullptr, nullptr
             ));
-            ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
         });
     });
 }
 
 TEST(cat_coroutine, resume_scheduler)
 {
-    ASSERT_FALSE(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
-}
+    cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();
+    cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_ERROR);
+    DEFER(cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type));
 
-TEST(cat_coroutine, wait)
-{
-    cat_coroutine_t *coroutine = cat_coroutine_get_current(), *waiter;
-
-    waiter = co([=] {
-        ASSERT_TRUE(cat_coroutine_wait_for(coroutine));
-    });
-
-    co([=] {
-        ASSERT_FALSE(cat_coroutine_resume(waiter, nullptr, nullptr));
-        ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
-    });
-
-    ASSERT_TRUE(cat_coroutine_resume(waiter, nullptr, nullptr));
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr), "Dead lock");
 }
 
 TEST(cat_coroutine, dead_lock)
 {
     cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();
     cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_ERROR);
+    DEFER(cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type));
 
     ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "Dead lock");
-
-    cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type);
-}
-
-TEST(cat_coroutine, get_by_index)
-{
-    cat_event_wait_all();
-    ASSERT_EQ(cat_coroutine_get_by_index((cat_coroutine_count_t) -1), nullptr);
-    cat_coroutine_t *coroutine0 = cat_coroutine_get_previous(cat_coroutine_get_current());
-    if (coroutine0 != nullptr) {
-        co([=] {
-            ASSERT_EQ(cat_coroutine_get_by_index(0), coroutine0);
-        });
-    }
-    cat_coroutine_t *coroutine1 = cat_coroutine_get_current();
-    co([=] {
-        ASSERT_EQ(cat_coroutine_get_by_index(coroutine0 ? 1 : 0), coroutine1);
-    });
-}
-
-TEST(cat_coroutine, get_root)
-{
-    SKIP_IF(cat_coroutine_get_scheduler() == nullptr);
-    ASSERT_EQ(cat_coroutine_get_root(), cat_coroutine_get_scheduler());
-}
-
-TEST(cat_coroutine, no_where_to_go)
-{
-    defer([] {
-        ASSERT_FALSE(cat_coroutine_yield(nullptr, nullptr));
-        ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
-    });
 }
 
 TEST(cat_coroutine, get_role_name)
@@ -648,6 +560,8 @@ TEST(cat_coroutine, get_role_name)
     defer([] {
         ASSERT_STREQ(cat_coroutine_get_current_role_name(), "scheduler");
     });
+    ASSERT_TRUE(cat_coroutine_wait_all());
+
     ASSERT_STREQ(cat_coroutine_get_current_role_name(), "main");
 
     cat_coroutine_t *current_coroutine = cat_coroutine_get_current();

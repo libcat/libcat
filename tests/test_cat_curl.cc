@@ -66,7 +66,7 @@ TEST(cat_curl, base)
 
 TEST(cat_curl, concurrency)
 {
-    cat_event_wait_all(); // call it before timing test
+    ASSERT_TRUE(cat_coroutine_wait_all()); // call it before timing test
     auto concurrency = ([](uint32_t concurrency) {
         cat_sync_wait_group_t wg;
         ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
