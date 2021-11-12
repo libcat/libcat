@@ -53,6 +53,7 @@ typedef uint64_t cat_coroutine_id_t;
     XX(ALLOCATED,   1 << 0) \
     /* built-in runtime (8 ~ 15) */ \
     XX(SCHEDULING,  1 << 8) \
+    XX(ACCEPT_DATA, 1 << 9) \
     /* for user (16 ~ 31) */ \
     XX(USR1,  1 << 16) XX(USR2,  1 << 17) XX(USR3,  1 << 18) XX(USR4,  1 << 19) \
     XX(USR5,  1 << 20) XX(USR6,  1 << 21) XX(USR7,  1 << 22) XX(USR8,  1 << 23) \
@@ -130,7 +131,7 @@ struct cat_coroutine_s
 #endif
 };
 
-typedef cat_bool_t (*cat_coroutine_resume_t)(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
+typedef void (*cat_coroutine_jump_t)(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 
 typedef uint32_t cat_coroutine_count_t;
 #define CAT_COROUTINE_COUNT_FMT "%u"
@@ -149,8 +150,8 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_coroutine)
     cat_queue_t waiters;
     cat_coroutine_count_t waiter_count;
     /* functions */
-    cat_coroutine_resume_t resume;
-    cat_coroutine_resume_t original_resume;
+    cat_coroutine_jump_t jump;
+    cat_bool_t switch_denied;
     /* info */
     cat_coroutine_id_t last_id;
     cat_coroutine_count_t count;
@@ -170,7 +171,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void);
 
 /* register/options */
 /* return the original resume function ptr */
-CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume);
+CAT_API cat_coroutine_jump_t cat_coroutine_register_jump(cat_coroutine_jump_t jump);
 CAT_API cat_bool_t cat_coroutine_switch_denied(void);
 CAT_API void cat_coroutine_switch_deny(void);
 CAT_API void cat_coroutine_switch_allow(void);
@@ -201,11 +202,10 @@ CAT_API void cat_coroutine_free(cat_coroutine_t *coroutine);
 /* Notice: unless you create a coroutine and never ran it, or you need not close coroutine by yourself */
 CAT_API cat_bool_t cat_coroutine_close(cat_coroutine_t *coroutine);
 /* switch (internal) */
-CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data);
+#define cat_coroutine_jump CAT_COROUTINE_G(jump)
+CAT_API void cat_coroutine_jump_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 /* switch (external) */
-CAT_API cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *coroutine);
-CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
-#define cat_coroutine_resume CAT_COROUTINE_G(resume)
+CAT_API cat_bool_t cat_coroutine_resume(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval);
 CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval);
 
 /* properties */

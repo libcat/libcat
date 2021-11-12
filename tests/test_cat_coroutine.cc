@@ -425,19 +425,19 @@ TEST(cat_coroutine, scheduler_stop_duplicated)
     ASSERT_STREQ("No scheduler is available", cat_get_last_error_message());
 }
 
-TEST(cat_coroutine, register_resume)
+TEST(cat_coroutine, register_jump)
 {
-    cat_coroutine_resume_t origin_resume = cat_coroutine_resume;
-    cat_coroutine_resume_t new_resume = nullptr;
-    cat_coroutine_resume_t resume;
-
-    /* set new resume function and return origin resume function */
-    resume = cat_coroutine_register_resume(new_resume);
-    ASSERT_EQ(origin_resume, resume);
-    ASSERT_EQ(nullptr, cat_coroutine_resume);
+    cat_coroutine_jump_t original_jump = cat_coroutine_jump;
+    cat_coroutine_jump_t new_jump = nullptr;
+    cat_coroutine_jump_t jump;
 
     /* register origin resume function */
-    cat_coroutine_register_resume(origin_resume);
+    DEFER(cat_coroutine_register_jump(original_jump););
+
+    /* set new resume function and return origin resume function */
+    jump = cat_coroutine_register_jump(new_jump);
+    ASSERT_EQ(original_jump, jump);
+    ASSERT_EQ(nullptr, cat_coroutine_jump);
 }
 
 TEST(cat_coroutine, register_main)

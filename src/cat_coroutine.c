@@ -144,8 +144,8 @@ CAT_API cat_bool_t cat_coroutine_module_init(void)
 CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 {
     /* register coroutine resume */
-    cat_coroutine_register_resume(cat_coroutine_resume_standard);
-    CAT_COROUTINE_G(original_resume) = NULL;
+    cat_coroutine_register_jump(cat_coroutine_jump_standard);
+    CAT_COROUTINE_G(switch_denied) = cat_false;
 
     /* init options */
     cat_coroutine_set_default_stack_size(CAT_COROUTINE_RECOMMENDED_STACK_SIZE);
@@ -226,40 +226,26 @@ CAT_API cat_bool_t cat_coroutine_set_dead_lock_log_type(cat_log_type_t type)
     return cat_true;
 }
 
-CAT_API cat_coroutine_resume_t cat_coroutine_register_resume(cat_coroutine_resume_t resume)
+CAT_API cat_coroutine_jump_t cat_coroutine_register_jump(cat_coroutine_jump_t jump)
 {
-    cat_coroutine_resume_t original_resume = cat_coroutine_resume;
-    cat_coroutine_resume = resume;
-    return original_resume;
-}
-
-static CAT_COLD cat_bool_t cat_coroutine_resume_deny(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
-{
-    (void) coroutine;
-    (void) data;
-    (void) retval;
-    cat_update_last_error(CAT_EMISUSE, "Unexpected coroutine switching");
-
-    return cat_false;
+    cat_coroutine_jump_t original_jump = cat_coroutine_jump;
+    cat_coroutine_jump = jump;
+    return original_jump;
 }
 
 CAT_API cat_bool_t cat_coroutine_switch_denied(void)
 {
-    return CAT_COROUTINE_G(resume) == cat_coroutine_resume_deny;
+    return CAT_COROUTINE_G(switch_denied);
 }
 
 CAT_API void cat_coroutine_switch_deny(void)
 {
-    CAT_COROUTINE_G(original_resume) = cat_coroutine_register_resume(cat_coroutine_resume_deny);
+    CAT_COROUTINE_G(switch_denied) = cat_true;
 }
 
 CAT_API void cat_coroutine_switch_allow(void)
 {
-    if (CAT_COROUTINE_G(resume) != cat_coroutine_resume_deny) {
-        return;
-    }
-    cat_coroutine_register_resume(CAT_COROUTINE_G(original_resume));
-    CAT_COROUTINE_G(original_resume) = NULL;
+    CAT_COROUTINE_G(switch_denied) = cat_false;
 }
 
 CAT_API cat_coroutine_t *cat_coroutine_register_main(cat_coroutine_t *coroutine)
@@ -479,7 +465,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 
     /* init coroutine properties */
     coroutine->id = CAT_COROUTINE_G(last_id)++;
-    coroutine->flags = flags;
+    coroutine->flags = flags | CAT_COROUTINE_FLAG_ACCEPT_DATA;
     coroutine->state = CAT_COROUTINE_STATE_WAITING;
     coroutine->round = 0;
     coroutine->from = NULL;
@@ -563,18 +549,12 @@ CAT_API cat_bool_t cat_coroutine_close(cat_coroutine_t *coroutine)
     return cat_true;
 }
 
-CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *data)
+CAT_API void cat_coroutine_jump_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
     cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
 
-    CAT_LOG_DEBUG_SCOPE_START(COROUTINE) {
-        const char *name = cat_coroutine_get_role_name(coroutine);
-        if (name != NULL) {
-            CAT_LOG_DEBUG_D(COROUTINE, "Jump to %s", name);
-        } else {
-            CAT_LOG_DEBUG_D(COROUTINE, "Jump to R" CAT_COROUTINE_ID_FMT, coroutine->id);
-        }
-    } CAT_LOG_DEBUG_SCOPE_END();
+    CAT_ASSERT((data == NULL || (coroutine->flags & CAT_COROUTINE_FLAG_ACCEPT_DATA)) && "Coroutine does not accept data");
+
     /* swap ptr */
     CAT_COROUTINE_G(current) = coroutine;
     /* update from */
@@ -584,55 +564,21 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
         /* maybe dead */
         current_coroutine->state = CAT_COROUTINE_STATE_WAITING;
     }
-    /* solve relation */
-    if (current_coroutine->previous == coroutine) {
-        /* if it is yield
-         * ┌──────┐  ┌──────┐       ┌──────┐
-         * │ co-1 ├─►│ co-2 │◄-here─┤ co-3 │
-         * └──────┘  └──────┘       └──────┘
-         * then it becomes:
-         * ┌──────┐  ┌──────┐  ┌──────┐
-         * │ co-1 ├─►│ co-2 │  │ co-3 │:(waiting)
-         * └──────┘  └──────┘  └──────┘
-         */
-        /* break the previous */
-        current_coroutine->previous = NULL;
-        /* break the next */
-        coroutine->next = NULL;
-    } else  {
-        /* it is resume, not yield:
-         * ┌──────┐  ┌──────┐       ┌──────┐
-         * │ co-1 ├─►│ co-2 ├─here─►│ co-3 │
-         * └──────┘  └──────┘       └──────┘ */
-        if (unlikely(coroutine->previous != NULL)) {
-            /* cross resume:
-             * ┌──────┐  ┌──────┐  ┌──────┐
-             * │ co-1 ├─►│ co-2 ├─►│ co-3 │
-             * └──▲───┘  └──────┘  └───┬──┘
-             *    └─────here-we-are────┘
-             *  then it becomes:
-             *  ┌──────┐  ┌──────┐  ┌──────┐
-             *  │ co-2 ├─►┤ co-3 ├─►│ co-1 │
-             *  └──────┘  └──────┘  └──────┘*/
-            coroutine->previous->next = coroutine->next;
-            coroutine->next->previous = coroutine->previous;
-        }
-        /* current becomes target's previous */
-        coroutine->previous = current_coroutine;
-        /* target becomes current's next */
-        current_coroutine->next = coroutine;
-    }
     /* update state */
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
     /* round++ */
     coroutine->round = ++CAT_COROUTINE_G(round);
+    /* accept-data check */
+    if (retval != NULL) {
+        current_coroutine->flags |= CAT_COROUTINE_FLAG_ACCEPT_DATA;
+    }
 #ifdef CAT_HAVE_ASAN
     __sanitizer_start_switch_fiber(
         current_coroutine->state != CAT_COROUTINE_STATE_DEAD ? &current_coroutine->asan_fake_stack : NULL,
         coroutine->asan_stack, coroutine->asan_stack_size
     );
 #endif
-    /* jump */
+    /* jump {{{ */
 #ifdef CAT_COROUTINE_USE_UCONTEXT
     coroutine->transfer_data = data;
     cat_coroutine_context_jump(&current_coroutine->context, &coroutine->context);
@@ -641,7 +587,10 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
     cat_coroutine_transfer_t transfer = cat_coroutine_context_jump(coroutine->context, data);
     data = transfer.data;
 #endif
+    /* }}} */
     CAT_ASSERT(current_coroutine == CAT_COROUTINE_G(current));
+    /* accept-data clear */
+    current_coroutine->flags &= ~CAT_COROUTINE_FLAG_ACCEPT_DATA;
     /* handle from */
     coroutine = current_coroutine->from;
     CAT_ASSERT(coroutine != NULL);
@@ -657,17 +606,21 @@ CAT_API cat_data_t *cat_coroutine_jump(cat_coroutine_t *coroutine, cat_data_t *d
         cat_coroutine_free(coroutine);
     }
 
-    return data;
+    if (retval != NULL) {
+        *retval = data;
+    } else {
+        CAT_ASSERT(data == NULL && "Unexpected transfer return data");
+    }
 }
 
-CAT_API cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *coroutine)
-{
-    cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
-
-    if (coroutine == current_coroutine->previous) {
-        return cat_true;
+#define CAT_COROUTINE_SWITCH_PRECHECK(failure) \
+    if (unlikely(CAT_COROUTINE_G(switch_denied))) { \
+        cat_update_last_error(CAT_EMISUSE, "Coroutine switch denied"); \
+        failure; \
     }
 
+static cat_always_inline cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *coroutine)
+{
     switch (coroutine->state) {
         case CAT_COROUTINE_STATE_WAITING:
             break;
@@ -687,41 +640,108 @@ CAT_API cat_bool_t cat_coroutine_check_resumability(const cat_coroutine_t *corou
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_coroutine_resume_standard(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
+#define CAT_COROUTINE_SWITCH_LOG(action, to) cat_coroutine_switch_log(#action, to)
+
+static cat_always_inline void cat_coroutine_switch_log(const char *action, const cat_coroutine_t *coroutine)
 {
+    CAT_LOG_DEBUG_SCOPE_START(COROUTINE) {
+        const char *name = cat_coroutine_get_role_name(coroutine);
+        if (name != NULL) {
+            CAT_LOG_DEBUG_D(COROUTINE, "%s to %s", action, name);
+        } else {
+            CAT_LOG_DEBUG_D(COROUTINE, "%s to R" CAT_COROUTINE_ID_FMT, action, coroutine->id);
+        }
+    } CAT_LOG_DEBUG_SCOPE_END();
+}
+
+CAT_API cat_bool_t cat_coroutine_resume(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
+{
+    CAT_COROUTINE_SWITCH_PRECHECK(return cat_false);
     if (unlikely(!cat_coroutine_check_resumability(coroutine))) {
         return cat_false;
     }
 
-    data = cat_coroutine_jump(coroutine, data);
+    CAT_COROUTINE_SWITCH_LOG(resume, coroutine);
 
-    if (retval != NULL) {
-        *retval = data;
-    } else {
-        CAT_ASSERT(data == NULL && "Unexpected non-empty data, resource may leak");
-    }
+    /* resume flow:
+     * ┌──────┐  ┌──────┐       ┌──────┐
+     * │ co-1 ├─►│ co-2 ├─here─►│ co-3 │
+     * └──────┘  └──────┘       └──────┘
+     * resume previous
+     * ┌──────┐  ┌──────┐  ┌──────┐
+     * │ co-1 ├─►│ co-2 ├─►│ co-3 │
+     * └──────┘  └──▲───┘  └───┬──┘
+     *              └───here───┘
+     *  then it becomes:
+     *  ┌──────┐  ┌──────┐  ┌──────┐
+     *  │ co-1 ├─►┤ co-3 ├─►│ co-2 │
+     *  └──────┘  └──────┘  └──────┘
+     * or cross resume flow:
+     * ┌──────┐  ┌──────┐  ┌──────┐
+     * │ co-1 ├─►│ co-2 ├─►│ co-3 │
+     * └──▲───┘  └──────┘  └───┬──┘
+     *    └─────here-we-are────┘
+     *  then it becomes:
+     *  ┌──────┐  ┌──────┐  ┌──────┐
+     *  │ co-2 ├─►┤ co-3 ├─►│ co-1 │
+     *  └──────┘  └──────┘  └──────┘
+     * */
+    do {
+        cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+        /* remove target from linked list */
+        if (coroutine->previous != NULL) {
+            coroutine->previous->next = coroutine->next;
+        }
+        if (coroutine->next != NULL) {
+            coroutine->next->previous = coroutine->previous;
+        }
+        /* target's previous becomes current */
+        coroutine->previous = current_coroutine;
+        /* target's next becomes NULL */
+        coroutine->next = NULL;
+        /* current's next becomes target */
+        current_coroutine->next = coroutine;
+    } while (0);
+
+    cat_coroutine_jump(coroutine, data, retval);
 
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_coroutine_yield(cat_data_t *data, cat_data_t **retval)
 {
-    cat_coroutine_t *coroutine = CAT_COROUTINE_G(current)->previous;
-    cat_bool_t ret;
+    CAT_COROUTINE_SWITCH_PRECHECK(return cat_false);
+    cat_coroutine_t *current_coroutine = CAT_COROUTINE_G(current);
+    cat_coroutine_t *coroutine = current_coroutine->previous;
 
     if (coroutine == NULL) {
         coroutine = CAT_COROUTINE_G(scheduler);
-        if (unlikely(coroutine == NULL)) {
+        if (unlikely(coroutine == NULL || coroutine == current_coroutine)) {
             cat_update_last_error(CAT_EMISUSE, "Coroutine has nowhere to go");
             return cat_false;
         }
     }
 
-    ret = cat_coroutine_resume(coroutine, data, retval);
+    CAT_COROUTINE_SWITCH_LOG(yield, coroutine);
 
-    CAT_ASSERT((ret || cat_coroutine_switch_denied()) && "Yield never fail");
+    /* yield flow:
+    * ┌──────┐  ┌──────┐       ┌──────┐
+    * │ co-1 ├─►│ co-2 │◄-here─┤ co-3 │
+    * └──────┘  └──────┘       └──────┘
+    * then it becomes:
+    * ┌──────┐  ┌──────┐  ┌──────┐
+    * │ co-1 ├─►│ co-2 │  │ co-3 │:(waiting)
+    * └──────┘  └──────┘  └──────┘
+    */
 
-    return ret;
+    /* break the previous */
+    current_coroutine->previous = NULL;
+    /* break the next */
+    coroutine->next = NULL;
+
+    cat_coroutine_jump(coroutine, data, retval);
+
+    return cat_true;
 }
 
 /* properties */

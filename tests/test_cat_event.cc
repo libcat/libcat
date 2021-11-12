@@ -218,8 +218,8 @@ TEST(cat_event, dead_lock)
 TEST(cat_event, yield_from_defer)
 {
     defer([] {
-        ASSERT_TRUE(cat_coroutine_yield(nullptr, nullptr));
+        ASSERT_FALSE(cat_coroutine_yield(nullptr, nullptr));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
     });
-    ASSERT_FALSE(cat_coroutine_wait_all());
-    ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
+    ASSERT_TRUE(cat_coroutine_wait_all());
 }
