@@ -162,6 +162,7 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         cat_coroutine_t *main_coroutine = &CAT_COROUTINE_G(_main);
         main_coroutine->id = CAT_COROUTINE_MAIN_ID;
         main_coroutine->start_time = cat_time_msec();
+        main_coroutine->end_time = 0;
         main_coroutine->flags = CAT_COROUTINE_FLAG_NONE;
         main_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
         main_coroutine->round = ++CAT_COROUTINE_G(round);
