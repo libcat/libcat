@@ -118,12 +118,18 @@ CAT_API const char *cat_http_status_get_reason(cat_http_status_code_t status);
 
 /* parser */
 
-enum cat_http_errno_ext {
-  CAT_HTTP_ERRNO_START = HPE_USER,
-  CAT_HTTP_ERRNO_MULTIPART_HEADER,
-  CAT_HTTP_ERRNO_DUPLICATE_CONTENT_TYPE,
-  CAT_HTTP_ERRNO_MULTIPART_BODY,
-};
+#define CAT_HTTP_PARSER_ERRNO_MAP(XX) \
+    HTTP_ERRNO_MAP(XX) \
+    XX(HPE_USER + 1, NOMEM, NOMEM) \
+    XX(HPE_USER + 2, MULTIPART_HEADER, MULTIPART_HEADER) \
+    XX(HPE_USER + 3, DUPLICATE_CONTENT_TYPE, DUPLICATE_CONTENT_TYPE) \
+    XX(HPE_USER + 4, MULTIPART_BODY, MULTIPART_BODY) \
+
+typedef enum cat_http_parser_errno_e {
+#define CAT_HTTP_PARSER_ERRNO_GEN(code, name, description) CAT_HTTP_PARSER_E_##name = code,
+    CAT_HTTP_PARSER_ERRNO_MAP(CAT_HTTP_PARSER_ERRNO_GEN)
+#undef CAT_HTTP_PARSER_ERRNO_GEN
+} cat_http_parser_errno_t;
 
 typedef enum cat_http_parser_type_e {
     CAT_HTTP_PARSER_TYPE_BOTH     = HTTP_BOTH,
@@ -162,11 +168,14 @@ typedef enum cat_http_parser_event_flag_e {
     XX(MULTIPART_DATA_BEGIN,       (1 << 26) | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
     XX(MULTIPART_HEADERS_COMPLETE, (1 << 27) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
     XX(MULTIPART_DATA_END,         (1 << 28) | CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
-    /* XX(MULTIPART_BODY_END, ...) should be replaced by MESSAGE_COMPLETE */ \
+
+#define CAT_HTTP_PARSER_INTERNAL_EVENT_MAP(XX) \
+    XX(MULTIPART_BODY_END,         CAT_HTTP_PARSER_EVENT_FLAG_COMPLETE | CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) \
 
 typedef enum cat_http_parser_event_e {
 #define CAT_HTTP_PARSER_EVENT_GEN(name, value) CAT_HTTP_PARSER_EVENT_##name = value,
     CAT_HTTP_PARSER_EVENT_MAP(CAT_HTTP_PARSER_EVENT_GEN)
+    CAT_HTTP_PARSER_INTERNAL_EVENT_MAP(CAT_HTTP_PARSER_EVENT_GEN)
 #undef CAT_HTTP_PARSER_EVENT_GEN
 } cat_http_parser_event_t; /* 16 ~ 31 */
 
@@ -180,10 +189,15 @@ typedef enum cat_http_parser_union_events_e {
 
 typedef uint32_t cat_http_parser_events_t;
 
+typedef enum cat_http_parser_internal_flag_e {
+    CAT_HTTP_PARSER_INTERNAL_FLAG_NONE = 0,
+    CAT_HTTP_PARSER_INTERNAL_FLAG_HAS_PREVIOUS_ERROR = 1 << 0,
+} cat_http_parser_internal_flag_t;
+
+typedef uint8_t cat_http_parser_internal_flags_t;
+
 typedef struct cat_http_parser_s {
-    /* private: handle */
-    llhttp_t llhttp;
-    /* private: which events will return from execute */
+    /* public readonly: which events will return from execute */
     cat_http_parser_events_t events;
     /* public readonly: current event */
     cat_http_parser_event_t event;
@@ -199,20 +213,22 @@ typedef struct cat_http_parser_s {
     uint64_t content_length;
     /* public readonly: keep alive (update on headers complete) */
     cat_bool_t keep_alive;
-    /* private: error message is provided by libcat */
-    uint8_t libcat_error;
-    /* private: multipart parser header parser buffer */
-    char multipart_header[12];
+    /* private: internal flags */
+    cat_http_parser_internal_flags_t internal_flags;
+    /* private: handle */
+    llhttp_t llhttp;
+    /* private: multipart parser */
+    multipart_parser multipart;
     /* private: multipart parser header parser index */
     uint8_t multipart_header_index;
     /* private: multipart parser state*/
-    char multipart_state;
+    uint8_t multipart_state;
     /* private: callback complete state */
     uint8_t complete_state;
-    /* public readonly: multipart parser pointer */
+    /* private: multipart parser header parser buffer */
+    char multipart_header[12];
+    /* private: multipart parser pointer */
     const char *multipart_ptr;
-    /* private: multipart parser */
-    multipart_parser multipart;
 } cat_http_parser_t;
 
 /*
@@ -285,14 +301,6 @@ CAT_API cat_bool_t cat_http_parser_should_keep_alive(const cat_http_parser_t *pa
 * finish parser: "This method should be called when the other side has no further bytes to send (e.g. shutdown of readable side of the TCP connection.)"
 */
 CAT_API cat_bool_t cat_http_parser_finish(cat_http_parser_t *parser);
-/*
-* get error code
-*/
-CAT_API llhttp_errno_t cat_http_parser_get_error_code(const cat_http_parser_t *parser);
-/*
-* get error message
-*/
-CAT_API const char *cat_http_parser_get_error_message(const cat_http_parser_t *parser);
 /*
 * tell if parser is completed
 */

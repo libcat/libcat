@@ -250,27 +250,7 @@ TEST(cat_http_parser, finish_unsafe)
     ASSERT_FALSE(cat_http_parser_finish(parser));
     ASSERT_STREQ("Invalid EOF state", parser->llhttp.reason);
     ASSERT_EQ(HPE_INVALID_EOF_STATE, cat_get_last_error_code());
-    ASSERT_STREQ("HTTP-Parser finish failed: HPE_INVALID_EOF_STATE", cat_get_last_error_message());
-}
-
-TEST(cat_http_parser, get_error_code)
-{
-    cat_http_parser_t *parser, _parser;
-    llhttp_errno_t llhttp_errno;
-
-    ASSERT_EQ((parser = cat_http_parser_create(&_parser)), &_parser);
-    llhttp_errno = cat_http_parser_get_error_code(parser);
-    ASSERT_EQ(0, llhttp_errno);
-}
-
-TEST(cat_http_parser, get_error_message)
-{
-    cat_http_parser_t *parser, _parser;
-    const char *error_message;
-
-    ASSERT_EQ((parser = cat_http_parser_create(&_parser)), &_parser);
-    error_message = cat_http_parser_get_error_message(parser);
-    ASSERT_EQ(nullptr, error_message);
+    ASSERT_STREQ("HTTP-Parser finish failed: Invalid EOF state", cat_get_last_error_message());
 }
 
 TEST(cat_http_parser, get_parsed_length)
@@ -498,7 +478,7 @@ TEST(cat_http_parser, all)
             CAT_LOG_DEBUG(TEST, "%s", cat_http_parser_get_event_name(&parser));
         }
         if (cat_http_parser_is_completed(&parser)) {
-            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            CAT_LOG_DEBUG(TEST, "Completed");
             ASSERT_EQ(cat_http_parser_get_major_version(&parser), 1);
             ASSERT_EQ(cat_http_parser_get_minor_version(&parser), 1);
             break;
@@ -533,7 +513,7 @@ TEST(cat_http_parser, byte_by_byte)
             CAT_LOG_DEBUG(TEST, "%s", cat_http_parser_get_event_name(&parser));
         }
         if (cat_http_parser_is_completed(&parser)) {
-            CAT_LOG_DEBUG(TEST, "Completed, error=%s", cat_http_parser_get_error_message(&parser));
+            CAT_LOG_DEBUG(TEST, "Completed");
             ASSERT_EQ(cat_http_parser_get_major_version(&parser), 1);
             ASSERT_EQ(cat_http_parser_get_minor_version(&parser), 1);
             ASSERT_EQ(cat_http_parser_get_method(&parser), CAT_HTTP_METHOD_POST);
@@ -629,7 +609,7 @@ static struct {
         "X-Not-boundary: %s\r\n"
         "Content-Type: MultiPart/fORm\r\n"
         "\r\n"
-    ), CAT_HTTP_ERRNO_MULTIPART_HEADER },
+    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
     // no boundary
     { cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -639,7 +619,7 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;miao=%s  ;\r\n"
         "\r\n"
-    ), CAT_HTTP_ERRNO_MULTIPART_HEADER },
+    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
     // duplicate content-type
     { cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -650,7 +630,7 @@ static struct {
         "Content-Type: application/json  ;\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;boundary=%s  ;\r\n"
         "\r\n"
-    ), CAT_HTTP_ERRNO_DUPLICATE_CONTENT_TYPE },
+    ), CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE },
     // duplicate content-type
     { cat_const_string(
         "HTTP/1.1 206 Partial Content\r\n"
@@ -661,7 +641,7 @@ static struct {
         "Content-Type: multipart/byteranges;\t boundary=%s\r\n"
         "Content-Type: application/json\r\n"
         "\r\n"
-    ), CAT_HTTP_ERRNO_DUPLICATE_CONTENT_TYPE },
+    ), CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE },
     // duplicate boundary
     { cat_const_string(
         "HTTP/1.1 206 Partial Content\r\n"
@@ -671,7 +651,7 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
         "\r\n"
-    ), CAT_HTTP_ERRNO_MULTIPART_HEADER },
+    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
 };
 
 static struct {
@@ -1023,7 +1003,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     return;
 }
 
-#define ITEM_EVENT(NAME) { CAT_HTTP_PARSER_EVENT_##NAME, nullptr },
+#define ITEM_EVENT(NAME) { CAT_HTTP_PARSER_EVENT_##NAME, { nullptr, 0 } },
 #define ITEM_DATA(NAME, data) { CAT_HTTP_PARSER_EVENT_##NAME, cat_const_string(data) },
 
 const struct {
@@ -1145,7 +1125,7 @@ TEST(cat_http_parser, multipart_stream)
     int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
     memcpy(&http_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
-    
+
 #ifdef CAT_HAVE_ASAN
     __asan_poison_memory_region(&http_buf[head_len + multipart_req_body_multiline.length], sizeof(http_buf) - head_len - multipart_req_body_multiline.length);
     DEFER({
@@ -1227,7 +1207,7 @@ TEST(cat_http_parser, multipart_stream)
                     // this slice is end, break current routine
                     leftover = 0;
                     ASSERT_TRUE(slice == 0 || parser.event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
-                    
+
                     break;
                 }
             }
@@ -1365,7 +1345,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                         // this slice is end, break current routine
                         leftover = 0;
                         ASSERT_TRUE(slice == 0 || parser.event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
-                        
+
                         break;
                     }
                 }
@@ -1410,7 +1390,7 @@ TEST(cat_http_parser, multipart_bad_boundaries)
             while (true) {
                 if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
-                    ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_ERRNO_MULTIPART_HEADER);
+                    ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_PARSER_E_MULTIPART_HEADER);
                     break;
                 }
                 ASSERT_FALSE(cat_http_parser_is_completed(&parser));
