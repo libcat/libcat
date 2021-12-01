@@ -713,6 +713,7 @@ if (LIBCAT_ENABLE_OPENSSL)
         list(APPEND cat_libraries crypt32.lib)
     endif()
 else()
+    find_package(OpenSSL REQUIRED) # throw warning
     message(STATUS "OpenSSL is not enabled")
 endif()
 
@@ -732,6 +733,7 @@ if (LIBCAT_ENABLE_CURL)
     list(APPEND cat_libraries ${CURL_LIBRARIES})
     list(APPEND cat_sources src/cat_curl.c)
 else()
+    find_package(CURL REQUIRED) # throw warning
     message(STATUS "cURL is not enabled")
 endif()
 
