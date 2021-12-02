@@ -380,9 +380,6 @@ _s_boundary_quoted_data:
             // never here
             CAT_NEVER_HERE("Unknow state");
     }
-    // never here
-    CAT_NEVER_HERE("Bad return");
-    return CAT_HTTP_PARSER_E_INTERNAL;
 #undef CONSUME_UNTIL
 #undef CONSUME_BUF
 #undef DEBUG_STATE
@@ -431,8 +428,6 @@ static cat_always_inline cat_bool_t cat_http_parser_multipart_state_solve(cat_ht
         default:
             CAT_NEVER_HERE("Unknown state, maybe memory corrupt");
     }
-
-    return cat_false;
 }
 
 /* http parser things */
