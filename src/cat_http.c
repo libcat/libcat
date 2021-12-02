@@ -652,7 +652,7 @@ CAT_API void cat_http_parser_set_events(cat_http_parser_t *parser, cat_http_pars
     parser->events = (events & CAT_HTTP_PARSER_EVENTS_ALL);
 }
 
-static llhttp_errno_t cat_http_parser_llhttp_execute(cat_http_parser_t *parser, const char *data, size_t length)
+static cat_http_parser_errno_t cat_http_parser_llhttp_execute(cat_http_parser_t *parser, const char *data, size_t length)
 {
     cat_http_parser_errno_t error;
 
@@ -673,7 +673,7 @@ static llhttp_errno_t cat_http_parser_llhttp_execute(cat_http_parser_t *parser, 
         parser->parsed_length = length;
     }
 
-    return HPE_OK;
+    return CAT_HTTP_PARSER_E_OK;
 }
 
 // TODO: maybe export-able? for email protocols usage?
@@ -726,10 +726,10 @@ static cat_bool_t cat_http_parser_solve_multipart_body(cat_http_parser_t *parser
         llhttp_finish(&parser->llhttp);
         cat_http_parser_throw_error(return cat_false, CAT_ENOTSUP, "Unsupported type: multipart/byterange");
     }
-    ret = cat_http_parser_llhttp_execute(parser, NULL, parser->content_length - parser->data_length) == HPE_OK;
+    ret = cat_http_parser_llhttp_execute(parser, NULL, parser->content_length - parser->data_length) == CAT_HTTP_PARSER_E_OK;
     CAT_ASSERT(ret && "Never fail");
     if (parser->event == CAT_HTTP_PARSER_EVENT_BODY) {
-        ret = cat_http_parser_llhttp_execute(parser, NULL, 0) == HPE_OK;
+        ret = cat_http_parser_llhttp_execute(parser, NULL, 0) == CAT_HTTP_PARSER_E_OK;
         CAT_ASSERT(ret && "Never fail");
     }
     CAT_ASSERT(parser->event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
@@ -744,13 +744,13 @@ static cat_bool_t cat_http_parser_solve_multipart_body(cat_http_parser_t *parser
 
 CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char *data, size_t length)
 {
-    llhttp_errno_t error = HPE_OK;
+    cat_http_parser_errno_t error = CAT_HTTP_PARSER_E_OK;
     cat_bool_t ret;
 
     if (likely(parser->multipart_state != CAT_HTTP_MULTIPART_STATE_IN_BODY)) {
         // if not in multipart body
         error = cat_http_parser_llhttp_execute(parser, data, length);
-        ret = error == HPE_OK;
+        ret = error == CAT_HTTP_PARSER_E_OK;
         if (ret && parser->event == CAT_HTTP_PARSER_EVENT_BODY && parser->multipart_state == CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK) {
             ret = cat_http_parser_solve_multipart_body(parser);
         }
