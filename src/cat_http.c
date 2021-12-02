@@ -799,6 +799,9 @@ CAT_API const char *cat_http_parser_event_name(cat_http_parser_event_t event)
 #define CAT_HTTP_PARSER_EVENT_NAME_GEN(name, unused1) case CAT_HTTP_PARSER_EVENT_##name: return #name;
     CAT_HTTP_PARSER_EVENT_MAP(CAT_HTTP_PARSER_EVENT_NAME_GEN)
 #undef CAT_HTTP_PARSER_EVENT_NAME_GEN
+#define CAT_HTTP_PARSER_INTERNAL_EVENT_NAME_GEN(name, unused1) case CAT_HTTP_PARSER_EVENT_##name:
+    CAT_HTTP_PARSER_INTERNAL_EVENT_MAP(CAT_HTTP_PARSER_INTERNAL_EVENT_NAME_GEN)
+#undef CAT_HTTP_PARSER_EVENT_NAME_GEN
         default:
             break;
     }
