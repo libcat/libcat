@@ -654,10 +654,10 @@ CAT_API void cat_http_parser_set_events(cat_http_parser_t *parser, cat_http_pars
 
 static llhttp_errno_t cat_http_parser_llhttp_execute(cat_http_parser_t *parser, const char *data, size_t length)
 {
-    llhttp_errno_t error;
+    cat_http_parser_errno_t error;
 
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
-    error = llhttp_execute(&parser->llhttp, data, length);
+    error = (cat_http_parser_errno_t) llhttp_execute(&parser->llhttp, data, length);
     if (error != CAT_HTTP_PARSER_E_OK) {
         parser->parsed_length = llhttp_get_error_pos(&parser->llhttp) - data;
         if (unlikely(error != CAT_HTTP_PARSER_E_PAUSED)) {
