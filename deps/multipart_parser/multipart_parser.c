@@ -149,7 +149,10 @@ int multipart_parser_error_msg(multipart_parser* p, char *buf, size_t len) {
             ret = snprintf(buf, len, "bad final hyphen: ");
             break;
     }
-    if (ret >= len) {
+    if (ret < 0) {
+        return 0;
+    }
+    if ((size_t) ret >= len) {
         return ret;
     }
     switch (p->error_expected) {
@@ -165,7 +168,10 @@ int multipart_parser_error_msg(multipart_parser* p, char *buf, size_t len) {
             ret += snprintf(buf + ret, len - ret, "expecting '%c' ", p->error_expected);
             break;
     }
-    if (ret >= len) {
+    if (ret < 0) {
+        return 0;
+    }
+    if ((size_t) ret >= len) {
         return ret;
     }
     if (isprint(p->error_unexpected)) {
@@ -181,7 +187,6 @@ size_t multipart_parser_execute(multipart_parser* p, const char *buf, size_t len
     size_t i = 0;
     size_t mark = 0;
     size_t mark_end = 0;
-    int state_back = 0;
     char c, cl;
     int is_last = 0;
     int ret;
