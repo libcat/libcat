@@ -133,11 +133,11 @@ static cat_bool_t cat_http_parser_multipart_parser_execute(cat_http_parser_t *pa
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
     parsed_length = multipart_parser_execute((multipart_parser*) &parser->multipart, data, length);
     if (MPPE_ERROR == parsed_length) {
-        char error[4096];
-        int error_code;
-        error_code = multipart_parser_error_msg(&parser->multipart, error, sizeof(error));
-        CAT_ASSERT((error_code != 0 && error_code <= 4095) && "multipart_parser_error_msg returns bad result");
-        cat_http_parser_throw_error(return cat_false, CAT_HTTP_PARSER_E_MULTIPART_BODY, "Failed to parse multipart body: %.*s", error_code, error);
+        char error_buffer[4096];
+        int error_length;
+        error_length = multipart_parser_error_msg(&parser->multipart, error_buffer, sizeof(error_buffer));
+        CAT_ASSERT((error_length != 0 && error_length <= 4095) && "multipart_parser_error_msg returns bad result");
+        cat_http_parser_throw_error(return cat_false, CAT_HTTP_PARSER_E_MULTIPART_BODY, "Failed to parse multipart body: %.*s", error_length, error_buffer);
     }
 
     // TODO: use quote
