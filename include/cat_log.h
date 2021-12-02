@@ -118,7 +118,7 @@ typedef enum cat_log_union_types_e {
 #define CAT_LOG_DEBUG_SCOPE_START_EX(module_type, pre)
 #define CAT_LOG_DEBUG_SCOPE_END_EX(end)
 #define CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL_EX(module_type, level, pre)
-#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL()
+#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL_EX(end)
 #define CAT_LOG_DEBUG(module_type, format, ...)
 #define CAT_LOG_DEBUG_V2(module_type, format, ...)
 #define CAT_LOG_DEBUG_V3(module_type, format, ...)
