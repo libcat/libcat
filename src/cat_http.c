@@ -128,16 +128,16 @@ static const multipart_parser_settings cat_http_multipart_parser_settings = {
 // TODO: maybe export-able? for email protocols usage?
 static cat_bool_t cat_http_parser_multipart_parser_execute(cat_http_parser_t *parser, const char *data, size_t length)
 {
-    char err_buf[4096];
-    size_t len = 0;
-    size_t ret;
+    size_t parsed_length = 0;
 
     parser->event = CAT_HTTP_PARSER_EVENT_NONE;
-    len = multipart_parser_execute((multipart_parser*) &parser->multipart, data, length);
-    if (MPPE_ERROR == len) {
-        ret = multipart_parser_error_msg(&parser->multipart, err_buf, sizeof(err_buf));
-        CAT_ASSERT((ret != 0 && ret <= 4095) && "multipart_parser_error_msg returns bad result");
-        cat_http_parser_throw_error(return cat_false, CAT_HTTP_PARSER_E_MULTIPART_BODY, "Failed to parse multipart body: %.*s", (int) ret, err_buf);
+    parsed_length = multipart_parser_execute((multipart_parser*) &parser->multipart, data, length);
+    if (MPPE_ERROR == parsed_length) {
+        char error[4096];
+        int error_code;
+        error_code = multipart_parser_error_msg(&parser->multipart, error, sizeof(error));
+        CAT_ASSERT((error_code != 0 && error_code <= 4095) && "multipart_parser_error_msg returns bad result");
+        cat_http_parser_throw_error(return cat_false, CAT_HTTP_PARSER_E_MULTIPART_BODY, "Failed to parse multipart body: %.*s", error_code, error);
     }
 
     // TODO: use quote
@@ -152,8 +152,8 @@ static cat_bool_t cat_http_parser_multipart_parser_execute(cat_http_parser_t *pa
     );
 
     // add ptr
-    parser->multipart_ptr = data + len;
-    parser->parsed_length = len;
+    parser->multipart_ptr = data + parsed_length;
+    parser->parsed_length = parsed_length;
 
     return cat_true;
 }
@@ -250,7 +250,7 @@ static int cat_http_parser_parse_content_type(cat_http_parser_t *parser, const c
             mp_state = CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART;
             /* fallthrough */
         case CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART:
-s_mime_type_end:
+_s_mime_type_end:
             // s_mime_type_end "mime type end"
             DEBUG_STATE(s_mime_type_end);
             // skip to next semicolon
@@ -261,7 +261,7 @@ s_mime_type_end:
             mp_state = CAT_HTTP_MULTIPART_STATE_ALMOST_BOUNDARY;
             /* fallthrough */
         case CAT_HTTP_MULTIPART_STATE_ALMOST_BOUNDARY:
-s_almost_boundary:
+_s_almost_boundary:
             // s_almost_boundary "almost 'boundary='"
             DEBUG_STATE(s_almost_boundary);
             // skip ows
@@ -286,14 +286,14 @@ s_almost_boundary:
                 mp_c++; /* ';' */
                 // sizeof new things
                 mp_length += parser->multipart_header + 9 - mp_c;
-                goto s_almost_boundary;
+                goto _s_almost_boundary;
             }
 
             if (!cat_strcasecmp_fast_boundary_eq(parser->multipart_header)) {
                 // not boundary=
                 // roll back to state "mime type end"
                 mp_state = CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART;
-                goto s_mime_type_end;
+                goto _s_mime_type_end;
             }
             if (parser->multipart.boundary_length != 0) {
                 cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Duplicate boundary=");
@@ -317,7 +317,7 @@ s_almost_boundary:
             if (mp_at[0] == '"') {
                 mp_length--;
                 mp_state = CAT_HTTP_MULTIPART_STATE_BOUNDARY_QUOTED;
-                goto s_boundary_quoted_data;
+                goto _s_boundary_quoted_data;
             }
             /* fallthrough */
         case CAT_HTTP_MULTIPART_STATE_BOUNDARY_COMMON:
@@ -370,9 +370,9 @@ s_boundary_end:
             }
             length--;
             mp_state = CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART;
-            goto s_mime_type_end;
+            goto _s_mime_type_end;
         case CAT_HTTP_MULTIPART_STATE_BOUNDARY_QUOTED:
-s_boundary_quoted_data:
+_s_boundary_quoted_data:
             // s_boundary_quoted_data "boundary quoted data" NOT_ACCEPTABLE
             DEBUG_STATE(s_boundary_quoted_data);
 
@@ -427,6 +427,59 @@ static cat_always_inline cat_http_parser_t *cat_http_parser_get_from_handle(cons
     return cat_container_of(llhttp, cat_http_parser_t, llhttp);
 }
 
+typedef enum cat_http_parser_complete_states_e {
+    CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_FIELD_COMPLETE = 1,
+    CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE = 2,
+} cat_http_parser_complete_states_t;
+
+static cat_always_inline cat_http_parser_errno_t cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
+{
+    cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp);
+
+    if (parser->complete_state == CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE) {
+        // not first called
+        return CAT_HTTP_PARSER_E_OK;
+    }
+    parser->complete_state = CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE;
+
+    switch (parser->multipart_state) {
+        case CAT_HTTP_MULTIPART_STATE_UNINIT:
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK:
+        case CAT_HTTP_MULTIPART_STATE_NOT_MULTIPART:
+            return CAT_HTTP_PARSER_E_OK;
+        case CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE:
+        case CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART:
+        case CAT_HTTP_MULTIPART_STATE_ALMOST_BOUNDARY:
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY:
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_COMMON:
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_END:
+            cat_http_parser_shrink_boundary(parser);
+            if (parser->multipart.boundary_length <= 2) {
+                cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Empty boundary on EOL");
+            }
+            if (0 != multipart_parser_init(&parser->multipart, NULL, 0, &cat_http_multipart_parser_settings)) {
+                cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Multipart parser init failed");
+            }
+            CAT_LOG_DEBUG_V3(PROTOCOL, "multipart boundary is [%u]%.*s\n",
+                parser->multipart.boundary_length,
+                (int) parser->multipart.boundary_length, parser->multipart.multipart_boundary);
+            parser->multipart_state = CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK;
+            return CAT_HTTP_PARSER_E_OK;
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_START:
+        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_QUOTED:
+            cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Unexpected EOF on parsing Content-Type header");
+        case CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE:
+            CAT_NEVER_HERE("Never used CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE");
+        case CAT_HTTP_MULTIPART_STATE_IN_BODY:
+        case CAT_HTTP_MULTIPART_STATE_BODY_END:
+            CAT_NEVER_HERE("Should not be body here");
+        default:
+            CAT_NEVER_HERE("Unknown state, maybe memory corrupt");
+    }
+
+    return CAT_HTTP_PARSER_E_INTERNAL;
+}
+
 #define CAT_HTTP_PARSER_ON_EVENT_BEGIN(name, NAME) \
 static int cat_http_parser_on_##name(llhttp_t *llhttp) \
 { \
@@ -465,13 +518,6 @@ CAT_HTTP_PARSER_ON_DATA_END()
 CAT_HTTP_PARSER_ON_EVENT(message_begin, MESSAGE_BEGIN)
 CAT_HTTP_PARSER_ON_DATA (url,           URL          )
 CAT_HTTP_PARSER_ON_DATA (status,        STATUS       )
-
-typedef enum cat_http_parser_complete_states_e {
-    CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_FIELD_COMPLETE = 1,
-    CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE = 2,
-} cat_http_parser_complete_states_t;
-
-static cat_http_parser_errno_t cat_http_parser_on_header_value_complete(llhttp_t *llhttp);
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field, HEADER_FIELD) {
     if (cat_http_parser_on_header_value_complete(llhttp) != CAT_HTTP_PARSER_E_OK) {
@@ -515,54 +561,6 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value, HEADER_VALUE) {
         }
     }
 } CAT_HTTP_PARSER_ON_DATA_END()
-
-static cat_http_parser_errno_t cat_http_parser_on_header_value_complete(llhttp_t *llhttp)
-{
-    cat_http_parser_t *parser = cat_http_parser_get_from_handle(llhttp);
-
-    if (parser->complete_state == CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE) {
-        // not first called
-        return CAT_HTTP_PARSER_E_OK;
-    }
-    parser->complete_state = CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE;
-
-    switch (parser->multipart_state) {
-        case CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE:
-        case CAT_HTTP_MULTIPART_STATE_TYPE_IS_MULTIPART:
-        case CAT_HTTP_MULTIPART_STATE_ALMOST_BOUNDARY:
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY:
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_COMMON:
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_END:
-            cat_http_parser_shrink_boundary(parser);
-            if (parser->multipart.boundary_length <= 2) {
-                cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Empty boundary on EOL");
-            }
-            if (0 != multipart_parser_init(&parser->multipart, NULL, 0, &cat_http_multipart_parser_settings)) {
-                cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Multipart parser init failed");
-            }
-            CAT_LOG_DEBUG_V3(PROTOCOL, "multipart boundary is [%u]%.*s\n",
-                parser->multipart.boundary_length,
-                (int) parser->multipart.boundary_length, parser->multipart.multipart_boundary);
-            parser->multipart_state = CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK;
-            return CAT_HTTP_PARSER_E_OK;
-        case CAT_HTTP_MULTIPART_STATE_UNINIT:
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK:
-        case CAT_HTTP_MULTIPART_STATE_NOT_MULTIPART:
-            return CAT_HTTP_PARSER_E_OK;
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_START:
-        case CAT_HTTP_MULTIPART_STATE_BOUNDARY_QUOTED:
-            cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Unexpected EOF on parsing Content-Type header");
-        case CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE:
-            CAT_NEVER_HERE("Never used CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE");
-        case CAT_HTTP_MULTIPART_STATE_IN_BODY:
-        case CAT_HTTP_MULTIPART_STATE_BODY_END:
-            CAT_NEVER_HERE("Should not be body here");
-        default:
-            CAT_NEVER_HERE("Unknown state, maybe memory corrupt");
-    }
-
-    return CAT_HTTP_PARSER_E_INTERNAL;
-}
 
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
     parser->keep_alive = !!llhttp_should_keep_alive(&parser->llhttp);
