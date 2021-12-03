@@ -249,7 +249,7 @@ do { \
                     }
                     p->index++;
                     break;
-                } else if (p->index == (p->boundary_length + 1)) {
+                } else if (p->index == (size_t) (p->boundary_length + 1)) {
                     if (c != LF) {
                         ERROR_EXPECT(MPPE_BOUNDARY_END_NO_CRLF, LF);
                     }
