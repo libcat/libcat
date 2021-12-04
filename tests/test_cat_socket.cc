@@ -516,6 +516,14 @@ TEST(cat_socket, sockaddr_set_port_ip6)
     ASSERT_EQ(expect_port, actual_port);
 }
 
+TEST(cat_socket, sockaddr_set_port_error)
+{
+    cat_sockaddr_t address;
+    address.sa_family = AF_UNSPEC;
+    ASSERT_FALSE(cat_sockaddr_set_port(&address, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
 TEST(cat_socket, sockaddr_getbyname)
 {
     cat_sockaddr_info_t info;
@@ -656,6 +664,20 @@ TEST(cat_socket, sockaddr_check_ip6)
     ASSERT_FALSE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in6_t) - 1));
     ASSERT_EQ(CAT_EINVAL, cat_get_last_error_code());
     ASSERT_TRUE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in6_t)));
+}
+
+TEST(cat_socket, sockaddr_check_unknown)
+{
+    cat_sockaddr_t address;
+
+    address.sa_family = AF_UNSPEC;
+    ASSERT_FALSE(cat_sockaddr_check(&address, sizeof(address.sa_family)));
+    ASSERT_EQ(CAT_EAFNOSUPPORT, cat_get_last_error_code());
+
+    address.sa_family = AF_INET6;
+    ASSERT_EQ(cat_sockaddr_check_silent(&address, sizeof(address.sa_family)), CAT_EINVAL);
+    address.sa_family = AF_UNSPEC;
+    ASSERT_EQ(cat_sockaddr_check_silent(&address, sizeof(address.sa_family)), CAT_EAFNOSUPPORT);
 }
 
 TEST(cat_socket, sockaddr_check_pipe_error)
