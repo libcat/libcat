@@ -53,6 +53,42 @@ string(CONCAT is-msvc $<OR:
 >)
 
 set(cat_defines "")
+set(cat_includes include)
+
+set(cat_sources
+    # [internal]
+    src/cat_cp.c
+    src/cat_memory.c
+    src/cat_string.c
+    src/cat_error.c
+    src/cat_module.c
+    src/cat_log.c
+    src/cat_env.c
+    # [public]
+    src/cat.c
+    src/cat_api.c
+    src/cat_coroutine.c
+    src/cat_channel.c
+    src/cat_sync.c
+    src/cat_event.c
+    src/cat_poll.c
+    src/cat_time.c
+    src/cat_socket.c
+    src/cat_dns.c
+    src/cat_work.c
+    src/cat_buffer.c
+    src/cat_fs.c
+    src/cat_signal.c
+    src/cat_async.c
+    src/cat_watch_dog.c
+    src/cat_process.c
+    src/cat_http.c
+    src/cat_websocket.c
+)
+
+set(cat_libraries)
+
+list(APPEND cat_defines HAVE_LIBCAT=1)
 
 # prepare debug cflags
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -144,7 +180,7 @@ else()
 endif()
 
 # ASan options
-option(ASAN "Enable AddressSanitizer (ASan)" OFF)
+option(ASAN "Enable AddressSanitizer (ASan)" $ENV{ASAN})
 if(ASAN)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
         message(WARNING "ASan is not supported in release build")
@@ -194,26 +230,33 @@ else()
     message(STATUS "ASan is not enabled")
 endif()
 
-# ========== ASM ===========
-if (NOT MSVC)
-    enable_language(ASM)
-    if(CMAKE_ASM_COMPILER_WORKS)
-        message(STATUS "ASM enabled")
-        message(STATUS "ASM Compiler is ${CMAKE_ASM_COMPILER_ID}")
-    else()
-        # TODO: use ucontext
-        message(FATAL_ERROR "Enable ASM failed")
-    endif(CMAKE_ASM_COMPILER_WORKS)
+# ========== Context ===========
+option(LIBCAT_USE_THREAD_CONTEXT "Use thread context" OFF)
+if (LIBCAT_USE_THREAD_CONTEXT)
+    message(STATUS "Thread-Context selected")
+    list(APPEND cat_defines CAT_COROUTINE_USE_THREAD_CONTEXT=1)
 else()
-    set(MASMFound FALSE)
-    enable_language(ASM_MASM)
-    if(CMAKE_ASM_MASM_COMPILER_WORKS)
-        SET(MASMFound TRUE)
-        message(STATUS "ASM_MASM enabled")
-        message(STATUS "ASM_MASM Compiler is ${CMAKE_ASM_MASM_COMPILER_ID}")
+    set(LIBCAT_USE_BOOST_CONTEXT 1)
+    if (NOT MSVC)
+        enable_language(ASM)
+        if(CMAKE_ASM_COMPILER_WORKS)
+            message(STATUS "ASM enabled")
+            message(STATUS "ASM Compiler is ${CMAKE_ASM_COMPILER_ID}")
+        else()
+            # TODO: use ucontext
+            message(FATAL_ERROR "Enable ASM failed")
+        endif(CMAKE_ASM_COMPILER_WORKS)
     else()
-        message(FATAL_ERROR "Enable ASM_MASM failed")
-    endif(CMAKE_ASM_MASM_COMPILER_WORKS)
+        set(MASMFound FALSE)
+        enable_language(ASM_MASM)
+        if(CMAKE_ASM_MASM_COMPILER_WORKS)
+            SET(MASMFound TRUE)
+            message(STATUS "ASM_MASM enabled")
+            message(STATUS "ASM_MASM Compiler is ${CMAKE_ASM_MASM_COMPILER_ID}")
+        else()
+            message(FATAL_ERROR "Enable ASM_MASM failed")
+        endif(CMAKE_ASM_MASM_COMPILER_WORKS)
+    endif()
 endif()
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 # ========== msvc x86 disable safeseh ==========
@@ -223,45 +266,8 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -x assembler-with-cpp")
 #     set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
 # endif()
 
-list(APPEND cat_defines HAVE_LIBCAT=1)
-
-set(cat_includes include)
-
-set(cat_sources
-    # [internal]
-    src/cat_cp.c
-    src/cat_memory.c
-    src/cat_string.c
-    src/cat_error.c
-    src/cat_module.c
-    src/cat_log.c
-    src/cat_env.c
-    # [public]
-    src/cat.c
-    src/cat_api.c
-    src/cat_coroutine.c
-    src/cat_channel.c
-    src/cat_sync.c
-    src/cat_event.c
-    src/cat_poll.c
-    src/cat_time.c
-    src/cat_socket.c
-    src/cat_dns.c
-    src/cat_work.c
-    src/cat_buffer.c
-    src/cat_fs.c
-    src/cat_signal.c
-    src/cat_async.c
-    src/cat_watch_dog.c
-    src/cat_process.c
-    src/cat_http.c
-    src/cat_websocket.c
-)
-
-set(cat_libraries)
-
 # ========== Detect mac info (thanks to libcopp) ==========
-if (1)
+if (LIBCAT_USE_BOOST_CONTEXT)
     # ========== set os platform ==========
     # CAT_CPU_ARCH can be set to arm/arm64/i386/x86_64/combined/mips/ppc32/ppc64/sparc/sparc64
     if (NOT CAT_CPU_ARCH)
@@ -365,7 +371,7 @@ if (1)
 endif()
 
 # context dep
-if (1)
+if (LIBCAT_USE_BOOST_CONTEXT)
     set(cat_coroutine_context_dir "deps/context/asm")
     set(cat_coroutine_context_name "${CAT_CPU_ARCH}_${CAT_ABI}_${CAT_BINARY_FORMAT}_${CAT_ASM_TOOL}.${CAT_ASM_SUFFIX}")
     message(STATUS "ASM of context is ${cat_coroutine_context_name}")
@@ -650,7 +656,8 @@ if (NOT WIN32)
     find_package(Valgrind QUIET)
     cmake_dependent_option(LIBCAT_WITH_VALGRIND
         "Build with valgrind by default if build type is Debug and found Valgrind" ON
-        "CAT_DEBUG; VALGRIND_FOUND" OFF)
+        "CAT_DEBUG; VALGRIND_FOUND"
+        OFF)
     if (LIBCAT_WITH_VALGRIND)
         if (NOT VALGRIND_FOUND)
             message(FATAL_ERROR "Require Valgrind but not found")
@@ -700,7 +707,10 @@ if (APPLE AND NOT OPENSSL_INCLUDE_DIR)
     message(WARNING "OpenSSL shipped with macOS cannot be used, please install openssl from brew and set environment variables")
     set(OPENSSL_FOUND NOTFOUND)
 endif()
-cmake_dependent_option(LIBCAT_ENABLE_OPENSSL "Enable OpenSSL if found" ON OPENSSL_FOUND OFF)
+cmake_dependent_option(LIBCAT_ENABLE_OPENSSL
+    "Enable OpenSSL if found"
+    ON OPENSSL_FOUND
+    OFF)
 if (LIBCAT_ENABLE_OPENSSL)
     if (NOT OPENSSL_FOUND)
         message(FATAL_ERROR "Require OpenSSL but not found")
@@ -723,7 +733,10 @@ find_package(CURL QUIET)
 if (NOT CURL_FOUND AND PkgConfig_FOUND)
     pkg_check_modules(CURL libcurl QUIET)
 endif()
-cmake_dependent_option(LIBCAT_ENABLE_CURL "Enable cURL if found" ON CURL_FOUND OFF)
+cmake_dependent_option(LIBCAT_ENABLE_CURL
+    "Enable cURL if found"
+    ON CURL_FOUND
+    OFF)
 if (LIBCAT_ENABLE_CURL)
     if (NOT CURL_FOUND)
         message(FATAL_ERROR "Require cURL but not found")
@@ -738,7 +751,14 @@ else()
     message(STATUS "cURL is not enabled")
 endif()
 
-add_library(cat STATIC $<TARGET_OBJECTS:cat_context> $<TARGET_OBJECTS:cat_uv> $<TARGET_OBJECTS:cat_llhttp> $<TARGET_OBJECTS:cat_multipart_parser> ${cat_sources})
+set(cat_target_objects "")
+if (LIBCAT_USE_BOOST_CONTEXT)
+    list(APPEND cat_target_objects $<TARGET_OBJECTS:cat_context>)
+endif()
+list(APPEND cat_target_objects $<TARGET_OBJECTS:cat_uv>)
+list(APPEND cat_target_objects $<TARGET_OBJECTS:cat_llhttp>)
+list(APPEND cat_target_objects $<TARGET_OBJECTS:cat_multipart_parser>)
+add_library(cat STATIC ${cat_target_objects} ${cat_sources})
 if(MSVC)
     set_property(TARGET cat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()

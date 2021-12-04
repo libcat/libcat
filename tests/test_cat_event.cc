@@ -123,6 +123,9 @@ TEST(cat_event, runtime_shutdown_function)
 
 TEST(cat_event, real_fork)
 {
+#ifdef CAT_COROUTINE_USE_THREAD_CONTEXT
+    SKIP_IF_(1, "Unable to test it with thread-context");
+#endif
     cat_socket_t server;
     cat_socket_t dummy, dummy_peer;
     int port;
