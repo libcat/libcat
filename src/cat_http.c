@@ -422,11 +422,11 @@ static cat_always_inline cat_bool_t cat_http_parser_multipart_state_solve(cat_ht
             cat_http_parser_throw_error(return cat_false, CAT_HTTP_PARSER_E_MULTIPART_HEADER, "Unexpected EOF on parsing Content-Type header");
         case CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE:
             CAT_NEVER_HERE("Never used CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE");
-            return cat_false; // suppress -Wimplicit-fallthrough
+            CAT_FALLTHROUGH;
         case CAT_HTTP_MULTIPART_STATE_IN_BODY:
         case CAT_HTTP_MULTIPART_STATE_BODY_END:
             CAT_NEVER_HERE("Should not be body here");
-            return cat_false; // suppress -Wimplicit-fallthrough
+            CAT_FALLTHROUGH;
         default:
             CAT_NEVER_HERE("Unknown state, maybe memory corrupt");
     }
