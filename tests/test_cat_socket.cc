@@ -35,26 +35,26 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
 {
     wait_group wg;
     while (true) {
-        cat_socket_t *client = cat_socket_accept(server, nullptr);
-        if (client == nullptr) {
+        cat_socket_t *connection = cat_socket_accept(server, nullptr);
+        if (connection == nullptr) {
             ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
             break;
         }
-        co([client, &wg] {
+        co([connection, &wg] {
             wg++;
             DEFER(wg--);
-            DEFER(cat_socket_close(client));
-            ASSERT_STREQ(cat_socket_get_role_name(client), "server-connection");
+            DEFER(cat_socket_close(connection));
+            ASSERT_STREQ(cat_socket_get_role_name(connection), "server-connection");
             while (true) {
                 char read_buffer[TEST_BUFFER_SIZE_STD];
-                ssize_t read_n = cat_socket_recv(client, CAT_STRS(read_buffer));
+                ssize_t read_n = cat_socket_recv(connection, CAT_STRS(read_buffer));
                 ASSERT_GE(read_n, 0);
                 if (read_n == 0) {
                     break;
                 }
 #ifdef CAT_SSL
                 if (strncmp(read_buffer, "SSL", read_n) == 0) {
-                    ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                    ASSERT_TRUE(cat_socket_send(connection, read_buffer, read_n));
                     cat_socket_crypto_options_t ssl_options;
                     cat_socket_crypto_options_init(&ssl_options, cat_false);
                     ssl_options.verify_peer = cat_true;
@@ -62,9 +62,9 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE_ENCODED;
                     ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
                     ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHPRASE;
-                    ASSERT_TRUE(cat_socket_enable_crypto(client, &ssl_options));
-                    ASSERT_TRUE(cat_socket_has_crypto(client));
-                    ASSERT_TRUE(cat_socket_is_encrypted(client));
+                    ASSERT_TRUE(cat_socket_enable_crypto(connection, &ssl_options));
+                    ASSERT_TRUE(cat_socket_has_crypto(connection));
+                    ASSERT_TRUE(cat_socket_is_encrypted(connection));
                     continue;
                 }
 #endif
@@ -72,10 +72,10 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     break;
                 }
                 if (strncmp(read_buffer, "TIMEOUT", read_n) == 0) {
-                    ASSERT_EQ(cat_socket_recv(client, CAT_STRS(read_buffer)), 0);
+                    ASSERT_EQ(cat_socket_recv(connection, CAT_STRS(read_buffer)), 0);
                     break;
                 }
-                ASSERT_TRUE(cat_socket_send(client, read_buffer, read_n));
+                ASSERT_TRUE(cat_socket_send(connection, read_buffer, read_n));
                 continue;
             }
         });

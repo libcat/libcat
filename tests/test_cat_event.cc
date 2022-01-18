@@ -152,11 +152,11 @@ TEST(cat_event, real_fork)
     SKIP_IF_(pid < 0, "Fork failed");
     if (pid > 0) {
         cat_msec_t s = cat_time_msec();
-        cat_socket_t client;
-        cat_socket_init(&client);
-        ASSERT_EQ(cat_socket_accept_ex(&server, &client, TEST_IO_TIMEOUT), &client);
-        DEFER(cat_socket_close(&client));
-        ASSERT_GT(nread = cat_socket_recv(&client, CAT_STRS(buffer)), 0);
+        cat_socket_t connection;
+        cat_socket_init(&connection);
+        ASSERT_EQ(cat_socket_accept_ex(&server, &connection, TEST_IO_TIMEOUT), &connection);
+        DEFER(cat_socket_close(&connection));
+        ASSERT_GT(nread = cat_socket_recv(&connection, CAT_STRS(buffer)), 0);
         ASSERT_EQ(std::string(buffer, nread - 1), "Forked\n");
         int wstatus;
         cat_pid_t dead_pid;

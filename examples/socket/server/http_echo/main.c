@@ -25,7 +25,7 @@
 
 static cat_data_t *echo_server_handle_connection(cat_data_t *data)
 {
-    cat_socket_t *client = (cat_socket_t *) data;
+    cat_socket_t *connection = (cat_socket_t *) data;
     cat_http_parser_t parser;
 
     cat_http_parser_init(&parser);
@@ -40,7 +40,7 @@ static cat_data_t *echo_server_handle_connection(cat_data_t *data)
         size_t total_bytes = 0;
         while (1) {
             ssize_t n = cat_socket_recv(
-                client,
+                connection,
                 read_buffer + total_bytes,
                 HTTP_REQUEST_MAX_LENGTH - total_bytes
             );
@@ -66,7 +66,7 @@ static cat_data_t *echo_server_handle_connection(cat_data_t *data)
             }
             if (cat_http_parser_is_completed(&parser)) {
                 if (body_length == 0) {
-                    (void) cat_socket_send(client, CAT_STRL(HTTP_EMPTY_RESPONSE));
+                    (void) cat_socket_send(connection, CAT_STRL(HTTP_EMPTY_RESPONSE));
                 } else {
                     char *response = cat_sprintf(
                         "HTTP/1.1 200 OK\r\n"
@@ -80,7 +80,7 @@ static cat_data_t *echo_server_handle_connection(cat_data_t *data)
                     if (unlikely(response == NULL)) {
                         goto _error;
                     }
-                    (void) cat_socket_send(client, response, strlen(response));
+                    (void) cat_socket_send(connection, response, strlen(response));
                 }
                 break;
             }
@@ -88,10 +88,10 @@ static cat_data_t *echo_server_handle_connection(cat_data_t *data)
     }
     if (0) {
         _error:
-        (void) cat_socket_send(client, CAT_STRL(HTTP_SERVICE_UNAVAILABLE_RESPONSE));
+        (void) cat_socket_send(connection, CAT_STRL(HTTP_SERVICE_UNAVAILABLE_RESPONSE));
     }
     _close:
-    cat_socket_close(client);
+    cat_socket_close(connection);
     return NULL;
 }
 
@@ -114,11 +114,11 @@ static void echo_server_run()
     }
     fprintf(stdout, "Server is running on 0.0.0.0:%d\n", CAT_MAGIC_PORT);
     while (1) {
-        cat_socket_t *client = cat_socket_accept(&server, NULL);
-        if (client == NULL) {
+        cat_socket_t *connection = cat_socket_accept(&server, NULL);
+        if (connection == NULL) {
             exit(1);
         }
-        cat_coroutine_run(NULL, echo_server_handle_connection, client);
+        cat_coroutine_run(NULL, echo_server_handle_connection, connection);
     }
 }
 
