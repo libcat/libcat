@@ -80,15 +80,13 @@ typedef struct cat_sockaddr_local_s {
 } cat_sockaddr_local_t;
 typedef struct sockaddr_storage cat_sockaddr_storage_t;
 
-typedef union
-{
+typedef union {
     cat_sockaddr_t common;
     cat_sockaddr_in_t in;
     cat_sockaddr_in6_t in6;
 } cat_sockaddr_inet_union_t;
 
-typedef union
-{
+typedef union {
     cat_sockaddr_t common;
     cat_sockaddr_in_t in;
     cat_sockaddr_in6_t in6;
