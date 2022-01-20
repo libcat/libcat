@@ -732,12 +732,12 @@ static cat_always_inline cat_bool_t cat_socket_internal_can_be_transfer_by_ipc(c
 static cat_always_inline void cat_socket_internal_on_open(cat_socket_internal_t *isocket, cat_sa_family_t af)
 {
     if ((isocket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
-        if (!(isocket->type & CAT_SOCKET_TYPE_FLAG_TCP_DELAY)) {
+        if (!(isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_DELAY)) {
             /* TCP always nodelay by default */
             (void) uv_tcp_nodelay(&isocket->u.tcp, 1);
         }
-        if (isocket->type & CAT_SOCKET_TYPE_FLAG_TCP_KEEPALIVE) {
-            (void) uv_tcp_keepalive(&isocket->u.tcp, 1, CAT_SOCKET_G(options.tcp_keepalive_delay));
+        if (isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_KEEPALIVE) {
+            (void) uv_tcp_keepalive(&isocket->u.tcp, 1, isocket->options.tcp_keepalive_delay);
         }
     }
     if (af != AF_UNSPEC && (isocket->type & CAT_SOCKET_TYPE_FLAG_INET)) {
@@ -824,13 +824,11 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         ioptions = *options;
     }
 
-    /* solve type and get af */
-    if (ioptions.flags & CAT_SOCKET_CREATION_FLAG_ACCEPT) {
-        /* Notice: use AF_UNSPEC to make sure that
-         * socket will not be created for now
-         * (it should be created when accept) */
-        af = AF_UNSPEC;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
+    /* solve type and get af
+     *  Notice: we should create socket without IPV* flag (AF_UNSPEC)
+     *  to make sure that sys socket will not be created for now
+     *  (it should be created when accept)) */
+    if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
         af = AF_INET;
     } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
         af = AF_INET6;
@@ -948,7 +946,9 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     isocket->cache.recv_buffer_size = -1;
     isocket->cache.send_buffer_size = -1;
     /* options */
+    isocket->option_flags = CAT_SOCKET_OPTION_FLAG_NONE;
     isocket->options.timeout = cat_socket_default_timeout_options;
+    isocket->options.tcp_keepalive_delay = 0;
 #ifdef CAT_SSL
     isocket->ssl = NULL;
     isocket->ssl_peer_name = NULL;
@@ -4075,11 +4075,18 @@ CAT_API int cat_socket_set_send_buffer_size(cat_socket_t *socket, int size)
 /* we always set the flag for extending (whether it works or not) */
 #define CAT_SOCKET_INTERNAL_SET_FLAG(_isocket, _flag, _enable) do { \
     if (_enable) { \
-        _isocket->type |= (CAT_SOCKET_TYPE_FLAG_##_flag); \
+        _isocket->option_flags |= (CAT_SOCKET_OPTION_FLAG_##_flag); \
     } else { \
-        _isocket->type &= ~(CAT_SOCKET_TYPE_FLAG_##_flag); \
+        _isocket->option_flags &= ~(CAT_SOCKET_OPTION_FLAG_##_flag); \
     } \
 } while (0)
+
+CAT_API cat_bool_t cat_socket_get_tcp_nodelay(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return cat_false);
+
+    return !(isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_DELAY);
+}
 
 CAT_API cat_bool_t cat_socket_set_tcp_nodelay(cat_socket_t *socket, cat_bool_t enable)
 {
@@ -4101,19 +4108,40 @@ CAT_API cat_bool_t cat_socket_set_tcp_nodelay(cat_socket_t *socket, cat_bool_t e
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_socket_get_tcp_keepalive(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return cat_false);
+
+    return isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_KEEPALIVE;
+}
+
+CAT_API unsigned int cat_socket_get_tcp_keepalive_delay(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return 0);
+
+    return isocket->options.tcp_keepalive_delay;
+}
+
 CAT_API cat_bool_t cat_socket_set_tcp_keepalive(cat_socket_t *socket, cat_bool_t enable, unsigned int delay)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
     CAT_SOCKET_INTERNAL_TCP_ONLY(isocket, return cat_false);
+    cat_bool_t changed;
 
     CAT_SOCKET_INTERNAL_SET_FLAG(isocket, TCP_KEEPALIVE, enable);
-    if (!cat_socket_is_open(socket)) {
-        return cat_true;
-    }
-    if (!!(isocket->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE) != enable) {
+    if (enable) {
         if (delay == 0) {
             delay = CAT_SOCKET_G(options.tcp_keepalive_delay);
         }
+    } else {
+        delay = 0;
+    }
+    changed = delay != isocket->options.tcp_keepalive_delay;
+    isocket->options.tcp_keepalive_delay = delay;
+    if (!cat_socket_is_open(socket)) {
+        return cat_true;
+    }
+    if (!!(isocket->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE) != enable || changed) {
         int error = uv_tcp_keepalive(&isocket->u.tcp, enable, delay);
         if (unlikely(error != 0)) {
             cat_update_last_error_with_reason(error, "Socket %s TCP Keep-Alive to %u failed", enable ? "enable" : "disable", delay);

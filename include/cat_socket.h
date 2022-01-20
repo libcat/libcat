@@ -232,16 +232,12 @@ typedef struct cat_socket_creation_options_s {
 #define CAT_SOCKET_TYPE_FLAG_MAP_EX(XX, SS) \
     /* 0 - 3 (sock) */ \
     XX(STREAM, 1 << 0) \
-    XX(DGRAM, 1 << 1) \
+    XX(DGRAM,  1 << 1) \
     /* 4 ~ 9 (af) */ \
-    XX(INET,  1 << 4) \
-    XX(IPV4,  1 << 5) \
-    XX(IPV6,  1 << 6) \
-    XX(LOCAL, 1 << 7) \
-    /* 10 ~ 19 ((tcp|udp)-extra) */ \
-    XX(TCP_DELAY,     1 << 10)  CAT_INTERNAL /* (disable tcp_nodelay) */ \
-    XX(TCP_KEEPALIVE, 1 << 11)  CAT_INTERNAL /* (enable keep-alive) */ \
-    XX(UDP_BROADCAST, 1 << 12)  CAT_INTERNAL /* (enable broadcast) TODO: support it or remove */ \
+    XX(INET,   1 << 4) \
+    XX(IPV4,   1 << 5) \
+    XX(IPV6,   1 << 6) \
+    XX(LOCAL,  1 << 7) \
     /* 10 ~ 19 (pipe-extra) */ \
     XX(IPC,    1 << 10) \
     /* 10 ~ 19 (tty-extra) */ \
@@ -291,6 +287,21 @@ typedef enum cat_socket_common_type_e {
 } cat_socket_common_type_t;
 
 typedef uint32_t cat_socket_type_t;
+
+#define CAT_SOCKET_OPTION_FLAG_MAP(XX) \
+    XX(NONE,               0) \
+    /* 1 ~ 8 ((tcp|udp)-extra) */ \
+    XX(TCP_DELAY,     1 << 0)  /* (disable tcp_nodelay) */ \
+    XX(TCP_KEEPALIVE, 1 << 1)  /* (enable keep-alive) */ \
+    XX(UDP_BROADCAST, 1 << 2)  /* (enable broadcast) TODO: support it or remove */ \
+
+typedef enum cat_socket_option_flag_e {
+#define CAT_SOCKET_OPTION_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_OPTION_FLAG_, name, value)
+    CAT_SOCKET_OPTION_FLAG_MAP(CAT_SOCKET_OPTION_FLAG_GEN)
+#undef CAT_SOCKET_OPTION_FLAG_GEN
+} cat_socket_option_flag_t;
+
+typedef uint32_t cat_socket_option_flags_t;
 
 /* 0 ~ 8 */
 #define CAT_SOCKET_FLAG_MAP(XX) \
@@ -411,8 +422,9 @@ typedef struct uv_udg_s {
 typedef struct cat_socket_s cat_socket_t;
 typedef struct cat_socket_internal_s cat_socket_internal_t;
 
-typedef struct cat_socket_internal_options_s {
+typedef struct cat_socket_options_s {
     cat_socket_timeout_options_t timeout;
+    unsigned int tcp_keepalive_delay;
 } cat_socket_options_t;
 
 typedef struct cat_socket_inheritance_info_s {
@@ -426,6 +438,7 @@ struct cat_socket_internal_s
     /* type (readonly) */
     cat_socket_type_t type;
     /* options */
+    cat_socket_option_flags_t option_flags;
     cat_socket_options_t options;
     /* === private === */
     /* internal bits */
@@ -688,8 +701,13 @@ CAT_API int cat_socket_get_send_buffer_size(const cat_socket_t *socket);
 CAT_API int cat_socket_set_recv_buffer_size(cat_socket_t *socket, int size);
 CAT_API int cat_socket_set_send_buffer_size(cat_socket_t *socket, int size);
 
+CAT_API cat_bool_t cat_socket_get_tcp_nodelay(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_set_tcp_nodelay(cat_socket_t *socket, cat_bool_t enable);
+
+CAT_API cat_bool_t cat_socket_get_tcp_keepalive(const cat_socket_t *socket);
+CAT_API unsigned int cat_socket_get_tcp_keepalive_delay(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_set_tcp_keepalive(cat_socket_t *socket, cat_bool_t enable, unsigned int delay);
+
 CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_bool_t enable);
 
 /* helper */

@@ -1052,16 +1052,24 @@ TEST(cat_socket, set_tcp_nodelay)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket)); // default is true
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
+    ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, UV_HANDLE_TCP_NODELAY);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
+    ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, UV_HANDLE_TCP_NODELAY);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_false));
+    ASSERT_FALSE(cat_socket_get_tcp_nodelay(&socket));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, 0);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
+    ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
+    ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, UV_HANDLE_TCP_NODELAY);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_false));
-    ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_false, 0));
+    ASSERT_FALSE(cat_socket_get_tcp_nodelay(&socket));
+    ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, 0);
 #ifndef CAT_OS_WIN
     close(cat_socket_get_fd(&socket));
 #else
@@ -1078,16 +1086,31 @@ TEST(cat_socket, set_tcp_keepalive)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
+    ASSERT_FALSE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 1));
+    ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 1);
     ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 1);
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, UV_HANDLE_TCP_KEEPALIVE);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 0));
+    ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), CAT_SOCKET_G(options.tcp_keepalive_delay));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, UV_HANDLE_TCP_KEEPALIVE);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_false, 0));
+    ASSERT_FALSE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, 0);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 30));
+    ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 30);
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, UV_HANDLE_TCP_KEEPALIVE);
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_false, 0));
+    ASSERT_FALSE(cat_socket_get_tcp_keepalive(&socket));
+    ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
+    ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, 0);
 #ifndef CAT_OS_WIN
     close(cat_socket_get_fd(&socket));
 #else
@@ -1095,7 +1118,9 @@ TEST(cat_socket, set_tcp_keepalive)
 #endif
     ASSERT_FALSE(cat_socket_set_tcp_keepalive(&socket, cat_true, 30));
     ASSERT_EQ(cat_get_last_error_code(), TEST_EFDCLOSED);
-
+    // Unable to detect correct state, because we close it in a hacky way
+    // ASSERT_FALSE(cat_socket_get_tcp_keepalive(&socket));
+    // ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
 }
 
 TEST(cat_socket, set_tcp_accept_balance)
