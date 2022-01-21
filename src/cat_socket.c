@@ -1023,10 +1023,9 @@ CAT_API cat_socket_t *cat_socket_open_os_socket(cat_socket_t *socket, cat_socket
     return cat_socket_create_ex(socket, type, &options);
 }
 
-CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket)
+CAT_API cat_socket_type_t cat_socket_type_simplify(cat_socket_type_t type)
 {
-    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_SOCKET_TYPE_ANY);
-    return isocket->type;
+    return type &= ~(CAT_SOCKET_TYPE_FLAG_IPV4 | CAT_SOCKET_TYPE_FLAG_IPV6);
 }
 
 CAT_API const char *cat_socket_type_name(cat_socket_type_t type)
@@ -1073,10 +1072,25 @@ CAT_API const char *cat_socket_type_name(cat_socket_type_t type)
     return "UNKNOWN";
 }
 
+CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_SOCKET_TYPE_ANY);
+    return isocket->type;
+}
+
+CAT_API cat_socket_type_t cat_socket_get_simple_type(const cat_socket_t *socket)
+{
+    return cat_socket_type_simplify(cat_socket_get_type(socket));
+}
+
 CAT_API const char *cat_socket_get_type_name(const cat_socket_t *socket)
 {
-    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return "UNKNOWN");
-    return cat_socket_type_name(isocket->type);
+    return cat_socket_type_name(cat_socket_get_type(socket));
+}
+
+CAT_API const char *cat_socket_get_simple_type_name(const cat_socket_t *socket)
+{
+    return cat_socket_type_name(cat_socket_get_simple_type(socket));
 }
 
 CAT_API cat_sa_family_t cat_socket_get_af_of_type(cat_socket_type_t type)

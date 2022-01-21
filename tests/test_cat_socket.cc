@@ -768,10 +768,18 @@ TEST(cat_socket, type_name)
 TEST(cat_socket, get_type_name)
 {
     cat_socket_t socket;
-
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_STREQ("TCP", cat_socket_get_type_name(&socket));
+    {
+        ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
+        DEFER(cat_socket_close(&socket));
+        ASSERT_STREQ("TCP4", cat_socket_get_type_name(&socket));
+        ASSERT_STREQ("TCP", cat_socket_get_simple_type_name(&socket));
+    }
+    {
+        ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_UDP4));
+        DEFER(cat_socket_close(&socket));
+        ASSERT_STREQ("UDP4", cat_socket_get_type_name(&socket));
+        ASSERT_STREQ("UDP", cat_socket_get_simple_type_name(&socket));
+    }
 }
 
 TEST(cat_socket, get_fd_fast)

@@ -521,9 +521,13 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
 CAT_API cat_socket_t *cat_socket_open_os_fd(cat_socket_t *socket, cat_socket_type_t type, cat_os_fd_t os_fd);
 CAT_API cat_socket_t *cat_socket_open_os_socket(cat_socket_t *socket, cat_socket_type_t type, cat_os_socket_t os_socket);
 
-CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket);
+CAT_API cat_socket_type_t cat_socket_type_simplify(cat_socket_type_t type);
 CAT_API const char *cat_socket_type_name(cat_socket_type_t type);
+
+CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket);
+CAT_API cat_socket_type_t cat_socket_get_simple_type(const cat_socket_t *socket);
 CAT_API const char *cat_socket_get_type_name(const cat_socket_t *socket);
+CAT_API const char *cat_socket_get_simple_type_name(const cat_socket_t *socket);
 CAT_API cat_sa_family_t cat_socket_get_af_of_type(cat_socket_type_t type);
 CAT_API cat_sa_family_t cat_socket_get_af(const cat_socket_t *socket);
 CAT_API cat_socket_fd_t cat_socket_get_fd_fast(const cat_socket_t *socket);
