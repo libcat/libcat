@@ -1425,6 +1425,15 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
         cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
         return NULL;
     }
+    if (handle_info == NULL) {
+        cat_socket_type_t server_type = cat_socket_type_simplify(iserver->type);
+        cat_socket_type_t client_type = iclient->type;
+        if (unlikely(server_type != client_type)) {
+            cat_update_last_error(CAT_EINVAL, "Socket accept connection type mismatch, expect %s but got %s",
+                cat_socket_type_name(server_type), cat_socket_type_name(client_type));
+            return NULL;
+        }
+    }
     iclient = client->internal;
 
     while (1) {
