@@ -739,6 +739,10 @@ static cat_always_inline void cat_socket_internal_on_open(cat_socket_internal_t 
         if (isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_KEEPALIVE) {
             (void) uv_tcp_keepalive(&isocket->u.tcp, 1, isocket->options.tcp_keepalive_delay);
         }
+    } else if ((isocket->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP) {
+        if (isocket->option_flags & CAT_SOCKET_OPTION_FLAG_UDP_BROADCAST) {
+            (void) uv_udp_set_broadcast(&isocket->u.udp, 1);
+        }
     }
     if (af != AF_UNSPEC && (isocket->type & CAT_SOCKET_TYPE_FLAG_INET)) {
         cat_socket_internal_detect_family(isocket, af);
@@ -4178,6 +4182,32 @@ CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_b
     error = uv_tcp_simultaneous_accepts(&isocket->u.tcp, !enable);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Socket %s TCP balance accepts failed", enable ? "enable" : "disable");
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_socket_get_udp_broadcast(const cat_socket_t *socket)
+{
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return cat_false);
+
+    return isocket->option_flags & CAT_SOCKET_OPTION_FLAG_UDP_BROADCAST;
+}
+
+CAT_API cat_bool_t cat_socket_set_udp_broadcast(cat_socket_t *socket, cat_bool_t enable)
+{
+    CAT_SOCKET_INTERNAL_GETTER(socket, isocket, return cat_false);
+    CAT_SOCKET_INTERNAL_TCP_ONLY(isocket, return cat_false);
+    int error;
+
+    CAT_SOCKET_INTERNAL_SET_FLAG(isocket, UDP_BROADCAST, enable);
+    if (!cat_socket_is_open(socket)) {
+        return cat_true;
+    }
+    error = uv_udp_set_broadcast(&isocket->u.udp, enable);
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Socket %s UDP broadcast failed", enable ? "enable" : "disable");
         return cat_false;
     }
 

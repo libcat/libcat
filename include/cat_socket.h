@@ -711,6 +711,9 @@ CAT_API cat_bool_t cat_socket_set_tcp_keepalive(cat_socket_t *socket, cat_bool_t
 
 CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_bool_t enable);
 
+CAT_API cat_bool_t cat_socket_get_udp_broadcast(const cat_socket_t *socket);
+CAT_API cat_bool_t cat_socket_set_udp_broadcast(cat_socket_t *socket, cat_bool_t enable);
+
 /* helper */
 
 CAT_API int cat_socket_get_local_free_port(void);

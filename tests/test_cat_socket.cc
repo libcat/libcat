@@ -1156,6 +1156,35 @@ TEST(cat_socket, set_tcp_accept_balance_failed)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
+TEST(cat_socket, set_udp_broadcast)
+{
+    cat_socket_t socket;
+
+    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_UDP));
+    DEFER(cat_socket_close(&socket));
+    ASSERT_FALSE(cat_socket_get_udp_broadcast(&socket));
+    ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_true));
+    ASSERT_TRUE(cat_socket_get_udp_broadcast(&socket));
+    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL("127.0.0.1"), 0));
+    auto verify_udp_broadcast_state = [](cat_socket_t *socket, cat_bool_t val) {
+#ifdef SO_BROADCAST
+#ifdef CAT_OS_WIN
+        BOOL on = (BOOL) 0;
+#else
+        int on = 0;
+#endif
+        cat_socklen_t len = sizeof(on);
+        ASSERT_EQ(getsockopt(cat_socket_get_fd(socket), SOL_SOCKET, SO_BROADCAST, &on, &len), 0);
+        ASSERT_EQ(!!on, !!val);
+#endif
+    };
+    verify_udp_broadcast_state(&socket, cat_true);
+    ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_false));
+    verify_udp_broadcast_state(&socket, cat_false);
+    ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_true));
+    verify_udp_broadcast_state(&socket, cat_true);
+}
+
 typedef cat_bool_t (*test_cat_socket_connect_function_t)(cat_socket_t *socket, const char *name, size_t name_length, int port);
 typedef cat_bool_t (*test_cat_socket_connect_to_function_t)(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
 
