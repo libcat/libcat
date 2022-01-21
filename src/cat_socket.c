@@ -1408,44 +1408,44 @@ CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog)
     return cat_true;
 }
 
-static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *client, cat_socket_inheritance_info_t *handle_info, cat_timeout_t timeout)
+static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *connection, cat_socket_inheritance_info_t *handle_info, cat_timeout_t timeout)
 {
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
     if ((iserver->type & CAT_SOCKET_TYPE_IPCC) != CAT_SOCKET_TYPE_IPCC) {
         CAT_SOCKET_INTERNAL_SERVER_ONLY(iserver, return NULL);
     }
-    cat_socket_internal_t *iclient;
+    cat_socket_internal_t *iconnection;
     int error;
 
-    if (unlikely(!cat_socket_is_available(client))) {
+    if (unlikely(!cat_socket_is_available(connection))) {
         cat_update_last_error(CAT_EINVAL, "Socket accept can not act on an unavailable socket");
         return NULL;
     }
-    if (unlikely(cat_socket_is_open(client))) {
+    if (unlikely(cat_socket_is_open(connection))) {
         cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
         return NULL;
     }
     if (handle_info == NULL) {
         cat_socket_type_t server_type = cat_socket_type_simplify(iserver->type);
-        cat_socket_type_t client_type = iclient->type;
-        if (unlikely(server_type != client_type)) {
+        cat_socket_type_t connection_type = iconnection->type;
+        if (unlikely(server_type != connection_type)) {
             cat_update_last_error(CAT_EINVAL, "Socket accept connection type mismatch, expect %s but got %s",
-                cat_socket_type_name(server_type), cat_socket_type_name(client_type));
+                cat_socket_type_name(server_type), cat_socket_type_name(connection_type));
             return NULL;
         }
     }
-    iclient = client->internal;
+    iconnection = connection->internal;
 
     while (1) {
         cat_bool_t ret;
-        error = uv_accept(&iserver->u.stream, &client->internal->u.stream);
+        error = uv_accept(&iserver->u.stream, &connection->internal->u.stream);
         if (error == 0) {
             /* init client properties */
-            iclient->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
+            iconnection->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
             /* TODO: socket_extends() ? */
-            memcpy(&iclient->options, handle_info == NULL ? &iserver->options : &handle_info->options, sizeof(iclient->options));
-            cat_socket_internal_on_open(iclient, cat_socket_get_af_of_type(handle_info == NULL ? iserver->type : handle_info->type));
-            return client;
+            memcpy(&iconnection->options, handle_info == NULL ? &iserver->options : &handle_info->options, sizeof(iconnection->options));
+            cat_socket_internal_on_open(iconnection, cat_socket_get_af_of_type(handle_info == NULL ? iserver->type : handle_info->type));
+            return connection;
         }
         if (unlikely(error != CAT_EAGAIN)) {
             cat_update_last_error_with_reason(error, "Socket accept failed");
@@ -1472,14 +1472,14 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
     return NULL;
 }
 
-CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *client)
+CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *connection)
 {
-    return cat_socket_accept_ex(server, client, cat_socket_get_accept_timeout_fast(server));
+    return cat_socket_accept_ex(server, connection, cat_socket_get_accept_timeout_fast(server));
 }
 
-CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout)
+CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *connection, cat_timeout_t timeout)
 {
-    return cat_socket__accept(server, client, NULL, timeout);
+    return cat_socket__accept(server, connection, NULL, timeout);
 }
 
 static cat_always_inline void cat_socket_internal_on_connect_done(cat_socket_internal_t *isocket, cat_sa_family_t af)
