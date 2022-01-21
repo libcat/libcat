@@ -1404,7 +1404,7 @@ CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog)
     return cat_true;
 }
 
-static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type, cat_socket_options_t *iclient_options, cat_timeout_t timeout)
+static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *client, cat_socket_inheritance_info_t *handle_info, cat_timeout_t timeout)
 {
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
     if ((iserver->type & CAT_SOCKET_TYPE_IPCC) != CAT_SOCKET_TYPE_IPCC) {
@@ -1413,16 +1413,12 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
     cat_socket_internal_t *iclient;
     int error;
 
-    if (client == NULL || client->internal == NULL) {
-        cat_socket_creation_options_t options;
-        options.flags = CAT_SOCKET_CREATION_FLAG_ACCEPT;
-        client = cat_socket_create_ex(client, client_type == CAT_SOCKET_TYPE_ANY ? iserver->type : client_type, &options);
-        if (unlikely(client == NULL)) {
-            cat_update_last_error_with_previous("Socket create for accepting connection failed");
-            return NULL;
-        }
-    } else if (unlikely(client_type != CAT_SOCKET_TYPE_ANY)) {
-        cat_update_last_error(CAT_EMISUSE, "Socket accept can not specify the type for a constructed socket");
+    if (unlikely(!cat_socket_is_available(client))) {
+        cat_update_last_error(CAT_EINVAL, "Socket accept can not act on an unavailable socket");
+        return NULL;
+    }
+    if (unlikely(cat_socket_is_open(client))) {
+        cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
         return NULL;
     }
     iclient = client->internal;
@@ -1434,8 +1430,8 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
             /* init client properties */
             iclient->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
             /* TODO: socket_extends() ? */
-            memcpy(&iclient->options, iclient_options == NULL ? &iserver->options : iclient_options, sizeof(iclient->options));
-            cat_socket_internal_on_open(iclient, AF_UNSPEC);
+            memcpy(&iclient->options, handle_info == NULL ? &iserver->options : &handle_info->options, sizeof(iclient->options));
+            cat_socket_internal_on_open(iclient, cat_socket_get_af_of_type(handle_info == NULL ? iserver->type : handle_info->type));
             return client;
         }
         if (unlikely(error != CAT_EAGAIN)) {
@@ -1460,9 +1456,6 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *clie
         }
     }
 
-    /* failed case */
-    cat_socket_close(client);
-
     return NULL;
 }
 
@@ -1473,17 +1466,7 @@ CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *clie
 
 CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout)
 {
-    return cat_socket__accept(server, client, CAT_SOCKET_TYPE_ANY, NULL, timeout);
-}
-
-CAT_API cat_socket_t *cat_socket_accept_typed(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type)
-{
-    return cat_socket_accept_typed_ex(server, client, client_type, cat_socket_get_accept_timeout_fast(server));
-}
-
-CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type, cat_timeout_t timeout)
-{
-    return cat_socket__accept(server, client, client_type, NULL, timeout);
+    return cat_socket__accept(server, client, NULL, timeout);
 }
 
 static cat_always_inline void cat_socket_internal_on_connect_done(cat_socket_internal_t *isocket, cat_sa_family_t af)
@@ -3508,6 +3491,7 @@ CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *ha
     return cat_socket_send_handle_ex(socket, handle, cat_socket_get_write_timeout_fast(socket));
 }
 
+// TODO: support send extra message
 CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
 {
     CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_NONE, return cat_false);
@@ -3546,7 +3530,6 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
     CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
     cat_socket_inheritance_info_t *handle_info = isocket->cache.recv_handle_info;
     cat_socket_inheritance_info_t handle_info_storage;
-    cat_socket_t *ret;
 
     if (handle_info == NULL) {
         ssize_t nread = cat_socket_internal_read(
@@ -3565,39 +3548,59 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
         handle_info = isocket->cache.recv_handle_info;
     }
 
+    /* check uv pending handle */
     CAT_ASSERT(uv_pipe_pending_count(&isocket->u.pipe) > 0);
 #ifdef CAT_DEBUG
-    uv_handle_type uv_handle_type = uv_pipe_pending_type(&isocket->u.pipe);
-    cat_socket_type_t handle_type = 0xffffffff;
-    if (uv_handle_type == UV_TCP) {
-        handle_type = CAT_SOCKET_TYPE_TCP;
-    } else if (uv_handle_type == UV_NAMED_PIPE) {
-        handle_type = CAT_SOCKET_TYPE_PIPE;
-    }
-    CAT_ASSERT((handle_type & handle_info->type) == handle_type);
+    do {
+        uv_handle_type uv_handle_type = uv_pipe_pending_type(&isocket->u.pipe);
+        cat_socket_type_t handle_type = 0xffffffff;
+        if (uv_handle_type == UV_TCP) {
+            handle_type = CAT_SOCKET_TYPE_TCP;
+        } else if (uv_handle_type == UV_NAMED_PIPE) {
+            handle_type = CAT_SOCKET_TYPE_PIPE;
+        } else if (uv_handle_type == UV_UDP) {
+            handle_type = CAT_SOCKET_TYPE_UDP;
+        }
+        CAT_ASSERT((handle_type & handle_info->type) == handle_type);
+    } while (0);
 #endif
 
-    ret = cat_socket__accept(socket, handle, handle_info->type, &handle_info->options, timeout);
+    do {
+        cat_socket_type_t server_type = cat_socket_type_simplify(handle_info->type);
+        cat_socket_type_t handle_type = cat_socket_get_type(handle);
+        if (unlikely(server_type != handle_type)) {
+            cat_update_last_error(CAT_EINVAL, "Socket recv handle type mismatch, expect %s but got %s",
+                cat_socket_type_name(server_type), cat_socket_type_name(handle_type));
+            goto _error;
+        }
+    } while (0);
 
-    if (unlikely(ret == NULL)) {
-        if (handle_info != isocket->cache.recv_handle_info) {
-            isocket->cache.recv_handle_info =
-                (cat_socket_inheritance_info_t *) cat_memdup(handle_info, sizeof(*handle_info));
+    handle = cat_socket__accept(socket, handle, handle_info, timeout);
+
+    if (unlikely(handle == NULL)) {
+        goto _error;
+    }
+
+    if (handle_info == isocket->cache.recv_handle_info) {
+        cat_free(handle_info);
+        isocket->cache.recv_handle_info = NULL;
+    }
+
+    return handle;
+
+    _error:
+    if (handle_info != isocket->cache.recv_handle_info) {
+        isocket->cache.recv_handle_info =
+            (cat_socket_inheritance_info_t *) cat_memdup(handle_info, sizeof(*handle_info));
 #if CAT_ALLOC_HANDLE_ERRORS
-            if (unlikely(isocket->cache.recv_handle_info == NULL)) {
-                /* dup failed, we can not re-accept it without handle info */
-                cat_socket_internal_unrecoverable_io_error(isocket);
-            }
+        if (unlikely(isocket->cache.recv_handle_info == NULL)) {
+            /* dup failed, we can not re-accept it without handle info */
+            cat_socket_internal_unrecoverable_io_error(isocket);
+        }
 #endif
-        }
-    } else {
-        if (handle_info == isocket->cache.recv_handle_info) {
-            cat_free(handle_info);
-            isocket->cache.recv_handle_info = NULL;
-        }
     }
 
-    return ret;
+    return NULL;
 }
 
 static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)

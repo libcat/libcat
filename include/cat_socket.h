@@ -203,7 +203,6 @@ CAT_API size_t cat_socket_write_vector_length(const cat_socket_write_vector_t *v
     XX(OPEN_FD,      1 << 0) \
     XX(OPEN_SOCKET,  1 << 1) \
     XX(OPEN_HANDLE,  1 << 2) \
-    XX(ACCEPT,       1 << 3) \
 
 typedef enum cat_socket_creation_flag_e {
 #define CAT_SOCKET_CREATION_FLAG_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_CREATION_FLAG_, name, value)
@@ -319,7 +318,7 @@ typedef enum cat_socket_flag_e {
 typedef uint8_t cat_socket_flags_t;
 
 #define CAT_SOCKET_INTERNAL_FLAG_MAP(XX) \
-    XX(NONE,              0) \
+    XX(NONE,                   0) \
     XX(ESTABLISHED,       1 << 0) \
     /* socket may be a pipe file, which is created by pipe2()
      * and can only work with read()/write() */ \
@@ -570,8 +569,6 @@ CAT_API cat_bool_t cat_socket_bind_to_ex(cat_socket_t *socket, const cat_sockadd
 CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog);
 CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *client);
 CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout);
-CAT_API cat_socket_t *cat_socket_accept_typed(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type);
-CAT_API cat_socket_t *cat_socket_accept_typed_ex(cat_socket_t *server, cat_socket_t *client, cat_socket_type_t client_type, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, size_t name_length, int port);
 CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout);

@@ -35,8 +35,9 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
 {
     wait_group wg;
     while (true) {
-        cat_socket_t *connection = cat_socket_accept(server, nullptr);
-        if (connection == nullptr) {
+        cat_socket_t *connection = cat_socket_create(nullptr, cat_socket_get_simple_type(server));
+        if (cat_socket_accept(server, connection) == nullptr) {
+            cat_socket_close(connection);
             ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
             break;
         }
@@ -2040,9 +2041,9 @@ TEST(cat_socket, tty_stderr)
 }
 
 #ifdef CAT_OS_WIN
-#define TEST_SEND_HANDLE_ROUND 1 /* Windows not support send pipe */
+#define TEST_SEND_HANDLE_ROUND 1 /* Windows can only send tcp handle */
 #else
-#define TEST_SEND_HANDLE_ROUND 2
+#define TEST_SEND_HANDLE_ROUND 3
 #endif
 
 TEST(cat_socket, send_handle)
@@ -2072,8 +2073,8 @@ TEST(cat_socket, send_handle)
         DEFER(wg--);
         ASSERT_TRUE(cat_socket_connect(&main_socket, pipe_path.c_str(), pipe_path.length(), 0));
     });
-    cat_socket_init(&worker_channel);
-    ASSERT_EQ(cat_socket_accept_typed(&worker_socket, &worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
+    ASSERT_EQ(cat_socket_create(&worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
+    ASSERT_EQ(cat_socket_accept(&worker_socket, &worker_channel), &worker_channel);
     DEFER(cat_socket_close(&worker_channel));
     wg();
 
@@ -2101,12 +2102,23 @@ TEST(cat_socket, send_handle)
 
         cat_socket_t worker_client;
         {
-            ASSERT_EQ(cat_socket_create(&worker_client, CAT_SOCKET_TYPE_TCP), &worker_client);
-            DEFER(cat_socket_close(&worker_client));
-            ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), nullptr);
-            ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+            std::array<cat_socket_type_t, 4> bad_types = { CAT_SOCKET_TYPE_TCP4, CAT_SOCKET_TYPE_PIPE, CAT_SOCKET_TYPE_UDP, CAT_SOCKET_TYPE_UDP4 };
+            for (int bad_type_index = 0; bad_type_index < bad_types.size(); bad_type_index++) {
+                cat_socket_type_t bad_type = bad_types[bad_type_index];
+                if (bad_type == type) {
+                    // this is misuse test scope
+                    // skip for the same type
+                    continue;
+                }
+                ASSERT_EQ(cat_socket_create(&worker_client, bad_type), &worker_client);
+                DEFER(cat_socket_close(&worker_client));
+                ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), nullptr);
+                /* IPV* will lead to EMISUSE error because sys socket would be bound to sys socket early,
+                 * and wrong type just lead to EINVAL */
+                ASSERT_EQ(cat_get_last_error_code(), type != cat_socket_type_simplify(bad_type) ? CAT_EINVAL : CAT_EMISUSE);
+            }
         }
-        cat_socket_init(&worker_client);
+        ASSERT_EQ(cat_socket_create(&worker_client, cat_socket_type_simplify(type)), &worker_client);
         ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
         DEFER(cat_socket_close(&worker_client));
         ASSERT_EQ((cat_socket_get_type(&worker_client) & type), type);
