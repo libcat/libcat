@@ -861,7 +861,10 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
                 }
             }
             if (ioptions.flags & CAT_SOCKET_CREATION_FLAG_OPEN_FD) {
-                type &= ~CAT_SOCKET_TYPE_FLAG_IPC;
+                if (type & CAT_SOCKET_TYPE_FLAG_IPC) {
+                    error = CAT_EINVAL;
+                    goto _init_error;
+                }
                 check_connection = cat_false;
                 isocket->u.udg.readfd = CAT_SOCKET_INVALID_FD;
                 isocket->u.udg.writefd = CAT_SOCKET_INVALID_FD;
@@ -997,7 +1000,9 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
         cat_free(isocket);
     }
     _type_error:
-    cat_update_last_error_with_reason(error, "Socket create with type %s failed", cat_socket_type_name(type));
+    cat_update_last_error_with_reason(error, "Socket %s with type %s failed",
+        !(ioptions.flags & CAT_SOCKET_CREATION_OPEN_FLAGS) ? "create" : "open",
+        cat_socket_type_name(type));
 #if CAT_ALLOC_HANDLE_ERRORS
     _malloc_internal_error:
 #endif
