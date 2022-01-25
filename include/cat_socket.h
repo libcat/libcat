@@ -457,7 +457,7 @@ struct cat_socket_internal_s
     struct {
         cat_socket_fd_t fd;
         cat_socket_write_request_t *write_request;
-        cat_socket_inheritance_info_t *recv_handle_info;
+        cat_socket_inheritance_info_t *ipcc_handle_info;
         cat_sockaddr_info_t *sockname;
         cat_sockaddr_info_t *peername;
         int recv_buffer_size;
@@ -657,8 +657,6 @@ CAT_API ssize_t cat_socket_peek_from(const cat_socket_t *socket, char *buffer, s
 
 CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *handle);
 CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout);
-CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t *handle);
-CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket);
 

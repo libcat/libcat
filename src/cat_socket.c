@@ -947,7 +947,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     /* part of cache */
     isocket->cache.fd = CAT_SOCKET_INVALID_FD;
     isocket->cache.write_request = NULL;
-    isocket->cache.recv_handle_info = NULL;
+    isocket->cache.ipcc_handle_info = NULL;
     isocket->cache.sockname = NULL;
     isocket->cache.peername = NULL;
     isocket->cache.recv_buffer_size = -1;
@@ -1413,44 +1413,32 @@ CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog)
     return cat_true;
 }
 
-static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *connection, cat_socket_inheritance_info_t *handle_info, cat_timeout_t timeout)
-{
-    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
-    if ((iserver->type & CAT_SOCKET_TYPE_IPCC) != CAT_SOCKET_TYPE_IPCC) {
-        CAT_SOCKET_INTERNAL_SERVER_ONLY(iserver, return NULL);
-    }
-    cat_socket_internal_t *iconnection;
+static cat_bool_t cat_socket_internal_accept(
+    cat_socket_internal_t *iserver, cat_socket_internal_t *iconnection,
+    cat_socket_inheritance_info_t *handle_info, cat_timeout_t timeout
+) {
     int error;
 
-    if (unlikely(!cat_socket_is_available(connection))) {
-        cat_update_last_error(CAT_EINVAL, "Socket accept can not act on an unavailable socket");
-        return NULL;
-    }
-    if (unlikely(cat_socket_is_open(connection))) {
-        cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
-        return NULL;
-    }
     if (handle_info == NULL) {
         cat_socket_type_t server_type = cat_socket_type_simplify(iserver->type);
         cat_socket_type_t connection_type = iconnection->type;
         if (unlikely(server_type != connection_type)) {
             cat_update_last_error(CAT_EINVAL, "Socket accept connection type mismatch, expect %s but got %s",
                 cat_socket_type_name(server_type), cat_socket_type_name(connection_type));
-            return NULL;
+            return cat_false;
         }
     }
-    iconnection = connection->internal;
 
     while (1) {
         cat_bool_t ret;
-        error = uv_accept(&iserver->u.stream, &connection->internal->u.stream);
+        error = uv_accept(&iserver->u.stream, &iconnection->u.stream);
         if (error == 0) {
             /* init client properties */
             iconnection->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
             /* TODO: socket_extends() ? */
             memcpy(&iconnection->options, handle_info == NULL ? &iserver->options : &handle_info->options, sizeof(iconnection->options));
             cat_socket_internal_on_open(iconnection, cat_socket_get_af_of_type(handle_info == NULL ? iserver->type : handle_info->type));
-            return connection;
+            return cat_true;
         }
         if (unlikely(error != CAT_EAGAIN)) {
             cat_update_last_error_with_reason(error, "Socket accept failed");
@@ -1474,8 +1462,10 @@ static cat_socket_t *cat_socket__accept(cat_socket_t *server, cat_socket_t *conn
         }
     }
 
-    return NULL;
+    return cat_false;
 }
+
+static cat_bool_t cat_socket_internal_recv_handle(cat_socket_internal_t *isocket, cat_socket_internal_t *ihandle, cat_timeout_t timeout);
 
 CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *connection)
 {
@@ -1484,7 +1474,21 @@ CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *conn
 
 CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *connection, cat_timeout_t timeout)
 {
-    return cat_socket__accept(server, connection, NULL, timeout);
+    CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return NULL);
+    CAT_SOCKET_INTERNAL_GETTER_SILENT(connection, iconnection, {
+        cat_update_last_error(CAT_EINVAL, "Socket accept can not act on an unavailable socket");
+        return NULL;
+    });
+    if (unlikely(cat_socket_is_open(connection))) {
+        cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
+        return NULL;
+    }
+    if (!(iserver->type & CAT_SOCKET_TYPE_FLAG_IPC)) {
+        CAT_SOCKET_INTERNAL_SERVER_ONLY(iserver, return NULL);
+        return cat_socket_internal_accept(iserver, iconnection, NULL, timeout) ? connection : NULL;
+    } else {
+        return cat_socket_internal_recv_handle(iserver, iconnection, timeout) ? connection : NULL;
+    }
 }
 
 static cat_always_inline void cat_socket_internal_on_connect_done(cat_socket_internal_t *isocket, cat_sa_family_t af)
@@ -3538,15 +3542,9 @@ CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t 
     return cat_true;
 }
 
-CAT_API cat_socket_t *cat_socket_recv_handle(cat_socket_t *socket, cat_socket_t *handle)
+static cat_bool_t cat_socket_internal_recv_handle(cat_socket_internal_t *isocket, cat_socket_internal_t *ihandle, cat_timeout_t timeout)
 {
-    return cat_socket_recv_handle_ex(socket, handle, cat_socket_get_accept_timeout_fast(socket));
-}
-
-CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout)
-{
-    CAT_SOCKET_IPCC_CHECK(socket, isocket, CAT_SOCKET_IO_FLAG_READ, return NULL);
-    cat_socket_inheritance_info_t *handle_info = isocket->cache.recv_handle_info;
+    cat_socket_inheritance_info_t *handle_info = isocket->cache.ipcc_handle_info;
     cat_socket_inheritance_info_t handle_info_storage;
 
     if (handle_info == NULL) {
@@ -3559,11 +3557,11 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
                 /* interrupt can not recover */
                 cat_socket_internal_unrecoverable_io_error(isocket);
             }
-            return NULL;
+            return cat_false;
         }
         handle_info = &handle_info_storage;
     } else {
-        handle_info = isocket->cache.recv_handle_info;
+        handle_info = isocket->cache.ipcc_handle_info;
     }
 
     /* check uv pending handle */
@@ -3585,40 +3583,49 @@ CAT_API cat_socket_t *cat_socket_recv_handle_ex(cat_socket_t *socket, cat_socket
 
     do {
         cat_socket_type_t server_type = cat_socket_type_simplify(handle_info->type);
-        cat_socket_type_t handle_type = cat_socket_get_type(handle);
+        cat_socket_type_t handle_type = ihandle->type;
         if (unlikely(server_type != handle_type)) {
-            cat_update_last_error(CAT_EINVAL, "Socket recv handle type mismatch, expect %s but got %s",
+            cat_update_last_error(CAT_EINVAL, "Socket accept handle type mismatch, expect %s but got %s",
                 cat_socket_type_name(server_type), cat_socket_type_name(handle_type));
-            goto _error;
+            goto _recoverable_error;
         }
     } while (0);
 
-    handle = cat_socket__accept(socket, handle, handle_info, timeout);
+    cat_bool_t ret = cat_socket_internal_accept(isocket, ihandle, handle_info, timeout);
 
-    if (unlikely(handle == NULL)) {
-        goto _error;
+    if (unlikely(!ret)) {
+        cat_errno_t error = cat_get_last_error_code();
+        if (error == CAT_EINVAL || error == CAT_EMISUSE) {
+            goto _recoverable_error;
+        } else {
+            goto _unrecoverable_error;
+        }
     }
 
-    if (handle_info == isocket->cache.recv_handle_info) {
+    if (handle_info == isocket->cache.ipcc_handle_info) {
         cat_free(handle_info);
-        isocket->cache.recv_handle_info = NULL;
+        isocket->cache.ipcc_handle_info = NULL;
     }
 
-    return handle;
+    return cat_true;
 
-    _error:
-    if (handle_info != isocket->cache.recv_handle_info) {
-        isocket->cache.recv_handle_info =
+    _recoverable_error:
+    if (handle_info != isocket->cache.ipcc_handle_info) {
+        isocket->cache.ipcc_handle_info =
             (cat_socket_inheritance_info_t *) cat_memdup(handle_info, sizeof(*handle_info));
 #if CAT_ALLOC_HANDLE_ERRORS
-        if (unlikely(isocket->cache.recv_handle_info == NULL)) {
+        if (unlikely(isocket->cache.ipcc_handle_info == NULL)) {
             /* dup failed, we can not re-accept it without handle info */
-            cat_socket_internal_unrecoverable_io_error(isocket);
+            goto _unrecoverable_error;
         }
 #endif
     }
+    if (0) {
+        _unrecoverable_error:
+        cat_socket_internal_unrecoverable_io_error(isocket);
+    }
 
-    return NULL;
+    return cat_false;
 }
 
 static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)

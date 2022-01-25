@@ -2141,14 +2141,14 @@ TEST(cat_socket, send_handle)
                 }
                 ASSERT_EQ(cat_socket_create(&worker_client, bad_type), &worker_client);
                 DEFER(cat_socket_close(&worker_client));
-                ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), nullptr);
+                ASSERT_EQ(cat_socket_accept(&worker_channel, &worker_client), nullptr);
                 /* IPV* will lead to EMISUSE error because sys socket would be bound to sys socket early,
                  * and wrong type just lead to EINVAL */
                 ASSERT_EQ(cat_get_last_error_code(), type != cat_socket_type_simplify(bad_type) ? CAT_EINVAL : CAT_EMISUSE);
             }
         }
         ASSERT_EQ(cat_socket_create(&worker_client, cat_socket_type_simplify(type)), &worker_client);
-        ASSERT_EQ(cat_socket_recv_handle(&worker_channel, &worker_client), &worker_client);
+        ASSERT_EQ(cat_socket_accept(&worker_channel, &worker_client), &worker_client);
         DEFER(cat_socket_close(&worker_client));
         ASSERT_EQ((cat_socket_get_type(&worker_client) & type), type);
 
