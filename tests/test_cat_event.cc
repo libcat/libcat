@@ -144,9 +144,9 @@ TEST(cat_event, real_fork)
     DEFER(cat_socket_close(&dummy));
     ASSERT_TRUE(cat_socket_connect(&dummy, CAT_STRL(TEST_LISTEN_HOST), port));
     ASSERT_EQ(cat_socket_create(&dummy_peer, cat_socket_get_simple_type(&server)), &dummy_peer);
+    DEFER(cat_socket_close(&dummy_peer));
     ASSERT_EQ(cat_socket_accept(&server, &dummy_peer), &dummy_peer);
     ASSERT_TRUE(cat_socket_send(&dummy_peer, CAT_STRS("PING")));
-    DEFER(cat_socket_close(&dummy_peer));
 
     cat_pid_t pid = fork();
     SKIP_IF_(pid < 0, "Fork failed");
@@ -154,8 +154,8 @@ TEST(cat_event, real_fork)
         cat_msec_t s = cat_time_msec();
         cat_socket_t connection;
         ASSERT_EQ(cat_socket_create(&connection, cat_socket_get_simple_type(&server)), &connection);
-        ASSERT_EQ(cat_socket_accept(&server, &connection), &connection);
         DEFER(cat_socket_close(&connection));
+        ASSERT_EQ(cat_socket_accept(&server, &connection), &connection);
         ASSERT_GT(nread = cat_socket_recv(&connection, CAT_STRS(buffer)), 0);
         ASSERT_EQ(std::string(buffer, nread - 1), "Forked\n");
         int wstatus;

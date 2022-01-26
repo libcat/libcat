@@ -2094,8 +2094,8 @@ TEST(cat_socket, send_handle)
         ASSERT_TRUE(cat_socket_connect(&main_socket, pipe_path.c_str(), pipe_path.length(), 0));
     });
     ASSERT_EQ(cat_socket_create(&worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
-    ASSERT_EQ(cat_socket_accept(&worker_socket, &worker_channel), &worker_channel);
     DEFER(cat_socket_close(&worker_channel));
+    ASSERT_EQ(cat_socket_accept(&worker_socket, &worker_channel), &worker_channel);
     wg();
 
     for (int round = 0; round < TEST_SEND_HANDLE_ROUND; round++) {
