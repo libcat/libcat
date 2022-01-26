@@ -51,7 +51,7 @@ extern "C" {
 #define CAT_SOCKADDR_MAX_PATH (sizeof(((struct sockaddr_un *) 0)->sun_path))
 #define CAT_SOCKLEN_FMT "%u"
 #define CAT_SOCKLEN_FMT_SPEC "u"
-typedef socklen_t cat_socklen_t; /* Notice: it's unsigned on drawin */
+typedef socklen_t cat_socklen_t; /* Notice: it's unsigned on darwin */
 typedef sa_family_t cat_sa_family_t;
 typedef in_port_t cat_in_port_t;
 #else
