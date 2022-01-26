@@ -1418,7 +1418,7 @@ static cat_bool_t cat_socket_internal_accept(
     if (handle_info == NULL) {
         cat_socket_type_t server_type = cat_socket_type_simplify(iserver->type);
         cat_socket_type_t connection_type = iconnection->type;
-        if (unlikely(server_type != connection_type)) {
+        if (unlikely((server_type & connection_type) != server_type)) {
             cat_update_last_error(CAT_EINVAL, "Socket accept connection type mismatch, expect %s but got %s",
                 cat_socket_type_name(server_type), cat_socket_type_name(connection_type));
             return cat_false;
