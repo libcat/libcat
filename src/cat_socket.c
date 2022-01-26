@@ -81,11 +81,7 @@ CAT_API const char* cat_sockaddr_af_name(cat_sa_family_t af)
         case AF_INET6:
             return "INET6";
         case AF_LOCAL:
-#ifdef CAT_OS_UNIX_LIKE
-            return "UNIX";
-#else
             return "LOCAL";
-#endif
     }
     return "UNKNOWN";
 }
@@ -1056,11 +1052,11 @@ CAT_API const char *cat_socket_type_name(cat_socket_type_t type)
             return "UDP";
         }
     } else if ((type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE) {
-#ifdef CAT_OS_UNIX_LIKE
-        return "UNIX";
-#else
-        return "PIPE";
-#endif
+        if (type & CAT_SOCKET_TYPE_FLAG_IPC) {
+            return "IPCC";
+        } else {
+            return "PIPE";
+        }
     } else if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY) {
         if (type & CAT_SOCKET_TYPE_FLAG_STDIN) {
             return "STDIN";

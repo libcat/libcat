@@ -274,11 +274,7 @@ TEST(cat_socket, sockaddr_af_name)
     ASSERT_STREQ("UNSPEC", cat_sockaddr_af_name(AF_UNSPEC));
     ASSERT_STREQ("INET", cat_sockaddr_af_name(AF_INET));
     ASSERT_STREQ("INET6", cat_sockaddr_af_name(AF_INET6));
-#ifdef CAT_OS_UNIX_LIKE
-    ASSERT_STREQ("UNIX", cat_sockaddr_af_name(AF_LOCAL));
-#else
     ASSERT_STREQ("LOCAL", cat_sockaddr_af_name(AF_LOCAL));
-#endif
     ASSERT_STREQ("UNKNOWN", cat_sockaddr_af_name(-1));
 }
 
@@ -754,11 +750,7 @@ TEST(cat_socket, type_name)
     ASSERT_STREQ("UDP4", cat_socket_type_name(CAT_SOCKET_TYPE_UDP4));
     ASSERT_STREQ("UDP6", cat_socket_type_name(CAT_SOCKET_TYPE_UDP6));
 
-#ifdef CAT_OS_UNIX_LIKE
-    ASSERT_STREQ("UNIX", cat_socket_type_name(CAT_SOCKET_TYPE_PIPE));
-#else
     ASSERT_STREQ("PIPE", cat_socket_type_name(CAT_SOCKET_TYPE_PIPE));
-#endif
     ASSERT_STREQ("TTY", cat_socket_type_name(CAT_SOCKET_TYPE_TTY));
 #ifdef CAT_OS_UNIX_LIKE
     ASSERT_STREQ("UDG", cat_socket_type_name(CAT_SOCKET_TYPE_UDG));
@@ -2289,7 +2281,7 @@ TEST(cat_socket, dump_all_and_close_all)
         std::string output = testing::internal::GetCapturedStdout();
         ASSERT_NE(output.find("TCP"), std::string::npos);
         ASSERT_NE(output.find("UDP"), std::string::npos);
-        ASSERT_TRUE(output.find("PIPE") != std::string::npos || output.find("UNIX") != std::string::npos);
+        ASSERT_TRUE(output.find("PIPE") != std::string::npos);
         if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
             ASSERT_TRUE(output.find("TTY") != std::string::npos || output.find("STDOUT") != std::string::npos);
         }
@@ -2305,7 +2297,7 @@ TEST(cat_socket, dump_all_and_close_all)
         std::string output = testing::internal::GetCapturedStdout();
         ASSERT_EQ(output.find("TCP"), std::string::npos);
         ASSERT_EQ(output.find("UDP"), std::string::npos);
-        ASSERT_TRUE(output.find("PIPE") == std::string::npos && output.find("UNIX") == std::string::npos);
+        ASSERT_TRUE(output.find("PIPE") == std::string::npos);
         if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
             ASSERT_TRUE(output.find("TTY") == std::string::npos && output.find("STDOUT") == std::string::npos);
         }
