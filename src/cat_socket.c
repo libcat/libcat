@@ -1081,6 +1081,19 @@ CAT_API const char *cat_socket_type_name(cat_socket_type_t type)
     return "UNKNOWN";
 }
 
+CAT_API cat_sa_family_t cat_socket_type_to_af(cat_socket_type_t type)
+{
+    if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
+        return AF_INET;
+    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
+        return AF_INET6;
+    } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
+        return AF_LOCAL;
+    } else {
+        return AF_UNSPEC;
+    }
+}
+
 CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket)
 {
     CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, isocket, return CAT_SOCKET_TYPE_ANY);
@@ -1102,22 +1115,9 @@ CAT_API const char *cat_socket_get_simple_type_name(const cat_socket_t *socket)
     return cat_socket_type_name(cat_socket_get_simple_type(socket));
 }
 
-CAT_API cat_sa_family_t cat_socket_get_af_of_type(cat_socket_type_t type)
-{
-    if (type & CAT_SOCKET_TYPE_FLAG_IPV4) {
-        return AF_INET;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_IPV6) {
-        return AF_INET6;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_LOCAL) {
-        return AF_LOCAL;
-    } else {
-        return AF_UNSPEC;
-    }
-}
-
 static cat_always_inline cat_sa_family_t cat_socket_internal_get_af(const cat_socket_internal_t *isocket)
 {
-    return cat_socket_get_af_of_type(isocket->type);
+    return cat_socket_type_to_af(isocket->type);
 }
 
 CAT_API cat_sa_family_t cat_socket_get_af(const cat_socket_t *socket)
@@ -1437,7 +1437,7 @@ static cat_bool_t cat_socket_internal_accept(
             iconnection->flags |= (CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED | CAT_SOCKET_INTERNAL_FLAG_SERVER_CONNECTION);
             /* TODO: socket_extends() ? */
             memcpy(&iconnection->options, handle_info == NULL ? &iserver->options : &handle_info->options, sizeof(iconnection->options));
-            cat_socket_internal_on_open(iconnection, cat_socket_get_af_of_type(handle_info == NULL ? iserver->type : handle_info->type));
+            cat_socket_internal_on_open(iconnection, cat_socket_type_to_af(handle_info == NULL ? iserver->type : handle_info->type));
             return cat_true;
         }
         if (unlikely(error != CAT_EAGAIN)) {
