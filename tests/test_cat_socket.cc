@@ -747,12 +747,12 @@ TEST(cat_socket, create_udp)
 TEST(cat_socket, type_name)
 {
     ASSERT_STREQ("TCP", cat_socket_type_name(CAT_SOCKET_TYPE_TCP));
-    ASSERT_STREQ("TCP4", cat_socket_type_name(CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV4));
-    ASSERT_STREQ("TCP6", cat_socket_type_name(CAT_SOCKET_TYPE_TCP | CAT_SOCKET_TYPE_FLAG_IPV6));
+    ASSERT_STREQ("TCP4", cat_socket_type_name(CAT_SOCKET_TYPE_TCP4));
+    ASSERT_STREQ("TCP6", cat_socket_type_name(CAT_SOCKET_TYPE_TCP6));
 
     ASSERT_STREQ("UDP", cat_socket_type_name(CAT_SOCKET_TYPE_UDP));
-    ASSERT_STREQ("UDP4", cat_socket_type_name(CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV4));
-    ASSERT_STREQ("UDP6", cat_socket_type_name(CAT_SOCKET_TYPE_UDP | CAT_SOCKET_TYPE_FLAG_IPV6));
+    ASSERT_STREQ("UDP4", cat_socket_type_name(CAT_SOCKET_TYPE_UDP4));
+    ASSERT_STREQ("UDP6", cat_socket_type_name(CAT_SOCKET_TYPE_UDP6));
 
 #ifdef CAT_OS_UNIX_LIKE
     ASSERT_STREQ("UNIX", cat_socket_type_name(CAT_SOCKET_TYPE_PIPE));
@@ -763,7 +763,6 @@ TEST(cat_socket, type_name)
 #ifdef CAT_OS_UNIX_LIKE
     ASSERT_STREQ("UDG", cat_socket_type_name(CAT_SOCKET_TYPE_UDG));
 #endif
-    ASSERT_STREQ("UNKNOWN", cat_socket_type_name(INT_MIN));
 }
 
 TEST(cat_socket, get_type_name)

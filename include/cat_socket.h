@@ -279,13 +279,11 @@ typedef enum cat_socket_type_flag_e {
 #define CAT_SOCKET_TYPE_MAP(XX) CAT_SOCKET_TYPE_MAP_EX(XX, CAT_SOCKET_UNIX_ENUM_GEN(XX))
 
 /* 24 ~ 31 */
-typedef enum cat_socket_common_type_e {
+typedef enum cat_socket_type_e {
 #define CAT_SOCKET_TYPE_GEN(name, value) CAT_ENUM_GEN(CAT_SOCKET_TYPE_, name, value)
     CAT_SOCKET_TYPE_MAP(CAT_SOCKET_TYPE_GEN)
 #undef CAT_SOCKET_TYPE_GEN
-} cat_socket_common_type_t;
-
-typedef uint32_t cat_socket_type_t;
+} cat_socket_type_t;
 
 #define CAT_SOCKET_OPTION_FLAG_MAP(XX) \
     XX(NONE,               0) \
