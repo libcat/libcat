@@ -565,8 +565,8 @@ CAT_API cat_bool_t cat_socket_bind_ex(cat_socket_t *socket, const char *name, si
 CAT_API cat_bool_t cat_socket_bind_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
 CAT_API cat_bool_t cat_socket_bind_to_ex(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_socket_bind_flags_t flags);
 CAT_API cat_bool_t cat_socket_listen(cat_socket_t *socket, int backlog);
-CAT_API cat_socket_t *cat_socket_accept(cat_socket_t *server, cat_socket_t *client);
-CAT_API cat_socket_t *cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout);
+CAT_API cat_bool_t cat_socket_accept(cat_socket_t *server, cat_socket_t *client);
+CAT_API cat_bool_t cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *client, cat_timeout_t timeout);
 
 CAT_API cat_bool_t cat_socket_connect(cat_socket_t *socket, const char *name, size_t name_length, int port);
 CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const char *name, size_t name_length, int port, cat_timeout_t timeout);

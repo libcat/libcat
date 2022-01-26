@@ -114,8 +114,11 @@ static void echo_server_run()
     }
     fprintf(stdout, "Server is running on 0.0.0.0:%d\n", CAT_MAGIC_PORT);
     while (1) {
-        cat_socket_t *connection = cat_socket_accept(&server, NULL);
+        cat_socket_t *connection = cat_socket_create(NULL, cat_socket_get_simple_type(&server));
         if (connection == NULL) {
+            exit(1);
+        }
+        if (!cat_socket_accept(&server, connection)) {
             exit(1);
         }
         cat_coroutine_run(NULL, echo_server_handle_connection, connection);

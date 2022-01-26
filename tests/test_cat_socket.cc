@@ -36,7 +36,7 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
     wait_group wg;
     while (true) {
         cat_socket_t *connection = cat_socket_create(nullptr, cat_socket_get_simple_type(server));
-        if (cat_socket_accept(server, connection) == nullptr) {
+        if (!cat_socket_accept(server, connection)) {
             cat_socket_close(connection);
             ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
             break;
@@ -2095,7 +2095,7 @@ TEST(cat_socket, send_handle)
     });
     ASSERT_EQ(cat_socket_create(&worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
     DEFER(cat_socket_close(&worker_channel));
-    ASSERT_EQ(cat_socket_accept(&worker_socket, &worker_channel), &worker_channel);
+    ASSERT_TRUE(cat_socket_accept(&worker_socket, &worker_channel));
     wg();
 
     for (int round = 0; round < TEST_SEND_HANDLE_ROUND; round++) {
@@ -2132,14 +2132,14 @@ TEST(cat_socket, send_handle)
                 }
                 ASSERT_EQ(cat_socket_create(&worker_client, bad_type), &worker_client);
                 DEFER(cat_socket_close(&worker_client));
-                ASSERT_EQ(cat_socket_accept(&worker_channel, &worker_client), nullptr);
+                ASSERT_FALSE(cat_socket_accept(&worker_channel, &worker_client));
                 /* IPV* will lead to EMISUSE error because sys socket would be bound to sys socket early,
                  * and wrong type just lead to EINVAL */
                 ASSERT_EQ(cat_get_last_error_code(), cat_socket_is_open(&worker_client) ? CAT_EMISUSE : CAT_EINVAL);
             }
         }
         ASSERT_EQ(cat_socket_create(&worker_client, cat_socket_type_simplify(type)), &worker_client);
-        ASSERT_EQ(cat_socket_accept(&worker_channel, &worker_client), &worker_client);
+        ASSERT_TRUE(cat_socket_accept(&worker_channel, &worker_client));
         DEFER(cat_socket_close(&worker_client));
         ASSERT_EQ((cat_socket_get_type(&worker_client) & type), type);
 
