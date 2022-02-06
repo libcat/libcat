@@ -3652,6 +3652,9 @@ static void cat_socket_close_callback(uv_handle_t *handle)
     if (isocket->cache.write_request != NULL) {
         cat_free(isocket->cache.write_request);
     }
+    if (isocket->cache.ipcc_handle_info != NULL) {
+        cat_free(isocket->cache.ipcc_handle_info);
+    }
     if (isocket->cache.sockname != NULL) {
         cat_free(isocket->cache.sockname);
     }
