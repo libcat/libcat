@@ -1471,6 +1471,10 @@ CAT_API cat_bool_t cat_socket_accept(cat_socket_t *server, cat_socket_t *connect
 CAT_API cat_bool_t cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *connection, cat_timeout_t timeout)
 {
     CAT_SOCKET_INTERNAL_GETTER_WITH_IO(server, iserver, CAT_SOCKET_IO_FLAG_ACCEPT, return cat_false);
+    if (!(iserver->type & CAT_SOCKET_TYPE_FLAG_IPC)) {
+        CAT_SOCKET_INTERNAL_SERVER_ONLY(iserver, return cat_false);
+    }
+
     CAT_SOCKET_INTERNAL_GETTER_SILENT(connection, iconnection, {
         cat_update_last_error(CAT_EINVAL, "Socket accept can not act on an unavailable socket");
         return cat_false;
@@ -1479,8 +1483,8 @@ CAT_API cat_bool_t cat_socket_accept_ex(cat_socket_t *server, cat_socket_t *conn
         cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
         return cat_false;
     }
+
     if (!(iserver->type & CAT_SOCKET_TYPE_FLAG_IPC)) {
-        CAT_SOCKET_INTERNAL_SERVER_ONLY(iserver, return cat_false);
         return cat_socket_internal_accept(iserver, iconnection, NULL, timeout);
     } else {
         return cat_socket_internal_recv_handle(iserver, iconnection, timeout);
