@@ -353,6 +353,11 @@ CAT_API uint64_t cat_http_parser_get_content_length(const cat_http_parser_t *par
 * tell if needs protocol upgrade
 */
 CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser);
+/*
+* tell if its' content-type is multipart form data
+* Notice: it should be called after headers complete event triggered
+*/
+CAT_API cat_bool_t cat_http_parser_is_multipart(const cat_http_parser_t *parser);
 
 #ifdef __cplusplus
 }

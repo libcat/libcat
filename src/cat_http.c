@@ -933,3 +933,8 @@ CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser)
 {
     return !!parser->llhttp.upgrade;
 }
+
+CAT_API cat_bool_t cat_http_parser_is_multipart(const cat_http_parser_t *parser)
+{
+    return parser->multipart_state >= CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK;
+}
