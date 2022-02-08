@@ -764,7 +764,7 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition"); \
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"description\""); \
     ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE); \
-    ASSERT_DATA(MULTIPART_DATA, "some text"); \
+    ASSERT_DATA(MULTIPART_BODY, "some text"); \
     ASSERT_EVENT(MULTIPART_DATA_END); \
     ASSERT_EVENT(MULTIPART_DATA_BEGIN); \
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition"); \
@@ -772,7 +772,7 @@ static const cat_const_string_t multipart_req_body = cat_const_string(
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type"); \
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "text/plain"); \
     ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE); \
-    ASSERT_DATA(MULTIPART_DATA, "content of the uploaded file foo.txt"); \
+    ASSERT_DATA(MULTIPART_BODY, "content of the uploaded file foo.txt"); \
     ASSERT_EVENT(MULTIPART_DATA_END); \
     ASSERT_COMPLETE(); \
 } while(0)
@@ -896,7 +896,7 @@ TEST(cat_http_parser, multipart_only_data_cb)
     cat_http_parser_t parser;
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
     cat_http_parser_set_events(&parser,
-        CAT_HTTP_PARSER_EVENT_MULTIPART_DATA |
+        CAT_HTTP_PARSER_EVENT_MULTIPART_BODY |
         CAT_HTTP_PARSER_EVENT_MULTIPART_HEADER_FIELD |
         CAT_HTTP_PARSER_EVENT_MULTIPART_HEADER_VALUE
     );
@@ -917,12 +917,12 @@ TEST(cat_http_parser, multipart_only_data_cb)
     ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"description\"");
-    ASSERT_DATA(MULTIPART_DATA, "some text");
+    ASSERT_DATA(MULTIPART_BODY, "some text");
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"myFile\"; filename=\"foo.txt\"");
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "text/plain");
-    ASSERT_DATA(MULTIPART_DATA, "content of the uploaded file foo.txt");
+    ASSERT_DATA(MULTIPART_BODY, "content of the uploaded file foo.txt");
     ASSERT_COMPLETE();
 
 }
@@ -981,7 +981,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
     ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
-    ASSERT_DATA(MULTIPART_DATA, "foo bar");
+    ASSERT_DATA(MULTIPART_BODY, "foo bar");
     ASSERT_EVENT(MULTIPART_DATA_END);
     ASSERT_EVENT(MULTIPART_DATA_BEGIN);
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
@@ -989,7 +989,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
     ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
-    ASSERT_DATA(MULTIPART_DATA, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3");
+    ASSERT_DATA(MULTIPART_BODY, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3");
     ASSERT_EVENT(MULTIPART_DATA_END);
     ASSERT_EVENT(MULTIPART_DATA_BEGIN);
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
@@ -997,7 +997,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Type");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream");
     ASSERT_EVENT(MULTIPART_HEADERS_COMPLETE);
-    ASSERT_DATA(MULTIPART_DATA, "");
+    ASSERT_DATA(MULTIPART_BODY, "");
     ASSERT_EVENT(MULTIPART_DATA_END);
     ASSERT_COMPLETE();
     return;
@@ -1027,7 +1027,7 @@ const struct {
     ITEM_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition")
     ITEM_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"")
     ITEM_EVENT(MULTIPART_HEADERS_COMPLETE)
-    ITEM_DATA(MULTIPART_DATA, "foo bar")
+    ITEM_DATA(MULTIPART_BODY, "foo bar")
     ITEM_EVENT(MULTIPART_DATA_END)
     ITEM_EVENT(MULTIPART_DATA_BEGIN)
     ITEM_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition")
@@ -1035,7 +1035,7 @@ const struct {
     ITEM_DATA(MULTIPART_HEADER_FIELD, "Content-Type")
     ITEM_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream")
     ITEM_EVENT(MULTIPART_HEADERS_COMPLETE)
-    ITEM_DATA(MULTIPART_DATA, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3")
+    ITEM_DATA(MULTIPART_BODY, "cesh\ni2\r\n" "ceshi\r1\r\n" "ces\r\n--hi3")
     ITEM_EVENT(MULTIPART_DATA_END)
     ITEM_EVENT(MULTIPART_DATA_BEGIN)
     ITEM_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition")
@@ -1043,7 +1043,7 @@ const struct {
     ITEM_DATA(MULTIPART_HEADER_FIELD, "Content-Type")
     ITEM_DATA(MULTIPART_HEADER_VALUE, "application/octet-stream")
     ITEM_EVENT(MULTIPART_HEADERS_COMPLETE)
-    ITEM_DATA(MULTIPART_DATA, "")
+    ITEM_DATA(MULTIPART_BODY, "")
     ITEM_EVENT(MULTIPART_DATA_END)
     ITEM_EVENT(MESSAGE_COMPLETE)
 };
