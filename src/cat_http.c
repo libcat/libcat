@@ -498,44 +498,48 @@ CAT_HTTP_PARSER_ON_DATA (url,           URL          )
 CAT_HTTP_PARSER_ON_DATA (status,        STATUS       )
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_field, HEADER_FIELD) {
-    if (!cat_http_parser_on_header_value_complete(llhttp)) {
-        return -1;
-    }
-    // copy header into buffer
-    if (length != 0) {
-        size_t index_new = (size_t) parser->multipart_header_index + length;
-        if (index_new < 13) {
-            memcpy(parser->multipart_header + parser->multipart_header_index, at, length);
-            parser->multipart_header_index = (uint8_t) index_new;
-        } else {
-            parser->multipart_header_index = UINT8_MAX;
+    if (parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+        if (!cat_http_parser_on_header_value_complete(llhttp)) {
+            return -1;
+        }
+        // copy header into buffer
+        if (length != 0) {
+            size_t index_new = (size_t) parser->multipart_header_index + length;
+            if (index_new < 13) {
+                memcpy(parser->multipart_header + parser->multipart_header_index, at, length);
+                parser->multipart_header_index = (uint8_t) index_new;
+            } else {
+                parser->multipart_header_index = UINT8_MAX;
+            }
         }
     }
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value, HEADER_VALUE) {
-    int error;
-    if (parser->complete_state == CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE) {
-        // first called
-        parser->complete_state = CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_FIELD_COMPLETE;
-        if (parser->multipart_header_index == 12 && cat_strcasecmp_fast_content_type(parser->multipart_header)) {
-            if (parser->multipart_state != CAT_HTTP_MULTIPART_STATE_UNINIT) {
-                cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE, "Duplicate Content-Type header");
+    if (parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+        int error;
+        if (parser->complete_state == CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_VALUE_COMPLETE) {
+            // first called
+            parser->complete_state = CAT_HTTP_PARSER_COMPLETE_STATE_HEADER_FIELD_COMPLETE;
+            if (parser->multipart_header_index == 12 && cat_strcasecmp_fast_content_type(parser->multipart_header)) {
+                if (parser->multipart_state != CAT_HTTP_MULTIPART_STATE_UNINIT) {
+                    cat_http_parser_throw_error(return -1, CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE, "Duplicate Content-Type header");
+                }
+                CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser on_header_field_complete found Content-Type");
+                parser->multipart_state = CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE;
             }
-            CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser on_header_field_complete found Content-Type");
-            parser->multipart_state = CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE;
+            parser->multipart_header_index = 0;
         }
-        parser->multipart_header_index = 0;
-    }
-    if (
-        length > 0 &&
-        parser->multipart_state >= CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE &&
-        parser->multipart_state < CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE
-    ) {
-        CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser Content-Type state %d", parser->multipart_state);
-        error = cat_http_parser_multipart_parse_content_type(parser, at, length);
-        if (CAT_HTTP_PARSER_E_OK != error) {
-            return -1;
+        if (
+            length > 0 &&
+            parser->multipart_state >= CAT_HTTP_MULTIPART_STATE_IN_CONTENT_TYPE &&
+            parser->multipart_state < CAT_HTTP_MULTIPART_STATE_OUT_CONTENT_TYPE
+        ) {
+            CAT_LOG_DEBUG_V3(PROTOCOL, "multipart_parser Content-Type state %d", parser->multipart_state);
+            error = cat_http_parser_multipart_parse_content_type(parser, at, length);
+            if (CAT_HTTP_PARSER_E_OK != error) {
+                return -1;
+            }
         }
     }
 } CAT_HTTP_PARSER_ON_DATA_END()
@@ -543,21 +547,24 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value, HEADER_VALUE) {
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
     parser->keep_alive = !!llhttp_should_keep_alive(&parser->llhttp);
     parser->content_length = parser->llhttp.content_length;
-    if (!cat_http_parser_on_header_value_complete(llhttp)) {
-        return -1;
+    if (parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+        if (!cat_http_parser_on_header_value_complete(llhttp)) {
+            return -1;
+        }
     }
     parser->complete_state = 0;
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY) {
-    CAT_ASSERT(
-        parser->multipart_state == CAT_HTTP_MULTIPART_STATE_UNINIT ||
-        parser->multipart_state == CAT_HTTP_MULTIPART_STATE_NOT_MULTIPART ||
-        parser->multipart_state == CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK
-    );
-    if ((parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) &&
-        parser->multipart_state == CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK) {
-        return CAT_HTTP_PARSER_E_PAUSED;
+    if (parser->events & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART) {
+        CAT_ASSERT(
+            parser->multipart_state == CAT_HTTP_MULTIPART_STATE_UNINIT ||
+            parser->multipart_state == CAT_HTTP_MULTIPART_STATE_NOT_MULTIPART ||
+            parser->multipart_state == CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK
+        );
+        if (parser->multipart_state == CAT_HTTP_MULTIPART_STATE_BOUNDARY_OK) {
+            return CAT_HTTP_PARSER_E_PAUSED;
+        }
     }
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
