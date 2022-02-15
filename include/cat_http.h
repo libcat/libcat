@@ -212,6 +212,8 @@ typedef struct cat_http_parser_s {
      * so we store it ourselves to ensure it is always available.
      * public readonly: it is not always reliable (consider chunk case) */
     uint64_t content_length;
+    /* public readonly: to distinguish it from content-length */
+    uint64_t current_chunk_length;
     /* public readonly: keep alive (update on headers complete) */
     cat_bool_t keep_alive;
     /* private: internal flags */
@@ -350,6 +352,10 @@ CAT_API const char *cat_http_parser_get_reason_phrase(const cat_http_parser_t *p
 * get http content-length header value
 */
 CAT_API uint64_t cat_http_parser_get_content_length(const cat_http_parser_t *parser);
+/*
+* get current http chunk length
+*/
+CAT_API uint64_t cat_http_parser_get_current_chunk_length(const cat_http_parser_t *parser);
 /*
 * tell if needs protocol upgrade
 */
