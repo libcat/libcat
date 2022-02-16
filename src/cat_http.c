@@ -945,6 +945,11 @@ CAT_API uint64_t cat_http_parser_get_current_chunk_length(const cat_http_parser_
     return parser->current_chunk_length;
 }
 
+CAT_API cat_bool_t cat_http_parser_is_chunked(const cat_http_parser_t *parser)
+{
+    return parser->llhttp.flags & F_CHUNKED;
+}
+
 CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser)
 {
     return !!parser->llhttp.upgrade;

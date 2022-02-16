@@ -357,6 +357,10 @@ CAT_API uint64_t cat_http_parser_get_content_length(const cat_http_parser_t *par
 */
 CAT_API uint64_t cat_http_parser_get_current_chunk_length(const cat_http_parser_t *parser);
 /*
+* tell if its' transfer-encoding is chunked
+*/
+CAT_API cat_bool_t cat_http_parser_is_chunked(const cat_http_parser_t *parser);
+/*
 * tell if needs protocol upgrade
 */
 CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser);
