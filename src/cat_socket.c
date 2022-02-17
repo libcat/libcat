@@ -463,6 +463,7 @@ CAT_API cat_bool_t cat_socket_module_init(void)
 
 CAT_API cat_bool_t cat_socket_runtime_init(void)
 {
+    CAT_SOCKET_G(last_id) = 0;
     CAT_SOCKET_G(options.timeout) = cat_socket_default_global_timeout_options;
     CAT_SOCKET_G(options.tcp_keepalive_delay) = 60;
 
@@ -757,6 +758,7 @@ static CAT_COLD void cat_socket_fail_close_callback(uv_handle_t *handle)
 
 CAT_API void cat_socket_init(cat_socket_t *socket)
 {
+    socket->id = 0;
     socket->flags = CAT_SOCKET_FLAG_NONE;
     socket->internal = NULL;
 }
@@ -934,6 +936,7 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
     }
 
     /* init properties of socket */
+    socket->id = ++CAT_SOCKET_G(last_id);
     socket->flags = flags;
     socket->internal = isocket;
 
@@ -1094,6 +1097,11 @@ CAT_API cat_sa_family_t cat_socket_type_to_af(cat_socket_type_t type)
     } else {
         return AF_UNSPEC;
     }
+}
+
+CAT_API cat_socket_id_t cat_socket_get_id(const cat_socket_t *socket)
+{
+    return socket->id;
 }
 
 CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket)

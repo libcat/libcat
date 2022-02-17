@@ -126,6 +126,10 @@ CAT_API int cat_sockaddr_copy(cat_sockaddr_t *to, cat_socklen_t *to_length, cons
 CAT_API cat_errno_t cat_sockaddr_check_silent(const cat_sockaddr_t *address, cat_socklen_t address_length);
 CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen_t address_length);
 
+/* socket id */
+
+typedef uint64_t cat_socket_id_t;
+
 /* socket fd */
 
 typedef cat_os_socket_t cat_socket_fd_t;
@@ -484,6 +488,7 @@ struct cat_socket_internal_s
 
 struct cat_socket_s
 {
+    cat_socket_id_t id;
     cat_socket_flags_t flags;
     cat_socket_internal_t *internal;
 };
@@ -492,6 +497,7 @@ struct cat_socket_s
 
 CAT_GLOBALS_STRUCT_BEGIN(cat_socket)
     /* socket */
+    cat_socket_id_t last_id;
     struct {
         cat_socket_timeout_options_t timeout;
         unsigned int tcp_keepalive_delay;
@@ -523,6 +529,7 @@ CAT_API cat_socket_type_t cat_socket_type_simplify(cat_socket_type_t type);
 CAT_API const char *cat_socket_type_name(cat_socket_type_t type);
 CAT_API cat_sa_family_t cat_socket_type_to_af(cat_socket_type_t type);
 
+CAT_API cat_socket_id_t cat_socket_get_id(const cat_socket_t *socket);
 CAT_API cat_socket_type_t cat_socket_get_type(const cat_socket_t *socket);
 CAT_API cat_socket_type_t cat_socket_get_simple_type(const cat_socket_t *socket);
 CAT_API const char *cat_socket_get_type_name(const cat_socket_t *socket);
