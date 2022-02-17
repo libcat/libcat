@@ -727,6 +727,10 @@ static cat_always_inline cat_bool_t cat_socket_internal_can_be_transfer_by_ipc(c
 
 static cat_always_inline void cat_socket_internal_on_open(cat_socket_internal_t *isocket, cat_sa_family_t af)
 {
+    if (unlikely(isocket->flags & CAT_SOCKET_INTERNAL_FLAG_OPENED)) {
+        return;
+    }
+    isocket->flags |= CAT_SOCKET_INTERNAL_FLAG_OPENED;
     if ((isocket->type & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
         if (!(isocket->option_flags & CAT_SOCKET_OPTION_FLAG_TCP_DELAY)) {
             /* TCP always nodelay by default */
@@ -984,6 +988,8 @@ CAT_API cat_socket_t *cat_socket_create_ex(cat_socket_t *socket, cat_socket_type
             }
         }
         cat_socket_internal_on_open(isocket, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
+    } else if (af != AF_UNSPEC) {
+        cat_socket_internal_on_open(isocket, af);
     }
 
     return socket;

@@ -317,10 +317,11 @@ typedef uint8_t cat_socket_flags_t;
 
 #define CAT_SOCKET_INTERNAL_FLAG_MAP(XX) \
     XX(NONE,                   0) \
-    XX(ESTABLISHED,       1 << 0) \
+    XX(OPENED,            1 << 0) \
+    XX(ESTABLISHED,       1 << 1) \
     /* socket may be a pipe file, which is created by pipe2()
      * and can only work with read()/write() */ \
-    XX(NOT_SOCK,          1 << 1) \
+    XX(NOT_SOCK,          1 << 2) \
     /* 20 ~ 23 (stream (tcp|pipe|tty)) */ \
     XX(SERVER,            1 << 20) \
     XX(SERVER_CONNECTION, 1 << 21) \
