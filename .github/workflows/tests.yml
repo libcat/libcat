@@ -156,7 +156,7 @@ jobs:
             --excluded_line_regex "\s*\{\s*" ^
             --modules build\Debug\cat_tests.exe -- ^
             build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
-          ${{ matrix.build-type == 'Debug' && format('C:\Codecov\codecov -f coverage.xml -t {0}', secrets.CODECOV_TOKEN) || '' }}
+          ${{ matrix.build-type == 'Debug' && C:\Codecov\codecov -f coverage.xml || '' }}
           ECHO ASan log:
           TYPE asan.log* || REM
           ECHO ::endgroup::
@@ -208,7 +208,7 @@ jobs:
           echo "::group::Make cmake cache"
           cmake .. \
             -DASAN=ON \
-            ${{ '' != secrets.CODECOV_TOKEN && '-DCODE_COVERAGE=ON' || '' }} \
+            -DCODE_COVERAGE=ON \
             -DCMAKE_C_FLAGS="-Werror" || exit 1
           echo "::endgroup::"
           echo "::group::Build libcat"
@@ -227,10 +227,6 @@ jobs:
         working-directory: libcat
         shell: bash
         run: |
-          [ x"${{ secrets.CODECOV_TOKEN }}" != x"" ] || {
-            echo "No CODECOV_TOKEN set, skipping coverage tests"
-            exit 0
-          }
           ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }} &&
           lcov \
             --capture \
@@ -244,4 +240,4 @@ jobs:
           lcov --list coverage.info &&
           curl -s https://codecov.io/bash -o codecov.sh &&
           chmod +x codecov.sh &&
-          ./codecov.sh -f coverage.info -t ${{ secrets.CODECOV_TOKEN }}
+          ./codecov.sh -f coverage.info
