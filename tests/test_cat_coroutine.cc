@@ -555,6 +555,20 @@ TEST(cat_coroutine, deadlock)
     ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "Deadlock");
 }
 
+TEST(cat_coroutine, deadlock_callback)
+{
+    cat_log_type_t original_deadlock_log_type = cat_coroutine_get_deadlock_log_type();
+    cat_coroutine_set_deadlock_log_type(CAT_LOG_TYPE_ERROR);
+    DEFER(cat_coroutine_set_deadlock_log_type(original_deadlock_log_type));
+
+    cat_coroutine_set_deadlock_callback([]() {
+        CAT_ERROR(COROUTINE, "User deadlock callback");
+    });
+    DEFER(cat_coroutine_set_deadlock_callback(nullptr));
+
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "User deadlock callback");
+}
+
 TEST(cat_coroutine, get_role_name)
 {
     defer([] {
