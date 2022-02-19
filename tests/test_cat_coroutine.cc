@@ -539,20 +539,20 @@ TEST(cat_coroutine, resume_running)
 
 TEST(cat_coroutine, resume_scheduler)
 {
-    cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();
-    cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_ERROR);
-    DEFER(cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type));
+    cat_log_type_t original_deadlock_log_type = cat_coroutine_get_deadlock_log_type();
+    cat_coroutine_set_deadlock_log_type(CAT_LOG_TYPE_ERROR);
+    DEFER(cat_coroutine_set_deadlock_log_type(original_deadlock_log_type));
 
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr), "Dead lock");
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_resume(cat_coroutine_get_scheduler(), nullptr, nullptr), "Deadlock");
 }
 
-TEST(cat_coroutine, dead_lock)
+TEST(cat_coroutine, deadlock)
 {
-    cat_log_type_t original_dead_lock_log_type = cat_coroutine_get_dead_lock_log_type();
-    cat_coroutine_set_dead_lock_log_type(CAT_LOG_TYPE_ERROR);
-    DEFER(cat_coroutine_set_dead_lock_log_type(original_dead_lock_log_type));
+    cat_log_type_t original_deadlock_log_type = cat_coroutine_get_deadlock_log_type();
+    cat_coroutine_set_deadlock_log_type(CAT_LOG_TYPE_ERROR);
+    DEFER(cat_coroutine_set_deadlock_log_type(original_deadlock_log_type));
 
-    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "Dead lock");
+    ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "Deadlock");
 }
 
 TEST(cat_coroutine, get_role_name)

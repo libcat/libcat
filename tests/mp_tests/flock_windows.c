@@ -227,7 +227,7 @@ int parent(int argc, wchar_t**argvw, HANDLE hIn, HANDLE hOut){
         cat_time_wait(waittime);
     }
     if(!req_done){
-        printf("thread pool full, dead lock occoured, please report a bug\n");
+        printf("thread pool full, deadlock occurred, please report a bug\n");
         abort();
     };
     printf("thread pool still usable\n");

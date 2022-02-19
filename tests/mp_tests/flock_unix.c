@@ -160,7 +160,7 @@ int parent(int rfd, int wfd){
         cat_time_wait(waittime);
     }
     if(!req_done){
-        fprintf(stderr, "thread pool full, dead lock occoured, please report a bug\n");
+        fprintf(stderr, "thread pool full, deadlock occurred, please report a bug\n");
         abort();
     };
     printf("thread pool still usable\n");
