@@ -156,7 +156,7 @@ jobs:
             --excluded_line_regex "\s*\{\s*" ^
             --modules build\Debug\cat_tests.exe -- ^
             build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
-          ${{ matrix.build-type == 'Debug' && C:\Codecov\codecov -f coverage.xml || '' }}
+          ${{ matrix.build-type == 'Debug' && 'C:\Codecov\codecov -f coverage.xml' || '' }}
           ECHO ASan log:
           TYPE asan.log* || REM
           ECHO ::endgroup::
