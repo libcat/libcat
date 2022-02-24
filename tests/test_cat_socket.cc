@@ -1161,11 +1161,12 @@ TEST(cat_socket, set_udp_broadcast)
 #ifdef SO_BROADCAST
 #ifdef CAT_OS_WIN
         BOOL on = (BOOL) 0;
+        char *on_ptr = (char *) &on;
 #else
-        int on = 0;
+        int on = 0, *on_ptr = &on;
 #endif
         cat_socklen_t len = sizeof(on);
-        ASSERT_EQ(getsockopt(cat_socket_get_fd(socket), SOL_SOCKET, SO_BROADCAST, &on, &len), 0);
+        ASSERT_EQ(getsockopt(cat_socket_get_fd(socket), SOL_SOCKET, SO_BROADCAST, on_ptr, &len), 0);
         ASSERT_EQ(!!on, !!val);
 #endif
     };
