@@ -51,7 +51,7 @@ ASM_OBJS_BUILD = $(patsubst %,$(BUILD_DIR)/$(ASM_SRCDIR)/%,$(ASM_OBJS))
 $(ASM_OBJS_BUILD): $(BUILD_DIR)/$(ASM_SRCDIR)/%.o: $(CAT_ROOT)/$(ASM_SRCDIR)/%.S $(BUILD_DIR)/$(ASM_SRCDIR)
 	$(CC) $(CFLAGS_OBJ) $(ASM_CFLAGS) -c $< -o $@
 
-LIBCAT_OBJS = cat_api.o cat_async.o cat_buffer.o cat.o cat_channel.o cat_coroutine.o cat_cp.o cat_dns.o cat_env.o cat_error.o cat_event.o cat_fs.o cat_http.o cat_log.o cat_memory.o cat_module.o cat_poll.o cat_process.o cat_signal.o cat_socket.o cat_string.o cat_sync.o cat_time.o cat_watch_dog.o cat_websocket.o cat_work.o
+LIBCAT_OBJS = cat_api.o cat_async.o cat_buffer.o cat.o cat_channel.o cat_coroutine.o cat_cp.o cat_dns.o cat_env.o cat_error.o cat_event.o cat_fs.o cat_http.o cat_log.o cat_memory.o cat_module.o cat_poll.o cat_process.o cat_signal.o cat_socket.o cat_string.o cat_sync.o cat_time.o cat_watchdog.o cat_websocket.o cat_work.o
 LIBCAT_SRCDIR = src
 LIBCAT_CFLAGS = -I$(CAT_ROOT)/include $(UV_CFLAGS) $(LLHTTP_CFLAGS) $(MPP_CFLAGS)
 $(BUILD_DIR)/$(LIBCAT_SRCDIR):
@@ -71,5 +71,3 @@ $(MAIN_OBJS_BUILD): $(MAIN_SRC_BUILD)
 
 http_parser: $(MPP_OBJS_BUILD) $(LLHTTP_OBJS_BUILD) $(LIBCAT_OBJS_BUILD) $(UV_OBJS_BUILD) $(ASM_OBJS_BUILD) $(MAIN_OBJS_BUILD)
 	$(CC) $(LDFLAGS_OBJ) $(MPP_OBJS_BUILD) $(LLHTTP_OBJS_BUILD) $(LIBCAT_OBJS_BUILD) $(UV_OBJS_BUILD) $(ASM_OBJS_BUILD) $(MAIN_OBJS_BUILD) $(LIBS) -o $@
-
-

@@ -16,13 +16,13 @@
   +--------------------------------------------------------------------------+
  */
 
-#include "cat_watch_dog.h"
+#include "cat_watchdog.h"
 
-CAT_API CAT_GLOBALS_DECLARE(cat_watch_dog)
+CAT_API CAT_GLOBALS_DECLARE(cat_watchdog)
 
-CAT_GLOBALS_CTOR_DECLARE_SZ(cat_watch_dog)
+CAT_GLOBALS_CTOR_DECLARE_SZ(cat_watchdog)
 
-static cat_timeout_t cat_watch_dog_align_quantum(cat_timeout_t quantum)
+static cat_timeout_t cat_watchdog_align_quantum(cat_timeout_t quantum)
 {
     if (quantum <= 0) {
         quantum = CAT_WATCH_DOG_DEFAULT_QUANTUM;
@@ -31,7 +31,7 @@ static cat_timeout_t cat_watch_dog_align_quantum(cat_timeout_t quantum)
     return quantum;
 }
 
-static cat_timeout_t cat_watch_dog_align_threshold(cat_timeout_t threshold)
+static cat_timeout_t cat_watchdog_align_threshold(cat_timeout_t threshold)
 {
     if (threshold == 0) {
         threshold = CAT_WATCH_DOG_DEFAULT_THRESHOLD;
@@ -66,203 +66,203 @@ static void cat_improve_timer_resolution(void)
 }
 #endif
 
-static void cat_watch_dog_loop(void* arg)
+static void cat_watchdog_loop(void* arg)
 {
-    cat_watch_dog_t *watch_dog = (cat_watch_dog_t *) arg;
+    cat_watchdog_t *watchdog = (cat_watchdog_t *) arg;
 
 #ifdef CAT_OS_WIN
     cat_improve_timer_resolution();
 #endif
 
-    uv_sem_post(watch_dog->sem);
+    uv_sem_post(watchdog->sem);
 
     while (1) {
-        watch_dog->last_round = watch_dog->globals->round;
-        uv_mutex_lock(&watch_dog->mutex);
-        uv_cond_timedwait(&watch_dog->cond, &watch_dog->mutex, watch_dog->quantum);
-        uv_mutex_unlock(&watch_dog->mutex);
-        if (watch_dog->stop) {
+        watchdog->last_round = watchdog->globals->round;
+        uv_mutex_lock(&watchdog->mutex);
+        uv_cond_timedwait(&watchdog->cond, &watchdog->mutex, watchdog->quantum);
+        uv_mutex_unlock(&watchdog->mutex);
+        if (watchdog->stop) {
             return;
         }
         /* Notice: globals info maybe changed during check,
          * but it is usually acceptable to us.
          * In other words, there is a certain probability of false alert. */
-        if (watch_dog->globals->round == watch_dog->last_round &&
-            watch_dog->globals->current != watch_dog->globals->scheduler &&
-            watch_dog->globals->count > 1
+        if (watchdog->globals->round == watchdog->last_round &&
+            watchdog->globals->current != watchdog->globals->scheduler &&
+            watchdog->globals->count > 1
         ) {
-            watch_dog->alert_count++;
-            watch_dog->alerter(watch_dog);
+            watchdog->alert_count++;
+            watchdog->alerter(watchdog);
         } else {
-            watch_dog->alert_count = 0;
+            watchdog->alert_count = 0;
         }
     }
 }
 
-CAT_API cat_bool_t cat_watch_dog_module_init(void)
+CAT_API cat_bool_t cat_watchdog_module_init(void)
 {
-    CAT_GLOBALS_REGISTER(cat_watch_dog, CAT_GLOBALS_CTOR(cat_watch_dog), NULL);
+    CAT_GLOBALS_REGISTER(cat_watchdog, CAT_GLOBALS_CTOR(cat_watchdog), NULL);
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_watch_dog_runtime_init(void)
+CAT_API cat_bool_t cat_watchdog_runtime_init(void)
 {
-    CAT_WATCH_DOG_G(watch_dog) = NULL;
+    CAT_WATCH_DOG_G(watchdog) = NULL;
 
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_watch_dog_runtime_shutdown(void)
+CAT_API cat_bool_t cat_watchdog_runtime_shutdown(void)
 {
-    if (cat_watch_dog_is_running() && !cat_watch_dog_stop()) {
-        CAT_CORE_ERROR(WATCH_DOG, "Watch-Dog close failed during rshutdown");
+    if (cat_watchdog_is_running() && !cat_watchdog_stop()) {
+        CAT_CORE_ERROR(WATCH_DOG, "WatchDog close failed during rshutdown");
     }
 
     return cat_true;
 }
 
-CAT_API void cat_watch_dog_alert_standard(cat_watch_dog_t *watch_dog)
+CAT_API void cat_watchdog_alert_standard(cat_watchdog_t *watchdog)
 {
-    fprintf(stderr, "Warning: <Watch-Dog> Syscall blocking or CPU starvation may occur in " CAT_WATCH_DOG_ROLE_NAME " %d, "
+    fprintf(stderr, "Warning: <WatchDog> Syscall blocking or CPU starvation may occur in " CAT_WATCH_DOG_ROLE_NAME " %d, "
                     "it has been blocked for more than " CAT_TIMEOUT_FMT  " ns" CAT_EOL,
-                    watch_dog->pid, watch_dog->quantum * watch_dog->alert_count);
+                    watchdog->pid, watchdog->quantum * watchdog->alert_count);
 }
 
-CAT_API cat_bool_t cat_watch_dog_run(cat_watch_dog_t *watch_dog, cat_timeout_t quantum, cat_timeout_t threshold, cat_watch_dog_alerter_t alerter)
+CAT_API cat_bool_t cat_watchdog_run(cat_watchdog_t *watchdog, cat_timeout_t quantum, cat_timeout_t threshold, cat_watchdog_alerter_t alerter)
 {
     uv_thread_options_t options;
     uv_sem_t sem;
     int error;
 
-    if (CAT_WATCH_DOG_G(watch_dog) != NULL) {
-        cat_update_last_error(CAT_EMISUSE, "Only one watch-dog is allowed to run per " CAT_WATCH_DOG_ROLE_NAME);
+    if (CAT_WATCH_DOG_G(watchdog) != NULL) {
+        cat_update_last_error(CAT_EMISUSE, "Only one watchdog is allowed to run per " CAT_WATCH_DOG_ROLE_NAME);
         return cat_false;
     }
 
-    if (watch_dog == NULL) {
-        watch_dog = (cat_watch_dog_t *) cat_malloc(sizeof(*watch_dog));
+    if (watchdog == NULL) {
+        watchdog = (cat_watchdog_t *) cat_malloc(sizeof(*watchdog));
 #if CAT_ALLOC_HANDLE_ERRORS
-        if (watch_dog == NULL) {
-            cat_update_last_error_of_syscall("Malloc for watch-dog failed");
+        if (watchdog == NULL) {
+            cat_update_last_error_of_syscall("Malloc for watchdog failed");
             return cat_false;
         }
 #endif
-        watch_dog->allocated = cat_true;
+        watchdog->allocated = cat_true;
     } else {
-        watch_dog->allocated = cat_false;
+        watchdog->allocated = cat_false;
     }
 
-    watch_dog->quantum = cat_watch_dog_align_quantum(quantum);
-    watch_dog->threshold = cat_watch_dog_align_threshold(threshold);
-    watch_dog->alerter = alerter != NULL ? alerter : cat_watch_dog_alert_standard;
-    watch_dog->alert_count = 0;
-    watch_dog->stop = cat_false;
-    watch_dog->pid = uv_os_getpid();
-    watch_dog->globals = CAT_GLOBALS_BULK(cat_coroutine);
-    watch_dog->last_round = 0;
+    watchdog->quantum = cat_watchdog_align_quantum(quantum);
+    watchdog->threshold = cat_watchdog_align_threshold(threshold);
+    watchdog->alerter = alerter != NULL ? alerter : cat_watchdog_alert_standard;
+    watchdog->alert_count = 0;
+    watchdog->stop = cat_false;
+    watchdog->pid = uv_os_getpid();
+    watchdog->globals = CAT_GLOBALS_BULK(cat_coroutine);
+    watchdog->last_round = 0;
 
     error = uv_sem_init(&sem, 0);
     if (error != 0) {
-        cat_update_last_error_with_reason(error, "Watch-Dog init sem failed");
+        cat_update_last_error_with_reason(error, "WatchDog init sem failed");
         goto _sem_init_failed;
     }
-    error = uv_cond_init(&watch_dog->cond);
+    error = uv_cond_init(&watchdog->cond);
     if (error != 0) {
-        cat_update_last_error_with_reason(error, "Watch-Dog init cond failed");
+        cat_update_last_error_with_reason(error, "WatchDog init cond failed");
         goto _cond_init_failed;
     }
-    error = uv_mutex_init(&watch_dog->mutex);
+    error = uv_mutex_init(&watchdog->mutex);
     if (error != 0) {
-        cat_update_last_error_with_reason(error, "Watch-Dog init mutex failed");
+        cat_update_last_error_with_reason(error, "WatchDog init mutex failed");
         goto _mutex_init_failed;
     }
 
-    watch_dog->sem = &sem;
+    watchdog->sem = &sem;
     options.flags = UV_THREAD_HAS_STACK_SIZE;
     options.stack_size = CAT_COROUTINE_RECOMMENDED_STACK_SIZE;
 
-    error = uv_thread_create_ex(&watch_dog->thread, &options, cat_watch_dog_loop, watch_dog);
+    error = uv_thread_create_ex(&watchdog->thread, &options, cat_watchdog_loop, watchdog);
 
     if (error != 0) {
-        cat_update_last_error_with_reason(error, "Watch-Dog create thread failed");
+        cat_update_last_error_with_reason(error, "WatchDog create thread failed");
         goto _thread_create_failed;
     }
 
-    CAT_WATCH_DOG_G(watch_dog) = watch_dog;
+    CAT_WATCH_DOG_G(watchdog) = watchdog;
 
     uv_sem_wait(&sem);
     uv_sem_destroy(&sem);
-    watch_dog->sem = NULL;
+    watchdog->sem = NULL;
 
     return cat_true;
 
     _thread_create_failed:
-    uv_mutex_destroy(&watch_dog->mutex);
+    uv_mutex_destroy(&watchdog->mutex);
     _mutex_init_failed:
-    uv_cond_destroy(&watch_dog->cond);
+    uv_cond_destroy(&watchdog->cond);
     _cond_init_failed:
     uv_sem_destroy(&sem);
     _sem_init_failed:
-    if (watch_dog->allocated) {
-        cat_free(watch_dog);
+    if (watchdog->allocated) {
+        cat_free(watchdog);
     }
     return cat_false;
 }
 
-CAT_API cat_bool_t cat_watch_dog_stop(void)
+CAT_API cat_bool_t cat_watchdog_stop(void)
 {
-    cat_watch_dog_t *watch_dog = CAT_WATCH_DOG_G(watch_dog);
+    cat_watchdog_t *watchdog = CAT_WATCH_DOG_G(watchdog);
     int error;
 
-    if (watch_dog == NULL) {
-        cat_update_last_error(CAT_EMISUSE, "Watch-Dog is not running");
+    if (watchdog == NULL) {
+        cat_update_last_error(CAT_EMISUSE, "WatchDog is not running");
         return cat_false;
     }
 
-    watch_dog->stop = cat_true;
-    uv_mutex_lock(&watch_dog->mutex);
-    uv_cond_signal(&watch_dog->cond);
-    uv_mutex_unlock(&watch_dog->mutex);
+    watchdog->stop = cat_true;
+    uv_mutex_lock(&watchdog->mutex);
+    uv_cond_signal(&watchdog->cond);
+    uv_mutex_unlock(&watchdog->mutex);
 
-    error = uv_thread_join(&watch_dog->thread);
+    error = uv_thread_join(&watchdog->thread);
 
     if (error != 0) {
-        cat_update_last_error_with_reason(error, "Watch-Dog close thread failed");
+        cat_update_last_error_with_reason(error, "WatchDog close thread failed");
         return cat_false;
     }
 
-    uv_mutex_destroy(&watch_dog->mutex);
-    uv_cond_destroy(&watch_dog->cond);
-    CAT_ASSERT(watch_dog->sem == NULL);
+    uv_mutex_destroy(&watchdog->mutex);
+    uv_cond_destroy(&watchdog->cond);
+    CAT_ASSERT(watchdog->sem == NULL);
 
-    if (watch_dog->allocated) {
-        cat_free(watch_dog);
+    if (watchdog->allocated) {
+        cat_free(watchdog);
     }
 
-    CAT_WATCH_DOG_G(watch_dog) = NULL;
+    CAT_WATCH_DOG_G(watchdog) = NULL;
 
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_watch_dog_is_running(void)
+CAT_API cat_bool_t cat_watchdog_is_running(void)
 {
-    return CAT_WATCH_DOG_G(watch_dog) != NULL;
+    return CAT_WATCH_DOG_G(watchdog) != NULL;
 }
 
-CAT_API cat_timeout_t cat_watch_dog_get_quantum(void)
+CAT_API cat_timeout_t cat_watchdog_get_quantum(void)
 {
-    cat_watch_dog_t *watch_dog = CAT_WATCH_DOG_G(watch_dog);
+    cat_watchdog_t *watchdog = CAT_WATCH_DOG_G(watchdog);
 
-    return watch_dog != NULL ?
-            watch_dog->quantum :
+    return watchdog != NULL ?
+            watchdog->quantum :
             -1;
 }
 
-CAT_API cat_timeout_t cat_watch_dog_get_threshold(void)
+CAT_API cat_timeout_t cat_watchdog_get_threshold(void)
 {
-    cat_watch_dog_t *watch_dog = CAT_WATCH_DOG_G(watch_dog);
+    cat_watchdog_t *watchdog = CAT_WATCH_DOG_G(watchdog);
 
-    return watch_dog != NULL ?
-            watch_dog->threshold :
+    return watchdog != NULL ?
+            watchdog->threshold :
             -1;
 }

@@ -18,7 +18,7 @@
 
 #include "test.h"
 
-const std::string keyword = "Watch-Dog";
+const std::string keyword = "WatchDog";
 
 static void test_sys_nanosleep_nocancel(cat_nsec_t ns_total)
 {
@@ -28,22 +28,22 @@ static void test_sys_nanosleep_nocancel(cat_nsec_t ns_total)
     while (cat_sys_nanosleep(&ts, &ts) != 0);
 }
 
-TEST(cat_watch_dog, base)
+TEST(cat_watchdog, base)
 {
     testing::internal::CaptureStderr();
 
-    ASSERT_LT(cat_watch_dog_get_threshold(), 0);
+    ASSERT_LT(cat_watchdog_get_threshold(), 0);
 
-    ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watch_dog_stop());
+    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+    DEFER(cat_watchdog_stop());
 
-    ASSERT_GT(cat_watch_dog_get_threshold(), 0);
+    ASSERT_GT(cat_watchdog_get_threshold(), 0);
 
     co([=] {
-        test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 100);
+        test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 100);
     });
 
-    cat_watch_dog_stop(); // make sure not output error anymore
+    cat_watchdog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
@@ -56,19 +56,19 @@ TEST(cat_watch_dog, base)
     ASSERT_GT(count, 0);
 }
 
-TEST(cat_watch_dog, single)
+TEST(cat_watchdog, single)
 {
     // recycle possible residual coroutines
     ASSERT_TRUE(cat_coroutine_wait_all());
 
     testing::internal::CaptureStderr();
 
-    ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watch_dog_stop());
+    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+    DEFER(cat_watchdog_stop());
 
-    test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 3);
+    test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
 
-    cat_watch_dog_stop(); // make sure not output error anymore
+    cat_watchdog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
@@ -76,31 +76,31 @@ TEST(cat_watch_dog, single)
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
 }
 
-TEST(cat_watch_dog, scheduler_blocking)
+TEST(cat_watchdog, scheduler_blocking)
 {
     testing::internal::CaptureStderr();
 
-    ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watch_dog_stop());
+    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+    DEFER(cat_watchdog_stop());
 
-    test_sys_nanosleep_nocancel(cat_watch_dog_get_quantum() * 3);
+    test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
 
-    cat_watch_dog_stop(); // make sure not output error anymore
+    cat_watchdog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
 }
 
-TEST(cat_watch_dog, nothing)
+TEST(cat_watchdog, nothing)
 {
     testing::internal::CaptureStderr();
 
-    ASSERT_TRUE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watch_dog_stop());
+    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+    DEFER(cat_watchdog_stop());
 
     auto sleeper = [=] {
-        cat_timeout_t usec = ((cat_watch_dog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
+        cat_timeout_t usec = ((cat_watchdog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
         size_t n = TEST_MAX_REQUESTS;
         while (n--) {
             cat_time_usleep(usec);
@@ -112,29 +112,29 @@ TEST(cat_watch_dog, nothing)
     }
     sleeper();
 
-    cat_watch_dog_stop(); // make sure not output error anymore
+    cat_watchdog_stop(); // make sure not output error anymore
     fflush(stderr); // flush stderr to prevent from affecting the next test
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
 }
 
-TEST(cat_watch_dog, duplicated)
+TEST(cat_watchdog, duplicated)
 {
-    ASSERT_TRUE(cat_watch_dog_run(
+    ASSERT_TRUE(cat_watchdog_run(
         nullptr,
         CAT_WATCH_DOG_DEFAULT_QUANTUM + 1 /* code cov */,
         CAT_WATCH_DOG_THRESHOLD_DISABLED, /* code cov */
-        cat_watch_dog_alert_standard
+        cat_watchdog_alert_standard
     ));
-    ASSERT_FALSE(cat_watch_dog_run(nullptr, 0, 0, nullptr));
+    ASSERT_FALSE(cat_watchdog_run(nullptr, 0, 0, nullptr));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
-    ASSERT_TRUE(cat_watch_dog_stop());
-    ASSERT_FALSE(cat_watch_dog_stop());
+    ASSERT_TRUE(cat_watchdog_stop());
+    ASSERT_FALSE(cat_watchdog_stop());
     ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
 }
 
-TEST(cat_watch_dog, not_running)
+TEST(cat_watchdog, not_running)
 {
-    ASSERT_EQ(cat_watch_dog_get_quantum(), -1);
+    ASSERT_EQ(cat_watchdog_get_quantum(), -1);
 }
