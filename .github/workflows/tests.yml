@@ -163,7 +163,7 @@ jobs:
           EXIT /b 0
           REM error condition
           :error
-          ECHO "::error::Test failed"
+          ECHO ::error::Test failed
           EXIT /b %errorlevel%
 
   unix-tests:
