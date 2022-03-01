@@ -13,7 +13,11 @@ jobs:
     timeout-minutes: 60
     strategy:
       matrix:
-        os: [ "windows-latest" ]
+        # FIXME: this is a workaround for error on windows-latest
+        # ERROR: Can't open file: asan.log.0
+        # It seems there is an assertion failure or you call DebugBreak() in your program.
+        # os: [ "windows-latest" ]
+        os: [ "windows-2019" ]
         build-type: [ "Debug", "Release" ]
         # build-type: [ "Debug" ]
       max-parallel: 2
