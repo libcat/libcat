@@ -13,14 +13,10 @@ jobs:
     timeout-minutes: 60
     strategy:
       matrix:
-        # FIXME: this is a workaround for error on windows-latest
-        # ERROR: Can't open file: asan.log.0
-        # It seems there is an assertion failure or you call DebugBreak() in your program.
-        # os: [ "windows-latest" ]
-        os: [ "windows-2019" ]
+        os: [ "windows-latest", "windows-2019" ]
         build-type: [ "Debug", "Release" ]
         # build-type: [ "Debug" ]
-      max-parallel: 2
+      max-parallel: 4
       fail-fast: false
     steps:
       - name: Fetch vcpkg versions from github
@@ -61,7 +57,7 @@ jobs:
             #C:\vcpkg\buildtrees\detect_compiler
             C:\vcpkg\downloads\*
             C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: Windows-vcpkg-${{ hashFiles('.vcpkgvers') }}
+          key: ${{ matrix.os }}-vcpkg-${{ hashFiles('.vcpkgvers') }}
 
       - name: Install vcpkg dependencies
         shell: cmd
