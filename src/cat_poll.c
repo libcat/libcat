@@ -501,7 +501,7 @@ CAT_API int cat_select(int max_fd, fd_set *readfds, fd_set *writefds, fd_set *ex
     SAFE_FD_ZERO(exceptfds);
     for (ifds = 0; ifds < nfds; ifds++) {
         pfd = &pfds[ifds];
-        if (pfd->revents & POLLIN) {
+        if (pfd->revents & (POLLIN | POLLHUP | POLLPRI)) {
             SAFE_FD_SET(pfd->fd, readfds);
         }
         if (pfd->revents & POLLOUT) {
