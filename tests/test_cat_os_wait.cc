@@ -67,6 +67,14 @@ TEST(cat_os_wait, waitpid)
         ASSERT_EQ(WEXITSTATUS(status), exit_status);
         ASSERT_EQ(WTERMSIG(status), 0);
     }
+
+    /* error cases */
+    {
+        int status;
+        pid_t w_pid = cat_os_waitpid(0, &status, 0);
+        ASSERT_EQ(w_pid, -1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
+    }
 }
 
 TEST(cat_os_wait, wait_after_sigchld)
@@ -91,6 +99,25 @@ TEST(cat_os_wait, wait_after_sigchld)
         ASSERT_EQ(WEXITSTATUS(status), 0);
         ASSERT_EQ(WTERMSIG(status), 0);
     }
+}
+
+TEST(cat_os_wait, kill_then_wait)
+{
+    pid_t pid = fork();
+    if (pid == 0) {
+        usleep(1000 * 1000); // 1s
+        _exit(0);
+    } else if (pid < 0) {
+        ASSERT_TRUE(false);
+    }
+    ASSERT_TRUE(cat_kill(pid, CAT_SIGTERM));
+    int status;
+    pid_t w_pid = cat_os_wait(&status);
+    ASSERT_EQ(w_pid, pid);
+    ASSERT_EQ(WIFEXITED(status), 0);
+    ASSERT_EQ(WEXITSTATUS(status), 0);
+    ASSERT_EQ(WIFSIGNALED(status), 1);
+    ASSERT_EQ(WTERMSIG(status), CAT_SIGTERM);
 }
 
 #endif

@@ -185,6 +185,8 @@ static cat_always_inline void cat_os_wait_sigchld_watcher_end(void)
 
 static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_msec_t timeout, const char *type)
 {
+    /* If pid is 0, the call waits for any child process in the process group of the caller.
+     * but we can not recognize which process is in the same group for now. */
     if (unlikely(pid == 0)) {
         cat_update_last_error(CAT_ENOTSUP, "OS waitpid() with zero pid is not supported yet");
         return -1;
