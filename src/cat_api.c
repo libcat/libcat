@@ -79,7 +79,9 @@ CAT_API cat_bool_t cat_runtime_shutdown_all(void)
     cat_bool_t ret = cat_true;
 
     ret = cat_watchdog_runtime_shutdown() && ret;
+#ifdef CAT_OS_WAIT
     ret = cat_os_wait_runtime_shutdown() && ret;
+#endif
     ret = cat_event_runtime_shutdown() && ret;
     ret = cat_coroutine_runtime_shutdown() && ret;
     ret = cat_runtime_shutdown() && ret;
