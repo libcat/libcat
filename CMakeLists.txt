@@ -79,6 +79,7 @@ set(cat_sources
     src/cat_buffer.c
     src/cat_fs.c
     src/cat_signal.c
+    src/cat_os_wait.c
     src/cat_async.c
     src/cat_watchdog.c
     src/cat_process.c
@@ -841,6 +842,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_buffer.cc
         tests/test_cat_fs.cc
         tests/test_cat_signal.cc
+        tests/test_cat_os_wait.cc
         tests/test_cat_async.cc
         tests/test_cat_watchdog.cc
         tests/test_cat_process.cc
