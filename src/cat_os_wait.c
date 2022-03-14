@@ -27,6 +27,8 @@
 
 #include "uv/tree.h"
 
+#include <sys/wait.h>
+
 typedef struct cat_os_wait_task_s {
     cat_queue_t node;
     cat_pid_t pid;
