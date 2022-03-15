@@ -24,6 +24,7 @@ static pid_t new_child_process(int exit_status = 0)
 {
     pid_t pid = fork();
     if (pid == 0) {
+        usleep(1000);
         _exit(exit_status);
     } else if (pid < 0) {
         CAT_NEVER_HERE("Should never happend");
