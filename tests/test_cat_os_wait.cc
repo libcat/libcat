@@ -125,6 +125,9 @@ TEST(cat_os_wait, waitpid)
 
 TEST(cat_os_wait, wait_after_sigchld)
 {
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    for (auto get_rusage : std::array<bool, 2>{ false, true }) {
+#endif
     for (auto type : std::array<int, 2>{ 0, 1 })  {
         pid_t pid = new_child_process();
 
@@ -135,16 +138,42 @@ TEST(cat_os_wait, wait_after_sigchld)
 
         int status;
         pid_t w_pid;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        struct rusage rusage;
+        memset(&rusage, 0, sizeof(rusage));
+#endif
         if (type == 0) {
-            w_pid = cat_os_wait(&status);
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            if (get_rusage) {
+                w_pid = cat_os_wait3(&status, 0, &rusage);
+            } else
+#endif
+            {
+                w_pid = cat_os_wait(&status);
+            }
         } else {
-            w_pid = cat_os_waitpid(pid, &status, 0);
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            if (get_rusage) {
+                w_pid = cat_os_wait4(pid, &status, 0, &rusage);
+            } else
+#endif
+            {
+                w_pid = cat_os_waitpid(pid, &status, 0);
+            }
         }
         ASSERT_EQ(w_pid, pid);
         ASSERT_EQ(WIFEXITED(status), 1);
         ASSERT_EQ(WEXITSTATUS(status), 0);
         ASSERT_EQ(WTERMSIG(status), 0);
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        if (get_rusage) {
+            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec + rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
+        }
+#endif
     }
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    }
+#endif
 }
 
 TEST(cat_os_wait, kill_then_wait)
