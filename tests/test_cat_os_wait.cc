@@ -167,4 +167,17 @@ TEST(cat_os_wait, kill_then_wait)
     ASSERT_EQ(WTERMSIG(status), CAT_SIGTERM);
 }
 
+TEST(cat_os_wait, waitpid_after_wait)
+{
+    pid_t pid = new_child_process();
+    int status;
+    pid_t w_pid = cat_os_wait(&status);
+    ASSERT_EQ(w_pid, pid);
+    ASSERT_EQ(WIFEXITED(status), 1);
+    ASSERT_EQ(WEXITSTATUS(status), 0);
+    w_pid = cat_os_waitpid(pid, &status, 0);
+    ASSERT_EQ(w_pid, -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ECHILD);
+}
+
 #endif

@@ -291,6 +291,12 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
             cat_free(child_process_state);
             return pid;
         }
+        if (pid > 0) {
+            if (unlikely(!cat_kill(pid, 0) && cat_get_last_error_code() == CAT_ESRCH)) {
+                cat_update_last_error_with_reason(CAT_ECHILD, "OS %s(pid=%d) failed", cat_os_wait_type_name(type), pid);
+                return -1;
+            }
+        }
     } while (cat_os_wait_dispatch() > 0);
 
     cat_os_wait_task_t wait_task;
