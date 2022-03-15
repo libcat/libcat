@@ -68,8 +68,7 @@ TEST(cat_os_wait, wait)
         ASSERT_EQ(WTERMSIG(status), 0);
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
         if (get_rusage) {
-            ASSERT_GT(rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
-            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec, 0);
+            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec + rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
         }
 #endif
     }
@@ -106,8 +105,7 @@ TEST(cat_os_wait, waitpid)
         ASSERT_EQ(WTERMSIG(status), 0);
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
         if (get_rusage) {
-            ASSERT_GT(rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
-            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec, 0);
+            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec + rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
         }
 #endif
     }
