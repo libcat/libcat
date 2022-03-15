@@ -130,28 +130,25 @@ static size_t cat_os_wait_dispatch(void)
             break;
         }
         CAT_LOG_DEBUG(OS,
-            "waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d"
+            "waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d",
+            pid, WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status), WIFSTOPPED(status), WSTOPSIG(status)
+        );
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
-            "\n"
+        CAT_LOG_DEBUG_V3(OS,
             "rusage {\n"
             "    user: %llu sec %llu microsec;\n"
             "    system: %llu sec %llu microsec;\n"
             "    pagefault: %llu;\n"
             "    maximum resident set size: %llu;\n"
-            "}"
-#endif
-            ,
-            pid, WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status), WIFSTOPPED(status), WSTOPSIG(status)
-#ifdef CAT_OS_WAIT_HAVE_RUSAGE
-            ,
+            "}",
             (unsigned long long) rusage.ru_utime.tv_sec,
             (unsigned long long) rusage.ru_utime.tv_usec,
             (unsigned long long) rusage.ru_stime.tv_sec,
             (unsigned long long) rusage.ru_stime.tv_usec,
             (unsigned long long) rusage.ru_majflt,
             (unsigned long long) rusage.ru_maxrss
-#endif
         );
+#endif
         do {
             /* try to notify waitpid() waiters */
             cat_os_waitpid_task_t *waitpid_task, lookup;
