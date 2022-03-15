@@ -139,6 +139,9 @@ CAT_API const char *cat_strerror(cat_errno_t error)
 #ifndef EBADF
 #define EBADF 9
 #endif
+#ifndef ECHILD
+#define ECHILD 10
+#endif
 #ifndef EBUSY
 #define EBUSY 16
 #endif
