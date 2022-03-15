@@ -33,6 +33,9 @@ typedef struct cat_os_wait_task_s {
     cat_queue_t node;
     cat_pid_t pid;
     int status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    struct rusage rusage;
+#endif
     cat_coroutine_t *coroutine;
 } cat_os_wait_task_t;
 
@@ -40,6 +43,9 @@ typedef struct cat_os_waitpid_task_s {
     RB_ENTRY(cat_os_waitpid_task_s) tree_entry;
     cat_pid_t pid;
     int status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    struct rusage rusage;
+#endif
     size_t waiter_count;
     cat_queue_t waiters;
 } cat_os_waitpid_task_t;
@@ -50,6 +56,9 @@ typedef struct cat_os_child_process_stat_s {
     RB_ENTRY(cat_os_child_process_stat_s) tree_entry;
     cat_pid_t pid;
     int status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    struct rusage rusage;
+#endif
 } cat_os_child_process_stat_t;
 
 RB_HEAD(cat_os_child_process_stat_tree_s, cat_os_child_process_stat_s);
@@ -103,19 +112,46 @@ RB_GENERATE_STATIC(cat_os_child_process_stat_tree_s,
                    cat_os_child_process_stat_s, tree_entry,
                    cat_os__child_process_state_compare);
 
-static size_t cat_os_waitpid_dispatch(void)
+static size_t cat_os_wait_dispatch(void)
 {
     size_t new_count = 0;
 
     CAT_LOG_DEBUG(OS, "waitpid dispatch");
     while (1) {
         int status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+	    struct rusage rusage;
+		memset(&rusage, 0, sizeof(rusage));
+        pid_t pid = wait4(-1, &status, WNOHANG | WUNTRACED, &rusage);
+#else
         pid_t pid = waitpid(-1, &status, WNOHANG | WUNTRACED);
+#endif
         if (pid <= 0) {
             break;
         }
-        CAT_LOG_DEBUG(OS, "waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d",
-            pid, WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status), WIFSTOPPED(status), WSTOPSIG(status));
+        CAT_LOG_DEBUG(OS,
+            "waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d"
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            "\n"
+            "rusage {\n"
+            "    user: %llu sec %llu microsec;\n"
+            "    system: %llu sec %llu microsec;\n"
+            "    pagefault: %llu;\n"
+            "    maximum resident set size: %llu;\n"
+            "}"
+#endif
+            ,
+            pid, WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status), WIFSTOPPED(status), WSTOPSIG(status)
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            ,
+            (unsigned long long) rusage.ru_utime.tv_sec,
+            (unsigned long long) rusage.ru_utime.tv_usec,
+            (unsigned long long) rusage.ru_stime.tv_sec,
+            (unsigned long long) rusage.ru_stime.tv_usec,
+            (unsigned long long) rusage.ru_majflt,
+            (unsigned long long) rusage.ru_maxrss
+#endif
+        );
         do {
             /* try to notify waitpid() waiters */
             cat_os_waitpid_task_t *waitpid_task, lookup;
@@ -127,6 +163,9 @@ static size_t cat_os_waitpid_dispatch(void)
                 while ((coroutine = cat_queue_front_data(&waitpid_task->waiters, cat_coroutine_t, waiter.node))) {
                     CAT_ASSERT(pid == waitpid_task->pid);
                     waitpid_task->status = status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+                    waitpid_task->rusage = rusage;
+#endif
                     CAT_LOG_DEBUG(OS, "Notify a waitpid() waiter");
                     cat_coroutine_schedule(coroutine, OS, "WaitPid");
                     /* Ensure that newly joined waiters will not be woken up (pid maybe reused) */
@@ -142,6 +181,9 @@ static size_t cat_os_waitpid_dispatch(void)
                 CAT_ASSERT(wait_task->pid == -1);
                 wait_task->pid = pid;
                 wait_task->status = status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+                wait_task->rusage = rusage;
+#endif
                 CAT_LOG_DEBUG(OS, "Notify a wait() waiter");
                 cat_coroutine_schedule(wait_task->coroutine, OS, "Wait");
                 break;
@@ -155,6 +197,9 @@ static size_t cat_os_waitpid_dispatch(void)
             }
             child_process_state->pid = pid;
             child_process_state->status = status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            child_process_state->rusage = rusage;
+#endif
             RB_INSERT(cat_os_child_process_stat_tree_s, &CAT_OS_WAIT_G(child_process_state_tree), child_process_state);
             new_count++;
         } while (0);
@@ -167,7 +212,7 @@ static void cat_os_wait_sigchld_handler(uv_signal_t* handle, int signum)
 {
     CAT_ASSERT(signum == CAT_SIGCHLD);
     CAT_LOG_DEBUG(OS, "SIGCHLD received");
-    (void) cat_os_waitpid_dispatch();
+    (void) cat_os_wait_dispatch();
 }
 
 static cat_always_inline void cat_os_wait_sigchld_watcher_start(void)
@@ -183,8 +228,38 @@ static cat_always_inline void cat_os_wait_sigchld_watcher_end(void)
     }
 }
 
-static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_msec_t timeout, const char *type)
+typedef enum cat_os_wait_type_e {
+    CAT_OS_WAIT_TYPE_WAIT,
+    CAT_OS_WAIT_TYPE_WAITPID,
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    CAT_OS_WAIT_TYPE_WAIT3,
+    CAT_OS_WAIT_TYPE_WAIT4,
+#endif
+} cat_os_wait_type_t;
+
+static const char *cat_never_inline cat_os_wait_type_name(cat_os_wait_type_t type)
 {
+    switch (type) {
+        case CAT_OS_WAIT_TYPE_WAIT:
+            return "wait";
+        case CAT_OS_WAIT_TYPE_WAITPID:
+            return "waitpid";
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        case CAT_OS_WAIT_TYPE_WAIT3:
+            return "wait3";
+        case CAT_OS_WAIT_TYPE_WAIT4:
+            return "wait4";
+#endif
+        default:
+            CAT_NEVER_HERE("Unknown type");
+    }
+}
+
+static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rusage, cat_msec_t timeout, cat_os_wait_type_t type)
+{
+#ifndef CAT_OS_WAIT_HAVE_RUSAGE
+    CAT_ASSERT(rusage == NULL);
+#endif
     /* If pid is 0, the call waits for any child process in the process group of the caller.
      * but we can not recognize which process is in the same group for now. */
     if (unlikely(pid == 0)) {
@@ -208,10 +283,15 @@ static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_ms
             RB_REMOVE(cat_os_child_process_stat_tree_s, &CAT_OS_WAIT_G(child_process_state_tree), child_process_state);
             pid = child_process_state->pid;
             *status = child_process_state->status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+            if (rusage != NULL) {
+                *((struct rusage *) rusage) = child_process_state->rusage;
+            }
+#endif
             cat_free(child_process_state);
             return pid;
         }
-    } while (cat_os_waitpid_dispatch() > 0);
+    } while (cat_os_wait_dispatch() > 0);
 
     cat_os_wait_task_t wait_task;
     cat_os_waitpid_task_t *waitpid_task;
@@ -232,6 +312,9 @@ static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_ms
             }
             waitpid_task->pid = pid;
             waitpid_task->status = 0;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+		    memset(&waitpid_task->rusage, 0, sizeof(waitpid_task->rusage));
+#endif
             waitpid_task->waiter_count = 0;
             cat_queue_init(&waitpid_task->waiters);
             RB_INSERT(cat_os_waitpid_task_tree_s, &CAT_OS_WAIT_G(waitpid_task_tree), waitpid_task);
@@ -245,10 +328,20 @@ static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_ms
     if (pid < 0) {
         pid = wait_task.pid;
         *status = wait_task.status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        if (rusage != NULL) {
+            *((struct rusage *) rusage) = wait_task.rusage;
+        }
+#endif
         cat_queue_remove(&wait_task.node);
     } else {
         CAT_ASSERT(pid == waitpid_task->pid);
         *status = waitpid_task->status;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        if (rusage != NULL) {
+            *((struct rusage *) rusage) = waitpid_task->rusage;
+        }
+#endif
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (--waitpid_task->waiter_count == 0) {
             RB_REMOVE(cat_os_waitpid_task_tree_s, &CAT_OS_WAIT_G(waitpid_task_tree), waitpid_task);
@@ -257,17 +350,17 @@ static cat_pid_t cat_os__waitpid(cat_pid_t pid, int *status, int options, cat_ms
     }
 
     if (unlikely(!ret)) {
-        cat_update_last_error_with_previous("OS %s wait failed", type);
+        cat_update_last_error_with_previous("OS %s() wait failed", cat_os_wait_type_name(type));
         return -1;
     }
 
     return pid;
 }
 
-static cat_pid_t cat_os__waitpid_wrapper(cat_pid_t pid, int *status, int options, cat_msec_t timeout, const char *type)
+static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, void *rusage, cat_msec_t timeout, cat_os_wait_type_t type)
 {
     cat_os_wait_sigchld_watcher_start();
-    pid = cat_os__waitpid(pid, status, options, timeout, type);
+    pid = cat_os__wait(pid, status, options, rusage, timeout, type);
     cat_os_wait_sigchld_watcher_end();
     return pid;
 }
@@ -279,7 +372,7 @@ CAT_API cat_pid_t cat_os_wait(int *status)
 
 CAT_API cat_pid_t cat_os_wait_ex(int *status, cat_msec_t timeout)
 {
-    return cat_os__waitpid_wrapper(-1, status, 0, timeout, "wait()");
+    return cat_os__wait_wrapper(-1, status, 0, NULL, timeout, CAT_OS_WAIT_TYPE_WAIT);
 }
 
 CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options)
@@ -289,8 +382,32 @@ CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options)
 
 CAT_API cat_pid_t cat_os_waitpid_ex(cat_pid_t pid, int *status, int options, cat_msec_t timeout)
 {
-    return cat_os__waitpid_wrapper(pid, status, 0, timeout, "waitpid()");
+    return cat_os__wait_wrapper(pid, status, 0, NULL, timeout, CAT_OS_WAIT_TYPE_WAITPID);
 }
+
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+
+CAT_API cat_pid_t cat_os_wait3(int *status, int options, struct rusage *rusage)
+{
+    return cat_os_wait3_ex(status, options, rusage, CAT_TIMEOUT_FOREVER);
+}
+
+CAT_API cat_pid_t cat_os_wait3_ex(int *status, int options, struct rusage *rusage, cat_msec_t timeout)
+{
+    return cat_os__wait_wrapper(-1, status, options, rusage, timeout, CAT_OS_WAIT_TYPE_WAIT3);
+}
+
+CAT_API cat_pid_t cat_os_wait4(cat_pid_t pid, int *status, int options, struct rusage *rusage)
+{
+    return cat_os_wait4_ex(pid, status, options, rusage, CAT_TIMEOUT_FOREVER);
+}
+
+CAT_API cat_pid_t cat_os_wait4_ex(cat_pid_t pid, int *status, int options, struct rusage *rusage, cat_msec_t timeout)
+{
+    return cat_os__wait_wrapper(pid, status, options, rusage, timeout, CAT_OS_WAIT_TYPE_WAIT4);
+}
+
+#endif /* CAT_OS_WAIT_HAVE_RUSAGE */
 
 CAT_API cat_bool_t cat_os_wait_module_init(void)
 {

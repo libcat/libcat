@@ -41,40 +41,87 @@ TEST(cat_os_wait, timeout)
 
 TEST(cat_os_wait, wait)
 {
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    for (auto get_rusage : std::array<bool, 2>{ false, true }) {
+#endif
     for (auto exit_status : std::array<int, 2>{ 0, 1 })  {
         pid_t pid = new_child_process(exit_status);
 
         int status;
-        pid_t w_pid = cat_os_wait(&status);
+        pid_t w_pid;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        struct rusage rusage;
+        memset(&rusage, 0, sizeof(rusage));
+
+        if (get_rusage) {
+            w_pid = cat_os_wait3(&status, 0, &rusage);
+        } else
+#endif
+        {
+            w_pid = cat_os_wait(&status);
+        }
 
         ASSERT_EQ(w_pid, pid);
         ASSERT_EQ(WIFEXITED(status), 1);
         ASSERT_EQ(WEXITSTATUS(status), exit_status);
         ASSERT_EQ(WTERMSIG(status), 0);
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        if (get_rusage) {
+            ASSERT_GT(rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
+            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec, 0);
+        }
+#endif
     }
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    }
+#endif
 }
 
 TEST(cat_os_wait, waitpid)
 {
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    for (auto get_rusage : std::array<bool, 2>{ false, true }) {
+#endif
     for (auto exit_status : std::array<int, 2>{ 0, 1 })  {
         pid_t pid = new_child_process(exit_status);
 
         int status;
-        pid_t w_pid = cat_os_waitpid(pid, &status, 0);
+        pid_t w_pid;
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        struct rusage rusage;
+        memset(&rusage, 0, sizeof(rusage));
+
+        if (get_rusage) {
+            w_pid = cat_os_wait4(pid, &status, 0, &rusage);
+        } else
+#endif
+        {
+            w_pid = cat_os_waitpid(pid, &status, 0);
+        }
 
         ASSERT_EQ(w_pid, pid);
         ASSERT_EQ(WIFEXITED(status), 1);
         ASSERT_EQ(WEXITSTATUS(status), exit_status);
         ASSERT_EQ(WTERMSIG(status), 0);
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+        if (get_rusage) {
+            ASSERT_GT(rusage.ru_stime.tv_sec + rusage.ru_stime.tv_usec, 0);
+            ASSERT_GT(rusage.ru_utime.tv_sec + rusage.ru_utime.tv_usec, 0);
+        }
+#endif
     }
-
     /* error cases */
     {
         int status;
-        pid_t w_pid = cat_os_waitpid(0, &status, 0);
+        pid_t w_pid;
+        w_pid = cat_os_waitpid(0, &status, 0);
+
         ASSERT_EQ(w_pid, -1);
         ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
     }
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    }
+#endif
 }
 
 TEST(cat_os_wait, wait_after_sigchld)

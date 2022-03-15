@@ -26,7 +26,13 @@ extern "C" {
 
 #ifdef CAT_OS_UNIX_LIKE
 
+#include <sys/resource.h>
+
 # define CAT_OS_WAIT 1
+
+/* we believe it's always available on nowadays machines,
+ * we can consider checking it only when someone met this problem :) */
+# define CAT_OS_WAIT_HAVE_RUSAGE 1
 
 CAT_API cat_bool_t cat_os_wait_module_init(void);
 CAT_API cat_bool_t cat_os_wait_runtime_init(void);
@@ -36,6 +42,13 @@ CAT_API cat_pid_t cat_os_wait(int *status);
 CAT_API cat_pid_t cat_os_wait_ex(int *status, cat_msec_t timeout);
 CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options);
 CAT_API cat_pid_t cat_os_waitpid_ex(cat_pid_t pid, int *status, int options, cat_msec_t timeout);
+
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+CAT_API cat_pid_t cat_os_wait3(int *status, int options, struct rusage *rusage);
+CAT_API cat_pid_t cat_os_wait3_ex(int *status, int options, struct rusage *rusage, cat_msec_t timeout);
+CAT_API cat_pid_t cat_os_wait4(cat_pid_t pid, int *status, int options, struct rusage *rusage);
+CAT_API cat_pid_t cat_os_wait4_ex(cat_pid_t pid, int *status, int options, struct rusage *rusage, cat_msec_t timeout);
+#endif /* CAT_OS_WAIT_HAVE_RUSAGE */
 
 #endif
 
