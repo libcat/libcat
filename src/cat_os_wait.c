@@ -130,7 +130,7 @@ static size_t cat_os_wait_dispatch(void)
             break;
         }
         CAT_LOG_DEBUG(OS,
-            "waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d",
+            "dispatcher: waitpid() = %d, exited=%u, exit_status=%d, if_signaled=%u, termsig=%d, if_stopped=%u, stopsig=%d",
             pid, WIFEXITED(status), WEXITSTATUS(status), WIFSIGNALED(status), WTERMSIG(status), WIFSTOPPED(status), WSTOPSIG(status)
         );
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
@@ -363,8 +363,44 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
 static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, void *rusage, cat_msec_t timeout, cat_os_wait_type_t type)
 {
     cat_os_wait_sigchld_watcher_start();
+
+#define CAT_OS_WAIT_LOG_WAIT_FMT "%s(timeout=" CAT_TIMEOUT_FMT ")"
+#define CAT_OS_WAIT_LOG_WAIT_ARGS cat_os_wait_type_name(type), (timeout)
+
+#define CAT_OS_WAIT_LOG_WAIT3_FMT "%s(options=%d, timeout=" CAT_TIMEOUT_FMT ")"
+#define CAT_OS_WAIT_LOG_WAIT3_ARGS cat_os_wait_type_name(type), options, timeout
+
+#define CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_FMT "%s(pid=%d, options=%d, timeout=" CAT_TIMEOUT_FMT ")"
+#define CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_ARGS cat_os_wait_type_name(type), pid, options, timeout
+
+    CAT_LOG_DEBUG_SCOPE_START(OS) {
+        if (type == CAT_OS_WAIT_TYPE_WAIT) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT_FMT, CAT_OS_WAIT_LOG_WAIT_ARGS);
+        } else if (type == CAT_OS_WAIT_TYPE_WAITPID || type == CAT_OS_WAIT_TYPE_WAIT4) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_FMT, CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_ARGS);
+        } else if (type == CAT_OS_WAIT_TYPE_WAIT3) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT3_FMT, CAT_OS_WAIT_LOG_WAIT3_ARGS);
+        } else CAT_NEVER_HERE("Unknown type");
+    } CAT_LOG_DEBUG_SCOPE_END();
+
     pid = cat_os__wait(pid, status, options, rusage, timeout, type);
+
+
+#define CAT_OS_WAIT_LOG_RETURN_VALUE_FMT " = %d"
+#define CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS pid
+
+    CAT_LOG_DEBUG_SCOPE_START(OS) {
+        if (type == CAT_OS_WAIT_TYPE_WAIT) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT_FMT CAT_OS_WAIT_LOG_RETURN_VALUE_FMT, CAT_OS_WAIT_LOG_WAIT_ARGS, CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS);
+        } else if (type == CAT_OS_WAIT_TYPE_WAITPID || type == CAT_OS_WAIT_TYPE_WAIT4) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_FMT CAT_OS_WAIT_LOG_RETURN_VALUE_FMT, CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_ARGS, CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS);
+        } else if (type == CAT_OS_WAIT_TYPE_WAIT3) {
+            CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT3_FMT CAT_OS_WAIT_LOG_RETURN_VALUE_FMT, CAT_OS_WAIT_LOG_WAIT3_ARGS, CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS);
+        } else CAT_NEVER_HERE("Unknown type");
+    } CAT_LOG_DEBUG_SCOPE_END();
+
     cat_os_wait_sigchld_watcher_end();
+
     return pid;
 }
 
