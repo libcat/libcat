@@ -20,6 +20,8 @@
 
 CAT_API CAT_GLOBALS_DECLARE(cat_event)
 
+static uv_loop_t *cat_event_main_loop = NULL;
+
 static cat_bool_t cat_event_module_init_threaded(void)
 {
     int error;
@@ -59,17 +61,23 @@ static cat_bool_t cat_event_module_shutdown_threaded(void)
 
 static CAT_GLOBALS_CTOR_DECLARE(cat_event, g)
 {
-    cat_event_module_init_threaded();
+    if (&g->loop != cat_event_main_loop) {
+        cat_event_module_init_threaded();
+    }
 }
 
 static CAT_GLOBALS_DTOR_DECLARE(cat_event, g)
 {
-    cat_event_module_shutdown_threaded();
+    if (&g->loop != cat_event_main_loop) {
+        cat_event_module_shutdown_threaded();
+    }
 }
 
 CAT_API cat_bool_t cat_event_module_init(void)
 {
     CAT_GLOBALS_REGISTER(cat_event, CAT_GLOBALS_CTOR(cat_event), CAT_GLOBALS_DTOR(cat_event));
+
+    cat_event_main_loop = &CAT_EVENT_G(loop);
 
     return cat_event_module_init_threaded();
 }
