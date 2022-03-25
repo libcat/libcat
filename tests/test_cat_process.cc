@@ -38,9 +38,11 @@ TEST(cat_process, echo)
     options.stdio_count = CAT_ARRAY_SIZE(stdio);
 
     testing::internal::CaptureStdout();
-    ASSERT_NE((process = cat_process_run(&options)), nullptr);
-    DEFER(cat_process_close(process));
-    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    ([&] {
+        ASSERT_NE((process = cat_process_run(&options)), nullptr);
+        DEFER(cat_process_close(process));
+        ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    })();
     std::string output = testing::internal::GetCapturedStdout();
     ASSERT_NE(output.find("Hello libcat"), std::string::npos);
 }

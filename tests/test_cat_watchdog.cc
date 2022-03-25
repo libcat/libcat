@@ -62,15 +62,15 @@ TEST(cat_watchdog, single)
     ASSERT_TRUE(cat_coroutine_wait_all());
 
     testing::internal::CaptureStderr();
+    ([&] {
+        ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+        DEFER(cat_watchdog_stop());
 
-    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watchdog_stop());
+        test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
 
-    test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
-
-    cat_watchdog_stop(); // make sure not output error anymore
-    fflush(stderr); // flush stderr to prevent from affecting the next test
-
+        cat_watchdog_stop(); // make sure not output error anymore
+        fflush(stderr); // flush stderr to prevent from affecting the next test
+    })();
     std::string output = testing::internal::GetCapturedStderr();
     printf("%s\n", output.c_str());
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
@@ -80,13 +80,15 @@ TEST(cat_watchdog, scheduler_blocking)
 {
     testing::internal::CaptureStderr();
 
-    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watchdog_stop());
+    ([&] {
+        ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+        DEFER(cat_watchdog_stop());
 
-    test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
+        test_sys_nanosleep_nocancel(cat_watchdog_get_quantum() * 3);
 
-    cat_watchdog_stop(); // make sure not output error anymore
-    fflush(stderr); // flush stderr to prevent from affecting the next test
+        cat_watchdog_stop(); // make sure not output error anymore
+        fflush(stderr); // flush stderr to prevent from affecting the next test
+    })();
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
@@ -96,24 +98,26 @@ TEST(cat_watchdog, nothing)
 {
     testing::internal::CaptureStderr();
 
-    ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
-    DEFER(cat_watchdog_stop());
+    ([&] {
+        ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+        DEFER(cat_watchdog_stop());
 
-    auto sleeper = [=] {
-        cat_timeout_t usec = ((cat_watchdog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
-        size_t n = TEST_MAX_REQUESTS;
-        while (n--) {
-            cat_time_usleep(usec);
+        auto sleeper = [=] {
+            cat_timeout_t usec = ((cat_watchdog_get_quantum() / 1000) * 3) / TEST_MAX_REQUESTS;
+            size_t n = TEST_MAX_REQUESTS;
+            while (n--) {
+                cat_time_usleep(usec);
+            }
+        };
+
+        for (size_t c = TEST_MAX_CONCURRENCY; c--;) {
+            co(sleeper);
         }
-    };
+        sleeper();
 
-    for (size_t c = TEST_MAX_CONCURRENCY; c--;) {
-        co(sleeper);
-    }
-    sleeper();
-
-    cat_watchdog_stop(); // make sure not output error anymore
-    fflush(stderr); // flush stderr to prevent from affecting the next test
+        cat_watchdog_stop(); // make sure not output error anymore
+        fflush(stderr); // flush stderr to prevent from affecting the next test
+    })();
 
     std::string output = testing::internal::GetCapturedStderr();
     ASSERT_TRUE(output.find(keyword) == std::string::npos);
