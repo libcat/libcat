@@ -74,11 +74,9 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_os_wait)
     struct cat_os_child_process_stat_tree_s child_process_state_tree;
 CAT_GLOBALS_STRUCT_END(cat_os_wait)
 
-CAT_API CAT_GLOBALS_DECLARE(cat_os_wait)
+CAT_GLOBALS_DECLARE(cat_os_wait)
 
 CAT_GLOBALS_CTOR_DECLARE_SZ(cat_os_wait)
-
-extern CAT_API CAT_GLOBALS_DECLARE(cat_os_wait)
 
 #define CAT_OS_WAIT_G(x) CAT_GLOBALS_GET(cat_os_wait, x)
 
