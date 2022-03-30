@@ -182,7 +182,9 @@ endif()
 
 # ASan options
 option(ASAN "Enable AddressSanitizer (ASan)" $ENV{ASAN})
-if(ASAN)
+# TODO: TSAN support, see: https://github.com/libuv/libuv/commit/22d62239289c7c6e50e6cc4a93642b3b46bf2dad (@dixyes)
+
+if(ASAN OR TSAN)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
         message(WARNING "ASan is not supported in release build")
         message(STATUS "ASan is not enabled")
@@ -192,6 +194,8 @@ if(ASAN)
             set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
             set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
             set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+            # FIXME: the following line is synced from libuv, please check it (@dixyes)
+            set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
             message(STATUS "ASan is enabled by ${CMAKE_C_COMPILER_ID}")
         elseif(MSVC)
             # vs donot need linker enable asan cflags
@@ -393,6 +397,7 @@ if (1)
         ${uv_dir}/src/inet.c
         ${uv_dir}/src/random.c
         ${uv_dir}/src/strscpy.c
+        ${uv_dir}/src/strtok.c
         ${uv_dir}/src/threadpool.c
         ${uv_dir}/src/timer.c
         ${uv_dir}/src/uv-common.c
@@ -480,7 +485,6 @@ if (1)
       list(APPEND uv_defines _GNU_SOURCE)
       list(APPEND uv_libraries dl)
       list(APPEND uv_sources
-           ${uv_dir}/src/unix/android-ifaddrs.c
            ${uv_dir}/src/unix/linux-core.c
            ${uv_dir}/src/unix/linux-inotify.c
            ${uv_dir}/src/unix/linux-syscalls.c
@@ -488,7 +492,8 @@ if (1)
            ${uv_dir}/src/unix/pthread-fixes.c
            ${uv_dir}/src/unix/random-getentropy.c
            ${uv_dir}/src/unix/random-getrandom.c
-           ${uv_dir}/src/unix/random-sysctl-linux.c)
+           ${uv_dir}/src/unix/random-sysctl-linux.c
+           ${uv_dir}/src/unix/epoll.c)
     endif()
 
     if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux|OS390")
@@ -523,6 +528,22 @@ if (1)
            ${uv_dir}/src/unix/fsevents.c)
     endif()
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "GNU")
+      list(APPEND uv_libraries dl)
+      list(APPEND uv_sources
+           src/unix/bsd-ifaddrs.c
+           src/unix/no-fsevents.c
+           src/unix/no-proctitle.c
+           src/unix/posix-hrtime.c
+           src/unix/posix-poll.c
+           src/unix/hurd.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "kFreeBSD")
+      list(APPEND uv_defines _GNU_SOURCE)
+      list(APPEND uv_libraries dl freebsd-glue)
+    endif()
+
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
       list(APPEND uv_libraries dl rt)
@@ -532,7 +553,8 @@ if (1)
            ${uv_dir}/src/unix/linux-syscalls.c
            ${uv_dir}/src/unix/procfs-exepath.c
            ${uv_dir}/src/unix/random-getrandom.c
-           ${uv_dir}/src/unix/random-sysctl-linux.c)
+           ${uv_dir}/src/unix/random-sysctl-linux.c
+           ${uv_dir}/src/unix/epoll.c)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
@@ -581,9 +603,11 @@ if (1)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-      list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500)
+      list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500 _REENTRANT)
       list(APPEND uv_libraries kstat nsl sendfile socket)
-      list(APPEND uv_sources ${uv_dir}/src/unix/no-proctitle.c ${uv_dir}/src/unix/sunos.c)
+      list(APPEND uv_sources
+        ${uv_dir}/src/unix/no-proctitle.c
+        ${uv_dir}/src/unix/sunos.c)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
@@ -875,8 +899,8 @@ message(STATUS "Summary of build options:
     Install prefix:  ${CMAKE_INSTALL_PREFIX}
     Target system:   ${CMAKE_SYSTEM_NAME}
     Compiler:
-      C Compiler:    ${CMAKE_C_COMPILER}
-      C++ Compiler:  ${CMAKE_CXX_COMPILER}
+      C Compiler:    ${CMAKE_C_COMPILER} (${CMAKE_C_COMPILER_ID})
+      C++ Compiler:  ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID})
       CFLAGS:        ${CMAKE_C_FLAGS}
       CXXFLAGS:      ${CMAKE_CXX_FLAGS}
       cat CFLAGS:    ${cat_cflags}
