@@ -29,6 +29,7 @@ CAT_API cat_bool_t cat_shutdown_all(void)
     cat_bool_t ret = cat_true;
 
     ret = cat_runtime_shutdown_all();
+    ret = cat_runtime_close_all() && ret;
     ret = cat_module_shutdown_all() && ret;
 
     return  ret;
@@ -55,7 +56,6 @@ CAT_API cat_bool_t cat_module_shutdown_all(void)
 {
     cat_bool_t ret = cat_true;
 
-    ret = cat_event_module_shutdown() && ret;
     ret = cat_module_shutdown() && ret;
 
     return ret;
@@ -85,6 +85,15 @@ CAT_API cat_bool_t cat_runtime_shutdown_all(void)
     ret = cat_event_runtime_shutdown() && ret;
     ret = cat_coroutine_runtime_shutdown() && ret;
     ret = cat_runtime_shutdown() && ret;
+
+    return ret;
+}
+
+CAT_API cat_bool_t cat_runtime_close_all(void)
+{
+    cat_bool_t ret = cat_true;
+
+    ret = cat_event_runtime_close() && ret;
 
     return ret;
 }

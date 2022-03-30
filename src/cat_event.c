@@ -20,9 +20,16 @@
 
 CAT_API CAT_GLOBALS_DECLARE(cat_event)
 
-static uv_loop_t *cat_event_main_loop = NULL;
+CAT_GLOBALS_CTOR_DECLARE_SZ(cat_event)
 
-static cat_bool_t cat_event_module_init_threaded(void)
+CAT_API cat_bool_t cat_event_module_init(void)
+{
+    CAT_GLOBALS_REGISTER(cat_event, CAT_GLOBALS_CTOR(cat_event), NULL);
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_event_runtime_init(void)
 {
     int error;
 
@@ -37,58 +44,6 @@ static cat_bool_t cat_event_module_init_threaded(void)
     cat_queue_init(&CAT_EVENT_G(defer_tasks));
     CAT_EVENT_G(defer_task_count) = 0;
 
-    return cat_true;
-}
-
-static cat_bool_t cat_event_module_shutdown_threaded(void)
-{
-    int error;
-
-    error = uv_loop_close(&CAT_EVENT_G(loop));
-
-    if (unlikely(error != 0)) {
-        CAT_WARN_WITH_REASON(EVENT, error, "Event loop close failed");
-#ifdef CAT_DEBUG
-        if (error == CAT_EBUSY) {
-            uv_print_all_handles(cat_event_loop, CAT_G(error_log));
-        }
-#endif
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
-static CAT_GLOBALS_CTOR_DECLARE(cat_event, g)
-{
-    if (&g->loop != cat_event_main_loop) {
-        cat_event_module_init_threaded();
-    }
-}
-
-static CAT_GLOBALS_DTOR_DECLARE(cat_event, g)
-{
-    if (&g->loop != cat_event_main_loop) {
-        cat_event_module_shutdown_threaded();
-    }
-}
-
-CAT_API cat_bool_t cat_event_module_init(void)
-{
-    CAT_GLOBALS_REGISTER(cat_event, CAT_GLOBALS_CTOR(cat_event), CAT_GLOBALS_DTOR(cat_event));
-
-    cat_event_main_loop = &CAT_EVENT_G(loop);
-
-    return cat_event_module_init_threaded();
-}
-
-CAT_API cat_bool_t cat_event_module_shutdown(void)
-{
-    return cat_event_module_shutdown_threaded();
-}
-
-CAT_API cat_bool_t cat_event_runtime_init(void)
-{
     return cat_true;
 }
 
@@ -109,6 +64,25 @@ CAT_API cat_bool_t cat_event_runtime_shutdown(void)
     cat_event_schedule();
     CAT_ASSERT(cat_queue_empty(&CAT_EVENT_G(defer_tasks)));
     CAT_ASSERT(CAT_EVENT_G(defer_task_count) == 0);
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_event_runtime_close(void)
+{
+    int error;
+
+    error = uv_loop_close(&CAT_EVENT_G(loop));
+
+    if (unlikely(error != 0)) {
+        CAT_WARN_WITH_REASON(EVENT, error, "Event loop close failed");
+#ifdef CAT_DEBUG
+        if (error == CAT_EBUSY) {
+            uv_print_all_handles(cat_event_loop, CAT_G(error_log));
+        }
+#endif
+        return cat_false;
+    }
 
     return cat_true;
 }

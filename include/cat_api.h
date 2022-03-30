@@ -53,6 +53,7 @@ CAT_API cat_bool_t cat_module_shutdown_all(void);
 
 CAT_API cat_bool_t cat_runtime_init_all(void);
 CAT_API cat_bool_t cat_runtime_shutdown_all(void);
+CAT_API cat_bool_t cat_runtime_close_all(void);
 
 CAT_API cat_bool_t cat_run(cat_run_mode_t run_mode);
 CAT_API cat_bool_t cat_stop(void);
