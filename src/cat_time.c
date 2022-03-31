@@ -38,6 +38,7 @@ CAT_API cat_msec_t cat_time_msec(void)
 #ifndef CAT_OS_WIN
     return uv__hrtime(UV_CLOCK_FAST) / (1000 * 1000);
 #else
+    uv__once_init();
     return uv__hrtime(1000);
 #endif
 }
