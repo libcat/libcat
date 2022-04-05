@@ -45,7 +45,7 @@ CAT_API cat_msec_t cat_time_msec(void)
 
 CAT_API cat_msec_t cat_time_msec_cached(void)
 {
-    return cat_event_loop->time;
+    return CAT_EVENT_G(loop).time;
 }
 
 CAT_API cat_nsec_t cat_time_nsec2(void)
@@ -132,7 +132,7 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
     }
 #endif
 
-    (void) uv_timer_init(cat_event_loop, &timer->timer);
+    (void) uv_timer_init(&CAT_EVENT_G(loop), &timer->timer);
     (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);
 
     CAT_LOG_DEBUG_SCOPE_START_EX(TIME, char *tmp) {
@@ -211,12 +211,12 @@ CAT_API cat_msec_t cat_time_msleep(cat_msec_t msec)
 
     if (unlikely(timer->coroutine != NULL)) {
         cat_update_last_error(CAT_ECANCELED, "Time waiter has been canceled");
-        if (unlikely(timer->timer.timeout <= cat_event_loop->time)) {
+        if (unlikely(timer->timer.timeout <= CAT_EVENT_G(loop).time)) {
             /* blocking IO lead it to be negative or 0
              * we can not know the real reserve time */
             return msec;
         }
-        return timer->timer.timeout - cat_event_loop->time;
+        return timer->timer.timeout - CAT_EVENT_G(loop).time;
     }
 
     return 0;

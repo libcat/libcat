@@ -39,20 +39,20 @@ TEST(cat_event, defer)
 
 TEST(cat_event, defer_in_defer)
 {
-    uint64_t round = cat_event_loop->round;
+    uint64_t round = CAT_EVENT_G(loop).round;
     bool done1 = false;
     bool done2 = false;
     bool done3 = false;
     ASSERT_TRUE(defer([&] {
         ASSERT_TRUE(defer([&] {
             ASSERT_TRUE(defer([&] {
-                ASSERT_EQ(cat_event_loop->round, round + 3);
+                ASSERT_EQ(CAT_EVENT_G(loop).round, round + 3);
                 done3 = true;
             }));
-            ASSERT_EQ(cat_event_loop->round, round + 2);
+            ASSERT_EQ(CAT_EVENT_G(loop).round, round + 2);
             done2 = true;
         }));
-        ASSERT_EQ(cat_event_loop->round, round + 1);
+        ASSERT_EQ(CAT_EVENT_G(loop).round, round + 1);
         done1 = true;
     }));
     ASSERT_TRUE(cat_time_delay(0));
@@ -76,19 +76,19 @@ TEST(cat_event, defer_backend_time)
     int timeout;
 
     ASSERT_TRUE(cat_coroutine_wait_all());
-    timeout = uv_backend_timeout(cat_event_loop);
+    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     ASSERT_TRUE(defer([]{}));
-    ASSERT_EQ(uv_backend_timeout(cat_event_loop), timeout);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
 
     ASSERT_TRUE(cat_coroutine_wait_all());
-    timeout = uv_backend_timeout(cat_event_loop);
+    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     co([] {
         ASSERT_TRUE(cat_time_delay(1));
     });
-    ASSERT_GT(uv_backend_timeout(cat_event_loop), timeout);
-    timeout = uv_backend_timeout(cat_event_loop);
+    ASSERT_GT(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
+    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     ASSERT_TRUE(defer([]{}));
-    ASSERT_EQ(uv_backend_timeout(cat_event_loop), timeout);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
 }
 
 TEST(cat_event, wait)
