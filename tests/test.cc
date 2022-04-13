@@ -353,7 +353,7 @@ public:
         ASSERT_EQ(cat_coroutine_get_count() , 1);
 
 #ifdef CAT_CURL
-        ASSERT_TRUE(cat_curl_runtime_shutdown());
+        ASSERT_TRUE(cat_curl_runtime_close());
         ASSERT_TRUE(cat_curl_module_shutdown());
 #endif
         ASSERT_TRUE(cat_shutdown_all());
