@@ -114,7 +114,12 @@ namespace testing
 
     bool file_put_contents(const char *filename, const char *content, size_t length)
     {
-        FILE *file = fopen(filename, "w");
+        FILE *file = fopen(filename, "w"
+#ifdef CAT_OS_WIN
+            // for no LF -> CRLF auto translation on Windows
+            "b"
+#endif
+        );
         if (file == NULL) {
             return false;
         }
