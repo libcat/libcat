@@ -71,7 +71,7 @@ TEST(cat_fs, open_close_read_write)
 {
     SKIP_IF_(no_tmp(), "Temp dir not writable");
 
-    char buf[CAT_BUFFER_DEFAULT_SIZE], red[CAT_BUFFER_DEFAULT_SIZE];
+    char buf[CAT_BUFFER_COMMON_SIZE], red[CAT_BUFFER_COMMON_SIZE];
     std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_ocrw");
     const char * fn = fnstr.c_str();
     int fd = -1;
@@ -104,10 +104,10 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_NE(errno, 0);
     ASSERT_NE(cat_get_last_error_code(), 0);
 
-    cat_srand(buf, CAT_BUFFER_DEFAULT_SIZE);
+    cat_srand(buf, CAT_BUFFER_COMMON_SIZE);
 
     for(int i = 0; i<128; i++){
-        ASSERT_EQ(cat_fs_write(fd, buf, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
+        ASSERT_EQ(cat_fs_write(fd, buf, CAT_BUFFER_COMMON_SIZE), CAT_BUFFER_COMMON_SIZE);
     }
 
     ASSERT_EQ(0, cat_fs_close(fd));
@@ -123,10 +123,10 @@ TEST(cat_fs, open_close_read_write)
     ASSERT_NE(cat_get_last_error_code(), 0);
 
     for(int i = 0; i<128; i++){
-        ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
-        ASSERT_EQ(std::string(buf, CAT_BUFFER_DEFAULT_SIZE), std::string(red, CAT_BUFFER_DEFAULT_SIZE));
+        ASSERT_EQ(cat_fs_read(fd, red, CAT_BUFFER_COMMON_SIZE), CAT_BUFFER_COMMON_SIZE);
+        ASSERT_EQ(std::string(buf, CAT_BUFFER_COMMON_SIZE), std::string(red, CAT_BUFFER_COMMON_SIZE));
     }
-    ASSERT_LT(cat_fs_read(fd, red, CAT_BUFFER_DEFAULT_SIZE), CAT_BUFFER_DEFAULT_SIZE);
+    ASSERT_LT(cat_fs_read(fd, red, CAT_BUFFER_COMMON_SIZE), CAT_BUFFER_COMMON_SIZE);
     ASSERT_NE(cat_get_last_error_code(), 0);
 }
 

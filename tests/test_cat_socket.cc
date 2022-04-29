@@ -1956,7 +1956,7 @@ TEST(cat_socket, peek)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     cat_socket_t client;
-    char buffer[CAT_BUFFER_DEFAULT_SIZE];
+    char buffer[CAT_BUFFER_COMMON_SIZE];
     ssize_t n;
 
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
@@ -1975,7 +1975,7 @@ TEST(cat_socket, peekfrom)
 {
     TEST_REQUIRE(echo_udp_server != nullptr, cat_socket, echo_udp_server);
     cat_socket_t client;
-    char buffer[CAT_BUFFER_DEFAULT_SIZE];
+    char buffer[CAT_BUFFER_COMMON_SIZE];
     ssize_t n;
     char ip[CAT_SOCKET_IP_BUFFER_SIZE];
     size_t ip_length;

@@ -25,7 +25,7 @@ TEST(cat_coroutine, stackoverflow)
     co([] {
         std::function<void(void)> fn;
         fn = [&fn] {
-            char buffer[CAT_BUFFER_DEFAULT_SIZE];
+            char buffer[CAT_BUFFER_COMMON_SIZE];
             memset(buffer, 0, sizeof(buffer));
             fn();
         };
