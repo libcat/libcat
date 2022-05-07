@@ -49,7 +49,7 @@ int main(int argc, const char **argv) {
         fprintf(stderr, "failed to read stdin\n");
         return 1;
     }
-  
+
     p = buf;
     pe = buf + red;
 
