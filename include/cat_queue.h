@@ -73,10 +73,6 @@ typedef void *cat_queue_node_t[2];
     cat_queue_prev(queue) = (node); \
 } while (0)
 
-#define cat_queue_pop_front(queue) cat_queue_remove(cat_queue_next(queue))
-
-#define cat_queue_pop_back(queue)  cat_queue_remove(cat_queue_prev(queue))
-
 #define cat_queue_remove(node) do { \
     cat_queue_prev_next(node) = cat_queue_next(node); \
     cat_queue_next_prev(node) = cat_queue_prev(node); \
