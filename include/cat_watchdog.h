@@ -43,11 +43,11 @@ typedef struct cat_watchdog_s cat_watchdog_t;
 
 typedef void (*cat_watchdog_alerter_t)(cat_watchdog_t *watchdog);
 
-CAT_GLOBALS_STRUCT_BEGIN(cat_watchdog)
+CAT_GLOBALS_STRUCT_BEGIN(cat_watchdog) {
     cat_watchdog_t *watchdog;
-CAT_GLOBALS_STRUCT_END(cat_watchdog)
+} CAT_GLOBALS_STRUCT_END(cat_watchdog);
 
-extern CAT_API CAT_GLOBALS_DECLARE(cat_watchdog)
+extern CAT_API CAT_GLOBALS_DECLARE(cat_watchdog);
 
 #define CAT_WATCH_DOG_G(x) CAT_GLOBALS_GET(cat_watchdog, x)
 

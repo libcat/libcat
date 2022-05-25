@@ -141,13 +141,11 @@ static cat_coroutine_stack_size_t cat_coroutine_align_stack_size(size_t size)
     return (cat_coroutine_stack_size_t) size;
 }
 
-CAT_API CAT_GLOBALS_DECLARE(cat_coroutine)
-
-CAT_GLOBALS_CTOR_DECLARE_SZ(cat_coroutine)
+CAT_API CAT_GLOBALS_DECLARE(cat_coroutine);
 
 CAT_API cat_bool_t cat_coroutine_module_init(void)
 {
-    CAT_GLOBALS_REGISTER(cat_coroutine, CAT_GLOBALS_CTOR(cat_coroutine), NULL);
+    CAT_GLOBALS_REGISTER(cat_coroutine);
     return cat_true;
 }
 

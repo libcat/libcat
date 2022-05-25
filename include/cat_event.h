@@ -31,15 +31,15 @@ typedef struct cat_event_task_s {
     cat_data_t *data;
 } cat_event_task_t;
 
-CAT_GLOBALS_STRUCT_BEGIN(cat_event)
+CAT_GLOBALS_STRUCT_BEGIN(cat_event) {
     uv_loop_t loop;
     uv_timer_t deadlock;
     cat_queue_t runtime_shutdown_tasks;
     cat_queue_t defer_tasks;
     size_t defer_task_count;
-CAT_GLOBALS_STRUCT_END(cat_event)
+} CAT_GLOBALS_STRUCT_END(cat_event);
 
-extern CAT_API CAT_GLOBALS_DECLARE(cat_event)
+extern CAT_API CAT_GLOBALS_DECLARE(cat_event);
 
 #define CAT_EVENT_G(x) CAT_GLOBALS_GET(cat_event, x)
 

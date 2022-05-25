@@ -20,15 +20,10 @@
 #define CAT_GLOBALS_TYPE(name)                          name##_globals_t
 #define CAT_GLOBALS(name)                               name##_globals
 
-#define CAT_GLOBALS_STRUCT_BEGIN(name)                  typedef struct CAT_GLOBALS_STRUCT(name) {
-#define CAT_GLOBALS_STRUCT_END(name)                    } CAT_GLOBALS_TYPE(name);
+#define CAT_GLOBALS_STRUCT_BEGIN(name)                  typedef struct CAT_GLOBALS_STRUCT(name)
+#define CAT_GLOBALS_STRUCT_END(name)                    CAT_GLOBALS_TYPE(name)
 
-#define CAT_GLOBALS_CTOR(name)                          name##_globals##_ctor
-#define CAT_GLOBALS_DTOR(name)                          name##_globals##_dtor
-#define CAT_GLOBALS_CTOR_DECLARE(name, param)           void CAT_GLOBALS_CTOR(name)(CAT_GLOBALS_TYPE(name) *param)
-#define CAT_GLOBALS_DTOR_DECLARE(name, param)           void CAT_GLOBALS_DTOR(name)(CAT_GLOBALS_TYPE(name) *param)
-#define CAT_GLOBALS_CTOR_DECLARE_SZ(name)               static CAT_GLOBALS_CTOR_DECLARE(name, g) { memset(g, 0, sizeof(*g)); }
-#define CAT_GLOBALS_DTOR_DECLARE_SZ(name)               static CAT_GLOBALS_DTOR_DECLARE(name, g) { memset(g, 0, sizeof(*g)); }
+#define CAT_GLOBALS_BZERO(name)                         memset(CAT_GLOBALS_BULK(name), 0, sizeof(CAT_GLOBALS_TYPE(name)))
 
 #ifndef CAT_THREAD_SAFE
 
@@ -42,15 +37,14 @@
 #endif /* CAT_USE_THREAD_LOCAL */
 
 #ifdef CAT_THREAD_LOCAL
-#define CAT_GLOBALS_DECLARE(name)                       CAT_THREAD_LOCAL CAT_GLOBALS_TYPE(name) CAT_GLOBALS(name);
+#define CAT_GLOBALS_DECLARE(name)                       CAT_THREAD_LOCAL CAT_GLOBALS_TYPE(name) CAT_GLOBALS(name)
 #else
-#define CAT_GLOBALS_DECLARE(name)                       CAT_GLOBALS_TYPE(name) CAT_GLOBALS(name);
+#define CAT_GLOBALS_DECLARE(name)                       CAT_GLOBALS_TYPE(name) CAT_GLOBALS(name)
 #endif
 #define CAT_GLOBALS_GET(name, value)                    CAT_GLOBALS(name).value
 #define CAT_GLOBALS_BULK(name)                          &CAT_GLOBALS(name)
 
-#define CAT_GLOBALS_REGISTER(name, ctor, dtor) do { \
-    ctor(CAT_GLOBALS_BULK(name)); \
-} while (0)
+#define CAT_GLOBALS_REGISTER(name)
+#define CAT_GLOBALS_UNREGISTER(name)
 
 #endif /* CAT_THREAD_SAFE */
