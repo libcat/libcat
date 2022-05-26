@@ -451,6 +451,13 @@ CAT_API cat_bool_t cat_os_wait_module_init(void)
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_os_wait_module_shutdown(void)
+{
+    CAT_GLOBALS_UNREGISTER(cat_os_wait);
+
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_os_wait_runtime_init(void)
 {
     uv_signal_init(&CAT_EVENT_G(loop), &CAT_OS_WAIT_G(sigchld_watcher));

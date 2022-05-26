@@ -518,6 +518,7 @@ extern CAT_API CAT_GLOBALS_DECLARE(cat_socket);
 /* module initialization */
 
 CAT_API cat_bool_t cat_socket_module_init(void);
+CAT_API cat_bool_t cat_socket_module_shutdown(void);
 CAT_API cat_bool_t cat_socket_runtime_init(void);
 
 /* common methods */

@@ -103,6 +103,12 @@ CAT_API cat_bool_t cat_watchdog_module_init(void)
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_watchdog_module_shutdown(void)
+{
+    CAT_GLOBALS_UNREGISTER(cat_watchdog);
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_watchdog_runtime_init(void)
 {
     CAT_WATCH_DOG_G(watchdog) = NULL;

@@ -73,6 +73,7 @@ struct cat_watchdog_s
 };
 
 CAT_API cat_bool_t cat_watchdog_module_init(void);
+CAT_API cat_bool_t cat_watchdog_module_shutdown(void);
 CAT_API cat_bool_t cat_watchdog_runtime_init(void);
 CAT_API cat_bool_t cat_watchdog_runtime_shutdown(void);
 

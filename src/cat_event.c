@@ -27,6 +27,13 @@ CAT_API cat_bool_t cat_event_module_init(void)
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_event_module_shutdown(void)
+{
+    CAT_GLOBALS_UNREGISTER(cat_event);
+
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_event_runtime_init(void)
 {
     int error;

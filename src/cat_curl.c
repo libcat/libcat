@@ -277,6 +277,8 @@ CAT_API cat_bool_t cat_curl_module_shutdown(void)
 {
     curl_global_cleanup();
 
+    CAT_GLOBALS_UNREGISTER(cat_curl);
+
     return cat_true;
 }
 

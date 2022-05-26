@@ -192,6 +192,7 @@ extern CAT_API CAT_GLOBALS_DECLARE(cat_coroutine);
 
 /* module initializers */
 CAT_API cat_bool_t cat_coroutine_module_init(void);
+CAT_API cat_bool_t cat_coroutine_module_shutdown(void);
 CAT_API cat_bool_t cat_coroutine_runtime_init(void);
 CAT_API cat_bool_t cat_coroutine_runtime_shutdown(void);
 

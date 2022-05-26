@@ -149,6 +149,12 @@ CAT_API cat_bool_t cat_coroutine_module_init(void)
     return cat_true;
 }
 
+CAT_API cat_bool_t cat_coroutine_module_shutdown(void)
+{
+    CAT_GLOBALS_UNREGISTER(cat_coroutine);
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_coroutine_runtime_init(void)
 {
     /* register coroutine resume */

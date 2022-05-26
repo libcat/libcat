@@ -69,6 +69,8 @@ CAT_API cat_bool_t cat_module_init(void)
 
 CAT_API cat_bool_t cat_module_shutdown(void)
 {
+    CAT_GLOBALS_UNREGISTER(cat);
+
     return cat_true;
 }
 
