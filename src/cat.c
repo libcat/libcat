@@ -34,7 +34,7 @@ void cat_bug_detector_callback(int signum)
     "You can read How to report a bug doc before submitting any bug reports:\n" \
     ">> https://github.com/libcat/libcat/blob/master/.github/ISSUE.md \n"
 #endif
-    fprintf(CAT_G(error_log), CAT_BUG_REPORT);
+    fprintf(stderr, CAT_BUG_REPORT);
     abort();
 }
 #endif
