@@ -40,6 +40,13 @@
 # define cat_sys_free    free
 #endif
 
+#ifndef cat_ts_malloc
+#define cat_ts_malloc  cat_sys_malloc
+#define cat_ts_calloc  cat_sys_calloc
+#define cat_ts_realloc cat_sys_realloc
+#define cat_ts_free    cat_sys_free
+#endif
+
 #ifndef cat_malloc
 # ifndef CAT_USE_DYNAMIC_ALLOCATOR
 #  define cat_malloc  cat_sys_malloc
