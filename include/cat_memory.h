@@ -30,28 +30,28 @@
 /* allocator */
 
 #ifndef CAT_ALLOC_HANDLE_ERRORS
-#define CAT_ALLOC_HANDLE_ERRORS 0
+# define CAT_ALLOC_HANDLE_ERRORS 0
 #endif
 
 #ifndef cat_sys_malloc
-#define cat_sys_malloc                 malloc
-#define cat_sys_calloc                 calloc
-#define cat_sys_realloc                realloc
-#define cat_sys_free                   free
+# define cat_sys_malloc  malloc
+# define cat_sys_calloc  calloc
+# define cat_sys_realloc realloc
+# define cat_sys_free    free
 #endif
 
 #ifndef cat_malloc
-#ifndef CAT_USE_DYNAMIC_ALLOCATOR
-#define cat_malloc                     cat_sys_malloc
-#define cat_calloc                     cat_sys_calloc
-#define cat_realloc                    cat_sys_realloc
-#define cat_free                       cat_sys_free
-#else
-#define cat_malloc                     cat_allocator.malloc
-#define cat_calloc                     cat_allocator.calloc
-#define cat_realloc                    cat_allocator.realloc
-#define cat_free                       cat_allocator.free
-#endif
+# ifndef CAT_USE_DYNAMIC_ALLOCATOR
+#  define cat_malloc  cat_sys_malloc
+#  define cat_calloc  cat_sys_calloc
+#  define cat_realloc cat_sys_realloc
+#  define cat_free    cat_sys_free
+# else
+#  define cat_malloc  cat_allocator.malloc
+#  define cat_calloc  cat_allocator.calloc
+#  define cat_realloc cat_allocator.realloc
+#  define cat_free    cat_allocator.free
+# endif
 #endif
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
@@ -70,7 +70,7 @@ typedef struct cat_allocator_s {
 extern CAT_API cat_allocator_t cat_allocator;
 
 CAT_API cat_bool_t cat_register_allocator(const cat_allocator_t *allocator);
-#endif
+#endif /* CAT_USE_DYNAMIC_ALLOCATOR */
 
 static cat_always_inline char *cat_memdup(const void *p, size_t size)
 {
