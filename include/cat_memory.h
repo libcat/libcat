@@ -29,36 +29,136 @@
 
 /* allocator */
 
-#ifndef CAT_ALLOC_HANDLE_ERRORS
-# define CAT_ALLOC_HANDLE_ERRORS 0
+#ifndef cat_sys_malloc_recoverable
+# define cat_sys_malloc_recoverable  malloc
+# define cat_sys_calloc_recoverable  calloc
+# define cat_sys_realloc_recoverable realloc
 #endif
 
 #ifndef cat_sys_malloc
-# define cat_sys_malloc  malloc
-# define cat_sys_calloc  calloc
-# define cat_sys_realloc realloc
-# define cat_sys_free    free
-#endif
-
-#ifndef cat_ts_malloc
-#define cat_ts_malloc  cat_sys_malloc
-#define cat_ts_calloc  cat_sys_calloc
-#define cat_ts_realloc cat_sys_realloc
-#define cat_ts_free    cat_sys_free
+# ifndef CAT_SYS_ALLOC_ABORT_ON_OOM
+#  define CAT_SYS_ALLOC_ABORT_ON_OOM 1
+# endif
+# if CAT_SYS_ALLOC_ABORT_ON_OOM
+#  define CAT_SYS_ALLOC_HANDLE_ERRORS 0
+# else
+#  define CAT_SYS_ALLOC_HANDLE_ERRORS 1
+# endif
+# if CAT_SYS_ALLOC_ABORT_ON_OOM
+#  define cat_sys_malloc  cat_sys_malloc_unrecoverable
+#  define cat_sys_calloc  cat_sys_calloc_unrecoverable
+#  define cat_sys_realloc cat_sys_realloc_unrecoverable
+# else
+#  define cat_sys_malloc  cat_sys_malloc_recoverable
+#  define cat_sys_calloc  cat_sys_calloc_recoverable
+#  define cat_sys_realloc cat_sys_realloc_recoverable
+# endif
+#  define cat_sys_free    free
 #endif
 
 #ifndef cat_malloc
-# ifndef CAT_USE_DYNAMIC_ALLOCATOR
-#  define cat_malloc  cat_sys_malloc
-#  define cat_calloc  cat_sys_calloc
-#  define cat_realloc cat_sys_realloc
-#  define cat_free    cat_sys_free
-# else
-#  define cat_malloc  cat_allocator.malloc
-#  define cat_calloc  cat_allocator.calloc
-#  define cat_realloc cat_allocator.realloc
-#  define cat_free    cat_allocator.free
+# ifndef CAT_ALLOC_ABORT_ON_OOM
+#  define CAT_ALLOC_ABORT_ON_OOM 1
 # endif
+# ifndef CAT_ALLOC_HANDLE_ERRORS
+#  if CAT_ALLOC_ABORT_ON_OOM
+#   define CAT_ALLOC_HANDLE_ERRORS 0
+#  else
+#   define CAT_ALLOC_HANDLE_ERRORS 1
+#  endif
+# endif
+# ifndef CAT_USE_DYNAMIC_ALLOCATOR
+#  if CAT_ALLOC_ABORT_ON_OOM
+#   define cat_malloc  cat_sys_malloc_unrecoverable
+#   define cat_calloc  cat_sys_calloc_unrecoverable
+#   define cat_realloc cat_sys_realloc_unrecoverable
+#   define cat_free    cat_sys_free
+#  else
+#   define cat_malloc  cat_sys_malloc_recoverable
+#   define cat_calloc  cat_sys_calloc_recoverable
+#   define cat_realloc cat_sys_realloc_recoverable
+#   define cat_free    cat_sys_free
+#  endif
+# else /* CAT_USE_DYNAMIC_ALLOCATOR */
+#  if CAT_ALLOC_ABORT_ON_OOM
+#   define cat_malloc  cat_allocator.malloc
+#   define cat_calloc  cat_allocator.calloc
+#   define cat_realloc cat_allocator.realloc
+#   define cat_free    cat_allocator.free
+#  else
+#   define cat_malloc  cat_allocator_malloc_unrecoverable
+#   define cat_calloc  cat_allocator_calloc_unrecoverable
+#   define cat_realloc cat_allocator_realloc_unrecoverable
+#   define cat_free    cat_allocator.free
+#  endif
+# endif
+#endif
+
+#ifndef CAT_SYS_ALLOC_HANDLE_ERRORS
+# error "CAT_SYS_ALLOC_HANDLE_ERRORS should be defined to indicates how the program should handle OOM"
+#endif
+#ifndef CAT_ALLOC_HANDLE_ERRORS
+# error "CAT_ALLOC_HANDLE_ERRORS should be defined to indicates how the program should handle OOM"
+#endif
+
+CAT_API CAT_COLD CAT_NORETURN void cat_out_of_memory(void);
+
+#if CAT_SYS_ALLOC_ABORT_ON_OOM
+static cat_always_inline void *cat_sys_malloc_unrecoverable(size_t size)
+{
+    void *ptr = malloc(size);
+    if (unlikely(ptr == NULL && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
+
+static cat_always_inline void *cat_sys_calloc_unrecoverable(size_t count, size_t size)
+{
+    void *ptr = calloc(count, size);
+    if (unlikely(ptr == NULL && count != 0 && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
+
+static cat_always_inline void *cat_sys_realloc_unrecoverable(void *ptr, size_t size)
+{
+    ptr = realloc(ptr, size);
+    if (unlikely(ptr == NULL && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
+#endif
+
+#if CAT_ALLOC_ABORT_ON_OOM && defined(CAT_USE_DYNAMIC_ALLOCATOR)
+static cat_always_inline void *cat_allocator_malloc_unrecoverable(size_t size)
+{
+    void *ptr = cat_allocator.malloc(size);
+    if (unlikely(ptr == NULL && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
+
+static cat_always_inline void *cat_allocator_calloc_unrecoverable(size_t count, size_t size)
+{
+    void *ptr = cat_allocator.calloc(count, size);
+    if (unlikely(ptr == NULL && count != 0 && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
+
+static cat_always_inline void *cat_allocator_realloc_unrecoverable(void *ptr, size_t size)
+{
+    ptr = cat_allocator.realloc(ptr, size);
+    if (unlikely(ptr == NULL && size != 0)) {
+        cat_out_of_memory();
+    }
+    return ptr;
+}
 #endif
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR

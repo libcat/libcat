@@ -1178,7 +1178,7 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
         return;
     }
     pret->name = cat_sys_strdup(pdirent->d_name);
-#ifndef CAT_SYS_ALLOC_NEVER_RETURNS_NULL
+#if CAT_SYS_ALLOC_HANDLE_ERRORS
     if (NULL == pret->name) {
         free(pret);
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
