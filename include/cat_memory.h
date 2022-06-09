@@ -101,7 +101,9 @@
 # error "CAT_ALLOC_HANDLE_ERRORS should be defined to indicates how the program should handle OOM"
 #endif
 
+#ifndef cat_out_of_memory
 CAT_API CAT_COLD CAT_NORETURN void cat_out_of_memory(void);
+#endif
 
 #if CAT_SYS_ALLOC_ABORT_ON_OOM
 static cat_always_inline void *cat_sys_malloc_unrecoverable(size_t size)

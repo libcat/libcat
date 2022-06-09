@@ -18,11 +18,13 @@
 
 #include "cat.h"
 
+#ifndef cat_out_of_memory
 CAT_API CAT_COLD CAT_NORETURN void cat_out_of_memory(void)
 {
 	fprintf(stderr, "Out of memory\n");
 	cat_abort();
 }
+#endif
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
 CAT_API cat_allocator_t cat_allocator;
