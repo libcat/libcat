@@ -84,13 +84,12 @@
 #   define cat_malloc  cat_allocator.malloc
 #   define cat_calloc  cat_allocator.calloc
 #   define cat_realloc cat_allocator.realloc
-#   define cat_free    cat_allocator.free
 #  else
 #   define cat_malloc  cat_allocator_malloc_unrecoverable
 #   define cat_calloc  cat_allocator_calloc_unrecoverable
 #   define cat_realloc cat_allocator_realloc_unrecoverable
-#   define cat_free    cat_allocator.free
 #  endif
+#   define cat_free    cat_allocator.free
 # endif
 #endif
 
@@ -105,10 +104,9 @@
 CAT_API CAT_COLD CAT_NORETURN void cat_out_of_memory(void);
 #endif
 
-#if CAT_SYS_ALLOC_ABORT_ON_OOM
 static cat_always_inline void *cat_sys_malloc_unrecoverable(size_t size)
 {
-    void *ptr = malloc(size);
+    void *ptr = cat_sys_malloc_recoverable(size);
     if (unlikely(ptr == NULL && size != 0)) {
         cat_out_of_memory();
     }
@@ -117,7 +115,7 @@ static cat_always_inline void *cat_sys_malloc_unrecoverable(size_t size)
 
 static cat_always_inline void *cat_sys_calloc_unrecoverable(size_t count, size_t size)
 {
-    void *ptr = calloc(count, size);
+    void *ptr = cat_sys_calloc_recoverable(count, size);
     if (unlikely(ptr == NULL && count != 0 && size != 0)) {
         cat_out_of_memory();
     }
@@ -126,15 +124,28 @@ static cat_always_inline void *cat_sys_calloc_unrecoverable(size_t count, size_t
 
 static cat_always_inline void *cat_sys_realloc_unrecoverable(void *ptr, size_t size)
 {
-    ptr = realloc(ptr, size);
+    ptr = cat_sys_realloc_recoverable(ptr, size);
     if (unlikely(ptr == NULL && size != 0)) {
         cat_out_of_memory();
     }
     return ptr;
 }
-#endif
 
-#if CAT_ALLOC_ABORT_ON_OOM && defined(CAT_USE_DYNAMIC_ALLOCATOR)
+#ifdef CAT_USE_DYNAMIC_ALLOCATOR
+typedef void *(*cat_malloc_function_t)(size_t size);
+typedef void *(*cat_calloc_function_t)(size_t count, size_t size);
+typedef void *(*cat_realloc_function_t)(void *ptr, size_t size);
+typedef void (*cat_free_function_t)(void *ptr);
+
+typedef struct cat_allocator_s {
+    cat_malloc_function_t malloc;
+    cat_calloc_function_t calloc;
+    cat_realloc_function_t realloc;
+    cat_free_function_t free;
+} cat_allocator_t;
+
+extern CAT_API cat_allocator_t cat_allocator;
+
 static cat_always_inline void *cat_allocator_malloc_unrecoverable(size_t size)
 {
     void *ptr = cat_allocator.malloc(size);
@@ -161,22 +172,6 @@ static cat_always_inline void *cat_allocator_realloc_unrecoverable(void *ptr, si
     }
     return ptr;
 }
-#endif
-
-#ifdef CAT_USE_DYNAMIC_ALLOCATOR
-typedef void *(*cat_malloc_function_t)(size_t size);
-typedef void *(*cat_calloc_function_t)(size_t count, size_t size);
-typedef void *(*cat_realloc_function_t)(void *ptr, size_t size);
-typedef void (*cat_free_function_t)(void *ptr);
-
-typedef struct cat_allocator_s {
-    cat_malloc_function_t malloc;
-    cat_calloc_function_t calloc;
-    cat_realloc_function_t realloc;
-    cat_free_function_t free;
-} cat_allocator_t;
-
-extern CAT_API cat_allocator_t cat_allocator;
 
 CAT_API cat_bool_t cat_register_allocator(const cat_allocator_t *allocator);
 #endif /* CAT_USE_DYNAMIC_ALLOCATOR */
