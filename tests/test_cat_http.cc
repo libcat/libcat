@@ -1103,9 +1103,13 @@ TEST(cat_http_parser, multipart_stream)
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
     cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
 
+#ifdef CAT_HAVE_ASAN
     char canary1[8192];
+#endif
     char http_buf[8192];
+#ifdef CAT_HAVE_ASAN
     char canary2[8192];
+#endif
     char http_buf_2[8192+8192];
 
 #ifdef CAT_HAVE_ASAN
@@ -1237,9 +1241,13 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
     });
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
 
+#ifdef CAT_HAVE_ASAN
     char canary1[8192];
+#endif
     char http_buf[8192];
+#ifdef CAT_HAVE_ASAN
     char canary2[8192];
+#endif
     char http_buf_2[8192+8192];
 
 #ifdef CAT_HAVE_ASAN
