@@ -110,7 +110,7 @@ typedef union {
     uv_timer_t timer;
 } cat_timer_t;
 
-static void cat_sleep_timer_callback(uv_timer_t* handle)
+static void cat_timer_callback(uv_timer_t* handle)
 {
     cat_timer_t *timer = (cat_timer_t *) handle;
     cat_coroutine_t *coroutine = timer->coroutine;
@@ -133,7 +133,7 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
 #endif
 
     (void) uv_timer_init(&CAT_EVENT_G(loop), &timer->timer);
-    (void) uv_timer_start(&timer->timer, cat_sleep_timer_callback, msec, 0);
+    (void) uv_timer_start(&timer->timer, cat_timer_callback, msec, 0);
 
     CAT_LOG_DEBUG_SCOPE_START_EX(TIME, char *tmp) {
         CAT_LOG_DEBUG_D(TIME, "Sleep %s", tmp = cat_time_format_msec(msec));

@@ -250,12 +250,12 @@ typedef struct {
 
 /* double defer here to avoid use-after-free */
 
-static void cat_poll_free_function(void *data)
+static void cat_poll_free_callback(void *data)
 {
     cat_event_defer(cat_free_function, data);
 }
 
-static void cat_poll_close_function(uv_handle_t *handle)
+static void cat_poll_close_callback(uv_handle_t *handle)
 {
     cat_poll_t *poll = (cat_poll_t *) handle;
     cat_poll_context_t *context = poll->u.context;
@@ -266,7 +266,7 @@ static void cat_poll_close_function(uv_handle_t *handle)
     }
 #endif
     if (!context->deferred_free_callback) {
-        (void) cat_event_defer(cat_poll_free_function, context);
+        (void) cat_event_defer(cat_poll_free_callback, context);
         context->deferred_free_callback = cat_true;
     }
 }
@@ -383,7 +383,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
         cat_pollfd_t *fd = &fds[i];
         cat_poll_t *poll = &polls[i];
         if (poll->initialized) {
-            uv_close(&poll->u.handle, cat_poll_close_function);
+            uv_close(&poll->u.handle, cat_poll_close_callback);
         }
         if (unlikely(ret == CAT_RET_NONE && poll->status < 0)) {
             if (poll->status == CAT_ECANCELED) {
@@ -416,7 +416,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
         for (; i > 0; i--) {
             cat_poll_t *poll = &polls[i];
             if (poll->initialized) {
-                uv_close(&poll->u.handle, cat_poll_close_function);
+                uv_close(&poll->u.handle, cat_poll_close_callback);
             }
         }
     } else {
