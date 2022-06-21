@@ -310,7 +310,13 @@ CAT_API int cat_fs_scandir(const char *path, cat_dirent_t **namelist,
     }
 
     if (compar) {
+#ifdef _MSC_VER
+# pragma warning(disable:4191) /* FIXME: workaround for MSVC bug */
+#endif
         qsort(tmp, cnt, sizeof(*tmp), (int (*)(const void *, const void *))compar);
+#ifdef _MSC_VER
+# pragma warning(default:4191) /* FIXME: workaround for MSVC bug */
+#endif
     }
     *namelist = tmp;
     return cnt;
@@ -1395,7 +1401,13 @@ static const char *cat_fs_proveRtlNtStatusToDosError(void)
                 return "Cannot open ntdll.dll";
             }
         }
+#ifdef _MSC_VER
+# pragma warning(disable:4191) /* FIXME: workaround for MSVC bug */
+#endif
         pRtlNtStatusToDosError = (ULONG (*)(NTSTATUS))GetProcAddress(hntdll, "RtlNtStatusToDosError");
+#ifdef _MSC_VER
+# pragma warning(default:4191) /* FIXME: workaround for MSVC bug */
+#endif
         if (NULL == pRtlNtStatusToDosError) {
             return "Cannot resolve RtlNtStatusToDosError";
         }
@@ -1595,8 +1607,14 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
                 return;
             }
         }
+#ifdef _MSC_VER /* FIXME: workaround for MSVC bug */
+# pragma warning(disable:4191)
+#endif
         pNtQueryDirectoryFile = (NTSTATUS (*)(HANDLE, HANDLE, PVOID, PVOID, PVOID, PVOID, ULONG, FILE_INFORMATION_CLASS, BOOLEAN, PVOID, BOOLEAN))
             GetProcAddress(hntdll, "NtQueryDirectoryFile");
+#ifdef _MSC_VER /* FIXME: workaround for MSVC bug */
+# pragma warning(default:4191)
+#endif
         if (NULL == pNtQueryDirectoryFile) {
             data->ret.error.msg_free = CAT_FS_FREER_NONE;
             data->ret.error.msg = "Cannot find NtQueryDirectoryFile in readdir";
