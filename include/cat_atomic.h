@@ -94,6 +94,16 @@ extern "C" {
     XX(64, int64,  __int64) \
     XX(64, uint64, __int64) \
 
+#ifdef CAT_HAVE_INTERLOCK_ATOMIC
+# define _InterlockedOr32 _InterlockedOr
+# define _InterlockedExchange32 _InterlockedExchange
+# define _InterlockedExchangeAdd32 _InterlockedExchangeAdd
+# define _InterlockedExchangeSub8(value, operand)  _InterlockedExchangeAdd8(value, -operand)
+# define _InterlockedExchangeSub16(value, operand) _InterlockedExchangeAdd16(value, -operand)
+# define _InterlockedExchangeSub32(value, operand) _InterlockedExchangeAdd32(value, -operand)
+# define _InterlockedExchangeSub64(value, operand) _InterlockedExchangeAdd64(value, -operand)
+#endif
+
 #define CAT_ATOMIC_OPERATION_FUNCTIONS_GEN(bit_size, type_name, type_name_for_interlock_t) \
 typedef struct cat_atomic_##type_name##_s { \
     CAT_ATOMIC_C11_ATOMIC_IMPL( \
