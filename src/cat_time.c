@@ -119,6 +119,12 @@ static void cat_timer_callback(uv_timer_t* handle)
     cat_coroutine_schedule(coroutine, TIME, "Timer");
 }
 
+static void cat_timer_close_callback(uv_handle_t *handle)
+{
+    cat_timer_t *timer = cat_container_of(handle, cat_timer_t, handle);
+    cat_free(timer);
+}
+
 static cat_timer_t *cat_timer_wait(cat_msec_t msec)
 {
     cat_timer_t *timer;
@@ -143,7 +149,7 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
 
     ret = cat_coroutine_yield(NULL, NULL);
 
-    uv_close(&timer->handle, (uv_close_cb) cat_free_function);
+    uv_close(&timer->handle, cat_timer_close_callback);
 
     if (unlikely(!ret)) {
         cat_update_last_error_with_previous("Time sleep failed");

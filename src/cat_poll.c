@@ -132,6 +132,12 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, int events)
     cat_coroutine_schedule(poll->u.coroutine, EVENT, "Poll one");
 }
 
+static void cat_poll_one_close_callback(uv_handle_t *handle)
+{
+    cat_poll_one_t *poll = cat_container_of(handle, cat_poll_one_t, u.handle);
+    cat_free(poll);
+}
+
 CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
 {
     CAT_POLL_CHECK_TIMEOUT(timeout);
@@ -177,7 +183,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
     error = uv_poll_start(&poll->u.poll, cat_poll_translate_from_sysno(events), cat_poll_one_callback);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll start failed");
-        uv_close(&poll->u.handle, (uv_close_cb) cat_free_function);
+        uv_close(&poll->u.handle, cat_poll_one_close_callback);
         *revents = cat_poll_translate_error_to_revents(events, error);
         return CAT_RET_ERROR;
     }
@@ -192,7 +198,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
         uv__close(fd);
     }
 #endif
-    uv_close(&poll->u.handle, (uv_close_cb) cat_free_function);
+    uv_close(&poll->u.handle, cat_poll_one_close_callback);
 
     switch (ret) {
         /* delay cancelled */
@@ -257,7 +263,7 @@ static void cat_poll_free_callback(void *data)
 
 static void cat_poll_close_callback(uv_handle_t *handle)
 {
-    cat_poll_t *poll = (cat_poll_t *) handle;
+    cat_poll_t *poll = cat_container_of(handle, cat_poll_t, u.handle);
     cat_poll_context_t *context = poll->u.context;
 
 #ifdef CAT_OS_UNIX_LIKE
