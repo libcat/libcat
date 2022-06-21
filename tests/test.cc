@@ -226,9 +226,12 @@ class BootstrapEnvironment : public testing::Environment
 public:
     virtual void SetUp()
     {
-        ASSERT_TRUE(cat_init_all());
+        ASSERT_TRUE(cat_module_init_all());
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_init());
+#endif
+        ASSERT_TRUE(cat_runtime_init_all());
+#ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_init());
 #endif
         cat_set_error_log(stderr);
@@ -359,9 +362,12 @@ public:
 
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_close());
+#endif
+        ASSERT_TRUE(cat_runtime_shutdown_all());
+#ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_shutdown());
 #endif
-        ASSERT_TRUE(cat_shutdown_all());
+        ASSERT_TRUE(cat_module_shutdown_all());
     }
 };
 
