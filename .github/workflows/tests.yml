@@ -132,7 +132,7 @@ jobs:
           ECHO ::endgroup::
           ECHO ::group::Make cmake cache
           cmake . -B build ^
-            -DASAN=ON ^
+            -DLIBCAT_ENABLE_ASAN=ON ^
             -DCMAKE_C_FLAGS="/WX" ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
@@ -207,7 +207,7 @@ jobs:
           echo "::endgroup::"
           echo "::group::Make cmake cache"
           cmake .. \
-            -DASAN=ON \
+            -DLIBCAT_ENABLE_ASAN=ON \
             -DCODE_COVERAGE=ON \
             -DCMAKE_C_FLAGS="-Werror" || exit 1
           echo "::endgroup::"

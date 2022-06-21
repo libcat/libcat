@@ -181,10 +181,10 @@ else()
 endif()
 
 # ASan options
-option(ASAN "Enable AddressSanitizer (ASan)" $ENV{ASAN})
+option(LIBCAT_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
 # TODO: TSAN support, see: https://github.com/libuv/libuv/commit/22d62239289c7c6e50e6cc4a93642b3b46bf2dad (@dixyes)
 
-if(ASAN)
+if(LIBCAT_ENABLE_ASAN)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
         message(WARNING "ASan is not supported in release build")
         message(STATUS "ASan is not enabled")
