@@ -1,0 +1,64 @@
+name: cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  '0 0 * * *'    # At every day 0:00
+
+jobs:
+  win-vcpkg-cache:
+    name: update vcpkg cache on ${{matrix.os}}
+    runs-on: ${{matrix.os}}
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        os: [ "windows-latest", "windows-2019" ]
+      max-parallel: 2
+      fail-fast: false
+    steps:
+      - name: Fetch vcpkg versions from github
+        run: |
+          function fetchmeta{
+            param ($Package)
+            $req = $null
+            try {
+              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/CONTROL"
+            }catch{
+              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/vcpkg.json"
+            }
+            return $req
+          }
+          Write-Host "::group::Fetching CONTROL from raw.githubusercontent.com"
+          (fetchmeta "gtest").Content > ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "openssl").Content >> ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "curl").Content >> ${{github.workspace}}/.vcpkgvers
+          (fetchmeta "zlib").Content >> ${{github.workspace}}/.vcpkgvers
+          Write-Host "::endgroup::"
+          Write-Host "::group::Show now vers"
+          Get-Content ${{github.workspace}}/.vcpkgvers
+          Write-Host "::endgroup::"
+
+      - name: Cache vcpkg
+        uses: actions/cache@v2
+        id: cache-gtest
+        with:
+          path: |
+            C:\vcpkg\packages\gtest_x64-windows
+            C:\vcpkg\packages\openssl_x64-windows
+            C:\vcpkg\packages\curl_x64-windows
+            C:\vcpkg\packages\zlib_x64-windows
+            C:\vcpkg\installed\*
+            #C:\vcpkg\buildtrees\openssl
+            #C:\vcpkg\buildtrees\curl
+            #C:\vcpkg\buildtrees\gtest
+            #C:\vcpkg\buildtrees\detect_compiler
+            C:\vcpkg\downloads\*
+            C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: ${{ matrix.os }}-vcpkg-${{ hashFiles('.vcpkgvers') }}
+
+      - name: Install vcpkg dependencies
+        shell: cmd
+        run: |
+          vcpkg install gtest:x64-windows && ^
+          vcpkg install openssl:x64-windows && ^
+          vcpkg install curl[core,non-http,ssl]:x64-windows
