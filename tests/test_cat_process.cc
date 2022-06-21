@@ -131,7 +131,7 @@ TEST(test_suite_name, test_name) { \
 #define TEST_PROCESS_END() \
 }
 
-#define GREETING_STRING "Hello libcat\n"
+#define GREETING_STRING "Hello libcat"
 
 static void greeter()
 {
@@ -140,9 +140,15 @@ static void greeter()
 
 static bool wait_for_greetings(cat_socket_t *pipe)
 {
-    char buffer[CAT_STRLEN(GREETING_STRING)];
-    return (cat_socket_read(pipe, CAT_STRS(buffer))== sizeof(buffer)) &&
-            (std::string(CAT_STRS(buffer)) == std::string(GREETING_STRING));
+    bool ret = false;
+    ([&] {
+        char buffer[CAT_STRLEN(GREETING_STRING)];
+        ssize_t nread = cat_socket_read(pipe, CAT_STRS(buffer));
+        ASSERT_EQ(nread, sizeof(buffer));
+        ASSERT_EQ(std::string(buffer, nread), std::string(GREETING_STRING));
+        ret = true;
+    })();
+    return ret;
 }
 
 TEST_PROCESS_START(cat_process, greeter, greeter) {
