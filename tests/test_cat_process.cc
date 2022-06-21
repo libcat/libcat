@@ -198,13 +198,11 @@ TEST_PROCESS_START(cat_process, kill, [] {
 
 TEST_PROCESS_START(cat_process, cancel_wait, [] {
     do {
-        char *line = NULL;
-        size_t size = 0;
-        ssize_t length;
-        length = getline(&line, &size, stdin);
-        ASSERT_GT(length, 0);
-        ASSERT_EQ(std::string(line, length), std::string(GREETING_STRING));
-        free(line);
+        char buffer[CAT_STRLEN(GREETING_STRING) + 1];
+        char *line = fgets(CAT_STRS(buffer), stdin);
+        ASSERT_EQ(line, buffer);
+        ASSERT_EQ(strlen(line), CAT_STRLEN(GREETING_STRING));
+        ASSERT_STREQ(line, GREETING_STRING);
     } while (0);
     greeter();
 }) {
