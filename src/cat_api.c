@@ -100,7 +100,9 @@ CAT_API cat_bool_t cat_runtime_close_all(void)
 {
     cat_bool_t ret = cat_true;
 
-    ret = cat_event_runtime_close() && ret;
+    ret = cat_event_runtime_close() &&
+          cat_runtime_close() &&
+          ret;
 
     return ret;
 }

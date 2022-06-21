@@ -56,6 +56,7 @@ CAT_API cat_bool_t cat_module_init(void)
     );
 #endif
 
+    CAT_GLOBALS_MODULE_INIT();
     CAT_GLOBALS_REGISTER(cat);
 
 #if CAT_USE_BUG_DETECTOR
@@ -70,12 +71,15 @@ CAT_API cat_bool_t cat_module_init(void)
 CAT_API cat_bool_t cat_module_shutdown(void)
 {
     CAT_GLOBALS_UNREGISTER(cat);
+    CAT_GLOBALS_MODULE_SHUTDOWN();
 
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_runtime_init(void)
 {
+    CAT_GLOBALS_RUNTIME_INIT();
+
     srand((unsigned int) time(NULL));
 
     CAT_G(log_types) = CAT_LOG_TYPES_DEFAULT;
@@ -143,6 +147,13 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
         cat_free((void *) CAT_G(exepath).data);
     }
     CAT_G(runtime) = cat_false;
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_runtime_close(void)
+{
+    CAT_GLOBALS_RUNTIME_CLOSE();
 
     return cat_true;
 }
