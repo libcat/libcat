@@ -723,6 +723,33 @@ if (1)
     target_include_directories(cat_multipart_parser PRIVATE ${multipart_parser_dir})
 endif()
 
+# Thread safe
+
+option(LIBCAT_USE_THREAD_LOCAL "Use thread_local for global vars" OFF)
+if (LIBCAT_USE_THREAD_LOCAL)
+    set(CAT_THREAD_SAFE "THREAD_LOCAL")
+    list(APPEND cat_defines CAT_USE_THREAD_LOCAL=1)
+endif()
+
+option(LIBCAT_USE_THREAD_KEY "Use uv_key for global vars" OFF)
+if (LIBCAT_USE_THREAD_KEY)
+    if (CAT_THREAD_SAFE)
+        message(WARNING "Another thread-safe option ${CAT_THREAD_SAFE} is on, THREAD_KEY option will be skipped")
+    else()
+        set(CAT_THREAD_SAFE "THREAD_KEY")
+        list(APPEND cat_defines CAT_USE_THREAD_KEY=1)
+    endif()
+endif()
+
+if (CAT_THREAD_SAFE)
+    if (LIBCAT_USE_THREAD_CONTEXT)
+        message(FATAL_ERROR "Thread-safe mode and coroutine thread-context can not be enabled at the same time")
+    endif()
+    message(STATUS "Thread-safe mode is enabled with ${CAT_THREAD_SAFE}")
+else()
+    message(STATUS "Thread-safe mode is disabled (by default)")
+endif()
+
 # OpenSSL dep
 find_package(OpenSSL QUIET)
 if (NOT OPENSSL_FOUND AND PkgConfig_FOUND)
