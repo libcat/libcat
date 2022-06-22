@@ -24,6 +24,8 @@ extern "C" {
 
 #include "cat.h"
 
+/* TODO: Fixed implementation selection
+ * or provided C API for external use. */
 #if __has_feature(c_atomic)
 # define CAT_HAVE_C11_ATOMIC 1
 #elif defined(__clang__) || CAT_GCC_VERSION >= 4007
