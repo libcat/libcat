@@ -1215,6 +1215,11 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
                 cat_ssl_unrecoverable_error(ssl);
                 break;
             }
+            if (!have_encrypted_data) {
+                /* need more encrypted data */
+                ret = cat_true;
+                break;
+            }
         } else {
             nread += n;
             if (nread == out_size) {
@@ -1222,12 +1227,6 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
                 ret = cat_true;
                 break;
             }
-        }
-
-        if (!have_encrypted_data) {
-            /* need more encrypted data */
-            ret = cat_true;
-            break;
         }
     }
 
