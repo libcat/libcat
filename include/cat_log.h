@@ -111,70 +111,46 @@ typedef enum cat_log_union_types_e {
         CAT_LOG_NORETURN_V(type, module_type, code, format ", reason: %s", reason, ##__VA_ARGS__)
 
 #ifndef CAT_ENABLE_DEBUG_LOG
-#define CAT_LOG_DEBUG_SCOPE_START(module_type)
-#define CAT_LOG_DEBUG_SCOPE_END()
-#define CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL(module_type, level)
-#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL()
-#define CAT_LOG_DEBUG_SCOPE_START_EX(module_type, pre)
-#define CAT_LOG_DEBUG_SCOPE_END_EX(end)
-#define CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL_EX(module_type, level, pre)
-#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL_EX(end)
-#define CAT_LOG_DEBUG(module_type, format, ...)
-#define CAT_LOG_DEBUG_V2(module_type, format, ...)
-#define CAT_LOG_DEBUG_V3(module_type, format, ...)
-#define CAT_LOG_DEBUG_WITH_LEVEL(module_type, level, format, ...)
-#define CAT_LOG_DEBUG_D(module_type, format, ...)
+# define CAT_LOG_DEBUG_VA(module_type, ...)
+# define CAT_LOG_DEBUG_VA_WITH_LEVEL(module_type, level, ...)
+# define CAT_LOG_DEBUG(module_type, format, ...)
+# define CAT_LOG_DEBUG_V2(module_type, format, ...)
+# define CAT_LOG_DEBUG_V3(module_type, format, ...)
+# define CAT_LOG_DEBUG_WITH_LEVEL(module_type, level, format, ...)
+# define CAT_LOG_DEBUG_D(module_type, format, ...)
 #else
-#define CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) do { \
+# define CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) do { \
     if (CAT_G(log_debug_level) >= level) {
 
-#define CAT_LOG_DEBUG_LEVEL_SCOPE_END() \
+# define CAT_LOG_DEBUG_LEVEL_SCOPE_END() \
     } \
 } while (0)
 
-#define CAT_LOG_DEBUG_SCOPE_START(module_type) \
-        CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL(module_type, 1)
+# define CAT_LOG_DEBUG_VA(module_type, ...) \
+        CAT_LOG_DEBUG_VA_WITH_LEVEL(module_type, 1, __VA_ARGS__)
 
-#define CAT_LOG_DEBUG_SCOPE_END() \
-        CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL()
-
-#define CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL(module_type, level) \
+# define CAT_LOG_DEBUG_VA_WITH_LEVEL(module_type, level, ...) \
         CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) { \
-            CAT_LOG_SCOPE_START(DEBUG, module_type) {
-
-#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL() \
+            CAT_LOG_SCOPE_START(DEBUG, module_type) { \
+                __VA_ARGS__ \
             } CAT_LOG_SCOPE_END(); \
         } CAT_LOG_DEBUG_LEVEL_SCOPE_END()
 
-#define CAT_LOG_DEBUG_SCOPE_START_EX(module_type, pre) \
-        CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL_EX(module_type, 1, pre)
-
-#define CAT_LOG_DEBUG_SCOPE_END_EX(end) \
-        CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL_EX(end)
-
-#define CAT_LOG_DEBUG_SCOPE_START_WITH_LEVEL_EX(module_type, level, pre) \
-        CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) { \
-            CAT_LOG_SCOPE_START(DEBUG, module_type) { pre;
-
-#define CAT_LOG_DEBUG_SCOPE_END_WITH_LEVEL_EX(end) \
-            end; } CAT_LOG_SCOPE_END(); \
-        } CAT_LOG_DEBUG_LEVEL_SCOPE_END()
-
-#define CAT_LOG_DEBUG(module_type, format, ...) \
+# define CAT_LOG_DEBUG(module_type, format, ...) \
         CAT_LOG_DEBUG_WITH_LEVEL(module_type, 1, format, ##__VA_ARGS__)
 
-#define CAT_LOG_DEBUG_V2(module_type, format, ...) \
+# define CAT_LOG_DEBUG_V2(module_type, format, ...) \
         CAT_LOG_DEBUG_WITH_LEVEL(module_type, 2, format, ##__VA_ARGS__)
 
-#define CAT_LOG_DEBUG_V3(module_type, format, ...) \
+# define CAT_LOG_DEBUG_V3(module_type, format, ...) \
         CAT_LOG_DEBUG_WITH_LEVEL(module_type, 3, format, ##__VA_ARGS__)
 
-#define CAT_LOG_DEBUG_WITH_LEVEL(module_type, level, format, ...) \
+# define CAT_LOG_DEBUG_WITH_LEVEL(module_type, level, format, ...) \
         CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) { \
             CAT_LOG(DEBUG, module_type, 0, format, ##__VA_ARGS__); \
         } CAT_LOG_DEBUG_LEVEL_SCOPE_END()
 
-#define CAT_LOG_DEBUG_D(module_type, format, ...) \
+# define CAT_LOG_DEBUG_D(module_type, format, ...) \
         CAT_LOG_D(DEBUG, module_type, 0, format, ##__VA_ARGS__)
 #endif /* CAT_ENABLE_DEBUG_LOG */
 

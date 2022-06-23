@@ -369,7 +369,7 @@ static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, v
 #define CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_FMT "%s(pid=%d, options=%d, timeout=" CAT_TIMEOUT_FMT ")"
 #define CAT_OS_WAIT_LOG_WAIT4_OR_WAITPID_ARGS cat_os_wait_type_name(type), pid, options, timeout
 
-    CAT_LOG_DEBUG_SCOPE_START(OS) {
+    CAT_LOG_DEBUG_VA(OS, {
         if (type == CAT_OS_WAIT_TYPE_WAIT) {
             CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT_FMT, CAT_OS_WAIT_LOG_WAIT_ARGS);
         } else if (type == CAT_OS_WAIT_TYPE_WAITPID || type == CAT_OS_WAIT_TYPE_WAIT4) {
@@ -377,7 +377,7 @@ static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, v
         } else if (type == CAT_OS_WAIT_TYPE_WAIT3) {
             CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT3_FMT, CAT_OS_WAIT_LOG_WAIT3_ARGS);
         } else CAT_NEVER_HERE("Unknown type");
-    } CAT_LOG_DEBUG_SCOPE_END();
+    });
 
     pid = cat_os__wait(pid, status, options, rusage, timeout, type);
 
@@ -385,7 +385,7 @@ static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, v
 #define CAT_OS_WAIT_LOG_RETURN_VALUE_FMT " = %d"
 #define CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS pid
 
-    CAT_LOG_DEBUG_SCOPE_START(OS) {
+    CAT_LOG_DEBUG_VA(OS, {
         if (type == CAT_OS_WAIT_TYPE_WAIT) {
             CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT_FMT CAT_OS_WAIT_LOG_RETURN_VALUE_FMT, CAT_OS_WAIT_LOG_WAIT_ARGS, CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS);
         } else if (type == CAT_OS_WAIT_TYPE_WAITPID || type == CAT_OS_WAIT_TYPE_WAIT4) {
@@ -393,7 +393,7 @@ static cat_pid_t cat_os__wait_wrapper(cat_pid_t pid, int *status, int options, v
         } else if (type == CAT_OS_WAIT_TYPE_WAIT3) {
             CAT_LOG_DEBUG_D(OS, CAT_OS_WAIT_LOG_WAIT3_FMT CAT_OS_WAIT_LOG_RETURN_VALUE_FMT, CAT_OS_WAIT_LOG_WAIT3_ARGS, CAT_OS_WAIT_LOG_RETURN_VALUE_ARGS);
         } else CAT_NEVER_HERE("Unknown type");
-    } CAT_LOG_DEBUG_SCOPE_END();
+    });
 
     cat_os_wait_sigchld_watcher_end();
 
