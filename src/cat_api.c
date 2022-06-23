@@ -126,7 +126,6 @@ CAT_API cat_bool_t cat_stop(void)
 CAT_API void cat_enable_debug_mode(void)
 {
     CAT_G(log_types) = CAT_LOG_TYPES_ALL;
-    CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
 }
 #endif
 

@@ -61,7 +61,6 @@ set(cat_sources
     src/cat_memory.c
     src/cat_string.c
     src/cat_error.c
-    src/cat_module.c
     src/cat_log.c
     src/cat_env.c
     # [public]

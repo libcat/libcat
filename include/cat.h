@@ -53,8 +53,6 @@ extern "C" {
 #include "cat_error.h"
 /* thread safe */
 #include "cat_tsrm.h"
-/* module */
-#include "cat_module.h"
 /* log */
 #include "cat_log.h"
 /* debug */
@@ -81,7 +79,6 @@ extern "C" {
 CAT_GLOBALS_STRUCT_BEGIN(cat) {
     cat_bool_t runtime;
     cat_log_types_t log_types;
-    cat_module_types_t log_module_types;
     cat_error_t last_error;
     FILE *error_log;
     cat_const_string_t exepath;

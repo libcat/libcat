@@ -83,7 +83,6 @@ CAT_API cat_bool_t cat_runtime_init(void)
     srand((unsigned int) time(NULL));
 
     CAT_G(log_types) = CAT_LOG_TYPES_DEFAULT;
-    CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
     CAT_G(error_log) = stderr;
     CAT_G(show_last_error) = cat_false;
     cat_const_string_init(&CAT_G(exepath));
@@ -113,7 +112,6 @@ do {
     if (CAT_G(log_debug_level) > 0) {
         /* enable all log types and log module types */
         CAT_G(log_types) = CAT_LOG_TYPES_ALL;
-        CAT_G(log_module_types) = CAT_MODULE_TYPES_ALL;
         /* enable SLE if there is no env to set it explicitly */
         if (!cat_env_exists("CAT_SLE")) {
             CAT_G(show_last_error) = cat_true;
@@ -127,12 +125,6 @@ do {
 #endif
 } while (0);
 #endif
-    /* log module types */
-    if (cat_env_exists("CAT_LOG_MODULE_TYPES")) {
-        char *names = cat_env_get("CAT_LOG_MODULE_TYPES");
-        CAT_G(log_module_types) = cat_module_get_types_from_names(names);
-        cat_free(names);
-    }
 
     CAT_G(runtime) = cat_true;
 

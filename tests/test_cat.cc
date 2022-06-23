@@ -83,11 +83,8 @@ TEST(cat, runtime_init_with_error_log_stderr)
 TEST(cat, enable_debug_mode)
 {
     cat_log_types_t log_types = CAT_G(log_types);
-    cat_module_types_t module_types = CAT_G(log_module_types);
     cat_enable_debug_mode();
     ASSERT_EQ(CAT_G(log_types), CAT_LOG_TYPES_ALL);
-    ASSERT_EQ(CAT_G(log_module_types), CAT_MODULE_TYPES_ALL);
-    CAT_G(log_module_types) = module_types;
     CAT_G(log_types) = log_types;
 }
 #endif
@@ -140,12 +137,3 @@ TEST(cat, bug_detection)
     })(), "bug occurred");
 }
 #endif
-
-TEST(cat, module_get_types_from_names)
-{
-    ASSERT_EQ(
-        cat_module_get_types_from_names("coroutine, event, socket"),
-        CAT_MODULE_TYPE_COROUTINE | CAT_MODULE_TYPE_EVENT | CAT_MODULE_TYPE_SOCKET
-    );
-    ASSERT_EQ(cat_module_get_types_from_names("foo, bar, baz"), 0);
-}
