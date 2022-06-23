@@ -22,7 +22,7 @@
 
 TEST(cat_atomic, base)
 {
-#define CAT_ATOMIC_BASE_TEST_MAP(XX) \
+#define CAT_ATOMIC_NUMERIC_TEST_MAP(XX) \
     XX(int8, 100) \
     XX(uint8, 100) \
     XX(int16, 10000) \
@@ -76,7 +76,7 @@ TEST(cat_atomic, base)
     } \
 } while (0);
 
-    CAT_ATOMIC_BASE_TEST_MAP(CAT_ATOMIC_BASE_TEST_GEN)
+    CAT_ATOMIC_NUMERIC_TEST_MAP(CAT_ATOMIC_BASE_TEST_GEN)
 }
 
 TEST(cat_atomic, bool)
@@ -89,4 +89,17 @@ TEST(cat_atomic, bool)
     ASSERT_FALSE(cat_atomic_bool_load(&atomic));
     cat_atomic_bool_store(&atomic, cat_true);
     ASSERT_TRUE(cat_atomic_bool_load(&atomic));
+}
+
+TEST(cat_atomic, ptr)
+{
+    cat_atomic_ptr_t atomic;
+    char buffer1[1], buffer2[1];
+    cat_atomic_ptr_init(&atomic, nullptr);
+    DEFER(cat_atomic_ptr_destroy(&atomic));
+    ASSERT_EQ(cat_atomic_ptr_exchange(&atomic, buffer1), nullptr);
+    ASSERT_EQ(cat_atomic_ptr_exchange(&atomic, buffer2), buffer1);
+    ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
+    cat_atomic_ptr_store(&atomic, nullptr);
+    ASSERT_EQ(cat_atomic_ptr_load(&atomic), nullptr);
 }

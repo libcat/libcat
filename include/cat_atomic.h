@@ -86,15 +86,19 @@ extern "C" {
 # define CAT_ATOMIC_NO_CASE(...) __VA_ARGS__
 #endif
 
-#define CAT_ATOMIC_OPERATION_FUNCTIONS_MAP(XX) \
-    XX(8,  int8,   char) \
-    XX(8,  uint8,  char) \
-    XX(16, int16,  short) \
-    XX(16, uint16, short) \
-    XX(32, int32,  long) \
-    XX(32, uint32, long) \
-    XX(64, int64,  __int64) \
-    XX(64, uint64, __int64) \
+#define CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_MAP(XX) \
+        XX(bool, cat_bool_t, 8,       char) \
+        XX(ptr,  cat_ptr_t,  Pointer, PVOID) \
+
+#define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_MAP(XX) \
+        XX(int8,   int8_t,   8,  char) \
+        XX(uint8,  uint8_t,  8,  char) \
+        XX(int16,  int16_t,  16, short) \
+        XX(uint16, uint16_t, 16, short) \
+        XX(int32,  int32_t,  32, long) \
+        XX(uint32, uint32_t, 32, long) \
+        XX(int64,  int64_t,  64, __int64) \
+        XX(uint64, uint64_t, 64, __int64) \
 
 #ifdef CAT_HAVE_INTERLOCK_ATOMIC
 # define _InterlockedOr32 _InterlockedOr
@@ -106,37 +110,37 @@ extern "C" {
 # define _InterlockedExchangeSub64(value, operand) _InterlockedExchangeAdd64(value, -operand)
 #endif
 
-#define CAT_ATOMIC_OPERATION_FUNCTIONS_GEN(bit_size, type_name, type_name_for_interlock_t) \
-typedef struct cat_atomic_##type_name##_s { \
+#define CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
+typedef struct cat_atomic_##name##_s { \
     CAT_ATOMIC_C11_CASE( \
-        _Atomic(type_name##_t) value; \
+        _Atomic(type_name_t) value; \
     ) \
     CAT_ATOMIC_GNUC_CASE( \
-        volatile type_name##_t value; \
+        volatile type_name_t value; \
     ) \
     CAT_ATOMIC_INTERLOCK_CASE( \
-        volatile type_name_for_interlock_t value; \
+        volatile interlocked_type_t value; \
     ) \
     CAT_ATOMIC_SYNC_CASE( \
-        volatile type_name##_t value; \
+        volatile type_name_t value; \
     ) \
     CAT_ATOMIC_MUTEX_CASE( \
         uv_mutex_t mutex; \
-        volatile type_name##_t value; \
+        volatile type_name_t value; \
     ) \
     CAT_ATOMIC_NO_CASE( \
-        volatile type_name##_t value; \
+        volatile type_name_t value; \
     ) \
-} cat_atomic_##type_name##_t; \
+} cat_atomic_##name##_t; \
 \
-static cat_always_inline void cat_atomic_##type_name##_init(cat_atomic_##type_name##_t *atomic, type_name##_t value) \
+static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *atomic, type_name_t value) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         __c11_atomic_init(&atomic->value, value); \
         return; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        atomic->value = (type_name_for_interlock_t) value; \
+        atomic->value = (interlocked_type_t) value; \
         return; \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
@@ -148,14 +152,14 @@ static cat_always_inline void cat_atomic_##type_name##_init(cat_atomic_##type_na
     atomic->value = value; \
 } \
 \
-static cat_always_inline void cat_atomic_##type_name##_destroy(volatile cat_atomic_##type_name##_t *atomic) \
+static cat_always_inline void cat_atomic_##name##_destroy(volatile cat_atomic_##name##_t *atomic) \
 { \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_destroy(&atomic->mutex); \
     }) \
 } \
 \
-static cat_always_inline void cat_atomic_##type_name##_store(cat_atomic_##type_name##_t *atomic, type_name##_t desired) \
+static cat_always_inline void cat_atomic_##name##_store(cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         __c11_atomic_store(&atomic->value, desired, __ATOMIC_SEQ_CST); \
@@ -164,7 +168,7 @@ static cat_always_inline void cat_atomic_##type_name##_store(cat_atomic_##type_n
         __atomic_store(&atomic->value, &desired, __ATOMIC_SEQ_CST); \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        (void) _InterlockedExchange##bit_size(&atomic->value, (type_name_for_interlock_t) desired); \
+        (void) _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
         __sync_synchronize(); \
@@ -181,25 +185,25 @@ static cat_always_inline void cat_atomic_##type_name##_store(cat_atomic_##type_n
     }) \
 } \
 \
-static cat_always_inline type_name##_t cat_atomic_##type_name##_load(const volatile cat_atomic_##type_name##_t *atomic) \
+static cat_always_inline type_name_t cat_atomic_##name##_load(const volatile cat_atomic_##name##_t *atomic) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_load(&atomic->value, __ATOMIC_SEQ_CST); \
     }) \
     CAT_ATOMIC_GNUC_CASE({ \
-        type_name##_t ret; \
+        type_name_t ret; \
         __atomic_load(&atomic->value, &ret, __ATOMIC_SEQ_CST); \
         return ret; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        return (type_name##_t) _InterlockedOr##bit_size(&(((cat_atomic_##type_name##_t *) atomic)->value), false); \
+        return (type_name_t) _InterlockedOr##interlocked_suffix(&(((cat_atomic_##name##_t *) atomic)->value), false); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        return __sync_fetch_and_or(&(((cat_atomic_##type_name##_t *) atomic)->value), false); \
+        return __sync_fetch_and_or(&(((cat_atomic_##name##_t *) atomic)->value), false); \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
-        type_name##_t value = atomic->value; \
+        type_name_t value = atomic->value; \
         uv_mutex_unlock(&atomic->mutex); \
         return value; \
     }) \
@@ -208,21 +212,21 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_load(const volat
     }) \
 } \
 \
-static cat_always_inline type_name##_t cat_atomic_##type_name##_exchange(volatile cat_atomic_##type_name##_t *atomic, type_name##_t desired) \
+static cat_always_inline type_name_t cat_atomic_##name##_exchange(volatile cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_SEQ_CST); \
     }) \
     CAT_ATOMIC_GNUC_CASE({ \
-        type_name##_t ret; \
+        type_name_t ret; \
         __atomic_exchange(&atomic->value, &desired, &ret, __ATOMIC_SEQ_CST); \
         return ret; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        return _InterlockedExchange##bit_size(&atomic->value, (type_name_for_interlock_t) desired); \
+        return _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        type_name##_t ret = __sync_lock_test_and_set(&atomic->value, desired); \
+        type_name_t ret = __sync_lock_test_and_set(&atomic->value, desired); \
         __sync_synchronize(); \
         return ret; \
     }) \
@@ -232,13 +236,14 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_exchange(volatil
         uv_mutex_unlock(&atomic->mutex); \
     }) \
     CAT_ATOMIC_NO_CASE({ \
-        type_name##_t ret = atomic->value; \
+        type_name_t ret = atomic->value; \
         atomic->value = true; \
         return ret; \
     }) \
 } \
-\
-static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_add(cat_atomic_##type_name##_t *atomic, type_name##_t operand) \
+
+#define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
+static cat_always_inline type_name_t cat_atomic_##name##_fetch_add(cat_atomic_##name##_t *atomic, type_name_t operand) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_fetch_add(&atomic->value, operand, __ATOMIC_SEQ_CST); \
@@ -247,7 +252,7 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_add(cat_at
         return __atomic_fetch_add(&atomic->value, operand, __ATOMIC_SEQ_CST); \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        return (type_name##_t) _InterlockedExchangeAdd##bit_size(&atomic->value, (type_name_for_interlock_t) operand); \
+        return (type_name_t) _InterlockedExchangeAdd##interlocked_suffix(&atomic->value, (interlocked_type_t) operand); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
         return __sync_fetch_and_add(&atomic->value, operand); \
@@ -262,7 +267,7 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_add(cat_at
     }) \
 } \
 \
-static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_sub(cat_atomic_##type_name##_t *atomic, type_name##_t operand) \
+static cat_always_inline type_name_t cat_atomic_##name##_fetch_sub(cat_atomic_##name##_t *atomic, type_name_t operand) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_fetch_sub(&atomic->value, operand, __ATOMIC_SEQ_CST); \
@@ -271,7 +276,7 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_sub(cat_at
         return __atomic_fetch_sub(&atomic->value, operand, __ATOMIC_SEQ_CST); \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        return (type_name##_t) _InterlockedExchangeSub##bit_size(&atomic->value, (type_name_for_interlock_t) operand); \
+        return (type_name_t) _InterlockedExchangeSub##interlocked_suffix(&atomic->value, (interlocked_type_t) operand); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
         return __sync_fetch_and_sub(&atomic->value, operand); \
@@ -286,34 +291,12 @@ static cat_always_inline type_name##_t cat_atomic_##type_name##_fetch_sub(cat_at
     }) \
 }
 
-CAT_ATOMIC_OPERATION_FUNCTIONS_MAP(CAT_ATOMIC_OPERATION_FUNCTIONS_GEN)
+#define CAT_ATOMIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
+        CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
+        CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
 
-typedef cat_atomic_uint8_t cat_atomic_bool_t;
-
-static cat_always_inline void cat_atomic_bool_init(cat_atomic_bool_t *atomic, cat_bool_t value)
-{
-    cat_atomic_uint8_init(atomic, value);
-}
-
-static cat_always_inline void cat_atomic_bool_destroy(cat_atomic_bool_t *atomic)
-{
-    cat_atomic_uint8_destroy(atomic);
-}
-
-static cat_always_inline void cat_atomic_bool_store(cat_atomic_bool_t *atomic, cat_bool_t desired)
-{
-    return cat_atomic_uint8_store(atomic, desired);
-}
-
-static cat_always_inline cat_bool_t cat_atomic_bool_load(cat_atomic_bool_t *atomic)
-{
-    return cat_atomic_uint8_load(atomic);
-}
-
-static cat_always_inline cat_bool_t cat_atomic_bool_exchange(cat_atomic_bool_t *atomic, cat_bool_t value)
-{
-    return cat_atomic_uint8_exchange(atomic, value);
-}
+CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_MAP(CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN)
+CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_MAP(CAT_ATOMIC_OPERATION_FUNCTIONS_GEN)
 
 #ifdef __cplusplus
 }
