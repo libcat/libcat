@@ -1843,7 +1843,7 @@ TEST(cat_socket, query_remote_http_server)
                     error = llhttp_execute(&parser, read_buffer, n);
                     ASSERT_EQ(error, HPE_OK);
 
-                    CAT_LOG_DEBUG(SOCKET, "Data[%zd]: %.*s", n, (int) n, read_buffer);
+                    CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", n, (int) n, read_buffer);
 
                     if (parser.data != nullptr) {
                         break;
@@ -1852,7 +1852,7 @@ TEST(cat_socket, query_remote_http_server)
 
                 EXPECT_TRUE(parser.status_code == TEST_HTTP_STATUS_CODE_OK);
 
-                CAT_LOG_DEBUG(SOCKET, "total_bytes: %zu", total_bytes);
+                CAT_LOG_DEBUG(TEST_SOCKET, "total_bytes: %zu", total_bytes);
             } while (0);
         });
         {
