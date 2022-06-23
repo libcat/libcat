@@ -124,7 +124,7 @@ typedef struct cat_atomic_##type_name##_s { \
         uv_mutex_t mutex; \
         volatile type_name##_t value; \
     ) \
-    CAT_ATOMIC_MUTEX_CASE( \
+    CAT_ATOMIC_NO_CASE( \
         volatile type_name##_t value; \
     ) \
 } cat_atomic_##type_name##_t; \
