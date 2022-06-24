@@ -101,9 +101,14 @@ extern "C" {
         XX(uint64, uint64_t, 64, __int64) \
 
 #ifdef CAT_HAVE_INTERLOCK_ATOMIC
-# define _InterlockedOr32 _InterlockedOr
-# define _InterlockedExchange32 _InterlockedExchange
-# define _InterlockedExchangeAdd32 _InterlockedExchangeAdd
+# define _InterlockedOr32                          _InterlockedOr
+# define _InterlockedExchange32                    _InterlockedExchange
+# define _InterlockedExchangeAdd32                 _InterlockedExchangeAdd
+# define _InterlockedLoad8(value)                  _InterlockedOr8(value, 0)
+# define _InterlockedLoad16(value)                 _InterlockedOr16(value, 0)
+# define _InterlockedLoad32(value)                 _InterlockedOr(value, 0)
+# define _InterlockedLoad64(value)                 _InterlockedOr64(value, 0)
+# define _InterlockedLoadPointer(value)            _InterlockedCompareExchangePointer(value, NULL, NULL)
 # define _InterlockedExchangeSub8(value, operand)  _InterlockedExchangeAdd8(value, -operand)
 # define _InterlockedExchangeSub16(value, operand) _InterlockedExchangeAdd16(value, -operand)
 # define _InterlockedExchangeSub32(value, operand) _InterlockedExchangeAdd32(value, -operand)
@@ -194,7 +199,7 @@ static cat_always_inline type_name_t cat_atomic_##name##_load(const volatile cat
         return ret; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        return (type_name_t) _InterlockedOr##interlocked_suffix(&(((cat_atomic_##name##_t *) atomic)->value), false); \
+        return (type_name_t) _InterlockedLoad##interlocked_suffix(&(((cat_atomic_##name##_t *) atomic)->value)); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
         return __sync_fetch_and_or(&(((cat_atomic_##name##_t *) atomic)->value), false); \
