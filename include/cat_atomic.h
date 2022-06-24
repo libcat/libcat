@@ -133,14 +133,14 @@ typedef struct cat_atomic_##name##_s { \
     ) \
 } cat_atomic_##name##_t; \
 \
-static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *atomic, type_name_t value) \
+static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
     CAT_ATOMIC_C11_CASE({ \
-        __c11_atomic_init(&atomic->value, value); \
+        __c11_atomic_init(&atomic->value, desired); \
         return; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        atomic->value = (interlocked_type_t) value; \
+        atomic->value = (interlocked_type_t) desired; \
         return; \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
@@ -149,7 +149,7 @@ static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *at
             abort(); \
         } \
     }) \
-    atomic->value = value; \
+    atomic->value = desired; \
 } \
 \
 static cat_always_inline void cat_atomic_##name##_destroy(volatile cat_atomic_##name##_t *atomic) \
