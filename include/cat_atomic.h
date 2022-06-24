@@ -171,9 +171,7 @@ static cat_always_inline void cat_atomic_##name##_store(cat_atomic_##name##_t *a
         (void) _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        __sync_synchronize(); \
-        atomic->value = desired; \
-        __sync_synchronize(); \
+        (void) __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
@@ -226,9 +224,7 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange(volatile cat_a
         return _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        type_name_t ret = __sync_lock_test_and_set(&atomic->value, desired); \
-        __sync_synchronize(); \
-        return ret; \
+        return __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
