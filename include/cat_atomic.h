@@ -260,7 +260,7 @@ static cat_always_inline cat_bool_t cat_atomic_##name##_compare_exchange_strong(
         return __atomic_compare_exchange_strong(&atomic->value, expected, desired); \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
-        type_name_t value = (type_name_t) _InterlockedCompareExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) (*expected), (interlocked_type_t) desired); \
+        type_name_t value = (type_name_t) _InterlockedCompareExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired, (interlocked_type_t) (*expected)); \
         if (value == *expected) { \
             return cat_true; \
         } else { \
