@@ -43,33 +43,42 @@ TEST(cat_atomic, base)
     ASSERT_EQ(cat_atomic_##type_name##_fetch_add(&atomic, 1), max - 1); \
     ASSERT_EQ(cat_atomic_##type_name##_load(&atomic), max); \
     for (auto is_add : std::array<bool, 2>{ false, true }) { \
+        const size_t c_max = 4; \
         type_name##_t value = is_add ? 0 : max; \
         cat_atomic_##type_name##_store(&atomic, value); \
         ASSERT_EQ(cat_atomic_##type_name##_load(&atomic), value); \
         wait_group wg; \
-        for (auto c = 0; c < 4; c++) { \
+        uv_cond_t cond; \
+        uv_mutex_t mutex; \
+        ASSERT_EQ(uv_cond_init(&cond), 0); \
+        DEFER2(uv_cond_destroy(&cond), 0); \
+        ASSERT_EQ(uv_mutex_init(&mutex), 0); \
+        DEFER2(uv_mutex_destroy(&mutex), 1); \
+        for (auto c = 0; c < c_max; c++) { \
             co([&] { \
                 wg++; \
                 work(CAT_WORK_KIND_CPU, [&] { \
-                    for (type_name##_t i = 0; i < max / 5; i++) { \
+                    uv_mutex_lock(&mutex); \
+                    uv_cond_wait(&cond, &mutex); \
+                    uv_mutex_unlock(&mutex); \
+                    for (type_name##_t i = 0; i < max / (c_max + 1); i++) { \
                         if (is_add) { \
                             (void) cat_atomic_##type_name##_fetch_add(&atomic, 1); \
                         } else { \
                             (void) cat_atomic_##type_name##_fetch_sub(&atomic, 1); \
                         } \
-                        cat_sys_usleep(1); \
                     } \
                 }, TEST_IO_TIMEOUT); \
                 wg--; \
             }); \
         } \
-        for (type_name##_t i = 0; i < max / 5; i++) { \
+        uv_cond_broadcast(&cond); \
+        for (type_name##_t i = 0; i < max / (c_max + 1); i++) { \
             if (is_add) { \
                 (void) cat_atomic_##type_name##_fetch_add(&atomic, 1); \
             } else { \
                 (void) cat_atomic_##type_name##_fetch_sub(&atomic, 1); \
             } \
-            cat_sys_usleep(1); \
         } \
         wg(); \
         ASSERT_EQ(cat_atomic_##type_name##_load(&atomic), is_add ? max : 0); \
