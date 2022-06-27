@@ -157,7 +157,7 @@ static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *at
     atomic->value = desired; \
 } \
 \
-static cat_always_inline void cat_atomic_##name##_destroy(volatile cat_atomic_##name##_t *atomic) \
+static cat_always_inline void cat_atomic_##name##_destroy(cat_atomic_##name##_t *atomic) \
 { \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_destroy(&atomic->mutex); \
@@ -188,7 +188,7 @@ static cat_always_inline void cat_atomic_##name##_store(cat_atomic_##name##_t *a
     }) \
 } \
 \
-static cat_always_inline type_name_t cat_atomic_##name##_load(const volatile cat_atomic_##name##_t *atomic) \
+static cat_always_inline type_name_t cat_atomic_##name##_load(const cat_atomic_##name##_t *atomic) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_load(&atomic->value, __ATOMIC_SEQ_CST); \
@@ -215,7 +215,7 @@ static cat_always_inline type_name_t cat_atomic_##name##_load(const volatile cat
     }) \
 } \
 \
-static cat_always_inline type_name_t cat_atomic_##name##_exchange(volatile cat_atomic_##name##_t *atomic, type_name_t desired) \
+static cat_always_inline type_name_t cat_atomic_##name##_exchange(cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
     CAT_ATOMIC_C11_CASE({ \
         return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_SEQ_CST); \
