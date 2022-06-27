@@ -42,6 +42,10 @@ extern "C" {
 # define CAT_HAVE_NO_ATOMIC 1
 #endif
 
+#ifdef CAT_HAVE_INTERLOCK_ATOMIC
+# include <intrin.h>
+#endif
+
 #if defined(CAT_HAVE_C11_ATOMIC)
 # define CAT_ATOMIC_C11_CASE(...) __VA_ARGS__
 # define CAT_ATOMIC_GNUC_CASE(...)
@@ -148,23 +152,31 @@ static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *at
 { \
     CAT_ATOMIC_C11_CASE({ \
         __c11_atomic_init(&atomic->value, desired); \
-        return; \
+    }) \
+    CAT_ATOMIC_GNUC_CASE({ \
+        atomic->value = desired; \
     }) \
     CAT_ATOMIC_INTERLOCK_CASE({ \
         atomic->value = (interlocked_type_t) desired; \
-        return; \
+    }) \
+    CAT_ATOMIC_SYNC_CASE({ \
+        atomic->value = desired; \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         int error = uv_mutex_init(&atomic->mutex); \
         if (unlikely(error != 0)) { \
             abort(); \
         } \
+        atomic->value = desired; \
     }) \
-    atomic->value = desired; \
+    CAT_ATOMIC_NO_CASE({ \
+        atomic->value = desired; \
+    }) \
 } \
 \
 static cat_always_inline void cat_atomic_##name##_destroy(cat_atomic_##name##_t *atomic) \
 { \
+    (void) atomic; \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_destroy(&atomic->mutex); \
     }) \
