@@ -150,7 +150,7 @@ static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *at
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         int error = uv_mutex_init(&atomic->mutex); \
-        if (unlikely(error !== 0)) { \
+        if (unlikely(error != 0)) { \
             abort(); \
         } \
     }) \
@@ -202,12 +202,12 @@ static cat_always_inline type_name_t cat_atomic_##name##_load(const volatile cat
         return (type_name_t) _InterlockedLoad##interlocked_suffix(&(((cat_atomic_##name##_t *) atomic)->value)); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        return __sync_fetch_and_or(&(((cat_atomic_##name##_t *) atomic)->value), false); \
+        return __sync_fetch_and_or(&(((cat_atomic_##name##_t *) atomic)->value), 0); \
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
-        uv_mutex_lock(&atomic->mutex); \
+        uv_mutex_lock((uv_mutex_t *) &atomic->mutex); \
         type_name_t value = atomic->value; \
-        uv_mutex_unlock(&atomic->mutex); \
+        uv_mutex_unlock((uv_mutex_t *) &atomic->mutex); \
         return value; \
     }) \
     CAT_ATOMIC_NO_CASE({ \
@@ -233,12 +233,14 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange(volatile cat_a
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
-        atomic->value = true; \
+        type_name_t ret = atomic->value; \
+        atomic->value = desired; \
         uv_mutex_unlock(&atomic->mutex); \
+        return ret; \
     }) \
     CAT_ATOMIC_NO_CASE({ \
         type_name_t ret = atomic->value; \
-        atomic->value = true; \
+        atomic->value = desired; \
         return ret; \
     }) \
 } \
@@ -260,11 +262,15 @@ static cat_always_inline type_name_t cat_atomic_##name##_fetch_add(cat_atomic_##
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
-        atomic->value += desired; \
+        type_name_t ret = atomic->value; \
+        atomic->value += operand; \
         uv_mutex_unlock(&atomic->mutex); \
+        return ret; \
     }) \
     CAT_ATOMIC_NO_CASE({ \
-        atomic->value += desired; \
+        type_name_t ret = atomic->value; \
+        atomic->value += operand; \
+        return ret; \
     }) \
 } \
 \
@@ -284,11 +290,15 @@ static cat_always_inline type_name_t cat_atomic_##name##_fetch_sub(cat_atomic_##
     }) \
     CAT_ATOMIC_MUTEX_CASE({ \
         uv_mutex_lock(&atomic->mutex); \
-        atomic->value -= desired; \
+        type_name_t ret = atomic->value; \
+        atomic->value -= operand; \
         uv_mutex_unlock(&atomic->mutex); \
+        return ret; \
     }) \
     CAT_ATOMIC_NO_CASE({ \
-        atomic->value -= desired; \
+        type_name_t ret = atomic->value; \
+        atomic->value -= operand; \
+        return ret; \
     }) \
 }
 
