@@ -88,6 +88,8 @@ TEST(cat_atomic, base)
     CAT_ATOMIC_NUMERIC_TEST_MAP(CAT_ATOMIC_BASE_TEST_GEN)
 }
 
+typedef cat_bool_t (*atomic_bool_compare_exchange_t)(cat_atomic_bool_t *atomic, cat_bool_t *expected, cat_bool_t desired);
+
 TEST(cat_atomic, bool)
 {
     cat_atomic_bool_t atomic;
@@ -98,7 +100,25 @@ TEST(cat_atomic, bool)
     ASSERT_FALSE(cat_atomic_bool_load(&atomic));
     cat_atomic_bool_store(&atomic, cat_true);
     ASSERT_TRUE(cat_atomic_bool_load(&atomic));
+
+    for (auto atomic_bool_compare_exchange_function : std::array<atomic_bool_compare_exchange_t, 2>{
+            cat_atomic_bool_compare_exchange_strong,
+            cat_atomic_bool_compare_exchange_weak
+    }) {
+        cat_bool_t expected = cat_false;
+        cat_atomic_bool_store(&atomic, cat_false);
+        ASSERT_TRUE(atomic_bool_compare_exchange_function(&atomic, &expected, cat_false));
+        ASSERT_EQ(cat_atomic_bool_load(&atomic), cat_false);
+        expected = cat_false;
+        ASSERT_TRUE(atomic_bool_compare_exchange_function(&atomic, &expected, cat_true));
+        ASSERT_EQ(cat_atomic_bool_load(&atomic), cat_true);
+        ASSERT_FALSE(atomic_bool_compare_exchange_function(&atomic, &expected, cat_false));
+        ASSERT_EQ(expected, cat_true);
+        ASSERT_EQ(cat_atomic_bool_load(&atomic), cat_true);
+    }
 }
+
+typedef cat_bool_t (*atomic_ptr_compare_exchange_t)(cat_atomic_ptr_t *atomic, cat_ptr_t *expected, cat_ptr_t desired);
 
 TEST(cat_atomic, ptr)
 {
@@ -110,5 +130,20 @@ TEST(cat_atomic, ptr)
     ASSERT_EQ(cat_atomic_ptr_exchange(&atomic, buffer2), buffer1);
     ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
     cat_atomic_ptr_store(&atomic, nullptr);
-    ASSERT_EQ(cat_atomic_ptr_load(&atomic), nullptr);
+
+    for (auto atomic_ptr_compare_exchange_function : std::array<atomic_ptr_compare_exchange_t, 2>{
+            cat_atomic_ptr_compare_exchange_strong,
+            cat_atomic_ptr_compare_exchange_weak
+    }) {
+        cat_ptr_t expected = nullptr;
+        cat_atomic_ptr_store(&atomic, nullptr);
+        ASSERT_TRUE(atomic_ptr_compare_exchange_function(&atomic, &expected, buffer1));
+        ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer1);
+        expected = buffer1;
+        ASSERT_TRUE(atomic_ptr_compare_exchange_function(&atomic, &expected, buffer2));
+        ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
+        ASSERT_FALSE(atomic_ptr_compare_exchange_function(&atomic, &expected, nullptr));
+        ASSERT_EQ(expected, buffer2);
+        ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
+    }
 }

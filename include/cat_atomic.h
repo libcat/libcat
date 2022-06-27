@@ -100,10 +100,16 @@ extern "C" {
         XX(int64,  int64_t,  64, __int64) \
         XX(uint64, uint64_t, 64, __int64) \
 
-#ifdef CAT_HAVE_INTERLOCK_ATOMIC
+# if defined(CAT_HAVE_GNUC_ATOMIC)
+# define __atomic_compare_exchange_strong(atomic, expected, desired) \
+         __atomic_compare_exchange_n(atomic, expected, desired, 0 /* not weak */, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+# define __atomic_compare_exchange_weak(atomic, expected, desired) \
+         __atomic_compare_exchange_n(atomic, expected, desired, 1 /* weak */, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+# elif defined(CAT_HAVE_INTERLOCK_ATOMIC)
 # define _InterlockedOr32                          _InterlockedOr
 # define _InterlockedExchange32                    _InterlockedExchange
 # define _InterlockedExchangeAdd32                 _InterlockedExchangeAdd
+# define _InterlockedCompareExchange32             _InterlockedCompareExchange
 # define _InterlockedLoad8(value)                  _InterlockedOr8(value, 0)
 # define _InterlockedLoad16(value)                 _InterlockedOr16(value, 0)
 # define _InterlockedLoad32(value)                 _InterlockedOr(value, 0)
@@ -244,6 +250,78 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange(cat_atomic_##n
         return ret; \
     }) \
 } \
+\
+static cat_always_inline cat_bool_t cat_atomic_##name##_compare_exchange_strong(cat_atomic_##name##_t *atomic, type_name_t *expected, type_name_t desired) \
+{ \
+    CAT_ATOMIC_C11_CASE({ \
+        return __c11_atomic_compare_exchange_strong(&atomic->value, expected, desired, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+    }) \
+    CAT_ATOMIC_GNUC_CASE({ \
+        return __atomic_compare_exchange_strong(&atomic->value, expected, desired); \
+    }) \
+    CAT_ATOMIC_INTERLOCK_CASE({ \
+        type_name_t value = (type_name_t) _InterlockedCompareExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) (*expected), (interlocked_type_t) desired); \
+        if (value == *expected) { \
+            return cat_true; \
+        } else { \
+            *expected = value; \
+            return cat_false; \
+        } \
+    }) \
+    CAT_ATOMIC_SYNC_CASE({ \
+        type_name_t value = __sync_val_compare_and_swap(&atomic->value, *expected, desired); \
+         if (value == *expected) { \
+            return cat_true; \
+        } else { \
+            *expected = value; \
+            return cat_false; \
+        } \
+    }) \
+    CAT_ATOMIC_MUTEX_CASE({ \
+        cat_bool_t ret; \
+        uv_mutex_lock(&atomic->mutex); \
+        if (atomic->value == *expected) { \
+            atomic->value = desired; \
+            ret = cat_true; \
+        } else { \
+            *expected = atomic->value; \
+            ret = cat_false; \
+        } \
+        uv_mutex_unlock(&atomic->mutex); \
+        return ret; \
+    }) \
+    CAT_ATOMIC_NO_CASE({ \
+        if (atomic->value == *expected) { \
+            atomic->value = desired; \
+            return cat_true; \
+        } else { \
+            *expected = atomic->value; \
+            return cat_false; \
+        } \
+    }) \
+} \
+\
+static cat_always_inline cat_bool_t cat_atomic_##name##_compare_exchange_weak(cat_atomic_##name##_t *atomic, type_name_t *expected, type_name_t desired) \
+{ \
+    CAT_ATOMIC_C11_CASE({ \
+        return __c11_atomic_compare_exchange_weak(&atomic->value, expected, desired, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+    }) \
+    CAT_ATOMIC_GNUC_CASE({ \
+        return __atomic_compare_exchange_weak(&atomic->value, expected, desired); \
+    }) \
+    CAT_ATOMIC_INTERLOCK_CASE({ \
+        return cat_atomic_##name##_compare_exchange_strong(atomic, expected, desired); \
+    }) \
+    CAT_ATOMIC_SYNC_CASE({ \
+        return cat_atomic_##name##_compare_exchange_strong(atomic, expected, desired); \
+    }) \
+    CAT_ATOMIC_MUTEX_CASE({ \
+        return cat_atomic_##name##_compare_exchange_strong(atomic, expected, desired); \
+    }) \
+    CAT_ATOMIC_NO_CASE({ \
+        return cat_atomic_##name##_compare_exchange_strong(atomic, expected, desired); \
+    }) \
+}
 
 #define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t) \
 static cat_always_inline type_name_t cat_atomic_##name##_fetch_add(cat_atomic_##name##_t *atomic, type_name_t operand) \
