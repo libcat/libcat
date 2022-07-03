@@ -18,7 +18,7 @@
 
 #include "test.h"
 
-const std::string keyword = "WatchDog";
+const std::string keyword = "Watchdog";
 
 static void test_sys_nanosleep_nocancel(cat_nsec_t ns_total)
 {
