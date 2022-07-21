@@ -703,7 +703,7 @@ static cat_bool_t cat_http_parser_multipart_parser_execute(cat_http_parser_t *pa
 
     CAT_LOG_DEBUG_VA_WITH_LEVEL(HTTP, 3, {
         char *s;
-        CAT_LOG_DEBUG_D(HTTP, "multipart_parser_execute() returns %zu, parsed \"%s\"",
+        CAT_LOG_DEBUG_D(HTTP, "multipart_parser_execute() returns %zu, parsed %s",
             parsed_length, cat_log_buffer_quote(data, parsed_length, &s));
         cat_free(s);
     });
