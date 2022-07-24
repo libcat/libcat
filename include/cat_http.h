@@ -278,7 +278,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
 /*
 * get parser event name string for event code
 */
-CAT_API const char *cat_http_parser_event_name(cat_http_parser_event_t event);
+CAT_API const char *cat_http_parser_event_get_name(cat_http_parser_event_t event);
 /*
 * get event code of parser
 */

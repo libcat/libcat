@@ -1072,7 +1072,7 @@ TEST(cat_http_parser, multipart_subscript_one)
                 continue;
             }
             CONTINUE_PARSE();
-            ASSERT_EQ(std::string(cat_http_parser_get_event_name(&parser)), std::string(cat_http_parser_event_name(events)));
+            ASSERT_EQ(std::string(cat_http_parser_get_event_name(&parser)), std::string(cat_http_parser_event_get_name(events)));
             //printf("ev %s\n",cat_http_parser_get_event_name(&parser));
             if (events & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
                 //printf("da %.*s\n",(int)parser.data_length,parser.data);
@@ -1098,7 +1098,7 @@ TEST(cat_http_parser, multipart_stream)
 {
     cat_http_parser_t parser;
     DEFER({
-        CAT_LOG_DEBUG(TEST_HTTP, "parser event is %s", cat_http_parser_event_name(parser.event));
+        CAT_LOG_DEBUG(TEST_HTTP, "parser event is %s", cat_http_parser_event_get_name(parser.event));
     });
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
     cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
@@ -1164,7 +1164,7 @@ TEST(cat_http_parser, multipart_stream)
                 ASSERT_LE(cat_http_parser_get_parsed_length(&parser), size_to_parse);
                 p += cat_http_parser_get_parsed_length(&parser);
                 if (parser.event == CAT_HTTP_PARSER_EVENT_NONE) {
-                    // if no events happend
+                    // if no events happened
                     // this slice is end, break current routine
                     leftover = size_to_parse - cat_http_parser_get_parsed_length(&parser);
                     ASSERT_EQ(slice, 0);
@@ -1174,7 +1174,7 @@ TEST(cat_http_parser, multipart_stream)
                 const char *expected_data = multipart_stream_events[state].data.data;
                 size_t expected_size = multipart_stream_events[state].data.length;
                 DEFER({
-                    CAT_LOG_DEBUG_V3(TEST_HTTP, "Expected %s: \"%.*s\"", cat_http_parser_event_name(expected_event), (int)expected_size, expected_data);
+                    CAT_LOG_DEBUG_V3(TEST_HTTP, "Expected %s: \"%.*s\"", cat_http_parser_event_get_name(expected_event), (int)expected_size, expected_data);
                 });
                 if (parser.event != expected_event) {
                     // maybe last data callback with zero size
@@ -1237,7 +1237,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
 {
     cat_http_parser_t parser;
     DEFER({
-        CAT_LOG_DEBUG(TEST_HTTP, "parser event is %s", cat_http_parser_event_name(parser.event));
+        CAT_LOG_DEBUG(TEST_HTTP, "parser event is %s", cat_http_parser_event_get_name(parser.event));
     });
     ASSERT_EQ(cat_http_parser_create(&parser), &parser);
 
@@ -1248,7 +1248,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
 #ifdef CAT_HAVE_ASAN
     char canary2[8192];
 #endif
-    char http_buf_2[8192+8192];
+    char http_buf_2[8192 + 8192];
 
 #ifdef CAT_HAVE_ASAN
     __asan_poison_memory_region(canary1, sizeof(canary1));
@@ -1296,17 +1296,15 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
             pe = http_buf + slice_a_len;
 
             for (int slice = 0; slice < 2; slice++) {
-                CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data slice %d:\n%.*s\n", slice, (int)(pe - p), p);
+                CAT_LOG_DEBUG_WITH_LEVEL(TEST_HTTP, 10, "Parsing data slice %d:\n%.*s\n", slice, (int)(pe - p), p);
                 while (state < (int) CAT_ARRAY_SIZE(multipart_stream_events)) {
-
                     cat_bool_t data_done = cat_false;
                     size_t size_to_parse = pe - p;
                     ASSERT_TRUE(cat_http_parser_execute(&parser, p, size_to_parse));
-                    // printf("parsed %zu, requested %zu\n", cat_http_parser_get_parsed_length(&parser), size_to_parse);
                     ASSERT_LE(cat_http_parser_get_parsed_length(&parser), size_to_parse);
                     p += cat_http_parser_get_parsed_length(&parser);
                     if (parser.event == CAT_HTTP_PARSER_EVENT_NONE || pe == p) {
-                        // if no events happend
+                        // if no events happened
                         // this slice is end, break current routine
                         leftover = size_to_parse - cat_http_parser_get_parsed_length(&parser);
                         break;
@@ -1314,8 +1312,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                     cat_http_parser_event_t expected_event = multipart_stream_events[state].event;
                     const char *expected_data = multipart_stream_events[state].data.data;
                     size_t expected_size = multipart_stream_events[state].data.length;
-                    CAT_LOG_DEBUG_V3(TEST_HTTP, "Expected %s: \"%.*s\"", cat_http_parser_event_name(expected_event), (int)expected_size, expected_data);
-
+                    CAT_LOG_DEBUG_V3(TEST_HTTP, "Expected %s: \"%.*s\"", cat_http_parser_event_get_name(expected_event), (int) expected_size, expected_data);
                     if (parser.event != expected_event) {
                         // maybe last data callback with zero size
                         // or requested done without this event
@@ -1326,7 +1323,6 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                         memcpy(&assert_buf[assert_i], parser.data, parser.data_length);
                         assert_i += parser.data_length;
                         ASSERT_LE(assert_i, expected_size);
-                        //printf("ca %zu, ex %zu\n", assert_i, expected_size);
                         if (assert_i == expected_size) {
                             ASSERT_EQ(std::string(expected_data, expected_size), std::string(assert_buf, assert_i));
                             assert_i = 0;
@@ -1341,7 +1337,6 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                         ASSERT_EQ(std::string(boundary), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
                     }
                     if (data_done) {
-                        //printf("NEXT STATE1\n");
                         int _state = state;
                         while ((++state) < CAT_ARRAY_SIZE(multipart_stream_events) && (cat_http_parser_events_t)multipart_stream_events[state].event != events);
                         if (state == CAT_ARRAY_SIZE(multipart_stream_events) && slice == 0) {
@@ -1353,7 +1348,6 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                         // this slice is end, break current routine
                         leftover = 0;
                         ASSERT_TRUE(slice == 0 || parser.event == CAT_HTTP_PARSER_EVENT_MESSAGE_COMPLETE);
-
                         break;
                     }
                 }

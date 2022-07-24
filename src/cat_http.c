@@ -819,7 +819,7 @@ CAT_API cat_bool_t cat_http_parser_execute(cat_http_parser_t *parser, const char
     return cat_true;
 }
 
-CAT_API const char *cat_http_parser_event_name(cat_http_parser_event_t event)
+CAT_API const char *cat_http_parser_event_get_name(cat_http_parser_event_t event)
 {
     switch (event) {
 #define CAT_HTTP_PARSER_EVENT_NAME_GEN(name, unused1) case CAT_HTTP_PARSER_EVENT_##name: return #name;
@@ -841,7 +841,7 @@ CAT_API cat_http_parser_event_t cat_http_parser_get_event(const cat_http_parser_
 
 CAT_API const char* cat_http_parser_get_event_name(const cat_http_parser_t *parser)
 {
-    return cat_http_parser_event_name(parser->event);
+    return cat_http_parser_event_get_name(parser->event);
 }
 
 CAT_API cat_http_parser_event_t cat_http_parser_get_previous_event(const cat_http_parser_t *parser)
@@ -851,7 +851,7 @@ CAT_API cat_http_parser_event_t cat_http_parser_get_previous_event(const cat_htt
 
 CAT_API const char* cat_http_parser_get_previous_event_name(const cat_http_parser_t *parser)
 {
-    return cat_http_parser_event_name(parser->previous_event);
+    return cat_http_parser_event_get_name(parser->previous_event);
 }
 
 CAT_API const char* cat_http_parser_get_data(const cat_http_parser_t *parser)
