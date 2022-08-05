@@ -271,11 +271,11 @@ TEST(cat_socket, get_local_free_port)
 
 TEST(cat_socket, sockaddr_af_name)
 {
-    ASSERT_STREQ("UNSPEC", cat_sockaddr_af_name(AF_UNSPEC));
-    ASSERT_STREQ("INET", cat_sockaddr_af_name(AF_INET));
-    ASSERT_STREQ("INET6", cat_sockaddr_af_name(AF_INET6));
-    ASSERT_STREQ("LOCAL", cat_sockaddr_af_name(AF_LOCAL));
-    ASSERT_STREQ("UNKNOWN", cat_sockaddr_af_name(-1));
+    ASSERT_STREQ("UNSPEC", cat_sockaddr_af_get_name(AF_UNSPEC));
+    ASSERT_STREQ("INET", cat_sockaddr_af_get_name(AF_INET));
+    ASSERT_STREQ("INET6", cat_sockaddr_af_get_name(AF_INET6));
+    ASSERT_STREQ("LOCAL", cat_sockaddr_af_get_name(AF_LOCAL));
+    ASSERT_STREQ("UNKNOWN", cat_sockaddr_af_get_name(-1));
 }
 
 TEST(cat_socket, sockaddr_get_address_ip)
@@ -742,18 +742,18 @@ TEST(cat_socket, create_udp)
 
 TEST(cat_socket, type_name)
 {
-    ASSERT_STREQ("TCP", cat_socket_type_name(CAT_SOCKET_TYPE_TCP));
-    ASSERT_STREQ("TCP4", cat_socket_type_name(CAT_SOCKET_TYPE_TCP4));
-    ASSERT_STREQ("TCP6", cat_socket_type_name(CAT_SOCKET_TYPE_TCP6));
+    ASSERT_STREQ("TCP", cat_socket_type_get_name(CAT_SOCKET_TYPE_TCP));
+    ASSERT_STREQ("TCP4", cat_socket_type_get_name(CAT_SOCKET_TYPE_TCP4));
+    ASSERT_STREQ("TCP6", cat_socket_type_get_name(CAT_SOCKET_TYPE_TCP6));
 
-    ASSERT_STREQ("UDP", cat_socket_type_name(CAT_SOCKET_TYPE_UDP));
-    ASSERT_STREQ("UDP4", cat_socket_type_name(CAT_SOCKET_TYPE_UDP4));
-    ASSERT_STREQ("UDP6", cat_socket_type_name(CAT_SOCKET_TYPE_UDP6));
+    ASSERT_STREQ("UDP", cat_socket_type_get_name(CAT_SOCKET_TYPE_UDP));
+    ASSERT_STREQ("UDP4", cat_socket_type_get_name(CAT_SOCKET_TYPE_UDP4));
+    ASSERT_STREQ("UDP6", cat_socket_type_get_name(CAT_SOCKET_TYPE_UDP6));
 
-    ASSERT_STREQ("PIPE", cat_socket_type_name(CAT_SOCKET_TYPE_PIPE));
-    ASSERT_STREQ("TTY", cat_socket_type_name(CAT_SOCKET_TYPE_TTY));
+    ASSERT_STREQ("PIPE", cat_socket_type_get_name(CAT_SOCKET_TYPE_PIPE));
+    ASSERT_STREQ("TTY", cat_socket_type_get_name(CAT_SOCKET_TYPE_TTY));
 #ifdef CAT_OS_UNIX_LIKE
-    ASSERT_STREQ("UDG", cat_socket_type_name(CAT_SOCKET_TYPE_UDG));
+    ASSERT_STREQ("UDG", cat_socket_type_get_name(CAT_SOCKET_TYPE_UDG));
 #endif
 }
 

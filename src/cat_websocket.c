@@ -18,7 +18,7 @@
 
 #include "cat_websocket.h"
 
-CAT_API const char* cat_websocket_opcode_name(cat_websocket_opcode_t opcode)
+CAT_API const char* cat_websocket_opcode_get_name(cat_websocket_opcode_t opcode)
 {
     switch(opcode) {
 #define CAT_WEBSOCKET_OPCODE_NAME_GEN(name, value) case value: return #name;
