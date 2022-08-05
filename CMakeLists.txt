@@ -898,6 +898,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_process.cc
         tests/test_cat_atomic.cc
         tests/test_cat_http.cc
+        tests/test_cat_websocket.cc
     )
     if (LIBCAT_ENABLE_OPENSSL)
         list(APPEND cat_test_sources tests/test_cat_ssl.cc)
