@@ -245,8 +245,9 @@ CAT_API void cat_buffer_truncate_from(cat_buffer_t *buffer, size_t offset, size_
         cat_buffer_clear(buffer);
         return;
     }
-    if (length > buffer->length - offset) {
-        length = buffer->length - offset;
+    size_t readable_size = buffer->length - offset;
+    if (length > readable_size) {
+        length = readable_size;
     }
     if (offset != 0) {
         memmove(buffer->value, buffer->value + offset, length);
