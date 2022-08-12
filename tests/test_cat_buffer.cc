@@ -52,7 +52,7 @@ TEST(cat_buffer, realloc_standard)
     src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_NE(nullptr, src);
 
-    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE * 2);
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE * 2);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);
@@ -73,7 +73,7 @@ TEST(cat_buffer, realloc_standard_data)
         src_tmp[i] = src[i];
     }
 
-    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);
@@ -98,7 +98,7 @@ TEST(cat_buffer, realloc_standard_less_data)
         src_tmp[i] = src[i];
     }
 
-    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE / 2 + 1);
+    dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE / 2 + 1);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
     ASSERT_NE(src, dst);

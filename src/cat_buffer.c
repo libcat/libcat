@@ -34,7 +34,7 @@ static char *cat_buffer_alloc_standard(size_t size)
     return value;
 }
 
-static char *cat_buffer_realloc_standard(char *old_value, size_t old_length, size_t new_size)
+static char *cat_buffer_realloc_standard(char *old_value, size_t new_size)
 {
     char *new_value = (char *) cat_realloc(old_value, new_size);
 
@@ -163,7 +163,7 @@ CAT_API cat_bool_t cat_buffer_realloc(cat_buffer_t *buffer, size_t new_size)
         return cat_true;
     }
 
-    new_value = cat_buffer_allocator.realloc_function(buffer->value, buffer->length, new_size);
+    new_value = cat_buffer_allocator.realloc_function(buffer->value, new_size);
 
     if (unlikely(new_value == NULL)) {
         return cat_false;
