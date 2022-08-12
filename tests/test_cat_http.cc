@@ -331,31 +331,42 @@ TEST(cat_http_parser, get_protocol_version_unknown)
     cat_http_parser_t *parser, _parser;
     size_t parsed_length;
 
-    const cat_const_string_t request_unknown = cat_const_string(
-        "GET /get HTTP/0.0\r\n"
-        "\r\n"
-    );
-
     ASSERT_EQ((parser = cat_http_parser_create(&_parser)), &_parser);
-    cat_http_parser_set_events(parser, CAT_HTTP_PARSER_EVENTS_ALL);
+    cat_http_parser_set_events(parser, CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE);
 
-    const char *p = request_unknown.data;
-    const char *pe = request_unknown.data + request_unknown.length;
-
-    while (true) {
-        ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
-
-        if (cat_http_parser_is_completed(parser)) {
-            parsed_length = cat_http_parser_get_current_offset(parser, request_unknown.data);
-            ASSERT_EQ(request_unknown.length, parsed_length);
-            break;
-        }
-
-        p = cat_http_parser_get_current_pos(parser);
+    {
+        const cat_const_string_t request_bad = cat_const_string(
+            "GET /get HTTP/0.0\r\n"
+            "\r\n"
+        );
+        ASSERT_FALSE(cat_http_parser_execute(parser, request_bad.data, request_bad.length));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_PARSER_E_INVALID_VERSION);
     }
+    {
+        const cat_const_string_t request_unknown = cat_const_string(
+            // looks like we do not need to support 0.9, use it for fail test
+            "GET /get HTTP/0.9\r\n"
+            "\r\n"
+        );
 
-    char unknown[] = "UNKNOWN";
-    ASSERT_STREQ(unknown, cat_http_parser_get_protocol_version(parser));
+        const char *p = request_unknown.data;
+        const char *pe = request_unknown.data + request_unknown.length;
+
+        cat_http_parser_reset(parser);
+        while (true) {
+            ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
+
+            if (cat_http_parser_is_completed(parser)) {
+                parsed_length = cat_http_parser_get_current_offset(parser, request_unknown.data);
+                ASSERT_EQ(request_unknown.length, parsed_length);
+                break;
+            }
+
+            p = cat_http_parser_get_current_pos(parser);
+        }
+        char unknown[] = "UNKNOWN";
+        ASSERT_STREQ(unknown, cat_http_parser_get_protocol_version(parser));
+    }
 }
 
 TEST(cat_http_parser, get_status_code)
