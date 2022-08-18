@@ -64,6 +64,9 @@ CAT_API cat_bool_t cat_event_defer_ex(cat_data_callback_t callback, cat_data_t *
 
 CAT_API void cat_event_fork(void);
 
+CAT_API void cat_event_print_all_handles(cat_os_fd_t output);
+CAT_API void cat_event_print_active_handles(cat_os_fd_t output);
+
 #ifdef __cplusplus
 }
 #endif

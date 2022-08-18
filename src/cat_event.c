@@ -229,3 +229,26 @@ CAT_API void cat_event_fork(void)
     CAT_ERROR(EVENT, "Function fork() is disabled for internal reasons when using thread-context");
 #endif
 }
+
+static FILE *cat_event_get_fp_from_fd(cat_os_fd_t fd)
+{
+    FILE* fp;
+    if (fd == STDOUT_FILENO) {
+        fp = stdout;
+    } else if (fd == STDERR_FILENO) {
+        fp = stderr;
+    } else {
+        fp = stdout;
+    }
+    return fp;
+}
+
+CAT_API void cat_event_print_all_handles(cat_os_fd_t output)
+{
+    uv_print_all_handles(&CAT_EVENT_G(loop), cat_event_get_fp_from_fd(output));
+}
+
+CAT_API void cat_event_print_active_handles(cat_os_fd_t output)
+{
+    uv_print_active_handles(&CAT_EVENT_G(loop), cat_event_get_fp_from_fd(output));
+}
