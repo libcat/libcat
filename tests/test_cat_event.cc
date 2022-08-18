@@ -210,14 +210,6 @@ TEST(cat_event, busy)
     ASSERT_NE(output.find("Event loop close failed, reason: Resource busy or locked"), std::string::npos);
 }
 
-TEST(cat_event, deadlock)
-{
-    co([] {
-        ASSERT_TRUE(cat_time_delay(0));
-    });
-    cat_event_deadlock();
-}
-
 TEST(cat_event, yield_from_defer)
 {
     defer([] {

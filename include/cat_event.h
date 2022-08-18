@@ -50,7 +50,6 @@ CAT_API cat_bool_t cat_event_runtime_shutdown(void);
 CAT_API cat_bool_t cat_event_runtime_close(void);
 
 CAT_API void cat_event_schedule(void)  CAT_INTERNAL;
-CAT_API void cat_event_deadlock(void) CAT_INTERNAL;
 
 CAT_API cat_coroutine_t *cat_event_scheduler_run(cat_coroutine_t *coroutine);
 CAT_API cat_coroutine_t *cat_event_scheduler_close(void);

@@ -90,30 +90,6 @@ CAT_API cat_bool_t cat_event_runtime_close(void)
     return cat_true;
 }
 
-static void cat_event_deadlock_unlock(uv_timer_t *deadlock)
-{
-    uv_timer_stop(deadlock);
-    uv_close((uv_handle_t *) deadlock, NULL);
-}
-
-static void cat_event_deadlock_unlock_callback(cat_data_t *data)
-{
-    cat_event_deadlock_unlock((uv_timer_t *) data);
-}
-
-static void cat_event_deadlock_callback(uv_timer_t *deadlock)
-{
-    uv_timer_again(deadlock);
-}
-
-CAT_API void cat_event_deadlock(void)
-{
-    uv_timer_t *deadlock = &CAT_EVENT_G(deadlock);
-    (void) uv_timer_init(&CAT_EVENT_G(loop), deadlock);
-    (void) uv_timer_start(deadlock, cat_event_deadlock_callback, UINT64_MAX, UINT64_MAX);
-    (void) cat_event_defer(cat_event_deadlock_unlock_callback, deadlock);
-}
-
 static void cat_event_do_defer_tasks(void)
 {
     uint64_t current_round = CAT_EVENT_G(loop).round;
@@ -156,7 +132,7 @@ CAT_API cat_coroutine_t *cat_event_scheduler_run(cat_coroutine_t *coroutine)
 {
     const cat_coroutine_scheduler_t scheduler = {
         cat_event_schedule,
-        cat_event_deadlock
+        NULL
     };
 
     return cat_coroutine_scheduler_run(coroutine, &scheduler);
