@@ -25,7 +25,7 @@ TEST(cat_string, hexprint)
     char in[] = "hello";
     char *out;
 
-    out = cat_hexprint(in, CAT_STRLEN(in));
+    out = cat_hex_dump(in, CAT_STRLEN(in));
     ASSERT_NE(nullptr, out);
     ASSERT_STREQ("0x68 0x65 0x6C 0x6C 0x6F", out);
     cat_free(out);
