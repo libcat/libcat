@@ -62,7 +62,7 @@ static void echo_stream_server_connection_handler(cat_socket_t *server)
                     ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
                     ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE_ENCODED;
                     ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
-                    ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHPRASE;
+                    ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHRASE;
                     ASSERT_TRUE(cat_socket_enable_crypto(connection, &ssl_options));
                     ASSERT_TRUE(cat_socket_has_crypto(connection));
                     ASSERT_TRUE(cat_socket_is_encrypted(connection));

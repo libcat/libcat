@@ -149,7 +149,7 @@ TEST(cat_string, str_quote)
         ASSERT_TRUE(cat_str_quote_ex(
             CAT_STRS(buffer),
             &new_str, &new_length,
-            CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES | CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCILL_STRINGS_IN_HEX,
+            CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES | CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCII_STRINGS_IN_HEX,
             NULL, &is_complete
         ));
         DEFER(cat_free(new_str));

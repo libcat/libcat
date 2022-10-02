@@ -12,9 +12,9 @@
     }
 */
 
-// manully build
-// cl /I ..\..\deps\libuv\include /I ..\..\deps\libuv\inlcude\uv /I ..\..\include ..\..\build\Debug\cat.lib /MDd kernel32.lib ws2_32.lib user32.lib advapi32.lib iphlpapi.lib psapi.lib userenv.lib flock_windows.c
-// manully run
+// manually build
+// cl /I ..\..\deps\libuv\include /I ..\..\deps\libuv\include\uv /I ..\..\include ..\..\build\Debug\cat.lib /MDd kernel32.lib ws2_32.lib user32.lib advapi32.lib iphlpapi.lib psapi.lib userenv.lib flock_windows.c
+// manually run
 // flock_windows.exe
 
 #include "cat.h"

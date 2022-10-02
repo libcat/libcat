@@ -18,11 +18,11 @@
 
 #include "test.h"
 
-#define CAT_TEST_DEFAULT_MEMOEY_SIZE    16
+#define CAT_TEST_DEFAULT_MEMORY_SIZE    16
 
 TEST(cat_memory, malloc_function)
 {
-    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
 
     ASSERT_NE(nullptr, ptr);
 
@@ -31,7 +31,7 @@ TEST(cat_memory, malloc_function)
 
 TEST(cat_memory, calloc_function)
 {
-    void *ptr = cat_calloc_function(1, CAT_TEST_DEFAULT_MEMOEY_SIZE);
+    void *ptr = cat_calloc_function(1, CAT_TEST_DEFAULT_MEMORY_SIZE);
 
     ASSERT_NE(nullptr, ptr);
 
@@ -40,10 +40,10 @@ TEST(cat_memory, calloc_function)
 
 TEST(cat_memory, realloc_function)
 {
-    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
 
     ASSERT_NE(nullptr, ptr);
-    ptr = cat_realloc_function(ptr, CAT_TEST_DEFAULT_MEMOEY_SIZE * 2);
+    ptr = cat_realloc_function(ptr, CAT_TEST_DEFAULT_MEMORY_SIZE * 2);
     ASSERT_NE(nullptr, ptr);
 
     cat_free_function(ptr);
@@ -51,7 +51,7 @@ TEST(cat_memory, realloc_function)
 
 TEST(cat_memory, free_function)
 {
-    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+    void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
 
     ASSERT_NE(nullptr, ptr);
 
@@ -63,7 +63,7 @@ TEST(cat_memory, freep_function)
 {
     void *ptr[1];
 
-    ptr[0] = cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+    ptr[0] = cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
     ASSERT_NE(nullptr, ptr[0]);
     cat_freep_function(ptr);
     cat_freep_function(nullptr);
@@ -75,10 +75,10 @@ TEST(cat_memory, strdup_function)
     char *dst;
 
     for (int n = 0; n < 2; n++) {
-        src = (char *) cat_malloc_function(CAT_TEST_DEFAULT_MEMOEY_SIZE);
+        src = (char *) cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
         DEFER(cat_free_function(src));
         ASSERT_NE(nullptr, src);
-        ASSERT_EQ(src, cat_srand(src, CAT_TEST_DEFAULT_MEMOEY_SIZE));
+        ASSERT_EQ(src, cat_srand(src, CAT_TEST_DEFAULT_MEMORY_SIZE));
         dst = n ? cat_sys_strdup(src) : cat_strdup(src);
         DEFER(if (n) { cat_sys_free(dst); } else { cat_free(dst); });
         ASSERT_NE(nullptr, dst);

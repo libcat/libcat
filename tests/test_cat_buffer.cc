@@ -376,7 +376,7 @@ TEST(cat_buffer, append)
     ASSERT_STREQ(expect, buffer.value);
 }
 
-TEST(cat_buffer, truncate_value_not_allocted)
+TEST(cat_buffer, truncate_value_not_allocated)
 {
     cat_buffer_t buffer = { .value = nullptr, .size = CAT_TEST_DEFAULT_BUFFER_SIZE, .length = 0 };
 
@@ -447,7 +447,7 @@ TEST(cat_buffer, clear)
     ASSERT_NE(nullptr, buffer.value);
 }
 
-TEST(cat_buffer, clear_not_allocted)
+TEST(cat_buffer, clear_not_allocated)
 {
     cat_buffer_t buffer = { };
 
@@ -498,7 +498,7 @@ TEST(cat_buffer, close)
     ASSERT_EQ(empty_buffer, buffer);
 }
 
-TEST(cat_buffer, close_not_allocted)
+TEST(cat_buffer, close_not_allocated)
 {
     cat_buffer_t buffer = { };
 
@@ -547,11 +547,11 @@ TEST(cat_buffer, get_length)
 
 TEST(cat_buffer, make_pair)
 {
-    cat_buffer_t rbuffer = { };
-    cat_buffer_t wbuffer = { };
+    cat_buffer_t read_buffer = { };
+    cat_buffer_t write_buffer = { };
 
-    ASSERT_TRUE(cat_buffer_make_pair(&rbuffer, CAT_TEST_DEFAULT_BUFFER_SIZE, &wbuffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
-    DEFER(cat_buffer_close(&rbuffer));
-    DEFER(cat_buffer_close(&wbuffer));
-    ASSERT_EQ(rbuffer, wbuffer);
+    ASSERT_TRUE(cat_buffer_make_pair(&read_buffer, CAT_TEST_DEFAULT_BUFFER_SIZE, &write_buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    DEFER(cat_buffer_close(&read_buffer));
+    DEFER(cat_buffer_close(&write_buffer));
+    ASSERT_EQ(read_buffer, write_buffer);
 }
