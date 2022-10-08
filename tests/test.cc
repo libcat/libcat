@@ -360,10 +360,11 @@ public:
         ASSERT_TRUE(cat_stop());
         ASSERT_EQ(cat_coroutine_get_count() , 1);
 
+        ASSERT_TRUE(cat_runtime_shutdown_all());
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_close());
 #endif
-        ASSERT_TRUE(cat_runtime_shutdown_all());
+        ASSERT_TRUE(cat_runtime_close_all());
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_shutdown());
 #endif
