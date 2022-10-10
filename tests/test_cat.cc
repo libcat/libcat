@@ -128,6 +128,25 @@ TEST(cat, process_title)
     }
 }
 
+#include <thread>
+
+TEST(cat, is_main_thread)
+{
+    ASSERT_TRUE(cat_is_main_thread());
+}
+
+TEST(cat, is_not_main_thread)
+{
+    bool is_main_thread = true;
+
+    std::thread thread([&is_main_thread] {
+        is_main_thread = cat_is_main_thread();
+    });
+    thread.join();
+
+    ASSERT_FALSE(is_main_thread);
+}
+
 #if CAT_USE_BUG_DETECTOR
 TEST(cat, bug_detection)
 {
