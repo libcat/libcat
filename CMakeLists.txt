@@ -713,9 +713,9 @@ if (1)
     target_include_directories(cat_llhttp PRIVATE ${llhttp_dir}/include)
 endif()
 
-# multipart-parser dep
+# multipart-parser-c dep
 if (1)
-    set(multipart_parser_dir "deps/multipart_parser")
+    set(multipart_parser_dir "deps/multipart-parser-c")
     add_library(cat_multipart_parser OBJECT
         ${multipart_parser_dir}/multipart_parser.c
     )
