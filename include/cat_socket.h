@@ -50,6 +50,7 @@ extern "C" {
 #else
 # define CAT_SOCKET_IPV6_BUFFER_SIZE 65 /* Linux >= 46, Windows >= 65 */
 #endif
+#define CAT_SOCKET_IP_BUFFER_SIZE CAT_SOCKET_IPV6_BUFFER_SIZE
 
 #ifndef AF_LOCAL
 #define AF_LOCAL AF_UNIX
