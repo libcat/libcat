@@ -36,7 +36,6 @@ TEST(cat_atomic, base)
     cat_atomic_##type_name##_t atomic; \
     type_name##_t max = max_value; \
     cat_atomic_##type_name##_init(&atomic, 0); \
-    DEFER(cat_atomic_##type_name##_destroy(&atomic)); \
     ASSERT_EQ(cat_atomic_##type_name##_load(&atomic), 0); \
     cat_atomic_##type_name##_store(&atomic, 123); \
     ASSERT_EQ(cat_atomic_##type_name##_exchange(&atomic, max - 1), 123); \
@@ -94,7 +93,6 @@ TEST(cat_atomic, bool)
 {
     cat_atomic_bool_t atomic;
     cat_atomic_bool_init(&atomic, cat_false);
-    DEFER(cat_atomic_bool_destroy(&atomic));
     ASSERT_FALSE(cat_atomic_bool_exchange(&atomic, cat_true));
     ASSERT_TRUE(cat_atomic_bool_exchange(&atomic, cat_false));
     ASSERT_FALSE(cat_atomic_bool_load(&atomic));
@@ -125,7 +123,6 @@ TEST(cat_atomic, ptr)
     cat_atomic_ptr_t atomic;
     char buffer1[1], buffer2[1];
     cat_atomic_ptr_init(&atomic, nullptr);
-    DEFER(cat_atomic_ptr_destroy(&atomic));
     ASSERT_EQ(cat_atomic_ptr_exchange(&atomic, buffer1), nullptr);
     ASSERT_EQ(cat_atomic_ptr_exchange(&atomic, buffer2), buffer1);
     ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
