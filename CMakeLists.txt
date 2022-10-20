@@ -489,14 +489,11 @@ if (1)
       list(APPEND uv_defines _GNU_SOURCE)
       list(APPEND uv_libraries dl)
       list(APPEND uv_sources
-           ${uv_dir}/src/unix/linux-core.c
-           ${uv_dir}/src/unix/linux-inotify.c
-           ${uv_dir}/src/unix/linux-syscalls.c
+           ${uv_dir}/src/unix/linux.c
            ${uv_dir}/src/unix/procfs-exepath.c
            ${uv_dir}/src/unix/random-getentropy.c
            ${uv_dir}/src/unix/random-getrandom.c
-           ${uv_dir}/src/unix/random-sysctl-linux.c
-           ${uv_dir}/src/unix/epoll.c)
+           ${uv_dir}/src/unix/random-sysctl-linux.c)
     endif()
 
     if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux|OS390")
@@ -551,13 +548,10 @@ if (1)
       list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
       list(APPEND uv_libraries dl rt)
       list(APPEND uv_sources
-           ${uv_dir}/src/unix/linux-core.c
-           ${uv_dir}/src/unix/linux-inotify.c
-           ${uv_dir}/src/unix/linux-syscalls.c
+           ${uv_dir}/src/unix/linux.c
            ${uv_dir}/src/unix/procfs-exepath.c
            ${uv_dir}/src/unix/random-getrandom.c
-           ${uv_dir}/src/unix/random-sysctl-linux.c
-           ${uv_dir}/src/unix/epoll.c)
+           ${uv_dir}/src/unix/random-sysctl-linux.c)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
