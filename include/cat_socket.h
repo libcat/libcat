@@ -145,18 +145,6 @@ typedef cat_os_socket_t cat_socket_fd_t;
 #define CAT_SOCKET_FD_FMT_SPEC CAT_OS_SOCKET_FMT_SPEC
 #define CAT_SOCKET_INVALID_FD CAT_OS_INVALID_SOCKET
 
-/* stdio os fd */
-
-#ifndef STDIN_FILENO
-#define STDIN_FILENO  0 /* standard input file descriptor */
-#endif
-#ifndef STDOUT_FILENO
-#define STDOUT_FILENO 1 /* standard output file descriptor */
-#endif
-#ifndef STDERR_FILENO
-#define STDERR_FILENO 2 /* standard error file descriptor */
-#endif
-
 /* socket length */
 
 #ifndef CAT_OS_WIN

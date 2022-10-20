@@ -2285,7 +2285,7 @@ TEST(cat_socket, dump_all_and_close_all)
     DEFER(if (!closed_all) { cat_socket_close(pipe_socket); });
 
     cat_socket_t *tty_socket = nullptr;
-    if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
+    if (uv_guess_handle(CAT_STDOUT_FILENO) == UV_TTY) {
         cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
         ASSERT_NE(nullptr, tty_socket);
     }
@@ -2299,7 +2299,7 @@ TEST(cat_socket, dump_all_and_close_all)
         ASSERT_NE(output.find("TCP"), std::string::npos);
         ASSERT_NE(output.find("UDP"), std::string::npos);
         ASSERT_TRUE(output.find("PIPE") != std::string::npos);
-        if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
+        if (uv_guess_handle(CAT_STDOUT_FILENO) == UV_TTY) {
             ASSERT_TRUE(output.find("TTY") != std::string::npos || output.find("STDOUT") != std::string::npos);
         }
     }
@@ -2315,7 +2315,7 @@ TEST(cat_socket, dump_all_and_close_all)
         ASSERT_EQ(output.find("TCP"), std::string::npos);
         ASSERT_EQ(output.find("UDP"), std::string::npos);
         ASSERT_TRUE(output.find("PIPE") == std::string::npos);
-        if (uv_guess_handle(STDOUT_FILENO) == UV_TTY) {
+        if (uv_guess_handle(CAT_STDOUT_FILENO) == UV_TTY) {
             ASSERT_TRUE(output.find("TTY") == std::string::npos && output.find("STDOUT") == std::string::npos);
         }
     }

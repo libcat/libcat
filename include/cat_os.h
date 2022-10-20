@@ -90,3 +90,19 @@ typedef uv_os_fd_t cat_os_handle_t;
 #else
 # define CAT_OS_INVALID_HANDLE INVALID_HANDLE_VALUE
 #endif
+
+#ifndef STDIN_FILENO
+# define CAT_STDIN_FILENO  0 /* standard input file descriptor */
+# else
+# define CAT_STDIN_FILENO  STDIN_FILENO
+#endif
+#ifndef STDOUT_FILENO
+# define CAT_STDOUT_FILENO 1 /* standard output file descriptor */
+#else
+# define CAT_STDOUT_FILENO STDOUT_FILENO
+#endif
+#ifndef STDERR_FILENO
+# define CAT_STDERR_FILENO 2 /* standard error file descriptor */
+#else
+# define CAT_STDERR_FILENO STDERR_FILENO
+#endif

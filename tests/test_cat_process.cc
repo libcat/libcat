@@ -31,9 +31,9 @@ TEST(cat_process, echo)
 
     stdio[0].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
     stdio[1].flags = CAT_PROCESS_STDIO_FLAG_INHERIT_FD;
-    stdio[1].data.fd = STDOUT_FILENO;
+    stdio[1].data.fd = CAT_STDOUT_FILENO;
     stdio[2].flags = CAT_PROCESS_STDIO_FLAG_INHERIT_FD;
-    stdio[2].data.fd = STDERR_FILENO;
+    stdio[2].data.fd = CAT_STDERR_FILENO;
     options.stdio = stdio;
     options.stdio_count = CAT_ARRAY_SIZE(stdio);
 
