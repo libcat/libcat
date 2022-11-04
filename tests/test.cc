@@ -236,6 +236,9 @@ public:
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_init());
 #endif
+#ifdef CAT_PQ
+        ASSERT_TRUE(cat_pq_runtime_init());
+#endif
         cat_set_error_log(stderr);
 
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
@@ -363,6 +366,9 @@ public:
         ASSERT_EQ(cat_coroutine_get_count() , 1);
 
         ASSERT_TRUE(cat_runtime_shutdown_all());
+#ifdef CAT_PQ
+        ASSERT_TRUE(cat_pq_runtime_close());
+#endif
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_close());
 #endif

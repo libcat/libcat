@@ -182,6 +182,18 @@ jobs:
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     timeout-minutes: 30
     strategy:
       matrix:
@@ -198,7 +210,7 @@ jobs:
           if [ "${{runner.os}}" = "Linux" ]
           then
             sudo apt-get update
-            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev
+            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev libpq-dev postgresql-server-dev-all
           else
             brew install googletest ||
             brew install googletest ||
@@ -206,6 +218,7 @@ jobs:
             brew install pkg-config
             brew install openssl@1.1
             brew install curl
+            brew install libpq
           fi
 
       - name: Checkout libcat sources

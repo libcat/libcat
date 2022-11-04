@@ -803,6 +803,34 @@ else()
     message(STATUS "cURL is not enabled")
 endif()
 
+# pq dep
+find_package(PostgreSQL QUIET)
+if(NOT PostgreSQL_FOUND AND PkgConfig_FOUND)
+    pkg_check_modules(PostgreSQL libpq QUIET)
+    if(PostgreSQL_FOUND)
+        set(PostgreSQL_LIBRARIES ${PostgreSQL_LINK_LIBRARIES})
+    endif()
+endif()
+
+cmake_dependent_option(LIBCAT_ENABLE_POSTGRESQL
+    "Enable PostgreSQL if found"
+    ON PostgreSQL_FOUND
+    OFF)
+if (LIBCAT_ENABLE_POSTGRESQL)
+    if (NOT PostgreSQL_FOUND)
+        message(FATAL_ERROR "Require PostgreSQL but not found")
+    endif()
+    message(STATUS "Enable PostgreSQL")
+    list(APPEND cat_defines CAT_HAVE_PQ=1)
+    
+    list(APPEND cat_includes ${PostgreSQL_INCLUDE_DIRS})
+    list(APPEND cat_libraries ${PostgreSQL_LIBRARIES})
+    list(APPEND cat_sources src/cat_pq.c)
+else()
+    find_package(PostgreSQL REQUIRED) # throw warning
+    message(STATUS "PostgreSQL is not enabled")
+endif()
+
 set(cat_target_objects "")
 if (LIBCAT_USE_BOOST_CONTEXT)
     list(APPEND cat_target_objects $<TARGET_OBJECTS:cat_context>)
@@ -911,6 +939,9 @@ if (LIBCAT_BUILD_TESTS)
     endif()
     if (LIBCAT_ENABLE_CURL)
         list(APPEND cat_test_sources tests/test_cat_curl.cc)
+    endif()
+    if (LIBCAT_ENABLE_POSTGRESQL)
+        list(APPEND cat_test_sources tests/test_cat_pq.cc)
     endif()
     add_executable(cat_tests ${cat_test_sources})
     if(MSVC)

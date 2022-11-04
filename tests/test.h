@@ -32,6 +32,9 @@
 /* ext, not enabled by default */
 #include "cat_curl.h"
 
+/* ext, not enabled by default */
+#include "cat_pq.h"
+
 /* GTEST_SKIP and GTEST_SKIP_ shim */
 #ifndef GTEST_SKIP
 # define GTEST_SKIP() {/* do nothing */}
@@ -80,6 +83,8 @@
 #define TEST_PIPE_PATH_FMT                 "\\\\?\\pipe\\cat_test_%s"
 #endif
 #define TEST_SERVER_BACKLOG                8192
+
+#define TEST_PQ_CONNINFO "host=127.0.0.1 dbname=postgres user='postgres' password='postgres' connect_timeout=30"
 
 #define TEST_REMOTE_HTTP_SERVER            ::testing::CONFIG_REMOTE_HTTP_SERVER_HOST.c_str(), ::testing::CONFIG_REMOTE_HTTP_SERVER_HOST.length(), ::testing::CONFIG_REMOTE_HTTP_SERVER_PORT
 #define TEST_REMOTE_HTTP_SERVER_HOST       ::testing::CONFIG_REMOTE_HTTP_SERVER_HOST.c_str()
