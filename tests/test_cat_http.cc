@@ -804,8 +804,8 @@ TEST(cat_http_parser, multipart)
         for (int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++) {
             const char *boundary = boundaries[j].literal;
             const char *boundary_real = boundaries[j].real;
-            int body_len = sprintf(body_buf, multipart_req_body.data, boundary_real, boundary_real, boundary_real);
-            int head_len = sprintf(head_buf, multipart_req_heads[i].data, body_len, boundary);
+            int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary_real, boundary_real, boundary_real);
+            int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[i].data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
             head_buf[head_len + body_len] = '\0';
 
@@ -825,7 +825,7 @@ TEST(cat_http_parser, multipart)
             ASSERT_TRUE(cat_http_parser_is_completed(&parser));
 
             // headers only
-            head_len = sprintf(head_buf, multipart_req_heads[i].data, 0, boundary);
+            head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[i].data, 0, boundary);
             p = head_buf;
             pe = &head_buf[head_len];
             ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
@@ -856,11 +856,11 @@ TEST(cat_http_parser, multipart_after_common)
     char plain_head_buf[8192];
     char body_buf[8192];
     const char *boundary = "cafebabe";
-    int body_len = sprintf(body_buf, multipart_req_body.data, boundary, boundary, boundary);
-    int mp_head_len = sprintf(mp_head_buf, multipart_req_heads[0].data, body_len, boundary);
+    int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary, boundary, boundary);
+    int mp_head_len = snprintf(CAT_STRS(mp_head_buf), multipart_req_heads[0].data, body_len, boundary);
     memcpy(&mp_head_buf[mp_head_len], body_buf, body_len);
 
-    int plain_head_len = sprintf(plain_head_buf, common_head.data, body_len);
+    int plain_head_len = snprintf(CAT_STRS(plain_head_buf), common_head.data, body_len);
     memcpy(&plain_head_buf[plain_head_len], body_buf, body_len);
 
     const char *p, *pe;
@@ -916,8 +916,8 @@ TEST(cat_http_parser, multipart_only_data_cb)
     char body_buf[8192];
 
     const char *boundary = boundaries[0].literal;
-    int body_len = sprintf(body_buf, multipart_req_body.data, boundary, boundary, boundary);
-    int head_len = sprintf(head_buf, multipart_req_heads[0].data, body_len, boundary);
+    int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary, boundary, boundary);
+    int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[0].data, body_len, boundary);
     memcpy(&head_buf[head_len], body_buf, body_len);
     head_buf[head_len + body_len] = '\0';
 
@@ -972,7 +972,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     char head_buf[8192];
 
     const char *boundary = "---------------------------6169044094038990135731635364";
-    int head_len = sprintf(head_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+    int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
     memcpy(&head_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
     head_buf[head_len + multipart_req_body_multiline.length] = '\0';
 
@@ -1072,7 +1072,7 @@ TEST(cat_http_parser, multipart_subscript_one)
         ASSERT_EQ(cat_http_parser_create(&parser), &parser);
         cat_http_parser_set_events(&parser, (cat_http_parser_events_t)events);
         const char *boundary = "---------------------------6169044094038990135731635364";
-        int head_len = sprintf(head_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+        int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
         memcpy(head_buf + head_len, multipart_req_body_multiline.data, multipart_req_body_multiline.length);
         head_buf[head_len + multipart_req_body_multiline.length] = '\0';
         CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data:\n%.*s\n\n", (int)(head_len + multipart_req_body_multiline.length), head_buf);
@@ -1137,7 +1137,7 @@ TEST(cat_http_parser, multipart_stream)
     size_t leftover = 0;
 
     const char *boundary = "---------------------------6169044094038990135731635364";
-    int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+    int head_len = snprintf(CAT_STRS(http_buf), multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
     memcpy(&http_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
 
@@ -1275,7 +1275,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
     size_t leftover = 0;
 
     const char *boundary = "---------------------------6169044094038990135731635364";
-    int head_len = sprintf(http_buf, multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
+    int head_len = snprintf(CAT_STRS(http_buf), multipart_req_heads[0].data, multipart_req_body_multiline.length, boundary);
     memcpy(&http_buf[head_len], multipart_req_body_multiline.data, multipart_req_body_multiline.length);
     http_buf[head_len + multipart_req_body_multiline.length] = '\0';
 
@@ -1393,8 +1393,8 @@ TEST(cat_http_parser, multipart_bad_boundaries)
     for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++) {
         for (int j = 0; j < CAT_ARRAY_SIZE(boundaries_bad); j++) {
             const char *boundary = boundaries_bad[j];
-            int body_len = sprintf(body_buf, multipart_req_body.data, boundary, boundary, boundary);
-            int head_len = sprintf(head_buf, multipart_req_heads[i].data, body_len, boundary);
+            int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary, boundary, boundary);
+            int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[i].data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
             head_buf[head_len + body_len] = '\0';
             CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data:\n%.*s\n\n", head_len + body_len, head_buf);
@@ -1432,8 +1432,8 @@ TEST(cat_http_parser, multipart_bad_heads)
         for (int j = 0; j < CAT_ARRAY_SIZE(boundaries); j++) {
             const char *boundary = boundaries[j].literal;
             const char *boundary_real = boundaries[j].real;
-            int body_len = sprintf(body_buf, multipart_req_body.data, boundary_real, boundary_real, boundary_real);
-            int head_len = sprintf(head_buf, multipart_req_heads_bad[i].head.data, body_len, boundary);
+            int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary_real, boundary_real, boundary_real);
+            int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads_bad[i].head.data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
             head_buf[head_len + body_len] = '\0';
             CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data:\n%.*s\n\n", head_len + body_len, head_buf);
