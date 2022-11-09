@@ -45,7 +45,7 @@ TEST(cat_websocket, mask_and_unmask)
 {
     size_t size = CAT_BUFFER_COMMON_SIZE;
     size_t unaligned_offset = 137;
-    const char *mask_key = "abcd";
+    const char *masking_key = "abcd";
     char *raw = new char[size + 1];
     DEFER(delete[] raw);
     char *processed = new char[size + 1];
@@ -54,14 +54,14 @@ TEST(cat_websocket, mask_and_unmask)
     processed[size] = 0;
 
     /* mask with empty key */
-    cat_websocket_mask(raw, processed, size, CAT_WEBSOCKET_EMPTY_MASK_KEY);
+    cat_websocket_mask(raw, processed, size, CAT_WEBSOCKET_EMPTY_MASKING_KEY);
     ASSERT_STREQ(raw, processed);
 
     /* mask */
-    cat_websocket_mask(raw, processed, size, mask_key);
+    cat_websocket_mask(raw, processed, size, masking_key);
     ASSERT_STRNE(raw, processed);
     /* unmask */
-    cat_websocket_unmask(processed, size, mask_key);
+    cat_websocket_unmask(processed, size, masking_key);
     ASSERT_STREQ(raw, processed);
 
     /* streaming mask */
@@ -69,27 +69,27 @@ TEST(cat_websocket, mask_and_unmask)
         /* from */ raw,
         /* to */ processed,
         /* length */ unaligned_offset,
-        /* mask_key */ mask_key,
+        /* masking_key */ masking_key,
         /* index */ 0
     );
     cat_websocket_mask_ex(
         /* from */ raw + unaligned_offset,
         /* to */ processed + unaligned_offset,
         /* length */ size - unaligned_offset,
-        /* mask_key */ mask_key,
+        /* masking_key */ masking_key,
         /* index */ unaligned_offset
     );
     /* streaming unmask */
     cat_websocket_unmask_ex(
         /* data */ processed,
         /* length */ size - unaligned_offset,
-        /* mask_key */ mask_key,
+        /* masking_key */ masking_key,
         /* index */ 0
     );
     cat_websocket_unmask_ex(
         /* data */ processed + (size - unaligned_offset),
         /* length */ unaligned_offset,
-        /* mask_key */ mask_key,
+        /* masking_key */ masking_key,
         /* index */ size - unaligned_offset
     );
     ASSERT_STREQ(raw, processed);
