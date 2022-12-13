@@ -103,6 +103,8 @@ CAT_API char *cat_hex_dump(const char *data, size_t length); CAT_FREE
 CAT_API char *cat_srand(char *buffer, size_t count);  CAT_MAY_FREE
 CAT_API char *cat_snrand(char *buffer, size_t count); CAT_MAY_FREE
 
+CAT_API cat_bool_t cat_str_list_contains_ci(const char *haystack, const char *needle, size_t needle_length);
+
 /* Note: `quote` related code are borrowed from the `strace` project */
 
 static cat_always_inline char *cat_byte_to_hexstr(uint8_t c, char *out)

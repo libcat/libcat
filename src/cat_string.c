@@ -161,6 +161,32 @@ CAT_API char *cat_snrand(char *buffer, size_t count)
     return buffer;
 }
 
+CAT_API cat_bool_t cat_str_list_contains_ci(const char *haystack, const char *needle, size_t needle_length)
+{
+    const char *s = NULL, *e = haystack;
+
+    while (1) {
+        if (*e == ' ' || *e == ',' || *e == '\0') {
+            if (s) {
+                if ((size_t) (e - s) == needle_length && cat_strncasecmp(s, needle, needle_length) == 0) {
+                    return cat_true;
+                }
+                s = NULL;
+            }
+        } else {
+            if (!s) {
+                s = e;
+            }
+        }
+        if (*e == '\0') {
+            break;
+        }
+        e++;
+    }
+
+    return cat_false;
+}
+
 /*
  * Quote string `in' of `length'
  * Write up to (3 + `length' * 4) bytes to `out' buffer.
