@@ -42,6 +42,7 @@ typedef struct cat_log_globals_s {
     cat_log_types_t types;
     FILE *error_output;
     size_t str_size;
+    char *module_name_filter;
 #ifdef CAT_DEBUG
     unsigned int debug_level;
 #endif
@@ -70,7 +71,11 @@ typedef struct cat_log_globals_s {
 
 #define CAT_LOG_SCOPE_WITH_TYPE_START(type, module_name) do { \
     if (( \
-            ((type) & CAT_LOG_G(types)) == (type) \
+            ((type) & CAT_LOG_G(types)) == (type) && \
+            ( \
+                likely(CAT_LOG_G(module_name_filter) == NULL) || \
+                cat_str_list_contains_ci(CAT_LOG_G(module_name_filter), #module_name, strlen(#module_name)) \
+            ) \
         ) || \
         unlikely((type) & CAT_LOG_TYPES_UNFILTERABLE) \
     ) {

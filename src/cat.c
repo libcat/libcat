@@ -108,6 +108,10 @@ CAT_API cat_bool_t cat_runtime_init(void)
     }
     /* log str size */
     CAT_LOG_G(str_size) = (size_t) cat_env_get_i("CAT_LOG_STR_SIZE", 32);
+    /* log module name filter */
+    if (cat_env_exists("CAT_LOG_MODULE_NAME_FILTER")) {
+        CAT_LOG_G(module_name_filter) = cat_env_get("CAT_LOG_MODULE_NAME_FILTER");
+    }
 #ifdef CAT_DEBUG
     CAT_LOG_G(debug_level) = (unsigned int) cat_env_get_i("CAT_DEBUG", 0);
     if (CAT_LOG_G(debug_level) > 0) {
@@ -139,6 +143,9 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
 {
     cat_clear_last_error();
 
+    if (CAT_LOG_G(module_name_filter) != NULL) {
+        cat_free(CAT_LOG_G(module_name_filter));
+    }
     if (CAT_G(exepath).data != NULL) {
         cat_free((void *) CAT_G(exepath).data);
     }
