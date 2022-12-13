@@ -56,7 +56,7 @@ TEST(cat, runtime_init_with_error_log_stdout)
     FILE *original_error_log = cat_get_error_log();
     DEFER(cat_set_error_log(original_error_log));
 
-    cat_env_set("CAT_ERROR_LOG", "stdout");
+    cat_env_set("CAT_LOG_ERROR_OUTPUT", "stdout");
     cat_runtime_shutdown();
     cat_runtime_init();
     testing::internal::CaptureStdout();
@@ -70,7 +70,7 @@ TEST(cat, runtime_init_with_error_log_stderr)
     FILE *original_error_log = cat_get_error_log();
     DEFER(cat_set_error_log(original_error_log));
 
-    cat_env_set("CAT_ERROR_LOG", "stderr");
+    cat_env_set("CAT_LOG_ERROR_OUTPUT", "stderr");
     cat_runtime_shutdown();
     cat_runtime_init();
     testing::internal::CaptureStderr();
@@ -82,10 +82,10 @@ TEST(cat, runtime_init_with_error_log_stderr)
 #ifdef CAT_DEBUG
 TEST(cat, enable_debug_mode)
 {
-    cat_log_types_t log_types = CAT_G(log_types);
+    cat_log_types_t log_types = CAT_LOG_G(types);
     cat_enable_debug_mode();
-    ASSERT_EQ(CAT_G(log_types), CAT_LOG_TYPES_ALL);
-    CAT_G(log_types) = log_types;
+    ASSERT_EQ(CAT_LOG_G(types), CAT_LOG_TYPES_ALL);
+    CAT_LOG_G(types) = log_types;
 }
 #endif
 

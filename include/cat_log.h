@@ -38,6 +38,18 @@ typedef enum cat_log_union_types_e {
     CAT_LOG_TYPES_UNFILTERABLE    = CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR,
 } cat_log_union_types_t;
 
+typedef struct cat_log_globals_s {
+    cat_log_types_t types;
+    FILE *error_output;
+    size_t str_size;
+#ifdef CAT_DEBUG
+    unsigned int debug_level;
+#endif
+#ifdef CAT_SOURCE_POSITION
+    cat_bool_t show_source_postion;
+#endif
+} cat_log_globals_t;
+
 #define CAT_LOG_STRING_OR_X_PARAM(string, x) \
         (string != NULL ? "\"" : ""), (string != NULL ? string : x), (string != NULL ? "\"" : "")
 
@@ -57,8 +69,11 @@ typedef enum cat_log_union_types_e {
  * [XXX_D] macros means log directly without checking user config */
 
 #define CAT_LOG_SCOPE_WITH_TYPE_START(type, module_name) do { \
-    if ((((type) & CAT_G(log_types)) == (type)) || \
-        unlikely((type) & CAT_LOG_TYPES_UNFILTERABLE)) {
+    if (( \
+            ((type) & CAT_LOG_G(types)) == (type) \
+        ) || \
+        unlikely((type) & CAT_LOG_TYPES_UNFILTERABLE) \
+    ) {
 
 #define CAT_LOG_SCOPE_WITH_TYPE_END() \
     } \
@@ -116,7 +131,7 @@ typedef enum cat_log_union_types_e {
 # define CAT_LOG_DEBUG_D(module_name, format, ...)
 #else
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) do { \
-    if (CAT_G(log_debug_level) >= level) {
+    if (CAT_LOG_G(debug_level) >= level) {
 
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_END() \
     } \
@@ -197,7 +212,7 @@ extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
 
 CAT_API void cat_log_standard(CAT_LOG_PARAMATERS);
 
-/* Notice: n will be limited to CAT_G(log_str_size) if it exceed CAT_G(log_str_size) */
+/* Notice: n will be limited to CAT_LOG_G(str_size) if it exceed CAT_LOG_G(str_size) */
 CAT_API const char *cat_log_str_quote(const char *buffer, size_t n, char **tmp_str); CAT_FREE
 /* Notice: n will not be limited anyway */
 CAT_API const char *cat_log_str_quote_unlimited(const char *buffer, size_t n, char **tmp_str); CAT_FREE

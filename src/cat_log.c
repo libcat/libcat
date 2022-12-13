@@ -64,22 +64,22 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         }
         case CAT_LOG_TYPE_NOTICE : {
             type_string = "Notice";
-            output = CAT_G(error_log);
+            output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_WARNING : {
             type_string = "Warning";
-            output = CAT_G(error_log);
+            output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_ERROR : {
             type_string = "Error";
-            output = CAT_G(error_log);
+            output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_CORE_ERROR : {
             type_string = "Core Error";
-            output = CAT_G(error_log);
+            output = CAT_LOG_G(error_output);
             break;
         }
         default:
@@ -91,7 +91,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         va_start(args, format);
         message = cat_vsprintf(format, args);
         if (unlikely(message == NULL)) {
-            fprintf(CAT_G(error_log), "Sprintf log message failed" CAT_EOL);
+            fprintf(CAT_LOG_G(error_output), "Sprintf log message failed" CAT_EOL);
             return;
         }
         va_end(args);
@@ -114,7 +114,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         }
     } while (0);
 #ifdef CAT_SOURCE_POSITION
-    if (CAT_G(log_source_postion)) {
+    if (CAT_LOG_G(show_source_postion)) {
         fprintf(
             output,
             "SP: " CAT_SOURCE_POSITION_FMT CAT_EOL,
@@ -136,7 +136,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
 
 CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str)
 {
-    return cat_log_str_quote_unlimited(str, CAT_MIN(n, CAT_G(log_str_size)), tmp_str);
+    return cat_log_str_quote_unlimited(str, CAT_MIN(n, CAT_LOG_G(str_size)), tmp_str);
 }
 
 CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char **tmp_str)
