@@ -97,7 +97,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
     memset(&CAT_G(last_error), 0, sizeof(CAT_G(last_error)));
 
     /* error log */
-    if (cat_env_exists("CAT_LOG_ERROR_OUTPUT")) {
+    if (!cat_env_is_empty("CAT_LOG_ERROR_OUTPUT")) {
         char *error_log = cat_env_get("CAT_LOG_ERROR_OUTPUT");
         if (cat_strcasecmp(error_log, "stdout") == 0) {
             CAT_LOG_G(error_output) = stdout;
@@ -109,7 +109,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
     /* log str size */
     CAT_LOG_G(str_size) = (size_t) cat_env_get_i("CAT_LOG_STR_SIZE", 32);
     /* log module name filter */
-    if (cat_env_exists("CAT_LOG_MODULE_NAME_FILTER")) {
+    if (!cat_env_is_empty("CAT_LOG_MODULE_NAME_FILTER")) {
         CAT_LOG_G(module_name_filter) = cat_env_get("CAT_LOG_MODULE_NAME_FILTER");
     } else {
         CAT_LOG_G(module_name_filter) = NULL;
