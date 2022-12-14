@@ -26,20 +26,15 @@
 
 CAT_API cat_log_t cat_log_function;
 
-#if 0
-static const char *cat_log_get_date()
+static cat_always_inline void cat_log_timespec_sub(struct timespec *tv, const struct timespec *a, const struct timespec *b)
 {
-    static char date[24];
-    time_t raw_time;
-    struct tm *info;
-
-    time(&raw_time);
-    info = localtime(&raw_time);
-    strftime(date, 24, "%Y-%m-%d %H:%M:%S", info);
-
-    return date;
+    tv->tv_sec = a->tv_sec - b->tv_sec;
+    tv->tv_nsec = a->tv_nsec - b->tv_nsec;
+    if (tv->tv_nsec < 0) {
+        tv->tv_sec--;
+        tv->tv_nsec += 1000000000;
+    }
 }
-#endif
 
 CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
 {
@@ -95,6 +90,73 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
             return;
         }
         va_end(args);
+    } while (0);
+
+    do {
+        unsigned int timestamps_level = CAT_LOG_G(show_timestamps);
+        if (timestamps_level == 0) {
+            break;
+        }
+        struct {
+            const char *name;
+            unsigned int width;
+            unsigned int scale;
+        } scale_options[] = {
+            { "s" , 0, 1000000000 }, // placeholder
+            { "ms", 3, 1000000 },
+            { "us", 6, 1000 },
+            { "ns", 9, 1 },
+        };
+        char buffer[32];
+        if (!CAT_LOG_G(show_timestamps_as_relative)) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            time_t local = ts.tv_sec;
+            struct tm *tm = localtime(&local);
+            size_t length;
+            length = strftime(CAT_STRS(buffer), CAT_LOG_G(timestamps_format), tm);
+            if (length == 0) {
+                break;
+            }
+            timestamps_level = MIN(timestamps_level, CAT_ARRAY_SIZE(scale_options));
+            if (timestamps_level > 1) {
+                // TODO: now just use "us" as default, supports more in the future
+                int f_length = snprintf(
+                    buffer + length, sizeof(buffer) - length,
+                    ".%0*ld",
+                    scale_options[timestamps_level - 1].width,
+                    (long) (ts.tv_nsec / scale_options[timestamps_level - 1].scale)
+                );
+                if (f_length >= 0) {
+                    length += f_length;
+                }
+            }
+            buffer[length] = '\0';
+        } else {
+            struct timespec ts;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            static struct timespec ots;
+            if (ots.tv_sec == 0) {
+                ots = ts;
+            }
+            struct timespec dts;
+            cat_log_timespec_sub(&dts, &ts, &ots);
+            ots = ts;
+            int length = snprintf(CAT_STRS(buffer), "%6ld", (long) dts.tv_sec);
+            // starts with msec, not sec
+            timestamps_level = MIN(timestamps_level, CAT_ARRAY_SIZE(scale_options) - 1);
+            int f_length = snprintf(
+                buffer + length, sizeof(buffer) - length,
+                ".%0*ld",
+                scale_options[timestamps_level].width,
+                (long) dts.tv_nsec / scale_options[timestamps_level].scale
+            );
+            if (f_length >= 0) {
+                length += f_length;
+            }
+            buffer[length] = '\0';
+        }
+        fprintf(output, "[%s] ", buffer);
     } while (0);
 
     do {

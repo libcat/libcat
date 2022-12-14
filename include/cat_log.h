@@ -43,6 +43,9 @@ typedef struct cat_log_globals_s {
     FILE *error_output;
     size_t str_size;
     char *module_name_filter;
+    unsigned int show_timestamps;
+    const char *timestamps_format;
+    cat_bool_t show_timestamps_as_relative;
 #ifdef CAT_DEBUG
     unsigned int debug_level;
 #endif

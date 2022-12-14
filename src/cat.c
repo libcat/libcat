@@ -111,6 +111,26 @@ CAT_API cat_bool_t cat_runtime_init(void)
     /* log module name filter */
     if (cat_env_exists("CAT_LOG_MODULE_NAME_FILTER")) {
         CAT_LOG_G(module_name_filter) = cat_env_get("CAT_LOG_MODULE_NAME_FILTER");
+    } else {
+        CAT_LOG_G(module_name_filter) = NULL;
+    }
+    CAT_LOG_G(show_timestamps) = (unsigned int) cat_env_get_i("CAT_LOG_SHOW_TIMESTAMPS", 0);
+    CAT_LOG_G(timestamps_format) = "%F %T";
+    CAT_LOG_G(show_timestamps_as_relative) = cat_false;
+    do {
+        char *timestamps_format = cat_env_get("CAT_LOG_TIMESTAMPS_FORMAT");
+        if (timestamps_format != NULL) {
+            if (cat_strcasecmp(timestamps_format, "time") == 0) {
+                CAT_LOG_G(timestamps_format) = "%T";
+            } else if (cat_strcasecmp(timestamps_format, "unix") == 0) {
+                CAT_LOG_G(timestamps_format) = "%s";
+            }
+        } else {
+            cat_free(timestamps_format);
+        }
+    } while (0);
+    if (cat_env_is_true("CAT_LOG_SHOW_TIMESTAMPS_AS_RELATIVE", cat_false)) {
+        CAT_LOG_G(show_timestamps_as_relative) = cat_true;
     }
 #ifdef CAT_DEBUG
     CAT_LOG_G(debug_level) = (unsigned int) cat_env_get_i("CAT_DEBUG", 0);
