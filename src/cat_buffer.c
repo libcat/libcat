@@ -215,7 +215,7 @@ CAT_API cat_bool_t cat_buffer_malloc_trim(cat_buffer_t *buffer)
     return cat_buffer_realloc(buffer, buffer->length);
 }
 
-CAT_API cat_bool_t cat_buffer_write(cat_buffer_t *buffer, size_t offset, const char *ptr, size_t length)
+CAT_API cat_bool_t cat_buffer_write(cat_buffer_t *buffer, size_t offset, const void *ptr, size_t length)
 {
     size_t new_length = offset + length;
 
@@ -224,8 +224,8 @@ CAT_API cat_bool_t cat_buffer_write(cat_buffer_t *buffer, size_t offset, const c
             return cat_false;
         }
     }
-    if (length > 0) {
-        // Do not use memcpy, ptr maybe at the same scope with dest
+    if (likely(length > 0)) {
+        // do not use memcpy, ptr maybe at the same scope with dest
         memmove(buffer->value + offset, ptr, length);
         if (new_length > buffer->length) {
             cat_buffer__update(buffer, new_length);
@@ -235,7 +235,7 @@ CAT_API cat_bool_t cat_buffer_write(cat_buffer_t *buffer, size_t offset, const c
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_buffer_append(cat_buffer_t *buffer, const char *ptr, size_t length)
+CAT_API cat_bool_t cat_buffer_append(cat_buffer_t *buffer, const void *ptr, size_t length)
 {
     size_t new_length = buffer->length + length;
 
