@@ -228,7 +228,7 @@ CAT_API cat_bool_t cat_str_list_contains_ci(const char *haystack, const char *ne
  */
 CAT_API cat_bool_t cat_str_quote_ex2(
     const char *in, size_t length, char *out, size_t *out_length,
-    cat_string_quote_style_flags_t style, const char *escape_chars
+    cat_str_quote_style_flags_t style, const char *escape_chars
 )
 {
     const unsigned char *p = (const unsigned char *) in;
@@ -394,7 +394,7 @@ _done:
 CAT_API cat_bool_t cat_str_quote_ex(
     const char *str, size_t length,
     char **new_str_ptr, size_t *new_length_ptr,
-    cat_string_quote_style_flags_t style, const char *escape_chars,
+    cat_str_quote_style_flags_t style, const char *escape_chars,
     cat_bool_t *is_complete
 )
 {

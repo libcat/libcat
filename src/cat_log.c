@@ -29,7 +29,7 @@ CAT_API cat_log_t cat_log_function;
 
 static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, FILE **output_ptr)
 {
-    const char *type_string;
+    const char *type_name;
     FILE *output;
 
     switch (type) {
@@ -37,33 +37,33 @@ static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, 
 #ifndef CAT_ENABLE_DEBUG_LOG
             return;
 #else
-            type_string = "Debug";
+            type_name = "Debug";
             output = stdout;
             break;
 #endif
         }
         case CAT_LOG_TYPE_INFO : {
-            type_string = "Info";
+            type_name = "Info";
             output = stdout;
             break;
         }
         case CAT_LOG_TYPE_NOTICE : {
-            type_string = "Notice";
+            type_name = "Notice";
             output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_WARNING : {
-            type_string = "Warning";
+            type_name = "Warning";
             output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_ERROR : {
-            type_string = "Error";
+            type_name = "Error";
             output = CAT_LOG_G(error_output);
             break;
         }
         case CAT_LOG_TYPE_CORE_ERROR : {
-            type_string = "Core Error";
+            type_name = "Core Error";
             output = CAT_LOG_G(error_output);
             break;
         }
@@ -74,7 +74,7 @@ static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, 
     if (output_ptr != NULL) {
         *output_ptr = output;
     }
-    return type_string;
+    return type_name;
 }
 
 static cat_always_inline void cat_log_timespec_sub(struct timespec *tv, const struct timespec *a, const struct timespec *b)
@@ -160,10 +160,10 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
 {
     cat_buffer_t buffer;
     cat_bool_t ret;
-    const char *type_string;
+    const char *type_name;
     FILE *output;
 
-    type_string = cat_log_type_dispatch(type, &output);
+    type_name = cat_log_type_dispatch(type, &output);
 
     ret = cat_buffer_create(&buffer, 0);
     if (unlikely(!ret)) {
@@ -208,7 +208,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         (void) cat_buffer_append_char(&buffer, '[');
         (void) cat_buffer_append_str_with_padding(&buffer, name, ' ', name_width);
         (void) cat_buffer_append_str(&buffer, "] ");
-        (void) cat_buffer_append_str(&buffer, type_string);
+        (void) cat_buffer_append_str(&buffer, type_name);
         if (type == CAT_LOG_TYPE_DEBUG && CAT_LOG_G(last_debug_log_level) > 1) {
             (void) cat_buffer_append_str(&buffer, "(v");
             (void) cat_buffer_append_signed(&buffer, CAT_LOG_G(last_debug_log_level));

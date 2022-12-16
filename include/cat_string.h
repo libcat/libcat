@@ -123,7 +123,7 @@ static cat_always_inline cat_bool_t cat_byte_is_printable(uint8_t c)
     return (c >= ' ') && (c < 0x7f);
 }
 
-typedef enum cat_string_quote_style_flag_e {
+typedef enum cat_str_quote_style_flag_e {
     CAT_STR_QUOTE_STYLE_FLAG_NONE = 0,
     /** String is '\0'-terminated. */
     CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED = 1 << 0,
@@ -141,7 +141,7 @@ typedef enum cat_string_quote_style_flag_e {
     CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT = 1 << 6,
 } cat_str_quote_style_flag_t;
 
-typedef uint8_t cat_string_quote_style_flags_t;
+typedef uint8_t cat_str_quote_style_flags_t;
 
 CAT_API cat_bool_t cat_str_quote(
     const char *str, size_t length,
@@ -151,13 +151,13 @@ CAT_API cat_bool_t cat_str_quote(
 CAT_API cat_bool_t cat_str_quote_ex(
     const char *str, size_t length,
     char **new_str_ptr, size_t *new_length_ptr,
-    cat_string_quote_style_flags_t style, const char *escape_chars,
+    cat_str_quote_style_flags_t style, const char *escape_chars,
     cat_bool_t *is_complete
 ); CAT_MAY_FREE
 
 CAT_API cat_bool_t cat_str_quote_ex2(
     const char *in, size_t length, char *out,
-    size_t *out_length, cat_string_quote_style_flags_t style,
+    size_t *out_length, cat_str_quote_style_flags_t style,
     const char *escape_chars
 );
 

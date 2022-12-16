@@ -370,7 +370,7 @@ TEST(cat_coroutine, get_elapsed)
 
 TEST(cat_coroutine, get_elapsed_as_string)
 {
-    char *elapsed = cat_coroutine_get_elapsed_as_string(cat_coroutine_get_current());
+    char *elapsed = cat_coroutine_get_elapsed_str(cat_coroutine_get_current());
 
     ASSERT_NE(elapsed, nullptr);
 
@@ -392,7 +392,7 @@ TEST(cat_coroutine, get_elapsed_zero)
     DEFER(ASSERT_TRUE(cat_coroutine_close(&coroutine)));
 
     ASSERT_EQ(cat_coroutine_get_elapsed(&coroutine), 0);
-    elapsed = cat_coroutine_get_elapsed_as_string(&coroutine);
+    elapsed = cat_coroutine_get_elapsed_str(&coroutine);
     ASSERT_EQ(std::string(elapsed), std::string("0ms"));
     cat_free(elapsed);
 }

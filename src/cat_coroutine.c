@@ -946,7 +946,7 @@ CAT_API cat_msec_t cat_coroutine_get_elapsed(const cat_coroutine_t *coroutine)
     return cat_time_msec() - coroutine->start_time;
 }
 
-CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *coroutine)
+CAT_API char *cat_coroutine_get_elapsed_str(const cat_coroutine_t *coroutine)
 {
     return cat_time_format_msec(cat_coroutine_get_elapsed(coroutine));
 }

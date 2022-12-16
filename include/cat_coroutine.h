@@ -258,7 +258,7 @@ CAT_API cat_coroutine_round_t cat_coroutine_get_round(const cat_coroutine_t *cor
 CAT_API cat_msec_t cat_coroutine_get_start_time(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_end_time(const cat_coroutine_t *coroutine);
 CAT_API cat_msec_t cat_coroutine_get_elapsed(const cat_coroutine_t *coroutine);
-CAT_API char *cat_coroutine_get_elapsed_as_string(const cat_coroutine_t *coroutine);
+CAT_API char *cat_coroutine_get_elapsed_str(const cat_coroutine_t *coroutine);
 
 /* scheduler */
 typedef void (*cat_coroutine_schedule_function_t)(void);
