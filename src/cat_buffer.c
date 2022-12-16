@@ -197,6 +197,15 @@ CAT_API cat_bool_t cat_buffer_extend(cat_buffer_t *buffer, size_t recommend_size
     return cat_buffer_realloc(buffer, new_size);
 }
 
+CAT_API cat_bool_t cat_buffer_prepare(cat_buffer_t *buffer, size_t append_length)
+{
+    size_t available_size = buffer->size - buffer->length;
+    if (unlikely(available_size < append_length)) {
+        return cat_buffer_extend(buffer, buffer->length + append_length);
+    }
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_buffer_malloc_trim(cat_buffer_t *buffer)
 {
     if (unlikely(buffer->length == buffer->size)) {
