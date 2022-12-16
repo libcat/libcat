@@ -458,3 +458,32 @@ CAT_API cat_bool_t cat_buffer_zero_terminate(cat_buffer_t *buffer)
     buffer->length--;
     return cat_true;
 }
+
+CAT_API cat_bool_t cat_buffer_append_with_padding(cat_buffer_t *buffer, const void *ptr, size_t length, const char padding_char, size_t width)
+{
+    size_t original_buffer_length = buffer->length;
+    ssize_t padding_length = width - length;
+    size_t padding_left = padding_length / 2;
+    size_t padding_right = padding_length - padding_left;
+    size_t i;
+    cat_bool_t ret;
+
+    if (!cat_buffer_prepare(buffer, length + padding_length)) {
+        return cat_false;
+    }
+
+    for (i = 0; i < padding_left; i++) {
+        (void) cat_buffer_append_char(buffer, padding_char);
+    }
+    (void) cat_buffer_append(buffer, ptr, length);
+    for (i = 0; i < padding_right; i++) {
+        (void) cat_buffer_append_char(buffer, padding_char);
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_buffer_append_str_with_padding(cat_buffer_t *buffer, const char *str, const char padding_char, size_t width)
+{
+    return cat_buffer_append_with_padding(buffer, str, strlen(str), padding_char, width);
+}

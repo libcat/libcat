@@ -86,6 +86,9 @@ CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *f
 CAT_API cat_bool_t cat_buffer_append_printf(cat_buffer_t *buffer, const char *format, ...) CAT_ATTRIBUTE_FORMAT(printf, 2, 3); CAT_FREE
 CAT_API cat_bool_t cat_buffer_zero_terminate(cat_buffer_t *buffer);
 
+CAT_API cat_bool_t cat_buffer_append_with_padding(cat_buffer_t *buffer, const void *ptr, size_t length, const char padding_char, size_t width);
+CAT_API cat_bool_t cat_buffer_append_str_with_padding(cat_buffer_t *buffer, const char *str, const char padding_char, size_t width);
+
 #ifdef __cplusplus
 }
 #endif
