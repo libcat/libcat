@@ -48,6 +48,7 @@ typedef struct cat_log_globals_s {
     cat_bool_t show_timestamps_as_relative;
 #ifdef CAT_DEBUG
     unsigned int debug_level;
+    unsigned int last_debug_log_level;
 #endif
 #ifdef CAT_SOURCE_POSITION
     cat_bool_t show_source_postion;
@@ -139,7 +140,8 @@ typedef struct cat_log_globals_s {
 # define CAT_LOG_DEBUG_D(module_name, format, ...)
 #else
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) do { \
-    if (CAT_LOG_G(debug_level) >= level) {
+    if (CAT_LOG_G(debug_level) >= level) { \
+        CAT_LOG_G(last_debug_log_level) = level; \
 
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_END() \
     } \

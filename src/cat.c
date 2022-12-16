@@ -133,6 +133,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
         CAT_LOG_G(show_timestamps_as_relative) = cat_true;
     }
 #ifdef CAT_DEBUG
+    CAT_LOG_G(last_debug_log_level) = 0;
     CAT_LOG_G(debug_level) = (unsigned int) cat_env_get_i("CAT_DEBUG", 0);
     if (CAT_LOG_G(debug_level) > 0) {
         /* enable all log types and log module types */
