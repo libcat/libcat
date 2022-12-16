@@ -136,7 +136,10 @@ CAT_API cat_bool_t cat_sockaddr_check(const cat_sockaddr_t *address, cat_socklen
 
 /* socket id */
 
-typedef uint64_t cat_socket_id_t;
+typedef int64_t cat_socket_id_t;
+#define CAT_SOCKET_ID_FMT "%" PRId64
+#define CAT_SOCKET_ID_FMT_SPEC PRId64
+#define CAT_SOCKET_INVALID_ID -1
 
 /* socket fd */
 
@@ -669,6 +672,7 @@ CAT_API ssize_t cat_socket_peek_from_ex(const cat_socket_t *socket, char *buffer
 CAT_API cat_bool_t cat_socket_send_handle(cat_socket_t *socket, cat_socket_t *handle);
 CAT_API cat_bool_t cat_socket_send_handle_ex(cat_socket_t *socket, cat_socket_t *handle, cat_timeout_t timeout);
 
+/* @note last_error will not be updated when close failed,  */
 CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket);
 
 /* getter */
