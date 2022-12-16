@@ -3796,12 +3796,7 @@ CAT_API cat_bool_t cat_socket_close(cat_socket_t *socket)
     socket->flags &= ~CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
 
     if (socket_i == NULL) {
-        /* we do not update the last error here
-         * because the only reason for close failure is
-         * it has been closed */
-#ifdef CAT_DEBUG
         cat_update_last_error(CAT_EBADF, NULL);
-#endif
         ret = cat_false;
     } else {
         cat_socket_internal_close(socket_i, cat_false);
