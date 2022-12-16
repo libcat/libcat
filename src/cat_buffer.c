@@ -237,7 +237,24 @@ CAT_API cat_bool_t cat_buffer_write(cat_buffer_t *buffer, size_t offset, const c
 
 CAT_API cat_bool_t cat_buffer_append(cat_buffer_t *buffer, const char *ptr, size_t length)
 {
-    return cat_buffer_write(buffer, buffer->length, ptr, length);
+    size_t new_length = buffer->length + length;
+
+    if (new_length > buffer->size) {
+        if (unlikely(!cat_buffer_extend(buffer, new_length))) {
+            return cat_false;
+        }
+    }
+    if (likely(length > 0)) {
+        // make sure that memory is not overlapped
+        CAT_ASSERT(
+            ptr > buffer->value + buffer->length + length ||
+            ptr < buffer->value + buffer->length
+        );
+        memcpy(buffer->value + buffer->length, ptr, length);
+        cat_buffer__update(buffer, new_length);
+    }
+
+    return cat_true;
 }
 
 CAT_API void cat_buffer_truncate(cat_buffer_t *buffer, size_t length)
