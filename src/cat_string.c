@@ -49,7 +49,7 @@ CAT_API char *cat_stpcpy(char *dest, const char *src)
     return dest;
 }
 
-CAT_API char *cat_vsprintf(const char *format, va_list args)
+CAT_API char *cat_vslprintf(const char *format, size_t *length, va_list args)
 {
     va_list _args;
     size_t size;
@@ -64,6 +64,9 @@ CAT_API char *cat_vsprintf(const char *format, va_list args)
         /* no need to update error message, we even have no mem to sprintf,
            so we may also have no mem to update error message */
         cat_update_last_error(cat_translate_sys_error(cat_sys_errno), NULL);
+        if (length != NULL) {
+            *length = 0;
+        }
         return NULL;
     }
 #endif
@@ -72,6 +75,26 @@ CAT_API char *cat_vsprintf(const char *format, va_list args)
         return NULL;
     }
     string[size - 1] = '\0';
+    if (length != NULL) {
+        *length = size - 1;
+    }
+
+    return string;
+}
+
+CAT_API char *cat_vsprintf(const char *format, va_list args)
+{
+    return cat_vslprintf(format, NULL, args);
+}
+
+CAT_API char *cat_slprintf(const char *format, size_t *length, ...)
+{
+    va_list args;
+    char *string;
+
+    va_start(args, length);
+    string = cat_vslprintf(format, length, args);
+    va_end(args);
 
     return string;
 }
@@ -82,7 +105,7 @@ CAT_API char *cat_sprintf(const char *format, ...)
     char *string;
 
     va_start(args, format);
-    string = cat_vsprintf(format, args);
+    string = cat_vslprintf(format, NULL, args);
     va_end(args);
 
     return string;
