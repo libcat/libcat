@@ -22,24 +22,14 @@
 #include "cat_log.h"
 #endif
 
+#include "cat_buffer.h"
 #include "cat_coroutine.h" /* for coroutine id (TODO: need to decouple it?) */
 
 CAT_API cat_log_t cat_log_function;
 
-static cat_always_inline void cat_log_timespec_sub(struct timespec *tv, const struct timespec *a, const struct timespec *b)
-{
-    tv->tv_sec = a->tv_sec - b->tv_sec;
-    tv->tv_nsec = a->tv_nsec - b->tv_nsec;
-    if (tv->tv_nsec < 0) {
-        tv->tv_sec--;
-        tv->tv_nsec += 1000000000;
-    }
-}
-
-CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
+static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, FILE **output_ptr)
 {
     const char *type_string;
-    char *message;
     FILE *output;
 
     switch (type) {
@@ -81,114 +71,184 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
             CAT_NEVER_HERE("Unknown log type");
     }
 
-    do {
-        va_list args;
-        va_start(args, format);
-        message = cat_vsprintf(format, args);
-        if (unlikely(message == NULL)) {
-            fprintf(CAT_LOG_G(error_output), "Sprintf log message failed" CAT_EOL);
+    if (output_ptr != NULL) {
+        *output_ptr = output;
+    }
+    return type_string;
+}
+
+static cat_always_inline void cat_log_timespec_sub(struct timespec *tv, const struct timespec *a, const struct timespec *b)
+{
+    tv->tv_sec = a->tv_sec - b->tv_sec;
+    tv->tv_nsec = a->tv_nsec - b->tv_nsec;
+    if (tv->tv_nsec < 0) {
+        tv->tv_sec--;
+        tv->tv_nsec += 1000000000;
+    }
+}
+
+static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int level, const char *format, cat_bool_t relative)
+{
+    const struct {
+        const char *name;
+        unsigned int width;
+        unsigned int scale;
+    } scale_options[] = {
+        { "s" , 0, 1000000000 }, // placeholder
+        { "ms", 3, 1000000 },
+        { "us", 6, 1000 },
+        { "ns", 9, 1 },
+    };
+    if (unlikely(!cat_buffer_prepare(buffer, 32))) {
+        return;
+    }
+    if (!relative) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_t local = ts.tv_sec;
+        struct tm *tm = localtime(&local);
+        size_t t_length;
+        t_length = strftime(
+            buffer->value + buffer->length,
+            buffer->size - buffer->length,
+            CAT_LOG_G(timestamps_format),
+            tm
+        );
+        if (t_length == 0) {
             return;
         }
-        va_end(args);
-    } while (0);
+        buffer->length += t_length;
+        level = CAT_MIN(level, CAT_ARRAY_SIZE(scale_options));
+        if (level > 1) {
+            // TODO: now just use "us" as default, supports more in the future
+            (void) cat_buffer_append_printf(
+                buffer, ".%0*ld",
+                scale_options[level - 1].width,
+                (long) (ts.tv_nsec / scale_options[level - 1].scale)
+            );
+        }
+    } else {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        static struct timespec ots;
+        if (ots.tv_sec == 0) {
+            ots = ts;
+        }
+        struct timespec dts;
+        cat_log_timespec_sub(&dts, &ts, &ots);
+        ots = ts;
+        int t_length = snprintf(
+            buffer->value + buffer->length,
+            buffer->size - buffer->length,
+            "%6ld", (long) dts.tv_sec
+        );
+        if (t_length == 0) {
+            return;
+        }
+        buffer->length += t_length;
+        // starts with msec, not sec
+        level = CAT_MIN(level, CAT_ARRAY_SIZE(scale_options) - 1);
+        (void) cat_buffer_append_printf(
+            buffer, ".%0*ld",
+            scale_options[level].width,
+            (long) dts.tv_nsec / scale_options[level].scale
+        );
+    }
+}
+
+CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
+{
+    cat_buffer_t buffer;
+    cat_bool_t ret;
+    const char *type_string;
+    FILE *output;
+
+    type_string = cat_log_type_dispatch(type, &output);
+
+    ret = cat_buffer_create(&buffer, 0);
+    if (unlikely(!ret)) {
+        fprintf(CAT_LOG_G(error_output), "Create log buffer failed (%s)" CAT_EOL, cat_get_last_error_message());
+        return;
+    }
 
     do {
         unsigned int timestamps_level = CAT_LOG_G(show_timestamps);
         if (timestamps_level == 0) {
             break;
         }
-        struct {
-            const char *name;
-            unsigned int width;
-            unsigned int scale;
-        } scale_options[] = {
-            { "s" , 0, 1000000000 }, // placeholder
-            { "ms", 3, 1000000 },
-            { "us", 6, 1000 },
-            { "ns", 9, 1 },
-        };
-        char buffer[32];
-        if (!CAT_LOG_G(show_timestamps_as_relative)) {
-            struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
-            time_t local = ts.tv_sec;
-            struct tm *tm = localtime(&local);
-            size_t length;
-            length = strftime(CAT_STRS(buffer), CAT_LOG_G(timestamps_format), tm);
-            if (length == 0) {
-                break;
-            }
-            timestamps_level = MIN(timestamps_level, CAT_ARRAY_SIZE(scale_options));
-            if (timestamps_level > 1) {
-                // TODO: now just use "us" as default, supports more in the future
-                int f_length = snprintf(
-                    buffer + length, sizeof(buffer) - length,
-                    ".%0*ld",
-                    scale_options[timestamps_level - 1].width,
-                    (long) (ts.tv_nsec / scale_options[timestamps_level - 1].scale)
-                );
-                if (f_length >= 0) {
-                    length += f_length;
-                }
-            }
-            buffer[length] = '\0';
-        } else {
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            static struct timespec ots;
-            if (ots.tv_sec == 0) {
-                ots = ts;
-            }
-            struct timespec dts;
-            cat_log_timespec_sub(&dts, &ts, &ots);
-            ots = ts;
-            int length = snprintf(CAT_STRS(buffer), "%6ld", (long) dts.tv_sec);
-            // starts with msec, not sec
-            timestamps_level = MIN(timestamps_level, CAT_ARRAY_SIZE(scale_options) - 1);
-            int f_length = snprintf(
-                buffer + length, sizeof(buffer) - length,
-                ".%0*ld",
-                scale_options[timestamps_level].width,
-                (long) dts.tv_nsec / scale_options[timestamps_level].scale
+        (void) cat_buffer_append_char(&buffer, '[');
+        (void) cat_log_buffer_append_timestamps(&buffer, timestamps_level, CAT_LOG_G(timestamps_format), CAT_LOG_G(show_timestamps_as_relative));
+        (void) cat_buffer_append_string(&buffer, "] ");
+    } while (0);
+
+    // role_name + log_type + module_name
+    do {
+        const char *name = cat_coroutine_get_current_role_name_in_uppercase();
+        if (name != NULL) {
+            (void) cat_buffer_append_printf(
+                &buffer,
+                "[%-12s] %s: <%s> ",
+                name, type_string, module_name
             );
-            if (f_length >= 0) {
-                length += f_length;
-            }
-            buffer[length] = '\0';
+        } else {
+            (void) cat_buffer_append_printf(
+                &buffer,
+                "[R%-11" CAT_COROUTINE_ID_FMT_SPEC "] %s: <%s> ",
+                cat_coroutine_get_current_id(), type_string, module_name
+            );
         }
-        fprintf(output, "[%s] ", buffer);
     } while (0);
 
     do {
-        const char *name = cat_coroutine_get_current_role_name();
-        if (name != NULL) {
-            fprintf(
-                output,
-                "%s: <%s> %s in %s" CAT_EOL,
-                type_string, module_name, message, name
-            );
-        } else {
-            fprintf(
-                output,
-                "%s: <%s> %s in R" CAT_COROUTINE_ID_FMT CAT_EOL,
-                type_string, module_name, message, cat_coroutine_get_current_id()
-            );
+        va_list args;
+        va_start(args, format);
+        ret = cat_buffer_append_vprintf(&buffer, format, args);
+        if (unlikely(!ret)) {
+            fprintf(CAT_LOG_G(error_output), "Vprintf log message failed (%s)" CAT_EOL, cat_get_last_error_message());
+            goto _error;
         }
+        va_end(args);
     } while (0);
+
+    cat_buffer_append_string(&buffer, CAT_EOL);
+
 #ifdef CAT_SOURCE_POSITION
     if (CAT_LOG_G(show_source_postion)) {
-        fprintf(
-            output,
-            "SP: " CAT_SOURCE_POSITION_FMT CAT_EOL,
-            CAT_SOURCE_POSITION_RELAY_C
+        (void) cat_buffer_append_printf(
+            &buffer,
+            "  ^ " "%s:%d | %s()" CAT_EOL,
+            file, line, function
         );
     }
 #endif
 
+    do {
+        const char *p = buffer.value;
+        const char *pe = p + buffer.length;
+        while (1) {
+            size_t l = pe - p;
+            size_t n = fwrite(p, 1, CAT_MIN(l, 16384), output);
+            break;
+            if (n == 0) {
+                fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)" CAT_EOL, cat_strerror(cat_sys_errno));
+                goto _error;
+            }
+            p += n;
+            if (p == pe) {
+                break;
+            }
+        }
+    } while (0);
+
     if (type & CAT_LOG_TYPES_ABNORMAL) {
-        cat_set_last_error(code, message);
+        if (0) {
+            _error:
+            cat_buffer_close(&buffer);
+            buffer.value = NULL;
+        }
+        cat_set_last_error(code, buffer.value);
     } else {
-        cat_free(message);
+        cat_buffer_close(&buffer);
     }
 
     if (type & (CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR)) {
