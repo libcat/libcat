@@ -119,6 +119,19 @@ CAT_API const char *cat_strerror(cat_errno_t error)
     return "Unknown error";
 }
 
+CAT_API const char *cat_strerrno(cat_errno_t error)
+{
+    if (error > 0) {
+        error = cat_translate_sys_error(error);
+    }
+#define CAT_STRERRNO_GEN(name, msg) case UV_ ## name: return #name;
+    switch (error) {
+        CAT_ERRNO_MAP(CAT_STRERRNO_GEN)
+    }
+#undef CAT_STRERRNO_GEN
+    return "UNKNOWN";
+}
+
 #ifndef E2BIG
 #define E2BIG 7
 #endif
