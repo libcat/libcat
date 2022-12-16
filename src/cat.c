@@ -98,7 +98,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
 
     /* error log */
     if (!cat_env_is_empty("CAT_LOG_ERROR_OUTPUT")) {
-        char *error_log = cat_env_get("CAT_LOG_ERROR_OUTPUT");
+        char *error_log = cat_env_get_silent("CAT_LOG_ERROR_OUTPUT", NULL);
         if (cat_strcasecmp(error_log, "stdout") == 0) {
             CAT_LOG_G(error_output) = stdout;
         } else if (cat_strcasecmp(error_log, "stderr") == 0) {
