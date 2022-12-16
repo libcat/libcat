@@ -412,9 +412,9 @@ CAT_API cat_bool_t cat_buffer_append_char(cat_buffer_t *buffer, char c)
     return cat_buffer_append(buffer, &c, 1);
 }
 
-CAT_API cat_bool_t cat_buffer_append_string(cat_buffer_t *buffer, const char *string)
+CAT_API cat_bool_t cat_buffer_append_str(cat_buffer_t *buffer, const char *str)
 {
-    return cat_buffer_append(buffer, string, strlen(string));
+    return cat_buffer_append(buffer, str, strlen(str));
 }
 
 CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *format, va_list args)

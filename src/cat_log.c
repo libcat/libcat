@@ -177,26 +177,46 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
             break;
         }
         (void) cat_buffer_append_char(&buffer, '[');
-        (void) cat_log_buffer_append_timestamps(&buffer, timestamps_level, CAT_LOG_G(timestamps_format), CAT_LOG_G(show_timestamps_as_relative));
-        (void) cat_buffer_append_string(&buffer, "] ");
+        (void) cat_log_buffer_append_timestamps(
+            &buffer,
+            timestamps_level,
+            CAT_LOG_G(timestamps_format),
+            CAT_LOG_G(show_timestamps_as_relative)
+        );
+        (void) cat_buffer_append_str(&buffer, "] ");
     } while (0);
 
     // role_name + log_type + module_name
     do {
+        const int name_width = 12;
         const char *name = cat_coroutine_get_current_role_name_in_uppercase();
-        if (name != NULL) {
-            (void) cat_buffer_append_printf(
-                &buffer,
-                "[%-12s] %s: <%s> ",
-                name, type_string, module_name
-            );
+        int name_length;
+        char name_buffer[32];
+        if (name == NULL) {
+            name_buffer[0] = 'R';
+            name_length = snprintf(name_buffer + 1, sizeof(name_buffer) - 1,
+                CAT_COROUTINE_ID_FMT, cat_coroutine_get_current_id());
+            if (name_length < 0) {
+                break;
+            }
+            name_length += 1;
+            name_buffer[name_length] = '\0';
+            name = name_buffer;
         } else {
-            (void) cat_buffer_append_printf(
-                &buffer,
-                "[R%-11" CAT_COROUTINE_ID_FMT_SPEC "] %s: <%s> ",
-                cat_coroutine_get_current_id(), type_string, module_name
-            );
+            name_length = strlen(name);
         }
+        (void) cat_buffer_append_char(&buffer, '[');
+        (void) cat_buffer_append_str_with_padding(&buffer, name, ' ', name_width);
+        (void) cat_buffer_append_str(&buffer, "] ");
+        (void) cat_buffer_append_str(&buffer, type_string);
+        if (type == CAT_LOG_TYPE_DEBUG && CAT_LOG_G(last_debug_log_level) > 1) {
+            (void) cat_buffer_append_str(&buffer, "(v");
+            (void) cat_buffer_append_signed(&buffer, CAT_LOG_G(last_debug_log_level));
+            (void) cat_buffer_append_char(&buffer, ')');;
+        }
+        (void) cat_buffer_append_str(&buffer, ": <");
+        (void) cat_buffer_append_str(&buffer, module_name);
+        (void) cat_buffer_append_str(&buffer, "> ");
     } while (0);
 
     do {
@@ -210,7 +230,7 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         va_end(args);
     } while (0);
 
-    cat_buffer_append_string(&buffer, CAT_EOL);
+    cat_buffer_append_str(&buffer, CAT_EOL);
 
 #ifdef CAT_SOURCE_POSITION
     if (CAT_LOG_G(show_source_postion)) {
