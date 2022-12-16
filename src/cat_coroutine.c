@@ -738,17 +738,14 @@ static cat_always_inline cat_bool_t cat_coroutine_check_resumability(const cat_c
     return cat_true;
 }
 
-#define CAT_COROUTINE_SWITCH_LOG(action, to) cat_coroutine_switch_log(#action, to)
-
-static cat_always_inline void cat_coroutine_switch_log(const char *action, const cat_coroutine_t *coroutine)
-{
-    CAT_LOG_DEBUG_VA(COROUTINE, {
-        const char *name = cat_coroutine_get_role_name(coroutine);
-        if (name != NULL) {
-            CAT_LOG_DEBUG_D(COROUTINE, "%s to %s", action, name);
-        } else {
-            CAT_LOG_DEBUG_D(COROUTINE, "%s to R" CAT_COROUTINE_ID_FMT, action, coroutine->id);
-        }
+#define CAT_COROUTINE_SWITCH_LOG(action, to) \
+    CAT_LOG_DEBUG_VA(COROUTINE, { \
+        const char *name = cat_coroutine_get_role_name(to); \
+        if (name != NULL) { \
+            CAT_LOG_DEBUG_D(COROUTINE, "%s to %s", #action, name); \
+        } else { \
+            CAT_LOG_DEBUG_D(COROUTINE, "%s to R" CAT_COROUTINE_ID_FMT, #action, to->id); \
+        } \
     });
 }
 
