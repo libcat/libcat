@@ -366,3 +366,78 @@ CAT_API void cat_buffer_dump(cat_buffer_t *buffer)
         buffer->size
     );
 }
+
+/* smart_str-like APIs */
+
+CAT_API cat_bool_t cat_buffer_append_unsigned(cat_buffer_t *buffer, size_t value)
+{
+    char tmp[32];
+    size_t length = snprintf(tmp, sizeof(tmp), "%zu", value);
+    return cat_buffer_append(buffer, tmp, length);
+}
+
+CAT_API cat_bool_t cat_buffer_append_signed(cat_buffer_t *buffer, ssize_t value)
+{
+    char tmp[32];
+    size_t length = snprintf(tmp, sizeof(tmp), "%zd", value);
+    return cat_buffer_append(buffer, tmp, length);
+}
+
+CAT_API cat_bool_t cat_buffer_append_double(cat_buffer_t *buffer, double value)
+{
+    char tmp[32];
+    size_t length = snprintf(tmp, sizeof(tmp), "%f", value);
+    return cat_buffer_append(buffer, tmp, length);
+}
+
+CAT_API cat_bool_t cat_buffer_append_char(cat_buffer_t *buffer, char c)
+{
+    return cat_buffer_append(buffer, &c, 1);
+}
+
+CAT_API cat_bool_t cat_buffer_append_string(cat_buffer_t *buffer, const char *string)
+{
+    return cat_buffer_append(buffer, string, strlen(string));
+}
+
+CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *format, va_list args)
+{
+    va_list _args;
+    size_t length;
+
+    va_copy(_args, args);
+    length = vsnprintf(NULL, 0, format, _args);
+    va_end(_args);
+
+    if (unlikely(!cat_buffer_prepare(buffer, length))) {
+        return cat_false;
+    }
+    if (unlikely(
+        vsnprintf(buffer->value + buffer->length,
+                  buffer->size - buffer->length,
+                  format, args) < 0)) {
+        return cat_false;
+    }
+    buffer->length += length;
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_buffer_append_printf(cat_buffer_t *buffer, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    cat_bool_t ret = cat_buffer_append_vprintf(buffer, format, args);
+    va_end(args);
+    return ret;
+}
+
+CAT_API cat_bool_t cat_buffer_zero_terminate(cat_buffer_t *buffer)
+{
+    cat_bool_t ret = cat_buffer_append_char(buffer, '\0');
+    if (unlikely(!ret)) {
+        return cat_false;
+    }
+    buffer->length--;
+    return cat_true;
+}

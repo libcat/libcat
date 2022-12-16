@@ -76,6 +76,16 @@ CAT_API size_t cat_buffer_get_length(const cat_buffer_t *buffer);
 CAT_API cat_bool_t cat_buffer_make_pair(cat_buffer_t *read_buffer, size_t rsize, cat_buffer_t *write_buffer, size_t wsize);
 CAT_API void cat_buffer_dump(cat_buffer_t *buffer);
 
+/* smart_str-like APIs */
+CAT_API cat_bool_t cat_buffer_append_unsigned(cat_buffer_t *buffer, size_t value);
+CAT_API cat_bool_t cat_buffer_append_signed(cat_buffer_t *buffer, ssize_t value);
+CAT_API cat_bool_t cat_buffer_append_double(cat_buffer_t *buffer, double value);
+CAT_API cat_bool_t cat_buffer_append_char(cat_buffer_t *buffer, char c);
+CAT_API cat_bool_t cat_buffer_append_string(cat_buffer_t *buffer, const char *string);
+CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *format, va_list args);
+CAT_API cat_bool_t cat_buffer_append_printf(cat_buffer_t *buffer, const char *format, ...) CAT_ATTRIBUTE_FORMAT(printf, 2, 3); CAT_FREE
+CAT_API cat_bool_t cat_buffer_zero_terminate(cat_buffer_t *buffer);
+
 #ifdef __cplusplus
 }
 #endif
