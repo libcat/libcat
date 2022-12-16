@@ -295,6 +295,8 @@ CAT_API void cat_coroutine_notify_all(void); CAT_INTERNAL
 /* main/scheduler/none */
 CAT_API const char *cat_coroutine_get_role_name(const cat_coroutine_t *coroutine);
 CAT_API const char *cat_coroutine_get_current_role_name(void);
+CAT_API const char *cat_coroutine_get_current_role_name_in_uppercase(void);
+CAT_API const char *cat_coroutine_get_role_name_in_uppercase(const cat_coroutine_t *coroutine);
 
 /* helper */
 CAT_API cat_coroutine_t *cat_coroutine_run(cat_coroutine_t *coroutine, cat_coroutine_function_t function, cat_data_t *data);

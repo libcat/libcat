@@ -747,7 +747,6 @@ static cat_always_inline cat_bool_t cat_coroutine_check_resumability(const cat_c
             CAT_LOG_DEBUG_D(COROUTINE, "%s to R" CAT_COROUTINE_ID_FMT, #action, to->id); \
         } \
     });
-}
 
 CAT_API cat_bool_t cat_coroutine_resume(cat_coroutine_t *coroutine, cat_data_t *data, cat_data_t **retval)
 {
@@ -1130,6 +1129,30 @@ CAT_API const char *cat_coroutine_get_current_role_name(void)
     }
 
     return cat_coroutine_get_role_name(coroutine);
+}
+
+CAT_API const char *cat_coroutine_get_role_name_in_uppercase(const cat_coroutine_t *coroutine)
+{
+    switch (coroutine->id) {
+        case CAT_COROUTINE_MAIN_ID:
+            return "MAIN";
+        case CAT_COROUTINE_SCHEDULER_ID:
+            return "SCHEDULER";
+        default:
+            return NULL;
+    }
+}
+
+CAT_API const char *cat_coroutine_get_current_role_name_in_uppercase(void)
+{
+    const cat_coroutine_t *coroutine = CAT_COROUTINE_G(current);
+
+    if (unlikely(coroutine == NULL)) {
+        /* may be called out of runtime (usually in log) */
+        return "MAIN";
+    }
+
+    return cat_coroutine_get_role_name_in_uppercase(coroutine);
 }
 
 /* helper */
