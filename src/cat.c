@@ -110,7 +110,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
     CAT_LOG_G(str_size) = (size_t) cat_env_get_i("CAT_LOG_STR_SIZE", 32);
     /* log module name filter */
     if (!cat_env_is_empty("CAT_LOG_MODULE_NAME_FILTER")) {
-        CAT_LOG_G(module_name_filter) = cat_env_get("CAT_LOG_MODULE_NAME_FILTER");
+        CAT_LOG_G(module_name_filter) = cat_env_get_silent("CAT_LOG_MODULE_NAME_FILTER", NULL);
     } else {
         CAT_LOG_G(module_name_filter) = NULL;
     }
@@ -118,7 +118,7 @@ CAT_API cat_bool_t cat_runtime_init(void)
     CAT_LOG_G(timestamps_format) = "%F %T";
     CAT_LOG_G(show_timestamps_as_relative) = cat_false;
     do {
-        char *timestamps_format = cat_env_get("CAT_LOG_TIMESTAMPS_FORMAT");
+        char *timestamps_format = cat_env_get_silent("CAT_LOG_TIMESTAMPS_FORMAT", NULL);
         if (timestamps_format != NULL) {
             if (cat_strcasecmp(timestamps_format, "time") == 0) {
                 CAT_LOG_G(timestamps_format) = "%T";
