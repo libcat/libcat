@@ -34,6 +34,7 @@ extern "C" {
 #include "cat_work.h"
 #include "cat_buffer.h"
 #include "cat_fs.h"
+#include "cat_fsnotify.h"
 #include "cat_signal.h"
 #include "cat_os_wait.h"
 #include "cat_async.h"
