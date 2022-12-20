@@ -36,7 +36,7 @@ static void cat_fsnotify_event_callback(uv_fs_event_t *handle, const char *filen
     cat_coroutine_schedule(coroutine, FS, "Fsnotify");
 }
 
-CAT_API cat_fsnotifier_t *cat_fsnotify_init(void)
+cat_fsnotifier_t *cat_fsnotify_init(void)
 {
     cat_fsnotifier_t *fsnotifier = (cat_fsnotifier_t *) cat_malloc(sizeof(*fsnotifier));
 #if CAT_ALLOC_HANDLE_ERRORS
@@ -49,30 +49,22 @@ CAT_API cat_fsnotifier_t *cat_fsnotify_init(void)
     return fsnotifier;
 }
 
-CAT_API void cat_fsnotify_create_watch_context(cat_fsnotifier_t *fsnotifier, const char *path)
+void cat_fsnotify_create_watch_context(cat_fsnotifier_t *fsnotifier, const char *path)
 {
-    cat_fsnotify_watcher_context_t *watch = (cat_fsnotify_watcher_context_t *) cat_malloc(sizeof(*watch));
+    cat_fsnotify_watcher_context_t *watch = &fsnotifier->watch;
     watch->path = path;
     watch->event.filename = NULL;
-    fsnotifier->watch = watch;
 
     (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
 }
 
-void cat_fsnotify_cleanup_watch_context(cat_fsnotify_watcher_context_t *watch)
-{
-    cat_free(watch);
-}
-
-CAT_API void cat_fsnotify_cleanup(cat_fsnotifier_t *fsnotifier)
-{
-    cat_fsnotify_cleanup_watch_context(fsnotifier->watch);
-}
-
-CAT_API cat_bool_t cat_fsnotify_wait(cat_fsnotifier_t *fsnotifier, cat_fsnotify_event_t *event)
+CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fsnotify_event_t *event)
 {
     cat_bool_t ret;
-    cat_fsnotify_watcher_context_t *watch = fsnotifier->watch;
+    cat_fsnotifier_t *fsnotifier = cat_fsnotify_init();
+
+    cat_fsnotify_create_watch_context(fsnotifier, path);
+    cat_fsnotify_watcher_context_t *watch = &fsnotifier->watch;
 
     CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait(path=%s)", watch->path);
 

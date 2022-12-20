@@ -38,13 +38,9 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
     int fs_event_created = 0;
 
     cat_coroutine_t *co1 = co([watch_dir, wg, &fs_event_cb_called] {
-        cat_fsnotifier_t *fsnotifier = cat_fsnotify_init();
-
-        cat_fsnotify_create_watch_context(fsnotifier, watch_dir.c_str());
-
         while (true) {
             cat_fsnotify_event_t event;
-            cat_bool_t ret = cat_fsnotify_wait(fsnotifier, &event);
+            cat_bool_t ret = cat_fsnotify_wait(watch_dir.c_str(), &event);
             if (ret == cat_false) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
@@ -55,7 +51,6 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
             ASSERT_STREQ(std::string(watch_dir + "/file1").c_str(), std::string(watch_dir + "/" + event.filename).c_str());
         }
 
-        cat_fsnotify_cleanup(fsnotifier);
         ASSERT_TRUE(cat_sync_wait_group_done(wg));
     });
 
@@ -75,5 +70,5 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
 
     ASSERT_TRUE(cat_sync_wait_group_wait(wg, TEST_IO_TIMEOUT));
 
-    ASSERT_EQ(2 * fs_event_created, fs_event_cb_called);
+    ASSERT_EQ(fs_event_created, fs_event_cb_called);
 }

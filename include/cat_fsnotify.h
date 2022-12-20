@@ -45,14 +45,11 @@ typedef struct cat_fsnotify_watcher_context_s {
 } cat_fsnotify_watcher_context_t;
 
 typedef struct {
-    cat_fsnotify_watcher_context_t *watch;
+    cat_fsnotify_watcher_context_t watch;
     int error;
 } cat_fsnotifier_t;
 
-CAT_API cat_fsnotifier_t *cat_fsnotify_init(void);
-CAT_API void cat_fsnotify_create_watch_context(cat_fsnotifier_t *fsnotifier, const char *path);
-CAT_API cat_bool_t cat_fsnotify_wait(cat_fsnotifier_t *fsnotifier, cat_fsnotify_event_t *event);
-CAT_API void cat_fsnotify_cleanup(cat_fsnotifier_t *fsnotifier);
+CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fsnotify_event_t *event);
 
 #ifdef __cplusplus
 }
