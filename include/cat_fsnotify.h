@@ -26,30 +26,30 @@ extern "C" {
 #include "cat_coroutine.h"
 #include "cat_event.h"
 
-typedef enum cat_fsnotify_event_kind_e {
-    CAT_FSNOTIFIER_EVENT_KIND_UNKNOWN,
-    CAT_FSNOTIFIER_EVENT_KIND_RENAME = UV_RENAME,
-    CAT_FSNOTIFIER_EVENT_KIND_CHANGE = UV_CHANGE,
-} cat_fsnotify_event_kind_t;
+typedef enum cat_fs_notify_event_kind_e {
+    CAT_FS_NOTIFY_EVENT_KIND_UNKNOWN,
+    CAT_FS_NOTIFY_EVENT_KIND_RENAME = UV_RENAME,
+    CAT_FS_NOTIFY_EVENT_KIND_CHANGE = UV_CHANGE,
+} cat_fs_notify_event_kind_t;
 
 typedef struct {
     const char *filename;
-    cat_fsnotify_event_kind_t event;
-} cat_fsnotify_event_t;
+    cat_fs_notify_event_kind_t event;
+} cat_fs_notify_event_t;
 
-typedef struct cat_fsnotify_watcher_context_s {
+typedef struct cat_fs_notify_watch_context_s {
     uv_fs_event_t handle;
     cat_coroutine_t *coroutine;
     const char *path;
-    cat_fsnotify_event_t event;
-} cat_fsnotify_watcher_context_t;
+    cat_fs_notify_event_t event;
+} cat_fs_notify_watch_context_t;
 
 typedef struct {
-    cat_fsnotify_watcher_context_t watch;
+    cat_fs_notify_watch_context_t watch;
     int error;
-} cat_fsnotifier_t;
+} cat_fs_notifier_t;
 
-CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fsnotify_event_t *event);
+CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fs_notify_event_t *event);
 
 #ifdef __cplusplus
 }
