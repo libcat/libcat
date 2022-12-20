@@ -47,9 +47,9 @@ typedef struct cat_fs_notify_watch_context_s {
 typedef struct {
     cat_fs_notify_watch_context_t watch;
     int error;
-} cat_fs_notifier_t;
+} cat_fs_notify_t;
 
-CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fs_notify_event_t *event);
+CAT_API cat_bool_t cat_fs_notify_wait(const char *path, cat_fs_notify_event_t *event);
 
 #ifdef __cplusplus
 }

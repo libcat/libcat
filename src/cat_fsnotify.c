@@ -18,7 +18,7 @@
 
 #include "cat_fsnotify.h"
 
-static void cat_fsnotify_event_callback(uv_fs_event_t *handle, const char *filename, int events, int status)
+static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *filename, int events, int status)
 {
     cat_fs_notify_watch_context_t *watch =  cat_container_of(handle, cat_fs_notify_watch_context_t, handle);
 
@@ -36,39 +36,39 @@ static void cat_fsnotify_event_callback(uv_fs_event_t *handle, const char *filen
     cat_coroutine_schedule(coroutine, FS, "Fsnotify");
 }
 
-static void cat_fsnotify_close_callback(uv_handle_t *handle)
+static void cat_fs_notify_close_callback(uv_handle_t *handle)
 {
     cat_fs_notify_watch_context_t *watch =  cat_container_of(handle, cat_fs_notify_watch_context_t, handle);
 
-    cat_free((cat_fs_notifier_t *) watch);
+    cat_free((cat_fs_notify_t *) watch);
 }
 
-void cat_fsnotify_watch_context_init(cat_fs_notify_watch_context_t *watch, const char *path)
+void cat_fs_notify_watch_context_init(cat_fs_notify_watch_context_t *watch, const char *path)
 {
     watch->path = path;
     watch->event.filename = NULL;
 }
 
-CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fs_notify_event_t *event)
+CAT_API cat_bool_t cat_fs_notify_wait(const char *path, cat_fs_notify_event_t *event)
 {
     CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait(path=%s)", path);
 
     cat_bool_t ret;
-    cat_fs_notifier_t *fsnotifier = (cat_fs_notifier_t *) cat_malloc(sizeof(*fsnotifier));
+    cat_fs_notify_t *fs_notify = (cat_fs_notify_t *) cat_malloc(sizeof(*fs_notify));
 #if CAT_ALLOC_HANDLE_ERRORS
-    if (unlikely(fsnotifier == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for fsnotifier failed");
+    if (unlikely(fs_notify == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for fs_notify failed");
         return NULL;
     }
 #endif
 
-    cat_fs_notify_watch_context_t *watch = &fsnotifier->watch;
-    cat_fsnotify_watch_context_init(watch, path);
+    cat_fs_notify_watch_context_t *watch = &fs_notify->watch;
+    cat_fs_notify_watch_context_init(watch, path);
 
     (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
 
     watch->coroutine = CAT_COROUTINE_G(current);
-    (void) uv_fs_event_start(&watch->handle, cat_fsnotify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
+    (void) uv_fs_event_start(&watch->handle, cat_fs_notify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
     ret = cat_coroutine_yield(NULL, NULL);
     if (unlikely(!ret)) {
         cat_update_last_error_with_previous("Fsnotify watch failed");
@@ -84,7 +84,7 @@ CAT_API cat_bool_t cat_fsnotify_wait(const char *path, cat_fs_notify_event_t *ev
         return cat_false;
     }
 
-    uv_close((uv_handle_t *) &fsnotifier->watch.handle, cat_fsnotify_close_callback);
+    uv_close((uv_handle_t *) &fs_notify->watch.handle, cat_fs_notify_close_callback);
 
     CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait result(filename=%s, event=%d)", watch->event.filename, watch->event.event);
 

@@ -40,7 +40,7 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
     cat_coroutine_t *co1 = co([watch_dir, wg, &fs_event_cb_called] {
         while (true) {
             cat_fs_notify_event_t event;
-            cat_bool_t ret = cat_fsnotify_wait(watch_dir.c_str(), &event);
+            cat_bool_t ret = cat_fs_notify_wait(watch_dir.c_str(), &event);
             if (ret == cat_false) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
