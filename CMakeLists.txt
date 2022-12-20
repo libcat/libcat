@@ -82,7 +82,7 @@ set(cat_sources
     src/cat_work.c
     src/cat_buffer.c
     src/cat_fs.c
-    src/cat_fsnotify.c
+    src/cat_fs_notify.c
     src/cat_signal.c
     src/cat_os_wait.c
     src/cat_async.c

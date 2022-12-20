@@ -16,7 +16,7 @@
 +--------------------------------------------------------------------------+
 */
 
-#include "cat_fsnotify.h"
+#include "cat_fs_notify.h"
 
 static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *filename, int events, int status)
 {
