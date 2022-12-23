@@ -474,9 +474,7 @@ CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel)
 
     /* revert and we can reuse this channel (if necessary...) */
     channel->flags ^= CAT_CHANNEL_FLAG_CLOSING;
-    if (!(channel->flags & CAT_CHANNEL_FLAG_REUSE)) {
-        channel->flags |= CAT_CHANNEL_FLAG_CLOSED;
-    }
+    channel->flags |= CAT_CHANNEL_FLAG_CLOSED;
 
     return cat_true;
 }
@@ -643,11 +641,6 @@ CAT_API cat_bool_t cat_channel_is_writable(const cat_channel_t *channel)
 CAT_API cat_channel_flags_t cat_channel_get_flags(const cat_channel_t *channel)
 {
     return channel->flags;
-}
-
-CAT_API void cat_channel_enable_reuse(cat_channel_t *channel)
-{
-    channel->flags |= CAT_CHANNEL_FLAG_REUSE;
 }
 
 CAT_API cat_channel_data_dtor_t cat_channel_get_dtor(const cat_channel_t *channel)

@@ -265,26 +265,6 @@ TEST(cat_channel, closing)
     }();
 }
 
-TEST(cat_channel, reuse)
-{
-    cat_channel_t *channel, _channel;
-    size_t data;
-
-    channel = cat_channel_create(&_channel, 1, sizeof(data), nullptr);
-    ASSERT_FALSE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_REUSE);
-    cat_channel_close(channel);
-    ASSERT_FALSE(cat_channel_push(channel, &data, -1));
-    ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
-    ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSED);
-
-    channel = cat_channel_create(&_channel, 1, sizeof(data), nullptr);
-    cat_channel_enable_reuse(channel);
-    DEFER(cat_channel_close(channel));
-    ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_REUSE);
-    cat_channel_close(channel);
-    ASSERT_TRUE(cat_channel_push(channel, &data, -1));
-}
-
 /* unbuffered {{{ */
 
 TEST(cat_channel_unbuffered, base)
