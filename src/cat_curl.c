@@ -222,8 +222,6 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
 
 static cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
 {
-    size_t i = 0;
-
     CAT_QUEUE_FOREACH_DATA_START(&CAT_CURL_G(multi_map), cat_curl_multi_context_t, node, context) {
         if (context->multi == NULL) {
             return NULL; // eof
@@ -231,7 +229,6 @@ static cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
         if (context->multi == multi) {
             return context; // hit
         }
-        i++;
     } CAT_QUEUE_FOREACH_DATA_END();
 
     return NULL;
