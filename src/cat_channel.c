@@ -20,19 +20,19 @@
 #include "cat_coroutine.h"
 #include "cat_time.h"
 
-#define CAT_CHANNEL_CHECK_STATE_EX(channel, update_last_error, failure) \
+#define CAT_CHANNEL_CHECK_STATE(channel, failure) \
     if (unlikely(!cat_channel__is_available(channel))) { \
-        if (update_last_error) { \
-            cat_channel__update_last_error(channel); \
-        } \
+        cat_channel__update_last_error(channel); \
         failure; \
     }
 
-#define CAT_CHANNEL_CHECK_STATE(channel, failure) \
-        CAT_CHANNEL_CHECK_STATE_EX(channel, cat_true, failure)
-
-#define CAT_CHANNEL_CHECK_STATE_WITHOUT_ERROR(channel, failure) \
-        CAT_CHANNEL_CHECK_STATE_EX(channel, cat_false, failure)
+#define CAT_CHANNEL_CHECK_STATE_FOR_READING(channel, failure) \
+    if (unlikely(!cat_channel__is_available(channel))) { \
+        if (cat_channel__is_empty(channel)) { \
+            cat_channel__update_last_error(channel); \
+            failure; \
+        } \
+    }
 
 /* for select()
  * head must be consistent with coroutine */
@@ -87,11 +87,14 @@ static cat_always_inline cat_bool_t cat_channel__is_full(const cat_channel_t *ch
 
 static cat_always_inline cat_bool_t cat_channel__is_readable(const cat_channel_t *channel)
 {
-    return likely(cat_channel__is_available(channel)) && (
+    return (
            /* buffered */
            !cat_channel__is_empty(channel) ||
            /* unbuffered */
-           cat_channel__has_producers(channel)
+           (
+               likely(cat_channel__is_available(channel)) &&
+               cat_channel__has_producers(channel)
+           )
     );
 }
 
@@ -423,7 +426,7 @@ CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *da
 
 CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout)
 {
-    CAT_CHANNEL_CHECK_STATE(channel, return cat_false);
+    CAT_CHANNEL_CHECK_STATE_FOR_READING(channel, return cat_false);
 
     if (cat_channel__is_unbuffered(channel)) {
         return cat_channel_unbuffered_pop(channel, data, timeout);
@@ -432,9 +435,9 @@ CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat
     }
 }
 
-CAT_API void cat_channel_close(cat_channel_t *channel)
+CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel)
 {
-    CAT_CHANNEL_CHECK_STATE_WITHOUT_ERROR(channel, return);
+    CAT_CHANNEL_CHECK_STATE(channel, return cat_false);
 
     /* prevent from channel operations during closing */
     channel->flags |= CAT_CHANNEL_FLAG_CLOSING;
@@ -474,6 +477,8 @@ CAT_API void cat_channel_close(cat_channel_t *channel)
     if (!(channel->flags & CAT_CHANNEL_FLAG_REUSE)) {
         channel->flags |= CAT_CHANNEL_FLAG_CLOSED;
     }
+
+    return cat_true;
 }
 
 /* select */
@@ -496,18 +501,21 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
 
     for (i = 0, request = requests; i < count; i++, request++) {
         channel = request->channel;
-        CAT_CHANNEL_CHECK_STATE(
-            channel,
-            request->error = cat_true;
-            return request;
-        );
         if (request->opcode == CAT_CHANNEL_SELECT_EVENT_PUSH) {
+            CAT_CHANNEL_CHECK_STATE(channel, {
+                request->error = cat_true;
+                return request;
+            });
             if (cat_channel__is_writable(channel)) {
                 request->error = !cat_channel_push(channel, request->data.in, -1);
                 CAT_ASSERT(!request->error || cat_get_last_error_code() == CAT_ENOMEM);
                 return request;
             }
         } else /* if (request->opcode == CAT_CHANNEL_SELECT_EVENT_POP) */ {
+            CAT_CHANNEL_CHECK_STATE_FOR_READING(channel, {
+                request->error = cat_true;
+                return request;
+            });
             if (cat_channel__is_readable(channel)) {
                 request->error = !cat_channel_pop(channel, request->data.out, -1);
                 CAT_ASSERT(!request->error);
@@ -544,12 +552,11 @@ CAT_API cat_channel_select_response_t *cat_channel_select(cat_channel_select_req
         if (dummy_coroutine->coroutine == NULL) {
             response = &requests[i];
             channel = response->channel;
-            CAT_CHANNEL_CHECK_STATE(
-                channel,
+            CAT_CHANNEL_CHECK_STATE(channel, {
                 cat_set_last_error_code(CAT_ECANCELED);
                 response->error = cat_true;
-                continue;
-            );
+                break;
+            });
             response->error = cat_false;
             if (response->opcode == CAT_CHANNEL_SELECT_EVENT_PUSH) {
                 if (cat_channel__is_unbuffered(channel)) {

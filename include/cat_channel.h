@@ -84,8 +84,9 @@ CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_si
 CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout);
 
-/* Notice: close will never break the channel so we can reuse the channel after close done (if necessary) */
-CAT_API void cat_channel_close(cat_channel_t *channel);
+/* @note: close will never real-break the channel,
+ * so we can reuse the channel after close done (if CHANNEL_FLAG_REUSE is on) */
+CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel);
 
 /* select */
 
