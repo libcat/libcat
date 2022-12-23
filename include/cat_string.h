@@ -23,6 +23,18 @@
 #define CAT_TO_STR_NAKED(str)    #str
 #define CAT_TO_STR(str)          CAT_TO_STR_NAKED(str)
 
+#define CAT_CENTERED_STRING_FMT "%*s%s%*s"
+
+#define CAT_CENTERED_STRING_D(var_name, length, width) \
+    int _##var_name##_length = length; \
+    int _##var_name##_padding_length = width > _##var_name##_length ? width - _##var_name##_length : 0; \
+    int _##var_name##_padding_left = _##var_name##_padding_length / 2; \
+    int _##var_name##_padding_right = _##var_name##_padding_length - _##var_name##_padding_left
+
+#define CAT_CENTERED_STRING_C(var_name) \
+    _##var_name##_padding_left, "", var_name, _##var_name##_padding_right, ""
+
+
 static cat_always_inline cat_bool_t cat_str_is_empty(const char *str)
 {
     return str == NULL || str[0] == '\0';

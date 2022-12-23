@@ -216,6 +216,8 @@ typedef struct cat_log_globals_s {
 #define CAT_LOG_ATTRIBUTES CAT_ATTRIBUTE_PTR_FORMAT(printf, 4, 5)
 #endif
 
+#define CAT_LOG_UNFINISHED_FMT "<unfinished ...>"
+
 typedef void (*cat_log_t)(CAT_LOG_PARAMATERS);
 
 extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
@@ -226,3 +228,20 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS);
 CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str); CAT_FREE
 /* Notice: n will not be limited anyway */
 CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char **tmp_str); CAT_FREE
+
+#define CAT_LOG_STRERRNO_FMT "%s%s%s"
+#define CAT_LOG_STRERRNO_C(ret, error) \
+            (ret) ? "" : " (", \
+                (ret) ? "" : cat_strerrno(error), \
+            (ret) ? "" : ")"
+
+#define CAT_LOG_BOOL_RET_FMT "%s" CAT_LOG_STRERRNO_FMT
+#define CAT_LOG_BOOL_RET_C(ret) \
+        cat_bool_str(ret), \
+        CAT_LOG_STRERRNO_C(ret, cat_get_last_error_code())
+
+#define CAT_LOG_ERROR_RET_FMT CAT_ERRNO_FMT CAT_LOG_STRERRNO_FMT
+#define CAT_LOG_ERROR_RET_C(error) \
+            error, \
+            CAT_LOG_STRERRNO_C(error == 0, error)
+
