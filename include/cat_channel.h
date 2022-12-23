@@ -83,7 +83,10 @@ CAT_API cat_channel_t *cat_channel_create(cat_channel_t *channel, cat_channel_si
 CAT_API cat_bool_t cat_channel_push(cat_channel_t *channel, const cat_data_t *data, cat_timeout_t timeout);
 CAT_API cat_bool_t cat_channel_pop(cat_channel_t *channel, cat_data_t *data, cat_timeout_t timeout);
 
+/* close channel without clean storage */
 CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel);
+/* close channel if channel is not closed and clean storage */
+CAT_API void cat_channel_cleanup(cat_channel_t *channel);
 
 /* select */
 

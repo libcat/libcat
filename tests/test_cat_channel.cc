@@ -44,7 +44,7 @@ TEST(cat_channel, get_capacity)
 {
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 1, sizeof(char), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_EQ(1, cat_channel_get_capacity(channel));
 }
@@ -54,7 +54,7 @@ TEST(cat_channel, get_length)
     cat_channel_t *channel, _channel;
     size_t data = 1;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_TRUE(cat_channel_push(channel, &data, -1));
     ASSERT_EQ(1, cat_channel_get_length(channel));
@@ -67,7 +67,7 @@ TEST(cat_channel, is_empty)
     cat_channel_t *channel, _channel;
     size_t data = 1;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_TRUE(cat_channel_is_empty(channel));
     ASSERT_TRUE(cat_channel_push(channel, &data, -1));
@@ -79,7 +79,7 @@ TEST(cat_channel, is_full)
     cat_channel_t *channel, _channel;
     size_t data = 1;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_FALSE(cat_channel_is_full(channel));
     ASSERT_TRUE(cat_channel_push(channel, &data, -1));
@@ -93,7 +93,7 @@ TEST(cat_channel, has_producers_and_is_readable)
     size_t rdata;
 
     channel = cat_channel_create(&_channel, 0, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_FALSE(cat_channel_is_readable(channel));
     co([&] {
@@ -111,7 +111,7 @@ TEST(cat_channel, has_consumers_and_is_writable)
     size_t data = 1;
 
     channel = cat_channel_create(&_channel, 0, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_FALSE(cat_channel_is_writable(channel));
     co([=] {
@@ -130,7 +130,7 @@ TEST(cat_channel, get_dtor)
     cat_channel_data_dtor_t dtor = [](const cat_data_t *data) {};
 
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), dtor);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_EQ(dtor, cat_channel_get_dtor(channel));
 }
@@ -141,7 +141,7 @@ TEST(cat_channel, set_dtor)
     cat_channel_data_dtor_t dtor = [](const cat_data_t *data) {};
 
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     ASSERT_EQ(nullptr, cat_channel_set_dtor(channel, dtor));
     ASSERT_EQ(dtor, cat_channel_set_dtor(channel, nullptr));
@@ -154,13 +154,13 @@ TEST(cat_channel, get_storage)
 
     ([&] {
         channel = cat_channel_create(&_channel, 0, sizeof(size_t), nullptr);
-        DEFER(cat_channel_close(channel));
+        DEFER(cat_channel_cleanup(channel));
         ASSERT_EQ(cat_channel_get_storage(channel), nullptr);
     })();
 
     ([&] {
         channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-        DEFER(cat_channel_close(channel));
+        DEFER(cat_channel_cleanup(channel));
         ASSERT_NE(cat_channel_get_storage(channel), nullptr);
     })();
 }
@@ -175,7 +175,7 @@ TEST(cat_channel, pop_null)
         channel = cat_channel_create(&_channel, capacity, sizeof(data), [](const cat_data_t *data) {
             **((cat_bool_t **) data) = !(**((cat_bool_t **) data));
         });
-        DEFER(cat_channel_close(channel));
+        DEFER(cat_channel_cleanup(channel));
 
         co([&] {
             ASSERT_TRUE(cat_channel_push(channel, &data, 0));
@@ -205,7 +205,7 @@ TEST(cat_channel, cancel)
             char data[] = "x";
 
             channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
-            DEFER(cat_channel_close(channel));
+            DEFER(cat_channel_cleanup(channel));
             if (capacity == 1) {
                 ASSERT_TRUE(cat_channel_push(channel, &data, -1));
             }
@@ -235,33 +235,37 @@ TEST(cat_channel, closing)
         cat_channel_t *channel, _channel;
         size_t data = 0;
         bool push_over = false, pop_over = false;
+        {
+            channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
+            DEFER(cat_channel_cleanup(channel));
 
-        channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
-        cat_channel_enable_reuse(channel); /* why we need it here? */
-        DEFER(cat_channel_close(channel));
-
-        if (capacity == 1) {
-            ASSERT_TRUE(cat_channel_push(channel, &data, 0));
+            if (capacity == 1) {
+                ASSERT_TRUE(cat_channel_push(channel, &data, 0));
+            }
+            co([&] {
+                ASSERT_FALSE(cat_channel_push(channel, &data, 0));
+                ASSERT_FALSE(cat_channel_is_available(channel));
+                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
+                push_over = true;
+            });
+            ASSERT_TRUE(cat_channel_has_producers(channel));
+            cat_channel_cleanup(channel);
+            ASSERT_TRUE(push_over);
         }
-        co([&] {
-            ASSERT_FALSE(cat_channel_push(channel, &data, 0));
-            ASSERT_FALSE(cat_channel_is_available(channel));
-            ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
-            push_over = true;
-        });
-        ASSERT_TRUE(cat_channel_has_producers(channel));
-        cat_channel_close(channel);
-        ASSERT_TRUE(push_over);
+        {
+            channel = cat_channel_create(&_channel, capacity, sizeof(data), nullptr);
+            DEFER(cat_channel_cleanup(channel));
 
-        co([&] {
-            ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
-            ASSERT_FALSE(cat_channel_is_available(channel));
-            ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
-            pop_over = true;
-        });
-        ASSERT_TRUE(cat_channel_has_consumers(channel));
-        cat_channel_close(channel);
-        ASSERT_TRUE(pop_over);
+            co([&] {
+                ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
+                ASSERT_FALSE(cat_channel_is_available(channel));
+                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
+                pop_over = true;
+            });
+            ASSERT_TRUE(cat_channel_has_consumers(channel));
+            cat_channel_cleanup(channel);
+            ASSERT_TRUE(pop_over);
+        }
     }();
 }
 
@@ -277,7 +281,7 @@ TEST(cat_channel_unbuffered, base)
     co([&]() {
         cat_bool_t data = cat_true;
         ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
-        cat_channel_close(&channel);
+        cat_channel_cleanup(&channel);
         channel_closed = true;
     });
     ASSERT_TRUE(cat_channel_pop(&channel, &data, -1));
@@ -291,7 +295,7 @@ TEST(cat_channel_unbuffered, push_timeout)
     char data[] = "x";
 
     channel = cat_channel_create(&_channel, 0, sizeof(data), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     ASSERT_FALSE(cat_channel_push(channel, &data, 0));
     ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
 }
@@ -301,7 +305,7 @@ TEST(cat_channel_unbuffered, pop_timeout)
     cat_channel_t *channel, _channel;
 
     channel = cat_channel_create(&_channel, 0, 0, nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
     ASSERT_EQ(CAT_ETIMEDOUT, cat_get_last_error_code());
 }
@@ -312,7 +316,7 @@ TEST(cat_channel_unbuffered, push_with_timeout)
     const char data[] = "x";
 
     channel = cat_channel_create(&_channel, 0, sizeof(data), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     co([=] {
         char buffer[sizeof(data)];
@@ -330,7 +334,7 @@ TEST(cat_channel_unbuffered, pop_with_timeout)
     char buffer[sizeof(data)];
 
     channel = cat_channel_create(&_channel, 0, sizeof(data), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
 
     co([&] {
         ASSERT_TRUE(cat_channel_push(channel, data, 0));
@@ -349,7 +353,7 @@ TEST(cat_channel_buffered, create)
     cat_channel_t *channel, _channel;
 
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     ASSERT_EQ(1, channel->capacity);
     ASSERT_EQ(0, channel->length);
     ASSERT_EQ(sizeof(size_t), channel->data_size);
@@ -367,7 +371,7 @@ TEST(cat_channel_buffered, push_and_pop)
      * cat_channel_push(channel, (cat_data_t *, -1)(uintptr_t) 1)
      */
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     co([channel] {
         for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
             ASSERT_TRUE(cat_channel_push(channel, &i, -1));
@@ -386,7 +390,7 @@ TEST(cat_channel_buffered, push_eq_data_size)
     char actual[sizeof(data)] = {0};
 
     channel = cat_channel_create(&_channel, 3, sizeof(data), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     ASSERT_TRUE(cat_channel_push(channel, data, -1));
     ASSERT_TRUE(cat_channel_pop(channel, actual, -1));
     ASSERT_STREQ(data, actual);
@@ -400,7 +404,7 @@ TEST(cat_channel_buffered, push_gt_data_size)
     const char expect[] = "x";
 
     channel = cat_channel_create(&_channel, 1, sizeof(char), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     /* because of the truncation, the actual stored data is the character a */
     ASSERT_TRUE(cat_channel_push(channel, data, -1));
     ASSERT_TRUE(cat_channel_pop(channel, actual, -1));
@@ -413,7 +417,7 @@ TEST(cat_channel_buffered, push_timeout)
     cat_msec_t s = cat_time_msec();
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 1, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     size_t n = 1;
     ASSERT_TRUE(cat_channel_push(channel, &n, 0));
     ASSERT_FALSE(cat_channel_push(channel, &n, 10));
@@ -428,7 +432,7 @@ TEST(cat_channel_buffered, pop_timeout)
     cat_msec_t s = cat_time_msec();
     cat_channel_t *channel, _channel;
     channel = cat_channel_create(&_channel, 10, sizeof(size_t), nullptr);
-    DEFER(cat_channel_close(channel));
+    DEFER(cat_channel_cleanup(channel));
     size_t n;
     ASSERT_FALSE(cat_channel_pop(channel, &n, 10));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
@@ -441,6 +445,7 @@ TEST(cat_channel_buffered, multi)
     for (cat_channel_size_t size = 0; size < TEST_MAX_REQUESTS; size++) {
         cat_channel_t *channel, _channel;
         channel = cat_channel_create(&_channel, size, sizeof(size_t), nullptr);
+        DEFER(cat_channel_cleanup(channel));
 
         for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
             co([=]() {
@@ -469,7 +474,7 @@ TEST(cat_channel_buffered, close_has_dtor)
 
     testing::internal::CaptureStdout();
     cat_channel_push(channel, &n, -1);
-    cat_channel_close(channel);
+    cat_channel_cleanup(channel);
     std::string output = testing::internal::GetCapturedStdout();
     ASSERT_EQ("dtor", output);
 }
@@ -479,6 +484,7 @@ TEST(cat_channel_buffered, close_no_dtor)
     cat_channel_t *channel, _channel;
 
     channel = cat_channel_create(&_channel, 5, sizeof(size_t), nullptr);
+    DEFER(cat_channel_cleanup(channel));
 
     co([=] {
         size_t n;
@@ -493,7 +499,7 @@ TEST(cat_channel_buffered, close_no_dtor)
 
     for (size_t i = 0; i < TEST_MAX_REQUESTS; i++) {
         if (i == TEST_MAX_REQUESTS / 2) {
-            cat_channel_close(channel);
+            cat_channel_cleanup(channel);
             break;
         }
         ASSERT_TRUE(cat_channel_push(channel, &i, -1));
@@ -511,6 +517,7 @@ TEST(cat_channel_select, base)
         cat_channel_select_response_t *response;
 
         ASSERT_NE(cat_channel_create(&channel, capacity, sizeof(cat_bool_t), nullptr), nullptr);
+        DEFER(cat_channel_cleanup(&channel));
 
         auto push = [&]() {
             cat_bool_t data;
@@ -542,27 +549,37 @@ TEST(cat_channel_select, base)
         co(pop);
         push();
 
-        co([&]() {
-            cat_channel_select_request_t requests[1];
-            cat_bool_t data = cat_false;
-            bool tried = false;
-            if (capacity == 1) {
-                ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
-            }
-            for (auto opcode : std::array<cat_channel_select_event_t, 2>{ CAT_CHANNEL_SELECT_EVENT_PUSH, CAT_CHANNEL_SELECT_EVENT_POP }) {
+        cat_channel_cleanup(&channel);
+
+        for (auto opcode : std::array<cat_channel_select_event_t, 2>{ CAT_CHANNEL_SELECT_EVENT_PUSH, CAT_CHANNEL_SELECT_EVENT_POP }) {
+            ASSERT_NE(cat_channel_create(&channel, capacity, sizeof(cat_bool_t), nullptr), nullptr);
+            DEFER(cat_channel_cleanup(&channel));
+            co([&]() {
+                cat_channel_select_request_t requests[1];
+                cat_bool_t data = cat_false;
+                if (capacity == 1) {
+                    ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
+                }
                 *requests = { &channel, { &data }, opcode, cat_false };
-                for (int n = 2; n--;) {
+                for (int n = 0; n < 3; n++) {
                     response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
                     ASSERT_EQ(response->channel, &channel);
-                    ASSERT_TRUE(response->error);
-                    ASSERT_FALSE(cat_channel_is_available(response->channel));
-                    ASSERT_EQ(!tried ? CAT_ECANCELED : CAT_ECLOSING, cat_get_last_error_code());
-                    /* first try it would return ECANCELED, if you still tried to opreate it, it would return EINVAL */
-                    tried = true;
+                    if (n == 0 && capacity == 1 && opcode == CAT_CHANNEL_SELECT_EVENT_POP) {
+                        ASSERT_TRUE(cat_channel_is_available(response->channel));
+                        ASSERT_FALSE(response->error);
+                    } else {
+                        ASSERT_FALSE(cat_channel_is_available(response->channel));
+                        ASSERT_TRUE(response->error);
+                        /* first failed try it would return ECANCELED, if you still tried to operate it, it would return ECLOSING */
+                        ASSERT_EQ(
+                            n == 0 || (n == 1 && capacity == 1 && opcode == CAT_CHANNEL_SELECT_EVENT_POP) ? CAT_ECANCELED : CAT_ECLOSING,
+                            cat_get_last_error_code()
+                        );
+                    }
                 }
-            }
-        });
-        cat_channel_close(&channel);
+            });
+            cat_channel_cleanup(&channel);
+        }
     }
 }
 
@@ -579,7 +596,9 @@ TEST(cat_channel_select, unbuffered)
         bool push_over = false, pop_over = false;
 
         ASSERT_NE(cat_channel_create(&read_channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
+        DEFER(cat_channel_cleanup(&read_channel));
         ASSERT_NE(cat_channel_create(&write_channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
+        DEFER(cat_channel_cleanup(&write_channel));
         co([&]() {
             cat_bool_t data = cat_true;
             if (!read_channel_first) {
@@ -611,8 +630,8 @@ TEST(cat_channel_select, unbuffered)
                 ASSERT_FALSE("never here");
             }
         }
-        cat_channel_close(&read_channel);
-        cat_channel_close(&write_channel);
+        cat_channel_cleanup(&read_channel);
+        cat_channel_cleanup(&write_channel);
         /* we should yield to the sub coroutine and let them released the channel */
         ASSERT_TRUE(cat_time_delay(0));
         ASSERT_TRUE(push_over);
@@ -627,6 +646,7 @@ TEST(cat_channel_select, timeout)
     cat_bool_t data = cat_false;
 
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
+    DEFER(cat_channel_cleanup(&channel));
 
     do {
         cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_SELECT_EVENT_PUSH, cat_false }};
@@ -651,6 +671,7 @@ TEST(cat_channel_select, cancel)
     cat_bool_t data = cat_false;
 
     ASSERT_NE(cat_channel_create(&channel, 0, sizeof(cat_bool_t), nullptr), nullptr);
+    DEFER(cat_channel_cleanup(&channel));
 
     co([=] {
         ASSERT_TRUE(cat_time_delay(0));
@@ -675,6 +696,74 @@ TEST(cat_channel_select, cancel)
         ASSERT_EQ(response, nullptr);
         ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
     } while (0);
+}
+
+TEST(cat_channel_select, pop_during_closing)
+{
+    cat_channel_t channel;
+    cat_channel_select_response_t *response;
+    cat_bool_t data;
+
+    ASSERT_NE(cat_channel_create(&channel, 1, sizeof(cat_bool_t), nullptr), nullptr);
+    DEFER(cat_channel_cleanup(&channel));
+    data = cat_true;
+    ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
+
+    wait_group wg;
+    co([&] {
+        wg++;
+        ASSERT_TRUE(cat_time_delay(0));
+        cat_channel_cleanup(&channel);
+        wg--;
+    });
+
+    for (int n = 0; n < 2; n++) {
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_SELECT_EVENT_POP, cat_false }};
+        data = cat_false;
+        response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
+        if (n == 0) {
+            ASSERT_NE(response, nullptr);
+            ASSERT_FALSE(response->error);
+            ASSERT_EQ(response->channel, &channel);
+            ASSERT_TRUE(data);
+        } else if (n == 1) {
+            ASSERT_TRUE(response->error);
+            ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
+        } else /* if (n == 2) */ {
+            ASSERT_EQ(response, nullptr);
+            ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
+        }
+    }
+
+    wg();
+}
+
+TEST(cat_channel_select, pop_after_closed)
+{
+    cat_channel_t channel;
+    cat_channel_select_response_t *response;
+    cat_bool_t data;
+
+    ASSERT_NE(cat_channel_create(&channel, 1, sizeof(cat_bool_t), nullptr), nullptr);
+    DEFER(cat_channel_cleanup(&channel));
+    data = cat_true;
+    ASSERT_TRUE(cat_channel_push(&channel, &data, -1));
+    ASSERT_TRUE(cat_channel_close(&channel));
+
+    for (int n = 0; n < 2; n++) {
+        cat_channel_select_request_t requests[] = {{ &channel, { &data }, CAT_CHANNEL_SELECT_EVENT_POP, cat_false }};
+        data = cat_false;
+        response = cat_channel_select(requests, CAT_ARRAY_SIZE(requests), -1);
+        if (n == 0) {
+            ASSERT_NE(response, nullptr);
+            ASSERT_FALSE(response->error);
+            ASSERT_EQ(response->channel, &channel);
+            ASSERT_TRUE(data);
+        } else {
+            ASSERT_TRUE(response->error);
+            ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
+        }
+    }
 }
 
 /* }}} channel select test */

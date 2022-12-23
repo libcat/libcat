@@ -454,6 +454,20 @@ CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel)
     CAT_ASSERT(!cat_channel__has_producers(channel));
     CAT_ASSERT(!cat_channel__has_consumers(channel));
 
+    /* revert and we can reuse this channel (if necessary...) */
+    channel->flags ^= CAT_CHANNEL_FLAG_CLOSING;
+    channel->flags |= CAT_CHANNEL_FLAG_CLOSED;
+
+    return cat_true;
+}
+
+CAT_API void cat_channel_cleanup(cat_channel_t *channel)
+{
+    if (!(channel->flags & CAT_CHANNEL_FLAG_CLOSED)) {
+        CAT_ASSERT(cat_channel_is_available(channel));
+        (void) cat_channel_close(channel);
+    }
+
     /* clean up the data bucket (no more consumers) */
     if (!cat_channel__is_unbuffered(channel)) {
         cat_queue_t *storage = &channel->u.buffered.storage;
@@ -471,12 +485,6 @@ CAT_API cat_bool_t cat_channel_close(cat_channel_t *channel)
 
     /* everything will be reset after close */
     CAT_ASSERT(cat_channel__is_empty(channel));
-
-    /* revert and we can reuse this channel (if necessary...) */
-    channel->flags ^= CAT_CHANNEL_FLAG_CLOSING;
-    channel->flags |= CAT_CHANNEL_FLAG_CLOSED;
-
-    return cat_true;
 }
 
 /* select */
