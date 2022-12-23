@@ -22,6 +22,8 @@
 #include "cat_error.h"
 #endif
 
+#undef cat_show_last_error
+
 CAT_API cat_errno_t cat_get_last_error_code(void)
 {
     return CAT_G(last_error).code;
@@ -71,6 +73,13 @@ CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...)
 CAT_API void cat_set_last_error_code(cat_errno_t code)
 {
     CAT_G(last_error).code = code;
+
+    if (CAT_G(show_last_error)) {
+        CAT_LOG_INFO(
+            ERROR,  "last_error.code = %s",
+            cat_strerrno(cat_get_last_error_code())
+        );
+    }
 }
 
 CAT_API void cat_set_last_error(cat_errno_t code, char *message)
@@ -84,7 +93,6 @@ CAT_API void cat_set_last_error(cat_errno_t code, char *message)
         cat_free(last_error_message);
     }
     if (CAT_G(show_last_error)) {
-#undef cat_show_last_error
         cat_show_last_error();
     }
 }
