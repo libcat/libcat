@@ -247,8 +247,8 @@ CAT_API cat_bool_t cat_buffer_append(cat_buffer_t *buffer, const void *ptr, size
     if (likely(length > 0)) {
         // make sure that memory is not overlapped
         CAT_ASSERT(
-            ptr > buffer->value + buffer->length + length ||
-            ptr < buffer->value + buffer->length
+            (const char *) ptr > buffer->value + buffer->length + length ||
+            (const char *) ptr < buffer->value + buffer->length
         );
         memcpy(buffer->value + buffer->length, ptr, length);
         cat_buffer__update(buffer, new_length);
@@ -423,7 +423,7 @@ CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *f
     size_t length;
 
     va_copy(_args, args);
-    length = vsnprintf(NULL, 0, format, _args);
+    length = vsnprintf(NULL, 0, format, _args) + 1;
     va_end(_args);
 
     if (unlikely(!cat_buffer_prepare(buffer, length))) {
@@ -461,12 +461,10 @@ CAT_API cat_bool_t cat_buffer_zero_terminate(cat_buffer_t *buffer)
 
 CAT_API cat_bool_t cat_buffer_append_with_padding(cat_buffer_t *buffer, const void *ptr, size_t length, const char padding_char, size_t width)
 {
-    size_t original_buffer_length = buffer->length;
     ssize_t padding_length = width - length;
     size_t padding_left = padding_length / 2;
     size_t padding_right = padding_length - padding_left;
     size_t i;
-    cat_bool_t ret;
 
     if (!cat_buffer_prepare(buffer, length + padding_length)) {
         return cat_false;
