@@ -245,7 +245,7 @@ TEST(cat_channel, closing)
             co([&] {
                 ASSERT_FALSE(cat_channel_push(channel, &data, 0));
                 ASSERT_FALSE(cat_channel_is_available(channel));
-                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
+                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSED);
                 push_over = true;
             });
             ASSERT_TRUE(cat_channel_has_producers(channel));
@@ -259,7 +259,7 @@ TEST(cat_channel, closing)
             co([&] {
                 ASSERT_FALSE(cat_channel_pop(channel, nullptr, 0));
                 ASSERT_FALSE(cat_channel_is_available(channel));
-                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSING);
+                ASSERT_TRUE(cat_channel_get_flags(channel) & CAT_CHANNEL_FLAG_CLOSED);
                 pop_over = true;
             });
             ASSERT_TRUE(cat_channel_has_consumers(channel));
@@ -571,10 +571,7 @@ TEST(cat_channel_select, base)
                         ASSERT_FALSE(cat_channel_is_available(response->channel));
                         ASSERT_TRUE(response->error);
                         /* first failed try it would return ECANCELED, if you still tried to operate it, it would return ECLOSING */
-                        ASSERT_EQ(
-                            n == 0 || (n == 1 && capacity == 1 && opcode == CAT_CHANNEL_SELECT_EVENT_POP) ? CAT_ECANCELED : CAT_ECLOSING,
-                            cat_get_last_error_code()
-                        );
+                        ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
                     }
                 }
             });
@@ -726,11 +723,8 @@ TEST(cat_channel_select, pop_during_closing)
             ASSERT_FALSE(response->error);
             ASSERT_EQ(response->channel, &channel);
             ASSERT_TRUE(data);
-        } else if (n == 1) {
+        } else /* if (n == 1 || n == 2) */ {
             ASSERT_TRUE(response->error);
-            ASSERT_EQ(CAT_ECANCELED, cat_get_last_error_code());
-        } else /* if (n == 2) */ {
-            ASSERT_EQ(response, nullptr);
             ASSERT_EQ(CAT_ECLOSED, cat_get_last_error_code());
         }
     }

@@ -27,7 +27,6 @@ extern "C" {
 
 typedef enum cat_channel_flag_e {
     CAT_CHANNEL_FLAG_NONE    = 0,
-    CAT_CHANNEL_FLAG_CLOSING = 1 << 0,
     CAT_CHANNEL_FLAG_CLOSED  = 1 << 1,
 } cat_channel_flag_t;
 

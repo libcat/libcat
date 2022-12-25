@@ -40,8 +40,6 @@ typedef struct cat_error_s {
     XX(EVALUE, "Value error") \
     /* it's different from EBUSY, it always caused by misuse */ \
     XX(ELOCKED, "Resource locked") \
-    /* resource is closing (similar to locked) */ \
-    XX(ECLOSING, "Resource is closing") \
     /* resource has been closed */ \
     XX(ECLOSED, "Resource has been closed") \
     /* deadlock */ \
@@ -60,7 +58,6 @@ typedef struct cat_error_s {
     XX(EMISUSE, EINVAL) \
     XX(EVALUE, EINVAL) \
     XX(ELOCKED, EBUSY) \
-    XX(ECLOSING, EBADF) \
     XX(ECLOSED, EBADF) \
     XX(EDEADLK, EBUSY) \
     XX(ESSL, ECONNRESET) \
