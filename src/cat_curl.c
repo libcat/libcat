@@ -131,7 +131,10 @@ static int cat_curl_easy_socket_function(CURL *ch, curl_socket_t sockfd, int act
     CAT_LOG_DEBUG(CURL, "curl_easy_socket_function(multi=%p, sockfd=%d, action=%s), timeout=%ld",
         context->multi, sockfd, cat_curl_translate_action_name(action), context->timeout);
 
-    context->sockfd = sockfd;
+    /* make sure only 1 sockfd will be added */
+    CAT_ASSERT(context->sockfd == CURL_SOCKET_BAD || context->sockfd == sockfd);
+
+    context->sockfd = action != CURL_POLL_REMOVE ? sockfd : CURL_SOCKET_BAD;
     context->events = cat_curl_translate_poll_flags_to_sys(action);
 
     return 0;
