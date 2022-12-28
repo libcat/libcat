@@ -312,7 +312,7 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
         return CURLE_OUT_OF_MEMORY;
     }
     context.coroutine = CAT_COROUTINE_G(current);
-    context.sockfd = -1;
+    context.sockfd = CURL_SOCKET_BAD;
     context.timeout = -1;
     context.events = POLLNONE;
     cat_curl_multi_configure(
@@ -411,7 +411,7 @@ CAT_API CURLMcode cat_curl_multi_cleanup(CURLM *multi)
     CURLMcode mcode;
 
     mcode = curl_multi_cleanup(multi);
-    /* we do not know whether libcurl would do somthing during cleanup,
+    /* we do not know whether libcurl would do something during cleanup,
      * so we close the context later */
     cat_curl_multi_close_context(multi);
 
