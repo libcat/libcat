@@ -74,6 +74,9 @@ static cat_always_inline int cat_curl_translate_poll_flags_from_sys(int revents)
     if (revents & POLLOUT) {
         action |= CURL_CSELECT_OUT;
     }
+    if (revents & POLLERR) {
+        action |= CURL_CSELECT_ERR;
+    }
 
     return action;
 }
