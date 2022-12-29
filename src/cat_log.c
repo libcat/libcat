@@ -212,11 +212,13 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
         (void) cat_buffer_append_str_with_padding(&buffer, name, ' ', name_width);
         (void) cat_buffer_append_str(&buffer, "] ");
         (void) cat_buffer_append_str(&buffer, type_name);
+#ifdef CAT_ENABLE_DEBUG_LOG
         if (type == CAT_LOG_TYPE_DEBUG && CAT_LOG_G(last_debug_log_level) > 1) {
             (void) cat_buffer_append_str(&buffer, "(v");
             (void) cat_buffer_append_signed(&buffer, CAT_LOG_G(last_debug_log_level));
-            (void) cat_buffer_append_char(&buffer, ')');;
+            (void) cat_buffer_append_char(&buffer, ')');
         }
+#endif
         (void) cat_buffer_append_str(&buffer, ": <");
         (void) cat_buffer_append_str(&buffer, module_name);
         (void) cat_buffer_append_str(&buffer, "> ");
