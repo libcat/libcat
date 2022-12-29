@@ -848,6 +848,11 @@ else()
     set(CAT_GTEST_MAIN_LIBRARIES "GTest::Main")
     set(CAT_GTEST_LIBRARIES "GTest::GTest")
 endif()
+if (GTEST_FOUND)
+message(STATUS "GTest founded")
+else()
+message(STATUS "GTest not found")
+endif()
 cmake_dependent_option(LIBCAT_BUILD_TESTS
     "Build the GTest-based unit tests when we have GTest and we are the root project"
     ON GTEST_FOUND
