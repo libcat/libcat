@@ -423,10 +423,11 @@ CAT_API cat_bool_t cat_buffer_append_vprintf(cat_buffer_t *buffer, const char *f
     size_t length;
 
     va_copy(_args, args);
-    length = vsnprintf(NULL, 0, format, _args) + 1;
+    length = vsnprintf(NULL, 0, format, _args);
     va_end(_args);
 
-    if (unlikely(!cat_buffer_prepare(buffer, length))) {
+    /* TODO: drop +1 will lead coredump, figure out why */
+    if (unlikely(!cat_buffer_prepare(buffer, length + 1))) {
         return cat_false;
     }
     if (unlikely(
