@@ -430,8 +430,8 @@ TEST(cat_http_parser, get_method_name)
     while (true) {
         ASSERT_TRUE(cat_http_parser_execute(parser, p, pe - p));
 
-        if (parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
-            if (parser->event & CAT_HTTP_PARSER_EVENT_FLAG_LINE) {
+        if ((int) parser->event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+            if ((int) parser->event & CAT_HTTP_PARSER_EVENT_FLAG_LINE) {
                 char GET[] = "GET";
                 ASSERT_STREQ(GET, cat_http_parser_get_method_name(parser));
             }
@@ -480,8 +480,8 @@ TEST(cat_http_parser, all)
     const char *pe = request_get.data + request_get.length;
     while (true) {
         ASSERT_TRUE(cat_http_parser_execute(&parser, p, pe - p));
-        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
-            if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_LINE) {
+        if ((int) parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+            if ((int) parser.event & CAT_HTTP_PARSER_EVENT_FLAG_LINE) {
                 ASSERT_EQ(cat_http_parser_get_method(&parser), CAT_HTTP_METHOD_GET);
             }
             CAT_LOG_DEBUG(TEST_HTTP, "%s: %.*s", cat_http_parser_get_event_name(&parser), (int ) parser.data_length, parser.data);
@@ -518,7 +518,7 @@ TEST(cat_http_parser, byte_by_byte)
                 pe = de;
             }
         }
-        if (parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+        if ((int) parser.event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
             CAT_LOG_DEBUG(TEST_HTTP, "%s: \"%.*s\"", cat_http_parser_get_event_name(&parser), (int ) parser.data_length, parser.data);
         } else {
             CAT_LOG_DEBUG(TEST_HTTP, "%s", cat_http_parser_get_event_name(&parser));
@@ -820,7 +820,7 @@ TEST(cat_http_parser, multipart)
             // test only, this should be private!
             ASSERT_EQ(std::string(boundaries[j].real), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
             CONTINUE_PARSE();
-            ASSERT_TRUE(parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART);
+            ASSERT_TRUE((int) parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART);
             ASSERT_MULTIPART_FLOW();
             ASSERT_TRUE(cat_http_parser_is_completed(&parser));
 
@@ -987,7 +987,7 @@ TEST(cat_http_parser, multipart_multiline_empty)
     // test only, this should be private!
     ASSERT_EQ(std::string(boundary), std::string(parser.multipart.multipart_boundary + 2, parser.multipart.boundary_length - 2));
     CONTINUE_PARSE();
-    ASSERT_TRUE(parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART);
+    ASSERT_TRUE((int) parser.event & CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART);
     ASSERT_EVENT(MULTIPART_DATA_BEGIN);
     ASSERT_DATA(MULTIPART_HEADER_FIELD, "Content-Disposition");
     ASSERT_DATA(MULTIPART_HEADER_VALUE, "form-data; name=\"Text\"");
@@ -1085,7 +1085,7 @@ TEST(cat_http_parser, multipart_subscript_one)
             CONTINUE_PARSE();
             ASSERT_EQ(std::string(cat_http_parser_get_event_name(&parser)), std::string(cat_http_parser_event_get_name(events)));
             //printf("ev %s\n",cat_http_parser_get_event_name(&parser));
-            if (events & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+            if ((int) events & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
                 //printf("da %.*s\n",(int)parser.data_length,parser.data);
                 ASSERT_EQ(std::string(parser.data, parser.data_length), std::string(multipart_stream_events[j].data.data));
             }
@@ -1194,7 +1194,7 @@ TEST(cat_http_parser, multipart_stream)
                     ASSERT_EQ(parser.data_length, 0);
                     continue;
                 }
-                if (expected_event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+                if ((int) expected_event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
                     ASSERT_NE(expected_data, nullptr);
                     memcpy(&assert_buf[assert_i], parser.data, parser.data_length);
                     assert_i += parser.data_length;
@@ -1329,7 +1329,7 @@ TEST(cat_http_parser, multipart_stream_subscript_one)
                         // or requested done without this event
                         continue;
                     }
-                    if (expected_event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
+                    if ((int) expected_event & CAT_HTTP_PARSER_EVENT_FLAG_DATA) {
                         ASSERT_NE(expected_data, nullptr);
                         memcpy(&assert_buf[assert_i], parser.data, parser.data_length);
                         assert_i += parser.data_length;

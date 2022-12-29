@@ -81,7 +81,7 @@ typedef struct cat_log_globals_s {
                 cat_str_list_contains_ci(CAT_LOG_G(module_name_filter), #module_name, strlen(#module_name)) \
             ) \
         ) || \
-        unlikely((type) & CAT_LOG_TYPES_UNFILTERABLE) \
+        unlikely(((int) (type)) & CAT_LOG_TYPES_UNFILTERABLE) \
     ) {
 
 #define CAT_LOG_SCOPE_WITH_TYPE_END() \
