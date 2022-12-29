@@ -199,9 +199,9 @@ CAT_API cat_bool_t cat_buffer_extend(cat_buffer_t *buffer, size_t recommend_size
 
 CAT_API cat_bool_t cat_buffer_prepare(cat_buffer_t *buffer, size_t append_length)
 {
-    size_t available_size = buffer->size - buffer->length;
-    if (unlikely(available_size < append_length)) {
-        return cat_buffer_extend(buffer, buffer->length + append_length);
+    size_t expected_size = buffer->length + append_length;
+    if (unlikely(expected_size > buffer->size)) {
+        return cat_buffer_extend(buffer, expected_size);
     }
     return cat_true;
 }
