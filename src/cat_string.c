@@ -210,6 +210,11 @@ CAT_API cat_bool_t cat_str_list_contains_ci(const char *haystack, const char *ne
     return cat_false;
 }
 
+CAT_API size_t cat_str_quote_size(size_t length, cat_str_quote_style_flags_t style)
+{
+    return (4 * length) + (style & CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES ? 1 : 3);
+}
+
 /*
  * Quote string `in' of `length'
  * Write up to (3 + `length' * 4) bytes to `out' buffer.
@@ -398,7 +403,7 @@ CAT_API cat_bool_t cat_str_quote_ex(
     cat_bool_t *is_complete
 )
 {
-    size_t new_size = (4 * length) + (style & CAT_STR_QUOTE_STYLE_FLAG_OMIT_LEADING_TRAILING_QUOTES ? 1 : 3);
+    size_t new_size = cat_str_quote_size(length, style);
     char *new_str = cat_malloc(new_size);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(new_str == NULL)) {

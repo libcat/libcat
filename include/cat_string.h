@@ -173,6 +173,8 @@ CAT_API cat_bool_t cat_str_quote_ex2(
     const char *escape_chars
 );
 
+CAT_API size_t cat_str_quote_size(size_t length, cat_str_quote_style_flags_t style);
+
 /* magic */
 
 #define CAT_STRCASECMP_FAST_FUNCTION(name, needle_str, mask_str) \
