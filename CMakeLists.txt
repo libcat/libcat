@@ -171,6 +171,9 @@ if(MSVC)
     check_add_cflags(/wd4100 uv_cflags HAVE_MSVC_LINT_wd4100)
     check_add_cflags(/wd4244 uv_cflags HAVE_MSVC_LINT_wd4244)
     check_add_cflags(/wd4267 uv_cflags HAVE_MSVC_LINT_wd4267)
+    # C4334: https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-3-c4334?view=msvc-170
+    # for code like: `procmask & (1 << i)`, `threadmask |= 1 << i`
+    check_add_cflags(/wd4334 uv_cflags HAVE_MSVC_LINT_wd4334)
     check_add_cflags(/wd4819 uv_cflags HAVE_MSVC_LINT_wd4819)
     # arrange global warnings
     # for while (0, 0) in FD_SET() at Winsock2.h:
