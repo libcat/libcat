@@ -237,6 +237,8 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
     }
 #endif
 
+    cat_buffer_zero_terminate(&buffer);
+
     do {
         const char *p = buffer.value;
         const char *pe = p + buffer.length;
