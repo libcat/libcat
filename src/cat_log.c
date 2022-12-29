@@ -35,7 +35,7 @@ static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, 
     switch (type) {
         case CAT_LOG_TYPE_DEBUG : {
 #ifndef CAT_ENABLE_DEBUG_LOG
-            return;
+            return NULL;
 #else
             type_name = "Debug";
             output = stdout;
@@ -104,7 +104,7 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
     }
     if (!relative) {
         struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
+        cat_clock_gettime_realtime(&ts);
         time_t local = ts.tv_sec;
         struct tm *tm = localtime(&local);
         size_t t_length;
@@ -129,7 +129,7 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
         }
     } else {
         struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
+        cat_clock_gettime_monotonic(&ts);
         static struct timespec ots;
         if (ots.tv_sec == 0) {
             ots = ts;
@@ -164,6 +164,9 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
     FILE *output;
 
     type_name = cat_log_type_dispatch(type, &output);
+    if (unlikely(type_name == NULL)) {
+        return;
+    }
 
     ret = cat_buffer_create(&buffer, 0);
     if (unlikely(!ret)) {
