@@ -156,7 +156,7 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
     }
 }
 
-CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
+CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
 {
     cat_buffer_t buffer;
     cat_bool_t ret;
@@ -219,16 +219,11 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         (void) cat_buffer_append_str(&buffer, "> ");
     } while (0);
 
-    do {
-        va_list args;
-        va_start(args, format);
-        ret = cat_buffer_append_vprintf(&buffer, format, args);
-        if (unlikely(!ret)) {
-            fprintf(CAT_LOG_G(error_output), "Vprintf log message failed (%s)" CAT_EOL, cat_get_last_error_message());
-            goto _error;
-        }
-        va_end(args);
-    } while (0);
+    ret = cat_buffer_append_vprintf(&buffer, format, args);
+    if (unlikely(!ret)) {
+        fprintf(CAT_LOG_G(error_output), "Vprintf log message failed (%s)" CAT_EOL, cat_get_last_error_message());
+        goto _error;
+    }
 
     cat_buffer_append_str(&buffer, CAT_EOL);
 
@@ -248,8 +243,24 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
         while (1) {
             size_t l = pe - p;
             size_t n = fwrite(p, 1, CAT_MIN(l, 16384), output);
-            break;
             if (n == 0) {
+                if (cat_translate_sys_error(cat_sys_errno) == CAT_EAGAIN) {
+                    cat_os_fd_t fd;
+                    fd = fileno(output);
+                    if (fd != CAT_OS_INVALID_FD) {
+                        fd_set wfd;
+                        struct timeval tv;
+                        FD_ZERO(&wfd);
+                        if (fd < FD_SETSIZE) {
+                            FD_SET(fd, &wfd);
+                        }
+                        tv.tv_sec = 30;
+                        tv.tv_usec = 0;
+                        if (select(fd + 1, NULL, &wfd, NULL, &tv) == 1) {
+                            continue;
+                        }
+                    }
+                }
                 fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)" CAT_EOL, cat_strerror(cat_sys_errno));
                 goto _error;
             }
@@ -261,19 +272,33 @@ CAT_API void cat_log_standard(CAT_LOG_PARAMATERS)
     } while (0);
 
     if (type & CAT_LOG_TYPES_ABNORMAL) {
-        if (0) {
-            _error:
-            cat_buffer_close(&buffer);
-            buffer.value = NULL;
-        }
         cat_set_last_error(code, buffer.value);
     } else {
         cat_buffer_close(&buffer);
     }
 
+    if (0) {
+        _error:
+        cat_buffer_close(&buffer);
+        buffer.value = NULL;
+        if (type & CAT_LOG_TYPES_ABNORMAL) {
+            cat_set_last_error(code, NULL);
+        }
+    }
+
     if (type & (CAT_LOG_TYPE_ERROR | CAT_LOG_TYPE_CORE_ERROR)) {
         cat_abort();
     }
+}
+
+CAT_API void cat_log_standard(CAT_LOG_PARAMETERS)
+{
+    va_list args;
+    va_start(args, format);
+
+    cat_log_va_standard(type, module_name CAT_SOURCE_POSITION_RELAY_CC, code, format, args);
+
+    va_end(args);
 }
 
 CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str)

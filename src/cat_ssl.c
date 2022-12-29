@@ -1500,4 +1500,25 @@ static void cat_ssl_handshake_log(cat_ssl_t *ssl)
 }
 #endif
 
+/* utils */
+
+CAT_API char *cat_ssl_protocols_str(cat_ssl_protocols_t protocols)
+{
+    cat_buffer_t buffer;
+    cat_buffer_create(&buffer, 32);
+#define CAT_SSL_PROTOCOL_APPEND_GEN(name, value) \
+    if (protocols & value) { \
+        cat_buffer_append_str(&buffer, #name "|"); \
+    }
+    CAT_SSL_PROTOCOL_MAP(CAT_SSL_PROTOCOL_APPEND_GEN)
+#undef CAT_SSL_PROTOCOL_APPEND_GEN
+    if (buffer.length == 0) {
+        cat_buffer_append_str(&buffer, "NONE");
+    } else {
+        buffer.length--;
+    }
+    cat_buffer_zero_terminate(&buffer);
+    return buffer.value;
+}
+
 #endif /* CAT_SSL */

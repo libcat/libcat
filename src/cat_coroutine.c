@@ -468,7 +468,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     }
 #endif
 
-#ifdef  CAT_COROUTINE_USE_USER_STACK
+#ifdef CAT_COROUTINE_USE_USER_STACK
     void *virtual_memory;
     size_t virtual_memory_size;
     size_t padding_size = cat_getpagesize() * CAT_COROUTINE_STACK_PADDING_PAGE_COUNT;

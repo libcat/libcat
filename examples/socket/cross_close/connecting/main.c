@@ -36,7 +36,7 @@ static void socket_connector(void)
 
     socket = cat_socket_create(NULL, CAT_SOCKET_TYPE_TCP4);
     cat_coroutine_run(NULL, closer, socket);
-    connected = cat_socket_connect(socket, "www.microsoft.com", 80, -1);
+    connected = cat_socket_connect_to(socket, "www.microsoft.com", 80, -1);
     CAT_LOG_INFO(TEST, "connected = %u, error: %s", connected, cat_get_last_error_message());
 }
 

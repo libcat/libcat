@@ -134,7 +134,7 @@ TEST(cat_event, real_fork)
 
     ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), &server);
     DEFER(cat_socket_close(&server));
-    ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_HOST), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_HOST), 0));
     ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
     port = cat_socket_get_sock_port(&server);
     ASSERT_GT(port, 0);
@@ -142,7 +142,7 @@ TEST(cat_event, real_fork)
     // dummy should be closed in sub-process
     ASSERT_EQ(cat_socket_create(&dummy, CAT_SOCKET_TYPE_TCP), &dummy);
     DEFER(cat_socket_close(&dummy));
-    ASSERT_TRUE(cat_socket_connect(&dummy, CAT_STRL(TEST_LISTEN_HOST), port));
+    ASSERT_TRUE(cat_socket_connect_to(&dummy, CAT_STRL(TEST_LISTEN_HOST), port));
     ASSERT_EQ(cat_socket_create(&dummy_peer, cat_socket_get_simple_type(&server)), &dummy_peer);
     DEFER(cat_socket_close(&dummy_peer));
     ASSERT_TRUE(cat_socket_accept(&server, &dummy_peer));
@@ -183,7 +183,7 @@ TEST(cat_event, real_fork)
             _exit(1);
         }
         DEFER(cat_socket_close(&client));
-        if (!cat_socket_connect(&client, CAT_STRL(TEST_LISTEN_HOST), port)) {
+        if (!cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_HOST), port)) {
             fprintf(stderr, "socket connect failed\n");
             _exit(1);
         }

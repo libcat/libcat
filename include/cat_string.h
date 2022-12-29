@@ -23,6 +23,9 @@
 #define CAT_TO_STR_NAKED(str)    #str
 #define CAT_TO_STR(str)          CAT_TO_STR_NAKED(str)
 
+#define CAT_NULLABLE_STR_C(str) \
+    (str == NULL ? "" : str)
+
 #define CAT_CENTERED_STRING_FMT "%*s%s%*s"
 
 #define CAT_CENTERED_STRING_D(var_name, length, width) \

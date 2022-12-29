@@ -42,7 +42,7 @@ TEST(cat_poll, init_failed)
     \
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP)); \
     DEFER(cat_socket_close(&socket)); \
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port)); \
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port)); \
     fd = cat_socket_get_fd_fast(&socket);
 
 TEST(cat_poll, base)

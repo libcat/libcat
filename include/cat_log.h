@@ -202,9 +202,15 @@ typedef struct cat_log_globals_s {
     CAT_LOG_V(type, module_name, _error, format " (syscall failure " CAT_ERRNO_FMT ": %s)", ##__VA_ARGS__, _error, cat_strerror(_error)); \
 } while (0)
 
-#define CAT_LOG_PARAMATERS \
+#define CAT_LOG_PARAMETERS_WITHOUT_ARGS \
     cat_log_type_t type, const char *module_name \
-    CAT_SOURCE_POSITION_DC, int code, const char *format, ...
+    CAT_SOURCE_POSITION_DC, int code, const char *format
+
+#define CAT_LOG_PARAMETERS \
+    CAT_LOG_PARAMETERS_WITHOUT_ARGS, ...
+
+#define CAT_LOG_VA_PARAMETERS \
+    CAT_LOG_PARAMETERS_WITHOUT_ARGS, va_list args
 
 #ifdef CAT_SOURCE_POSITION
 #ifndef CAT_DISABLE___FUNCTION__
@@ -218,11 +224,12 @@ typedef struct cat_log_globals_s {
 
 #define CAT_LOG_UNFINISHED_FMT "<unfinished ...>"
 
-typedef void (*cat_log_t)(CAT_LOG_PARAMATERS);
+typedef void (*cat_log_t)(CAT_LOG_PARAMETERS);
 
 extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
 
-CAT_API void cat_log_standard(CAT_LOG_PARAMATERS);
+CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS);
+CAT_API void cat_log_standard(CAT_LOG_PARAMETERS);
 
 /* Notice: n will be limited to CAT_LOG_G(str_size) if it exceed CAT_LOG_G(str_size) */
 CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str); CAT_FREE
@@ -245,3 +252,7 @@ CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char 
             error, \
             CAT_LOG_STRERRNO_C(error == 0, error)
 
+#define CAT_LOG_SSIZE_RET_FMT "%zd" CAT_LOG_STRERRNO_FMT
+#define CAT_LOG_SSIZE_RET_C(n) \
+            n, \
+            CAT_LOG_STRERRNO_C(n >= 0, cat_get_last_error_code())

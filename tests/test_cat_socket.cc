@@ -98,7 +98,7 @@ TEST_REQUIREMENT(cat_socket, echo_tcp_server)
         cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
         DEFER(cat_socket_close(&server));
-        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
         ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
         ASSERT_STREQ(cat_socket_get_role_name(&server), "server");
         ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_tcp_server_ip, &echo_tcp_server_ip_length));
@@ -136,7 +136,7 @@ TEST_REQUIREMENT(cat_socket, echo_udp_server)
         cat_socket_t server;
         ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_UDP), nullptr);
         DEFER(cat_socket_close(&server));
-        ASSERT_TRUE(cat_socket_bind(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
         ASSERT_TRUE(cat_socket_get_sock_address(&server, echo_udp_server_ip, &echo_udp_server_ip_length));
         DEFER(echo_udp_server_ip[0] = '\0'; echo_udp_server_ip_length = sizeof(echo_udp_server_ip));
         ASSERT_GT(echo_udp_server_port = cat_socket_get_sock_port(&server), 0);
@@ -195,7 +195,7 @@ TEST_REQUIREMENT(cat_socket, echo_pipe_server)
         DEFER(cat_socket_close(&server));
         echo_pipe_server_path = get_random_pipe_path();
         DEFER(echo_pipe_server_path = "");
-        ASSERT_TRUE(cat_socket_bind(&server, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
+        ASSERT_TRUE(cat_socket_bind_to(&server, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
         ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
         echo_pipe_server = cat_coroutine_get_current();
         DEFER(echo_pipe_server = nullptr;);
@@ -229,7 +229,7 @@ TEST_REQUIREMENT(cat_socket, echo_udg_server)
         DEFER(cat_socket_close(&server));
         echo_udg_server_path = get_random_pipe_path();
         DEFER(echo_udg_server_path = "");
-        ASSERT_TRUE(cat_socket_bind(&server, echo_udg_server_path.c_str(), echo_udg_server_path.length(), 0));
+        ASSERT_TRUE(cat_socket_bind_to(&server, echo_udg_server_path.c_str(), echo_udg_server_path.length(), 0));
         echo_udg_server = cat_coroutine_get_current();
         DEFER(echo_udg_server = nullptr;);
 
@@ -287,7 +287,7 @@ TEST(cat_socket, sockaddr_get_address_ip)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -306,7 +306,7 @@ TEST(cat_socket, sockaddr_get_address_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -325,7 +325,7 @@ TEST(cat_socket, sockaddr_get_address_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -344,7 +344,7 @@ TEST(cat_socket, sockaddr_get_address_pipe)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
@@ -403,7 +403,7 @@ TEST(cat_socket, sockaddr_get_port_ip)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -420,7 +420,7 @@ TEST(cat_socket, sockaddr_get_port_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -437,7 +437,7 @@ TEST(cat_socket, sockaddr_get_port_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -454,7 +454,7 @@ TEST(cat_socket, sockaddr_get_port_pipe)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
@@ -484,7 +484,7 @@ TEST(cat_socket, sockaddr_set_port_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -503,7 +503,7 @@ TEST(cat_socket, sockaddr_set_port_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -576,7 +576,7 @@ TEST(cat_socket, sockaddr_to_name)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_TRUE(cat_sockaddr_to_name(&info->address.common, info->length, name, &name_length, &port));
@@ -595,7 +595,7 @@ TEST(cat_socket, sockaddr_to_name_address_length_eq_zero)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_TRUE(cat_sockaddr_to_name(&info->address.common, 0, name, &name_length, &port));
@@ -612,7 +612,7 @@ TEST(cat_socket, sockaddr_copy)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* from will be free in cat_socket_close callback */
     from = cat_socket_getname_fast(&socket, cat_false);
     to.length = from->length;
@@ -627,7 +627,7 @@ TEST(cat_socket, sockaddr_copy_to_length_eq_zero)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* from will be free in cat_socket_close callback */
     from = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_EQ(CAT_ENOSPC, cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length));
@@ -640,7 +640,7 @@ TEST(cat_socket, sockaddr_check_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_FALSE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in_t) - 1));
@@ -655,7 +655,7 @@ TEST(cat_socket, sockaddr_check_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV6), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_FALSE(cat_sockaddr_check(&info->address.common, sizeof(cat_sockaddr_in6_t) - 1));
@@ -684,7 +684,7 @@ TEST(cat_socket, sockaddr_check_pipe_error)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_PIPE));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_PIPE_PATH), 0));
     DEFER(unlink(TEST_PIPE_PATH));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
@@ -705,22 +705,22 @@ TEST(cat_socket, do_something_when_unavailable)
 {
     cat_socket_t socket;
     cat_socket_init(&socket);
-    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_FALSE(cat_socket_connect_to(&socket, CAT_STRL("127.0.0.1"), 80));
     ASSERT_EQ(CAT_EMISUSE, cat_get_last_error_code());
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     cat_socket_close(&socket);
-    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+    ASSERT_FALSE(cat_socket_connect_to(&socket, CAT_STRL("127.0.0.1"), 80));
     ASSERT_EQ(CAT_EBADF, cat_get_last_error_code());
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     cat_coroutine_t *coroutine = co([&] {
-        ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 80));
+        ASSERT_FALSE(cat_socket_connect_to(&socket, CAT_STRL("127.0.0.1"), 80));
     });
     cat_coroutine_resume(coroutine, nullptr, nullptr);
     // re-call after unrecoverable error
-    ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("127.0.0.1"), 0));
+    ASSERT_FALSE(cat_socket_connect_to(&socket, CAT_STRL("127.0.0.1"), 0));
     ASSERT_EQ(CAT_EBADF, cat_get_last_error_code());
 }
 
@@ -782,7 +782,7 @@ TEST(cat_socket, get_fd_fast)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -798,7 +798,7 @@ TEST(cat_socket, get_fd)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_NE(nullptr, info);
@@ -812,7 +812,7 @@ TEST(cat_socket, bind)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
 }
 
 TEST(cat_socket, bind_ex_ip4)
@@ -821,7 +821,7 @@ TEST(cat_socket, bind_ex_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind_ex(&socket,
+    ASSERT_TRUE(cat_socket_bind_to_ex(&socket,
         CAT_STRL(TEST_LISTEN_IPV4),
         0,
         CAT_SOCKET_BIND_FLAG_REUSEADDR | CAT_SOCKET_BIND_FLAG_REUSEPORT)
@@ -834,7 +834,7 @@ TEST(cat_socket, bind_ex_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind_ex(&socket,
+    ASSERT_TRUE(cat_socket_bind_to_ex(&socket,
         CAT_STRL(TEST_LISTEN_IPV6),
         0,
         CAT_SOCKET_BIND_FLAG_IPV6ONLY | CAT_SOCKET_BIND_FLAG_REUSEADDR | CAT_SOCKET_BIND_FLAG_REUSEPORT)
@@ -848,7 +848,7 @@ TEST(cat_socket, getsockname_fast)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getsockname_fast(&socket);
     ASSERT_NE(nullptr, info);
@@ -861,7 +861,7 @@ TEST(cat_socket, getpeername)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     info.length = sizeof(info.address);
     ASSERT_FALSE(cat_socket_getpeername(&socket, &info.address.common, &info.length));
 }
@@ -873,7 +873,7 @@ TEST(cat_socket, getpeername_fast)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     /* info will be free in cat_socket_close callback */
     info = cat_socket_getpeername_fast(&socket);
     ASSERT_EQ(nullptr, info);
@@ -897,7 +897,7 @@ TEST(cat_socket, is_open)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_FALSE(cat_socket_is_open(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     ASSERT_TRUE(cat_socket_is_open(&socket));
 }
 
@@ -937,7 +937,7 @@ TEST(cat_socket, check_liveness)
     DEFER(cat_socket_close(&socket));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
     ASSERT_NE(cat_socket_get_connection_error(&socket), 0);
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_check_liveness(&socket));
     ASSERT_EQ(cat_socket_get_connection_error(&socket), 0);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
@@ -1010,7 +1010,7 @@ TEST(cat_socket, get_role_name)
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
     ASSERT_STREQ(cat_socket_get_role_name(&socket), "unknown");
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_STREQ(cat_socket_get_role_name(&socket), "client");
 }
 
@@ -1024,7 +1024,7 @@ TEST(cat_socket, buffer_size)
     ASSERT_EQ(cat_socket_get_recv_buffer_size(&socket), -1);
     ASSERT_EQ(cat_socket_get_send_buffer_size(&socket), -1);
 
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
 
     /* get/set/align-memory/clear-cache/get/get-cache */
     ASSERT_GT(cat_socket_get_recv_buffer_size(&socket), 0);
@@ -1055,7 +1055,7 @@ TEST(cat_socket, set_tcp_nodelay)
     ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket)); // default is true
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
     ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_get_tcp_nodelay(&socket));
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_NODELAY, UV_HANDLE_TCP_NODELAY);
     ASSERT_TRUE(cat_socket_set_tcp_nodelay(&socket, cat_true));
@@ -1091,7 +1091,7 @@ TEST(cat_socket, set_tcp_keepalive)
     ASSERT_TRUE(cat_socket_set_tcp_keepalive(&socket, cat_true, 1));
     ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
     ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 1);
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_get_tcp_keepalive(&socket));
     ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 1);
     ASSERT_EQ(socket.internal->u.tcp.flags & UV_HANDLE_TCP_KEEPALIVE, UV_HANDLE_TCP_KEEPALIVE);
@@ -1142,7 +1142,7 @@ TEST(cat_socket, set_tcp_accept_balance_failed)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
     DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_connect(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_FALSE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
@@ -1156,7 +1156,7 @@ TEST(cat_socket, set_udp_broadcast)
     ASSERT_FALSE(cat_socket_get_udp_broadcast(&socket));
     ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_true));
     ASSERT_TRUE(cat_socket_get_udp_broadcast(&socket));
-    ASSERT_TRUE(cat_socket_bind(&socket, CAT_STRL("127.0.0.1"), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL("127.0.0.1"), 0));
     auto verify_udp_broadcast_state = [](cat_socket_t *socket, cat_bool_t val) {
 #ifdef SO_BROADCAST
 #ifdef CAT_OS_WIN
@@ -1177,12 +1177,12 @@ TEST(cat_socket, set_udp_broadcast)
     verify_udp_broadcast_state(&socket, cat_true);
 }
 
-typedef cat_bool_t (*test_cat_socket_connect_function_t)(cat_socket_t *socket, const char *name, size_t name_length, int port);
-typedef cat_bool_t (*test_cat_socket_connect_to_function_t)(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
+typedef cat_bool_t (*test_cat_socket_connect_function_t)(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length);
+typedef cat_bool_t (*test_cat_socket_connect_to_function_t)(cat_socket_t *socket, const char *name, size_t name_length, int port);
 
-static cat_bool_t test_cat_socket_try_connect(cat_socket_t *socket, const char *name, size_t name_length, int port)
+static cat_bool_t test_cat_socket_try_connect(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
 {
-    cat_bool_t ret = cat_socket_try_connect(socket, name, name_length, port);
+    cat_bool_t ret = cat_socket_try_connect(socket, address, address_length);
     EXPECT_TRUE(ret);
     if (!ret) {
         return cat_false;
@@ -1195,9 +1195,9 @@ static cat_bool_t test_cat_socket_try_connect(cat_socket_t *socket, const char *
     return cat_true;
 }
 
-static cat_bool_t test_cat_socket_try_connect_to(cat_socket_t *socket, const cat_sockaddr_t *address, cat_socklen_t address_length)
+static cat_bool_t test_cat_socket_try_connect_to(cat_socket_t *socket, const char *name, size_t name_length, int port)
 {
-    cat_bool_t ret = cat_socket_try_connect_to(socket, address, address_length);
+    cat_bool_t ret = cat_socket_try_connect_to(socket, name, name_length, port);
     EXPECT_TRUE(ret);
     if (!ret) {
         return cat_false;
@@ -1522,7 +1522,7 @@ TEST(cat_socket, echo_tcp_client)
 
     echo_stream_client_tests([](cat_socket_t *echo_client, test_cat_socket_io_functions_t io_functions) {
         ASSERT_NE(cat_socket_create(echo_client, CAT_SOCKET_TYPE_TCP), nullptr);
-        ASSERT_TRUE(io_functions.connect(echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        ASSERT_TRUE(io_functions.connect_to(echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         {
             char ip[CAT_SOCKET_IP_BUFFER_SIZE];
             size_t ip_length = sizeof(ip);
@@ -1544,10 +1544,10 @@ TEST(cat_socket, echo_tcp_client_localhost)
     DEFER(cat_socket_close(&echo_client_localhost));
 
     // ::1 is not bound
-    ASSERT_FALSE(cat_socket_connect(&echo_client_v6, CAT_STRL("::1"), echo_tcp_server_port));
+    ASSERT_FALSE(cat_socket_connect_to(&echo_client_v6, CAT_STRL("::1"), echo_tcp_server_port));
     // localhost should work
     // try ::1 first, then 127.0.0.1
-    ASSERT_TRUE(cat_socket_connect(&echo_client_localhost, CAT_STRL("localhost"), echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&echo_client_localhost, CAT_STRL("localhost"), echo_tcp_server_port));
     {
         char ip[CAT_SOCKET_IP_BUFFER_SIZE];
         size_t ip_length = sizeof(ip);
@@ -1569,7 +1569,7 @@ TEST(cat_socket, echo_udp_client)
 
     for (int type = 0; type < 2; type++) {
         if (type == 1) {
-            ASSERT_TRUE(io_functions.connect(
+            ASSERT_TRUE(io_functions.connect_to(
                 &echo_client,
                 echo_udp_server_ip,
                 echo_udp_server_ip_length, echo_udp_server_port
@@ -1623,7 +1623,7 @@ TEST(cat_socket, echo_pipe_client)
 
     echo_stream_client_tests([](cat_socket_t *echo_client, test_cat_socket_io_functions_t io_functions) {
         ASSERT_NE(cat_socket_create(echo_client, CAT_SOCKET_TYPE_PIPE), nullptr);
-        ASSERT_TRUE(io_functions.connect(echo_client, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
+        ASSERT_TRUE(io_functions.connect_to(echo_client, echo_pipe_server_path.c_str(), echo_pipe_server_path.length(), 0));
         {
             char path[CAT_SOCKADDR_MAX_PATH];
             size_t path_length = sizeof(path);
@@ -1644,12 +1644,12 @@ TEST(cat_socket, echo_udg_client)
     ASSERT_NE(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_UDG), nullptr);
     DEFER(cat_socket_close(&echo_client));
     std::string path = get_random_pipe_path();
-    ASSERT_TRUE(cat_socket_bind(&echo_client, path.c_str(), path.length(), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&echo_client, path.c_str(), path.length(), 0));
 
     /* normal loop */
     for (int type = 0; type < 2; type++) {
         if (type == 1) {
-            ASSERT_TRUE(io_functions.connect(
+            ASSERT_TRUE(io_functions.connect_to(
                 &echo_client,
                 echo_udg_server_path.c_str(),
                 echo_udg_server_path.length(), 0
@@ -1707,7 +1707,7 @@ TEST(cat_socket, send_yield)
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&client));
 
-    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
 
     int send_buffer_size = cat_socket_get_send_buffer_size(&client);
     ASSERT_GT(send_buffer_size, 0);
@@ -1754,7 +1754,7 @@ TEST(cat_socket, cross_close_when_connecting_local)
         ASSERT_TRUE(exited);
     });
     co([&] {
-        ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        ASSERT_FALSE(cat_socket_connect_to(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
         exited = true;
     });
@@ -1769,7 +1769,7 @@ TEST(cat_socket, cancel_connect_local)
     bool exited = false;
     cat_coroutine_t *coroutine = co([&] {
         DEFER(exited = true);
-        ASSERT_FALSE(cat_socket_connect(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+        ASSERT_FALSE(cat_socket_connect_to(socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_FALSE(exited);
@@ -1785,17 +1785,17 @@ TEST(cat_socket, query_remote_http_server)
     ASSERT_NE(cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&socket));
 
-    // test connect
+    // test connect_to
     {
         wait_group wg;
         co ([&] {
             wg++;
             DEFER(wg--);
-            ASSERT_TRUE(cat_socket_connect(&socket, TEST_REMOTE_HTTP_SERVER));
+            ASSERT_TRUE(cat_socket_connect_to(&socket, TEST_REMOTE_HTTP_SERVER));
         });
         {
-            /* invalid connect */
-            ASSERT_FALSE(cat_socket_connect(&socket, CAT_STRL("8.8.8.8"), 12345));
+            /* invalid connect_to */
+            ASSERT_FALSE(cat_socket_connect_to(&socket, CAT_STRL("8.8.8.8"), 12345));
             ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
         }
     }
@@ -1870,7 +1870,7 @@ TEST(cat_socket, cross_close_when_dns_resolve)
     cat_socket_t _socket, *socket = cat_socket_create(&_socket, CAT_SOCKET_TYPE_TCP);
     ASSERT_EQ(socket, &_socket);
     co([&] {
-        ASSERT_FALSE(cat_socket_connect(socket, TEST_REMOTE_HTTP_SERVER));
+        ASSERT_FALSE(cat_socket_connect_to(socket, TEST_REMOTE_HTTP_SERVER));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     cat_socket_close(socket);
@@ -1894,7 +1894,7 @@ TEST(cat_socket, cross_close_when_connecting_remote)
     DEFER(cat_socket_close(socket));
     co([&] {
         DEFER(exited = true);
-        ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
+        ASSERT_FALSE(cat_socket_connect_to(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_FALSE(exited);
@@ -1910,7 +1910,7 @@ TEST(cat_socket, cancel_connect_remote)
     DEFER(cat_socket_close(socket));
     cat_coroutine_t *coroutine = co([&] {
         DEFER(exited = true);
-        ASSERT_FALSE(cat_socket_connect(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
+        ASSERT_FALSE(cat_socket_connect_to(socket, test_remote_http_server_ip, strlen(test_remote_http_server_ip), TEST_REMOTE_HTTP_SERVER_PORT));
         ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
     });
     ASSERT_FALSE(exited);
@@ -1927,7 +1927,7 @@ TEST(cat_socket, connreset)
 
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&client));
-    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("RESET")));
     n = cat_socket_recv(&client, CAT_STRS(buffer));
     ASSERT_LE(n, 0);
@@ -1945,7 +1945,7 @@ TEST(cat_socket, timeout)
 
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&client));
-    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("TIMEOUT")));
     n = cat_socket_recv_ex(&client, CAT_STRS(buffer), 1);
     ASSERT_LT(n, 0);
@@ -1961,7 +1961,7 @@ TEST(cat_socket, peek)
 
     ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&client));
-    ASSERT_TRUE(cat_socket_connect(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     for (auto use_timeout : std::array<bool, 2>{ false, true })  {
         ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("Hello libcat")));
         if (!use_timeout) {
@@ -2100,7 +2100,7 @@ TEST(cat_socket, send_handle)
     cat_socket_t worker_socket;
     ASSERT_EQ(cat_socket_create(&worker_socket, CAT_SOCKET_TYPE_PIPE), &worker_socket);
     DEFER(cat_socket_close(&worker_socket));
-    ASSERT_TRUE(cat_socket_bind(&worker_socket, pipe_path.c_str(), pipe_path.length(), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&worker_socket, pipe_path.c_str(), pipe_path.length(), 0));
     ASSERT_TRUE(cat_socket_listen(&worker_socket, TEST_SERVER_BACKLOG));
 
     cat_socket_t worker_channel;
@@ -2108,7 +2108,7 @@ TEST(cat_socket, send_handle)
     co([&] {
         wg++;
         DEFER(wg--);
-        ASSERT_TRUE(cat_socket_connect(&main_socket, pipe_path.c_str(), pipe_path.length(), 0));
+        ASSERT_TRUE(cat_socket_connect_to(&main_socket, pipe_path.c_str(), pipe_path.length(), 0));
     });
     ASSERT_EQ(cat_socket_create(&worker_channel, CAT_SOCKET_TYPE_IPCC), &worker_channel);
     DEFER(cat_socket_close(&worker_channel));
@@ -2124,7 +2124,7 @@ TEST(cat_socket, send_handle)
         cat_socket_t main_client;
         ASSERT_NE(cat_socket_create(&main_client, type), nullptr);
         DEFER(cat_socket_close(&main_client));
-        ASSERT_TRUE(cat_socket_connect(&main_client, server_ip, server_ip_length, server_port));
+        ASSERT_TRUE(cat_socket_connect_to(&main_client, server_ip, server_ip_length, server_port));
 
         // invalid operations on main IPPC
         for (auto socket : std::array<cat_socket_t *, 2>{ &main_socket, &worker_channel })  {
@@ -2210,7 +2210,7 @@ TEST(cat_socket, open_os_socket)
         ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP4), &echo_client);
         DEFER(cat_socket_close(&echo_client));
         if (n == 0) {
-            ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+            ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         }
 
         ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
@@ -2219,7 +2219,7 @@ TEST(cat_socket, open_os_socket)
             char buffer[1];
             ASSERT_EQ(cat_socket_recv(&echo_client2, buffer, sizeof(buffer)), -1);
             ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTCONN);
-            ASSERT_TRUE(cat_socket_connect(&echo_client2, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+            ASSERT_TRUE(cat_socket_connect_to(&echo_client2, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         }
 
         echo_stream_client_tests(&echo_client2);
@@ -2234,7 +2234,7 @@ TEST(cat_socket, move)
 
     ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
     DEFER(if (cat_socket_is_available(&echo_client)) { cat_socket_close(&echo_client); });
-    ASSERT_TRUE(cat_socket_connect(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+    ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
     ASSERT_TRUE(cat_socket_move(&echo_client, &echo_client2));
     DEFER(cat_socket_close(&echo_client2));
     ASSERT_FALSE(cat_socket_is_available(&echo_client));

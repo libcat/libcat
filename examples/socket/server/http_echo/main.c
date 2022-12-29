@@ -104,7 +104,7 @@ static void echo_server_run()
     if (!ret) {
         exit(1);
     }
-    ret = cat_socket_bind(&server, CAT_STRL("0.0.0.0"), CAT_MAGIC_PORT);
+    ret = cat_socket_bind_to(&server, CAT_STRL("0.0.0.0"), CAT_MAGIC_PORT);
     if (!ret) {
         exit(1);
     }
