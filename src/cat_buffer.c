@@ -395,8 +395,9 @@ CAT_API cat_bool_t cat_buffer_append_unsigned(cat_buffer_t *buffer, size_t value
 
 CAT_API cat_bool_t cat_buffer_append_signed(cat_buffer_t *buffer, ssize_t value)
 {
+    intmax_t i = (intmax_t) value;
     char tmp[32];
-    size_t length = snprintf(tmp, sizeof(tmp), "%zd", value);
+    size_t length = snprintf(tmp, sizeof(tmp), "%jd", i);
     return cat_buffer_append(buffer, tmp, length);
 }
 
