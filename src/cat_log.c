@@ -160,6 +160,7 @@ CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length)
 {
     const char *p = str;
     const char *pe = p + length;
+
     while (1) {
         size_t l = pe - p;
         size_t n = fwrite(p, 1, CAT_MIN(l, 16384), file);
@@ -189,6 +190,7 @@ CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length)
             break;
         }
     }
+    fflush(file);
 
     return cat_true;
 }
