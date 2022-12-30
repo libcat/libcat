@@ -22,6 +22,7 @@
 #include "cat_error.h"
 #endif
 
+#undef ERROR /* on Windows ERROR was defined as number, it will cause conflict for module_name */
 #undef cat_show_last_error
 
 CAT_API cat_errno_t cat_get_last_error_code(void)
