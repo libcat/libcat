@@ -164,24 +164,7 @@ CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length)
     while (1) {
         size_t l = pe - p;
         size_t n = fwrite(p, 1, CAT_MIN(l, 16384), file);
-        if (n == 0) {
-            if (cat_translate_sys_error(cat_sys_errno) == CAT_EAGAIN) {
-                cat_os_fd_t fd;
-                fd = fileno(file);
-                if (fd != CAT_OS_INVALID_FD) {
-                    fd_set wfd;
-                    struct timeval tv;
-                    FD_ZERO(&wfd);
-                    if (fd < FD_SETSIZE) {
-                        FD_SET(fd, &wfd);
-                    }
-                    tv.tv_sec = 30;
-                    tv.tv_usec = 0;
-                    if (select(fd + 1, NULL, &wfd, NULL, &tv) == 1) {
-                        continue;
-                    }
-                }
-            }
+        if (n == 0 && ferror(file) != 0) {
             fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)\n", cat_strerror(cat_sys_errno));
             return cat_false;
         }
