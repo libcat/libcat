@@ -558,8 +558,10 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e)
             errno = cat_orig_errno(e->val.cat_errno);
             return e->val.cat_errno;
         case CAT_FS_ERROR_NONE:
+        case CAT_FS_ERROR_EOF:
+            CAT_NEVER_HERE("Not a real error");
+            break;
         default:
-            // never here
             CAT_NEVER_HERE("Strange error type");
     }
 }
@@ -652,6 +654,7 @@ static inline const char *cat_fs_error_msg(cat_fs_error_t *e)
     }
     switch (e->type) {
         case CAT_FS_ERROR_NONE:
+        case CAT_FS_ERROR_EOF:
             e->msg_free = CAT_FS_FREER_NONE;
             e->msg = "";
             break;
