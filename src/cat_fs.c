@@ -40,6 +40,7 @@
 typedef enum cat_fs_error_type_e {
     CAT_FS_ERROR_NONE = 0, // no error
     CAT_FS_ERROR_ERRNO, // is errno
+    CAT_FS_ERROR_EOF, // is eof
     CAT_FS_ERROR_CAT_ERRNO, // is cat_errno_t
 #ifdef CAT_OS_WIN
     CAT_FS_ERROR_WIN32, // is GetLastError() result
@@ -547,11 +548,11 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e)
             return cat_translate_sys_error(e->val.le);
         case CAT_FS_ERROR_ERRNO:
             errno = e->val.error;
-            return cat_translate_unix_error(errno);
+            return cat_translate_unix_error(e->val.error);
 #else
         case CAT_FS_ERROR_ERRNO:
             errno = e->val.error;
-            return cat_translate_sys_error(errno);
+            return cat_translate_sys_error(e->val.error);
 #endif // CAT_OS_WIN
         case CAT_FS_ERROR_CAT_ERRNO:
             errno = cat_orig_errno(e->val.cat_errno);
@@ -1005,7 +1006,7 @@ static void cat_fs_ftell_cb(cat_data_t *ptr)
 {
     cat_fs_ftell_data_t *data = (cat_fs_ftell_data_t *) ptr;
     data->ret.ret.num = ftello(data->stream);
-    if (0 != data->ret.ret.num) {
+    if (-1 == data->ret.ret.num) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
     }
@@ -1171,10 +1172,16 @@ static void cat_fs_readdir_cb(cat_data_t *ptr)
 {
     cat_fs_readdir_data_t *data = (cat_fs_readdir_data_t *) ptr;
 
+    errno = 0;
     struct dirent *pdirent = readdir(data->dir);
     if (NULL == pdirent) {
-        data->ret.error.type = CAT_FS_ERROR_ERRNO;
-        data->ret.error.val.error = errno;
+        if (errno != 0) {
+            data->ret.error.type = CAT_FS_ERROR_ERRNO;
+            data->ret.error.val.error = errno;
+        } else  {
+            data->ret.error.type = CAT_FS_ERROR_EOF;
+            data->ret.error.val.error = 0;
+        }
         return;
     }
     cat_dirent_t *pret = malloc(sizeof(*pret));
@@ -1265,6 +1272,10 @@ CAT_API cat_dirent_t *cat_fs_readdir(cat_dir_t *dir)
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_readdir_cb, cat_fs_readdir_free, data, CAT_TIMEOUT_FOREVER)) {
         uv_dir->dir = NULL;
         data->canceled = cat_true;
+        return NULL;
+    }
+    if (CAT_FS_ERROR_EOF == data->ret.error.type) {
+        cat_clear_last_error();
         return NULL;
     }
     cat_fs_work_check_error(&data->ret.error, "readdir");
@@ -1898,8 +1909,12 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
     operation = op & (CAT_LOCK_SH | CAT_LOCK_EX | CAT_LOCK_UN);
 # endif // LOCK_NB
     data->ret.ret.num = flock(fd, operation);
-    data->ret.error.type = CAT_FS_ERROR_ERRNO;
-    data->ret.error.val.error = errno;
+    if (data->ret.ret.num != 0) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    } else {
+        data->ret.error.type = CAT_FS_ERROR_NONE;
+    }
     goto _done;
 #elif defined(F_SETLK) && defined(F_SETLKW) && defined(F_RDLCK) && defined(F_WRLCK) && defined(F_UNLCK)
     // fcntl implement
@@ -1919,8 +1934,12 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
         lbuf.l_type = F_UNLCK;
     }
     data->ret.ret.num = fcntl(fd, cmd, &lbuf);
-    data->ret.error.type = CAT_FS_ERROR_ERRNO;
-    data->ret.error.val.error = errno;
+    if (data->ret.ret.num == -1) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    } else {
+        data->ret.error.type = CAT_FS_ERROR_NONE;
+    }
     goto _done;
 #elif defined(F_LOCK) && defined(F_ULOCK) && defined(F_TLOCK)
     // lockf implement (not well tested, maybe buggy)
@@ -1948,8 +1967,12 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
     // we need seek to 0, then do this
     // however this is not atomic for this fd
     data->ret.ret.num = lockf(fd, cmd, 0); // not real full file
-    data->ret.error.type = CAT_FS_ERROR_ERRNO;
-    data->ret.error.val.error = errno;
+    if (data->ret.ret.num != 0) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = errno;
+    } else {
+        data->ret.error.type = CAT_FS_ERROR_NONE;
+    }
     goto _done;
 #else
     // maybe sometimes we can implement robust flock by ourselves?
