@@ -25,7 +25,7 @@ TEST(cat_log, info)
     testing::internal::CaptureStdout();
     CAT_LOG_INFO(TEST, "info log");
     std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> info log" CAT_EOL);
+    ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> info log\n");
 }
 
 TEST(cat_log, notice)
@@ -33,7 +33,7 @@ TEST(cat_log, notice)
     testing::internal::CaptureStderr();
     CAT_NOTICE(TEST, "notice log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "[    MAIN    ] Notice: <TEST> notice log" CAT_EOL);
+    ASSERT_EQ(output, "[    MAIN    ] Notice: <TEST> notice log\n");
 }
 
 TEST(cat_log, warn)
@@ -41,21 +41,21 @@ TEST(cat_log, warn)
     testing::internal::CaptureStderr();
     CAT_WARN(TEST, "warn log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "[    MAIN    ] Warning: <TEST> warn log" CAT_EOL);
+    ASSERT_EQ(output, "[    MAIN    ] Warning: <TEST> warn log\n");
 }
 
 TEST(cat_log, error)
 {
     ASSERT_DEATH_IF_SUPPORTED({
         CAT_ERROR(TEST, "error log");
-    }, "\\[    MAIN    \\] Error: <TEST> error log" CAT_EOL);
+    }, "\\[    MAIN    \\] Error: <TEST> error log\n");
 }
 
 TEST(cat_log, core_error)
 {
     ASSERT_DEATH_IF_SUPPORTED({
         CAT_CORE_ERROR(TEST, "core error log");
-    }, "\\[    MAIN    \\] Core Error: <TEST> core error log" CAT_EOL);
+    }, "\\[    MAIN    \\] Core Error: <TEST> core error log\n");
 }
 
 TEST(cat_log, buffer_quote)

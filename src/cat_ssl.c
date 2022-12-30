@@ -1484,7 +1484,7 @@ static void cat_ssl_handshake_log(cat_ssl_t *ssl)
             if (*s == ' ' && *d == ' ') {
                 continue;
             }
-            if (*s == CAT_LF || *s == CAT_CR) {
+            if (*s == '\n' || *s == '\r') {
                 continue;
             }
             *++d = *s;
