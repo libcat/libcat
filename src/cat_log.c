@@ -111,7 +111,7 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
         t_length = strftime(
             buffer->value + buffer->length,
             buffer->size - buffer->length,
-            CAT_LOG_G(timestamps_format),
+            format,
             tm
         );
         if (t_length == 0) {
@@ -230,16 +230,16 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
     do {
         const int name_width = 12;
         const char *name = cat_coroutine_get_current_role_name_in_uppercase();
-        int name_length;
+        size_t name_length;
         char name_buffer[32];
         if (name == NULL) {
             name_buffer[0] = 'R';
-            name_length = snprintf(name_buffer + 1, sizeof(name_buffer) - 1,
+            int n = snprintf(name_buffer + 1, sizeof(name_buffer) - 1,
                 CAT_COROUTINE_ID_FMT, cat_coroutine_get_current_id());
-            if (name_length < 0) {
+            if (n < 0) {
                 break;
             }
-            name_length += 1;
+            name_length = (size_t) n + 1;
             name_buffer[name_length] = '\0';
             name = name_buffer;
         } else {
