@@ -228,6 +228,8 @@ typedef void (*cat_log_t)(CAT_LOG_PARAMETERS);
 
 extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
 
+CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length);
+
 CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS);
 CAT_API void cat_log_standard(CAT_LOG_PARAMETERS);
 

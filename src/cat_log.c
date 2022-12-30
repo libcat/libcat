@@ -156,6 +156,43 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
     }
 }
 
+CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length)
+{
+    const char *p = str;
+    const char *pe = p + length;
+    while (1) {
+        size_t l = pe - p;
+        size_t n = fwrite(p, 1, CAT_MIN(l, 16384), file);
+        if (n == 0) {
+            if (cat_translate_sys_error(cat_sys_errno) == CAT_EAGAIN) {
+                cat_os_fd_t fd;
+                fd = fileno(file);
+                if (fd != CAT_OS_INVALID_FD) {
+                    fd_set wfd;
+                    struct timeval tv;
+                    FD_ZERO(&wfd);
+                    if (fd < FD_SETSIZE) {
+                        FD_SET(fd, &wfd);
+                    }
+                    tv.tv_sec = 30;
+                    tv.tv_usec = 0;
+                    if (select(fd + 1, NULL, &wfd, NULL, &tv) == 1) {
+                        continue;
+                    }
+                }
+            }
+            fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)\n", cat_strerror(cat_sys_errno));
+            return cat_false;
+        }
+        p += n;
+        if (p == pe) {
+            break;
+        }
+    }
+
+    return cat_true;
+}
+
 CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
 {
     cat_buffer_t buffer;
@@ -170,7 +207,7 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
 
     ret = cat_buffer_create(&buffer, 0);
     if (unlikely(!ret)) {
-        fprintf(CAT_LOG_G(error_output), "Create log buffer failed (%s)" CAT_EOL, cat_get_last_error_message());
+        fprintf(CAT_LOG_G(error_output), "Create log buffer failed (%s)\n", cat_get_last_error_message());
         return;
     }
 
@@ -226,17 +263,17 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
 
     ret = cat_buffer_append_vprintf(&buffer, format, args);
     if (unlikely(!ret)) {
-        fprintf(CAT_LOG_G(error_output), "Vprintf log message failed (%s)" CAT_EOL, cat_get_last_error_message());
+        fprintf(CAT_LOG_G(error_output), "Vprintf log message failed (%s)\n", cat_get_last_error_message());
         goto _error;
     }
 
-    cat_buffer_append_str(&buffer, CAT_EOL);
+    cat_buffer_append_str(&buffer, "\n");
 
 #ifdef CAT_SOURCE_POSITION
     if (CAT_LOG_G(show_source_postion)) {
         (void) cat_buffer_append_printf(
             &buffer,
-            "  ^ " "%s:%d | %s()" CAT_EOL,
+            "  ^ " "%s:%d | %s()\n",
             file, line, function
         );
     }
@@ -244,39 +281,9 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
 
     cat_buffer_zero_terminate(&buffer);
 
-    do {
-        const char *p = buffer.value;
-        const char *pe = p + buffer.length;
-        while (1) {
-            size_t l = pe - p;
-            size_t n = fwrite(p, 1, CAT_MIN(l, 16384), output);
-            if (n == 0) {
-                if (cat_translate_sys_error(cat_sys_errno) == CAT_EAGAIN) {
-                    cat_os_fd_t fd;
-                    fd = fileno(output);
-                    if (fd != CAT_OS_INVALID_FD) {
-                        fd_set wfd;
-                        struct timeval tv;
-                        FD_ZERO(&wfd);
-                        if (fd < FD_SETSIZE) {
-                            FD_SET(fd, &wfd);
-                        }
-                        tv.tv_sec = 30;
-                        tv.tv_usec = 0;
-                        if (select(fd + 1, NULL, &wfd, NULL, &tv) == 1) {
-                            continue;
-                        }
-                    }
-                }
-                fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)" CAT_EOL, cat_strerror(cat_sys_errno));
-                goto _error;
-            }
-            p += n;
-            if (p == pe) {
-                break;
-            }
-        }
-    } while (0);
+    if (!cat_log_fwrite(output, buffer.value, buffer.length)) {
+        goto _error;
+    }
 
     if (type & CAT_LOG_TYPES_ABNORMAL) {
         cat_set_last_error(code, buffer.value);
