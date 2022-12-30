@@ -1895,7 +1895,7 @@ CAT_API cat_bool_t cat_socket_connect_ex(cat_socket_t *socket, const cat_sockadd
 #ifdef CAT_ENABLE_DEBUG_LOG
     char name[CAT_SOCKADDR_MAX_PATH];
     size_t name_length = sizeof(name);
-    int port;
+    int port = 0;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
@@ -1940,7 +1940,7 @@ CAT_API cat_bool_t cat_socket_try_connect(cat_socket_t *socket, const cat_sockad
 #ifdef CAT_ENABLE_DEBUG_LOG
     char name[CAT_SOCKADDR_MAX_PATH];
     size_t name_length = sizeof(name);
-    int port;
+    int port = 0;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
@@ -2240,8 +2240,8 @@ CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, const cat_sock
 CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_socket_crypto_options_t *options, cat_timeout_t timeout)
 {
 #ifdef CAT_ENABLE_DEBUG_LOG
-    cat_socket_crypto_options_t log_options;
-    char *protocols_str;
+    cat_socket_crypto_options_t log_options = { 0 };
+    char *protocols_str = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (options == NULL) {
@@ -3621,7 +3621,7 @@ CAT_API cat_bool_t cat_socket_write(cat_socket_t *socket, const cat_socket_write
 CAT_API cat_bool_t cat_socket_write_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, cat_timeout_t timeout)
 {
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *vector_quoted;
+    char *vector_quoted = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         vector_quoted = cat_socket_write_vector_str(vector, vector_count);
@@ -3662,10 +3662,10 @@ CAT_API cat_bool_t cat_socket_writeto(cat_socket_t *socket, const cat_socket_wri
 CAT_API cat_bool_t cat_socket_writeto_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const cat_sockaddr_t *address, cat_socklen_t address_length, cat_timeout_t timeout)
 {
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *vector_quoted;
+    char *vector_quoted = NULL;
     char name[CAT_SOCKADDR_MAX_PATH];
     size_t name_length = sizeof(name);
-    int port;
+    int port = 0;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
@@ -3716,7 +3716,7 @@ CAT_API cat_bool_t cat_socket_write_to(cat_socket_t *socket, const cat_socket_wr
 CAT_API cat_bool_t cat_socket_write_to_ex(cat_socket_t *socket, const cat_socket_write_vector_t *vector, unsigned int vector_count, const char *name, size_t name_length, int port, cat_timeout_t timeout)
 {
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *vector_quoted;
+    char *vector_quoted = 0;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         vector_quoted = cat_socket_write_vector_str(vector, vector_count);
@@ -3879,7 +3879,7 @@ CAT_API cat_bool_t cat_socket_send_ex(cat_socket_t *socket, const char *buffer, 
     cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
 
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *buffer_quoted;
+    char *buffer_quoted = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         CAT_LOG_DEBUG_D(SOCKET, "send(" CAT_SOCKET_ID_FMT ", %s, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_FMT,
@@ -3923,10 +3923,10 @@ CAT_API cat_bool_t cat_socket_sendto_ex(cat_socket_t *socket, const char *buffer
     cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
 
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *buffer_quoted;
+    char *buffer_quoted = NULL;
     char name[CAT_SOCKADDR_MAX_PATH];
     size_t name_length = sizeof(name);
-    int port;
+    int port = 0;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
@@ -3979,7 +3979,7 @@ CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffe
     cat_socket_write_vector_t vector = cat_socket_write_vector_init(buffer, (cat_socket_vector_length_t) length);
 
 #ifdef CAT_ENABLE_DEBUG_LOG
-    char *buffer_quoted;
+    char *buffer_quoted = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         CAT_LOG_DEBUG_D(SOCKET, "send_to(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_FMT,
