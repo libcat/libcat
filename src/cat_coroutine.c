@@ -181,7 +181,8 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         main_coroutine->end_time = 0;
         main_coroutine->flags = CAT_COROUTINE_FLAG_NONE;
         main_coroutine->state = CAT_COROUTINE_STATE_RUNNING;
-        main_coroutine->round = ++CAT_COROUTINE_G(round);
+        main_coroutine->switches = 0;
+        main_coroutine->round = CAT_COROUTINE_G(round);
         main_coroutine->from = NULL;
         main_coroutine->previous = NULL;
         main_coroutine->next = NULL;
@@ -540,6 +541,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->id = CAT_COROUTINE_G(last_id)++;
     coroutine->flags = flags | CAT_COROUTINE_FLAG_ACCEPT_DATA;
     coroutine->state = CAT_COROUTINE_STATE_WAITING;
+    coroutine->switches = 0;
     coroutine->round = 0;
     coroutine->from = NULL;
     coroutine->previous = NULL;
@@ -652,6 +654,8 @@ CAT_API void cat_coroutine_jump_standard(cat_coroutine_t *coroutine, cat_data_t 
         /* maybe dead */
         current_coroutine->state = CAT_COROUTINE_STATE_WAITING;
     }
+    /* current switches++ */
+    current_coroutine->switches++;
     /* update state */
     coroutine->state = CAT_COROUTINE_STATE_RUNNING;
     /* round++ */
@@ -918,6 +922,11 @@ CAT_API cat_coroutine_state_t cat_coroutine_get_state(const cat_coroutine_t *cor
 CAT_API const char *cat_coroutine_get_state_name(const cat_coroutine_t *coroutine)
 {
     return cat_coroutine_state_name(coroutine->state);
+}
+
+CAT_API cat_coroutine_switches_t cat_coroutine_get_switches(const cat_coroutine_t *coroutine)
+{
+    return coroutine->switches;
 }
 
 CAT_API cat_coroutine_round_t cat_coroutine_get_round(const cat_coroutine_t *coroutine)
