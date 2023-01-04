@@ -1728,10 +1728,10 @@ TEST(cat_socket, send_yield)
             buffer_size
         };
         cat_coroutine_run(&write_coroutine, [](cat_data_t *data)->cat_data_t* {
-            cat_coroutine_round_t round = cat_coroutine_get_current_round();
+            cat_coroutine_switches_t switches = cat_coroutine_get_global_switches();
             struct write_context_s *context = (struct write_context_s *) data;
             EXPECT_TRUE(cat_socket_send(context->socket, context->buffer, context->length));
-            EXPECT_GT(cat_coroutine_get_current_round(), round);
+            EXPECT_GT(cat_coroutine_get_global_switches(), switches);
             return nullptr;
         }, &write_context);
     } while (0);

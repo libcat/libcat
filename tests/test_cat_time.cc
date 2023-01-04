@@ -92,9 +92,11 @@ TEST(cat_time, nanosleep)
 
 TEST(cat_time, sleep_zero)
 {
-    cat_coroutine_round_t round = cat_coroutine_get_current_round();
+    cat_coroutine_switches_t switches = cat_coroutine_get_global_switches();
+    cat_event_round_t round = cat_event_get_round();
     ASSERT_TRUE(cat_time_delay(0));
-    ASSERT_GT(cat_coroutine_get_current_round(), round);
+    ASSERT_GT(cat_coroutine_get_global_switches(), switches);
+    ASSERT_GT(cat_event_get_round(), round);
 }
 
 static std::string time_format_msec(cat_msec_t msec)

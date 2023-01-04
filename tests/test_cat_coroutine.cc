@@ -245,27 +245,28 @@ TEST(cat_coroutine, get_peak_count_not_in_main)
 
 TEST(cat_coroutine, get_round_in_main)
 {
-    ASSERT_EQ(CAT_COROUTINE_G(round), cat_coroutine_get_current_round());
+    ASSERT_EQ(CAT_COROUTINE_G(switches), cat_coroutine_get_global_switches());
 }
 
 TEST(cat_coroutine, get_round_not_in_main)
 {
     co([] {
-        EXPECT_EQ(CAT_COROUTINE_G(round),  cat_coroutine_get_current_round());
+        EXPECT_EQ(CAT_COROUTINE_G(switches),  cat_coroutine_get_global_switches());
     });
 }
 
-TEST(cat_coroutine, get_round)
+TEST(cat_coroutine, get_switches)
 {
-    cat_coroutine_round_t round = cat_coroutine_get_current_round();
-
-    ASSERT_EQ(round, cat_coroutine_get_round(cat_coroutine_get_current()));
+    cat_coroutine_t *current_coroutine = cat_coroutine_get_current();
+    cat_coroutine_switches_t global_switches = cat_coroutine_get_global_switches();
+    cat_coroutine_switches_t switches = cat_coroutine_get_switches(current_coroutine);
 
     co([=] {
-        ASSERT_EQ(round + 1, cat_coroutine_get_round(cat_coroutine_get_current()));
+        ASSERT_EQ(global_switches + 1, cat_coroutine_get_global_switches());
     });
 
-    ASSERT_EQ(round + 2, cat_coroutine_get_round(cat_coroutine_get_current()));
+    ASSERT_EQ(global_switches + 2, cat_coroutine_get_global_switches());
+    ASSERT_EQ(switches + 1, cat_coroutine_get_switches(current_coroutine));
 }
 
 TEST(cat_coroutine, get_and_set_flags)
