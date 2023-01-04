@@ -215,13 +215,15 @@ jobs:
           cmake --build . -j --target cat_tests || exit 1
           echo "::endgroup::"
           echo "::group::Test libcat"
-          ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || {
-            echo "::error::Test failed"
-            exit 1
-          }
+          ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
           echo "ASan log:"
           cat asan.log* || :
-          echo "::endgroup::"
+          if [ $exit_status -ne 0 ]; then
+            echo "::error::Test failed"
+            exit $exit_status
+          else
+            echo "::endgroup::"
+          fi
 
       - name: Coverage tests
         working-directory: libcat
