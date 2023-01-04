@@ -186,7 +186,10 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
     FILE *output;
 
     if (unlikely(type & CAT_LOG_TYPES_ABNORMAL)) {
-        cat_set_last_error(code, cat_vsprintf(format, args));
+        va_list _args;
+        va_copy(_args, args);
+        cat_set_last_error(code, cat_vsprintf(format, _args));
+        va_end(_args);
     }
 
     type_name = cat_log_type_dispatch(type, &output);
