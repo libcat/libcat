@@ -4433,14 +4433,19 @@ static void cat_socket_internal_close(cat_socket_internal_t *socket_i, cat_bool_
 static cat_always_inline cat_bool_t cat_socket_close_impl(cat_socket_t *socket)
 {
     cat_socket_internal_t *socket_i = socket->internal;
+    cat_bool_t is_unrecoverable_error = socket->flags & CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
     cat_bool_t ret = cat_true;
 
     /* native EBADF will be reported from now on */
     socket->flags &= ~CAT_SOCKET_FLAG_UNRECOVERABLE_ERROR;
 
     if (socket_i == NULL) {
-        cat_update_last_error(CAT_EBADF, NULL);
-        ret = cat_false;
+         /* unrecoverable error is triggered by internal,
+          * do not re-trigger EBADF when user call close(). */
+        if (!is_unrecoverable_error) {
+            cat_update_last_error(CAT_EBADF, NULL);
+            ret = cat_false;
+        }
     } else {
         cat_socket_internal_close_impl(socket_i, cat_false);
     }
