@@ -39,20 +39,20 @@ TEST(cat_event, defer)
 
 TEST(cat_event, defer_in_defer)
 {
-    uint64_t round = CAT_EVENT_G(loop).round;
+    uint64_t round = cat_event_get_round();
     bool done1 = false;
     bool done2 = false;
     bool done3 = false;
     ASSERT_TRUE(defer([&] {
         ASSERT_TRUE(defer([&] {
             ASSERT_TRUE(defer([&] {
-                ASSERT_EQ(CAT_EVENT_G(loop).round, round + 3);
+                ASSERT_EQ(cat_event_get_round(), round + 3);
                 done3 = true;
             }));
-            ASSERT_EQ(CAT_EVENT_G(loop).round, round + 2);
+            ASSERT_EQ(cat_event_get_round(), round + 2);
             done2 = true;
         }));
-        ASSERT_EQ(CAT_EVENT_G(loop).round, round + 1);
+        ASSERT_EQ(cat_event_get_round(), round + 1);
         done1 = true;
     }));
     ASSERT_TRUE(cat_time_delay(0));
