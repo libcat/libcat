@@ -185,6 +185,10 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
     const char *type_name;
     FILE *output;
 
+    if (unlikely(type & CAT_LOG_TYPES_ABNORMAL)) {
+        cat_set_last_error(code, cat_vsprintf(format, args));
+    }
+
     type_name = cat_log_type_dispatch(type, &output);
     if (unlikely(type_name == NULL)) {
         return;
@@ -270,11 +274,7 @@ CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS)
         goto _error;
     }
 
-    if (type & CAT_LOG_TYPES_ABNORMAL) {
-        cat_set_last_error(code, buffer.value);
-    } else {
-        cat_buffer_close(&buffer);
-    }
+    cat_buffer_close(&buffer);
 
     if (0) {
         _error:
