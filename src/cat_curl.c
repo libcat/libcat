@@ -335,48 +335,64 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
     }
 
     while (1) {
-        if (context.events == POLLNONE) {
+        if (context.sockfd == CURL_SOCKET_BAD) {
             cat_ret_t ret = cat_time_delay(context.timeout);
             if (unlikely(ret != CAT_RET_OK)) {
-                code = CURLE_RECV_ERROR;
-                break;
+                goto _error;
             }
             mcode = curl_multi_socket_action(context.multi, CURL_SOCKET_TIMEOUT, 0, &running_handles);
+            if (running_handles == 0) {
+                break;
+            }
+            /* workaround for cURL with OpenSSL 3.0 bug... */
+            CAT_LOG_DEBUG(CURL, "curl_multi_perform(multi=%p) workaround", context.multi);
+            mcode = curl_multi_perform(context.multi, &running_handles);
+            if (unlikely(mcode != CURLM_OK)) {
+                goto _error;
+            }
+            if (running_handles == 0) {
+                break;
+            }
         } else {
             cat_pollfd_events_t revents;
             int action;
             cat_ret_t ret;
             ret = cat_poll_one(context.sockfd, context.events, &revents, context.timeout);
             if (unlikely(ret == CAT_RET_ERROR)) {
-                code = CURLE_RECV_ERROR;
-                break;
+                goto _error;
             }
             action = cat_curl_translate_poll_flags_from_sys(revents);
+            if (action == CURL_POLL_NONE) {
+                continue;
+            }
             mcode = curl_multi_socket_action(
                 context.multi,
-                action != 0 ? context.sockfd : CURL_SOCKET_TIMEOUT,
+                context.sockfd,
                 action,
                 &running_handles
             );
+            if (running_handles == 0) {
+                break;
+            }
         }
         if (unlikely(mcode != CURLM_OK)) {
-            break;
+            goto _error;
         }
-        message = curl_multi_info_read(context.multi, &running_handles);
-        if (message != NULL) {
-            CAT_ASSERT(message->msg == CURLMSG_DONE);
-            CAT_ASSERT(running_handles == 0);
-            CAT_LOG_DEBUG_VA(CURL, {
-                char *done_url;
-                curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url);
-                CAT_LOG_DEBUG(CURL, "curl_easy_perform(multi=%p, url='%s') DONE", context.multi, done_url);
-            });
-            code = message->data.result;
-            break;
-        }
-        CAT_ASSERT(running_handles == 0 || running_handles == 1);
+    }
+    CAT_ASSERT(running_handles == 0);
+    message = curl_multi_info_read(context.multi, &running_handles);
+    if (message != NULL) {
+        CAT_ASSERT(message->msg == CURLMSG_DONE);
+        CAT_ASSERT(running_handles == 0);
+        CAT_LOG_DEBUG_VA(CURL, {
+            char *done_url;
+            curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url);
+            CAT_LOG_DEBUG(CURL, "curl_easy_perform(multi=%p, url='%s') DONE", context.multi, done_url);
+        });
+        code = message->data.result;
     }
 
+    _error:
     curl_multi_remove_handle(context.multi, ch);
     _add_failed:
     curl_multi_cleanup(context.multi);
@@ -489,13 +505,14 @@ static CURLMcode cat_curl_multi_exec(
                 goto _out;
             }
             if (ret != 0) {
+                cat_bool_t hit = cat_false;
                 for (i = 0; i < context->nfds; i++) {
                     cat_pollfd_t *fd = &fds[i];
-                    int action;
-                    if (fd->revents == POLLNONE) {
+                    int action = cat_curl_translate_poll_flags_from_sys(fd->revents);
+                    if (action == CURL_POLL_NONE) {
                         continue;
                     }
-                    action = cat_curl_translate_poll_flags_from_sys(fd->revents);
+                    hit = cat_true;
                     CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(multi=%p, fd=%d, %s) after poll", multi, fd->fd, cat_curl_translate_action_name(action));
                     mcode = curl_multi_socket_action(multi, fd->fd, action, running_handles);
                     if (unlikely(mcode != CURLM_OK)) {
@@ -505,7 +522,11 @@ static CURLMcode cat_curl_multi_exec(
                         goto _out;
                     }
                 }
+                if (unlikely(!hit)) {
+                    goto _action_timeout;
+                }
             } else {
+                _action_timeout:
                 CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(multi=%p, CURL_SOCKET_TIMEOUT) after poll return 0", multi);
                 mcode = curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
                 if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
