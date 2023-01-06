@@ -64,7 +64,7 @@ static cat_always_inline void cat_curl_multi_configure(CURLM *multi, void *socke
     curl_multi_setopt(multi, CURLMOPT_TIMERDATA, context);
 }
 
-static cat_always_inline int cat_curl_translate_poll_flags_from_sys(int revents)
+static cat_always_inline int cat_curl_translate_poll_flags_from_sys(int events, int revents)
 {
     int action = CURL_POLL_NONE;
 
@@ -76,6 +76,15 @@ static cat_always_inline int cat_curl_translate_poll_flags_from_sys(int revents)
     }
     if (revents & POLLERR) {
         action |= CURL_CSELECT_ERR;
+    }
+    if ((revents &~ (POLLIN | POLLOUT | POLLERR)) != 0) {
+        if (events & POLLIN) {
+            action |= CURL_CSELECT_IN;
+        } else if (events & POLLOUT) {
+            action |= CURL_CSELECT_OUT;
+        } else if (events & POLLERR) {
+            action |= CURL_CSELECT_ERR;
+        }
     }
 
     return action;
@@ -361,7 +370,7 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
             if (unlikely(ret == CAT_RET_ERROR)) {
                 goto _error;
             }
-            action = cat_curl_translate_poll_flags_from_sys(revents);
+            action = cat_curl_translate_poll_flags_from_sys(context.events, revents);
             if (action == CURL_POLL_NONE) {
                 continue;
             }
@@ -508,7 +517,7 @@ static CURLMcode cat_curl_multi_exec(
                 cat_bool_t hit = cat_false;
                 for (i = 0; i < context->nfds; i++) {
                     cat_pollfd_t *fd = &fds[i];
-                    int action = cat_curl_translate_poll_flags_from_sys(fd->revents);
+                    int action = cat_curl_translate_poll_flags_from_sys(fd->events, fd->revents);
                     if (action == CURL_POLL_NONE) {
                         continue;
                     }
