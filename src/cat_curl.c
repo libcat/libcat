@@ -539,11 +539,11 @@ static CURLMcode cat_curl_multi_wait_impl(
         do {
             cat_msec_t new_start_line = cat_time_msec_cached();
             timeout -= (new_start_line - start_line);
-            start_line = new_start_line;
             if (timeout <= 0) {
                 /* timeout */
                 goto _out;
             }
+            start_line = new_start_line;
         } while (0);
     }
 
