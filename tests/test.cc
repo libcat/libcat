@@ -227,6 +227,7 @@ public:
     virtual void SetUp()
     {
         ASSERT_TRUE(cat_module_init_all());
+        ASSERT_TRUE(cat_http_module_init());
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_module_init());
 #endif

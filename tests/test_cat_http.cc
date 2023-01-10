@@ -19,8 +19,6 @@
 
 #include "test.h"
 
-#include "cat_http.h"
-
 static const cat_const_string_t request_get = cat_const_string(
     "GET /get HTTP/1.1\r\n"
     "Host: www.foo.com\r\n"
@@ -249,7 +247,7 @@ TEST(cat_http_parser, finish_unsafe)
     parser->llhttp.finish = HTTP_FINISH_UNSAFE;
     ASSERT_FALSE(cat_http_parser_finish(parser));
     ASSERT_STREQ("Invalid EOF state", parser->llhttp.reason);
-    ASSERT_EQ(HPE_INVALID_EOF_STATE, cat_get_last_error_code());
+    ASSERT_EQ(CAT_EHP_INVALID_EOF_STATE, cat_get_last_error_code());
     ASSERT_STREQ("HTTP-Parser finish failed: Invalid EOF state", cat_get_last_error_message());
 }
 
@@ -340,7 +338,7 @@ TEST(cat_http_parser, get_protocol_version_unknown)
             "\r\n"
         );
         ASSERT_FALSE(cat_http_parser_execute(parser, request_bad.data, request_bad.length));
-        ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_PARSER_E_INVALID_VERSION);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_INVALID_VERSION);
     }
     {
         const cat_const_string_t request_unknown = cat_const_string(
@@ -620,7 +618,7 @@ static struct {
         "X-Not-boundary: %s\r\n"
         "Content-Type: MultiPart/fORm\r\n"
         "\r\n"
-    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
+    ), CAT_EHP_MULTIPART_HEADER },
     // no boundary
     { cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -630,7 +628,7 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;miao=%s  ;\r\n"
         "\r\n"
-    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
+    ), CAT_EHP_MULTIPART_HEADER },
     // duplicate content-type
     { cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -641,7 +639,7 @@ static struct {
         "Content-Type: application/json  ;\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;boundary=%s  ;\r\n"
         "\r\n"
-    ), CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE },
+    ), CAT_EHP_DUPLICATE_CONTENT_TYPE },
     // duplicate content-type
     { cat_const_string(
         "HTTP/1.1 206 Partial Content\r\n"
@@ -652,7 +650,7 @@ static struct {
         "Content-Type: multipart/byteranges;\t boundary=%s\r\n"
         "Content-Type: application/json\r\n"
         "\r\n"
-    ), CAT_HTTP_PARSER_E_DUPLICATE_CONTENT_TYPE },
+    ), CAT_EHP_DUPLICATE_CONTENT_TYPE },
     // duplicate boundary
     { cat_const_string(
         "HTTP/1.1 206 Partial Content\r\n"
@@ -662,7 +660,7 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
         "\r\n"
-    ), CAT_HTTP_PARSER_E_MULTIPART_HEADER },
+    ), CAT_EHP_MULTIPART_HEADER },
 };
 
 static struct {
@@ -1403,7 +1401,7 @@ TEST(cat_http_parser, multipart_bad_boundaries)
             while (true) {
                 if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST_HTTP, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
-                    ASSERT_EQ(cat_get_last_error_code(), CAT_HTTP_PARSER_E_MULTIPART_HEADER);
+                    ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART_HEADER);
                     break;
                 }
                 ASSERT_FALSE(cat_http_parser_is_completed(&parser));

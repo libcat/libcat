@@ -26,6 +26,9 @@
 
 #include "cat_api.h"
 
+/* optional, not always included in api.h */
+#include "cat_http.h"
+
 /* ext, not enabled by default */
 #include "cat_curl.h"
 
