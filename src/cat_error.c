@@ -109,9 +109,10 @@ CAT_API void cat_set_last_error(cat_errno_t code, char *message)
 
 CAT_API void cat_show_last_error(void)
 {
+    cat_errno_t code = cat_get_last_error_code();
     CAT_LOG_INFO(
-        ERROR,  "last_error = { code: %s, message: '%s' }",
-        cat_strerrno(cat_get_last_error_code()), cat_get_last_error_message()
+        ERROR,  "last_error = { code: " CAT_ERRNO_FMT " (%s), message: '%s' }",
+        code, cat_strerrno(code), cat_get_last_error_message()
     );
 }
 
