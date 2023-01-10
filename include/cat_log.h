@@ -209,7 +209,7 @@ typedef struct cat_log_globals_s {
 #define CAT_LOG_PARAMETERS \
     CAT_LOG_PARAMETERS_WITHOUT_ARGS, ...
 
-#define CAT_LOG_VA_PARAMETERS \
+#define CAT_LOG_VA_LIST_PARAMETERS \
     CAT_LOG_PARAMETERS_WITHOUT_ARGS, va_list args
 
 #ifdef CAT_SOURCE_POSITION
@@ -230,7 +230,7 @@ extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
 
 CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length);
 
-CAT_API void cat_log_va_standard(CAT_LOG_VA_PARAMETERS);
+CAT_API void cat_log_va_list_standard(CAT_LOG_VA_LIST_PARAMETERS);
 CAT_API void cat_log_standard(CAT_LOG_PARAMETERS);
 
 /* Notice: n will be limited to CAT_LOG_G(str_size) if it exceed CAT_LOG_G(str_size) */
