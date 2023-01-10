@@ -50,18 +50,15 @@ CAT_API void cat_clear_last_error(void)
     }
 }
 
-CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...)
+CAT_API void cat_update_last_error_va_list(cat_errno_t code, const char *format, va_list args)
 {
-    va_list args;
     char *message;
 
     if (format == NULL) {
         message = NULL;
     } else {
         /* Notice: new message maybe relying on the previous message */
-        va_start(args, format);
         message = cat_vsprintf(format, args);
-        va_end(args);
         if (unlikely(message == NULL)) {
             fprintf(CAT_LOG_G(error_output), "Sprintf last error message failed\n");
             return;
@@ -69,6 +66,18 @@ CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...)
     }
 
     cat_set_last_error(code, message);
+}
+
+CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...)
+{
+    if (format == NULL) {
+        cat_set_last_error(code, NULL);
+    } else {
+        va_list args;
+        va_start(args, format);
+        cat_update_last_error_va_list(code, format, args);
+        va_end(args);
+    }
 }
 
 CAT_API void cat_set_last_error_code(cat_errno_t code)

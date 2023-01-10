@@ -87,6 +87,7 @@ typedef enum cat_ret_e {
 CAT_API cat_errno_t cat_get_last_error_code(void);
 CAT_API const char *cat_get_last_error_message(void);
 CAT_API void cat_clear_last_error(void);
+CAT_API void cat_update_last_error_va_list(cat_errno_t code, const char *format, va_list args);
 CAT_API void cat_update_last_error(cat_errno_t code, const char *format, ...) CAT_ATTRIBUTE_FORMAT(printf, 2, 3);
 CAT_API void cat_set_last_error_code(cat_errno_t code);
 CAT_API void cat_set_last_error(cat_errno_t code, char *message); CAT_INTERNAL
