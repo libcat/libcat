@@ -72,17 +72,20 @@ typedef enum uv_errno_ext_e {
 #undef CAT_ERRNO_EXT_GEN
 } uv_errno_ext_t;
 
-typedef enum cat_errnos_e {
+typedef enum cat_standard_errno_e {
 #define CAT_ERRNO_GEN(code, unused) CAT_ ## code = UV_ ## code,
     CAT_ERRNO_MAP(CAT_ERRNO_GEN)
 #undef CAT_ERRNO_GEN
-} cat_errnos_t;
+} cat_standard_errno_t;
 
 typedef enum cat_ret_e {
     CAT_RET_ERROR    = -1,
     CAT_RET_NONE     = 0,
     CAT_RET_OK       = 1,
 } cat_ret_t;
+
+void cat_error_module_init(void);
+void cat_error_module_shutdown(void);
 
 CAT_API cat_errno_t cat_get_last_error_code(void);
 CAT_API const char *cat_get_last_error_message(void);
@@ -140,7 +143,18 @@ CAT_API CAT_NORETURN void cat_abort(void);
 #define cat_translate_sys_error(error)  ((cat_errno_t) uv_translate_sys_error(error))
 #endif
 
+/* error stringify */
+
+typedef const char *(*cat_error_stringify_t)(cat_errno_t error);
+typedef cat_error_stringify_t cat_strerror_t;
+typedef cat_error_stringify_t cat_strerrno_t;
+
 CAT_API const char *cat_strerror(cat_errno_t error);
 CAT_API const char *cat_strerrno(cat_errno_t error);
+
+CAT_API void cat_strerror_handler_register(cat_strerror_t function);
+CAT_API void cat_strerrno_handler_register(cat_strerrno_t function);
+
+/* ori sys error */
 
 CAT_API int cat_orig_errno(cat_errno_t error);
