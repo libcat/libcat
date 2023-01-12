@@ -2950,7 +2950,7 @@ CAT_API CAT_BUFFER_STR_FREE char *cat_socket_write_vector_str(const cat_socket_w
         if (i > 0) {
             cat_buffer_append_str(&buffer, ", ");
         }
-        cat_buffer_append_str(&buffer, "{");
+        cat_buffer_append_char(&buffer, '{');
         if (cat_buffer_prepare(&buffer, need_size)) {
             size_t length = buffer.size - buffer.length;
             cat_str_quote_ex2(vector[i].base, show_length, buffer.value + buffer.length, &length, CAT_STR_QUOTE_STYLE_FLAG_NONE, NULL);
