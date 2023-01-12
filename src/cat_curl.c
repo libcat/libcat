@@ -199,6 +199,16 @@ static CURLcode cat_curl_easy_perform_impl(CURL *ch)
     }
 
     while (1) {
+        /* workaround for cURL with OpenSSL 3.0 bug... */
+        mcode = curl_multi_perform(context.multi, &running_handles);
+        CAT_LOG_DEBUG(CURL, "curl_multi_perform(ch: %p, running_handles: %d) = %d (%s) workaround",
+            ch, running_handles, mcode, curl_multi_strerror(mcode));
+        if (unlikely(mcode != CURLM_OK)) {
+            goto _error;
+        }
+        if (running_handles == 0) {
+            break;
+        }
         if (context.sockfd == CURL_SOCKET_BAD) {
             CAT_LOG_DEBUG(CURL, "curl_time_delay(ch: %p, timeout: %ld) when sockfd is BAD", ch, context.timeout);
             cat_ret_t ret = cat_time_delay(context.timeout);
@@ -208,16 +218,6 @@ static CURLcode cat_curl_easy_perform_impl(CURL *ch)
             mcode = curl_multi_socket_action(context.multi, CURL_SOCKET_TIMEOUT, 0, &running_handles);
             CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(ch: %p, CURL_SOCKET_TIMEOUT) = %d (%s) after delay",
                 ch, mcode, curl_multi_strerror(mcode));
-            if (running_handles == 0) {
-                break;
-            }
-            /* workaround for cURL with OpenSSL 3.0 bug... */
-            mcode = curl_multi_perform(context.multi, &running_handles);
-            CAT_LOG_DEBUG(CURL, "curl_multi_perform(ch: %p, running_handles: %d) = %d (%s) workaround",
-                ch, running_handles, mcode, curl_multi_strerror(mcode));
-            if (unlikely(mcode != CURLM_OK)) {
-                goto _error;
-            }
             if (running_handles == 0) {
                 break;
             }
@@ -458,6 +458,15 @@ static CURLMcode cat_curl_multi_wait_impl(
     CAT_ASSERT(context != NULL);
 
     while (1) {
+        /* workaround for alpine bug <hyperf-dockerfile:8.1-alpine-3.17-swow-0.3.2-alpha>
+         * (version_number: 481024, version: 7.87.0, host: x86_64-alpine-linux-musl, with OpenSSL/3.0.7)
+         * TODO: optimize it, do not always do that... */
+        mcode = curl_multi_perform(multi, running_handles);
+        CAT_LOG_DEBUG(CURL, "curl_multi_perform(multi: %p, running_handles: %d) = %d (%s) (workaround)",
+            multi, *running_handles, mcode, curl_multi_strerror(mcode));
+        if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
+            goto _out;
+        }
         if (context->nfds == 0) {
             cat_timeout_t op_timeout = cat_curl_timeout_min(context->timeout, timeout);
             cat_ret_t ret;
@@ -469,15 +478,6 @@ static CURLMcode cat_curl_multi_wait_impl(
             mcode = curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
             CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(multi: %p, CURL_SOCKET_TIMEOUT) = %d (%s) after delay",
                 multi, mcode, curl_multi_strerror(mcode));
-            if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
-                goto _out;
-            }
-            /* workaround for alpine bug <hyperf-dockerfile:8.1-alpine-3.17-swow-0.3.2-alpha>
-             * (version_number: 481024, version: 7.87.0, host: x86_64-alpine-linux-musl, with OpenSSL/3.0.7)
-             * TODO: optimize it, do not always do that... */
-            mcode = curl_multi_perform(multi, running_handles);
-            CAT_LOG_DEBUG(CURL, "curl_multi_perform(multi: %p, running_handles: %d) = %d (%s) (workaround)",
-                multi, *running_handles, mcode, curl_multi_strerror(mcode));
             if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
                 goto _out;
             }
