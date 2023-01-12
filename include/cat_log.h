@@ -222,8 +222,6 @@ typedef struct cat_log_globals_s {
 #define CAT_LOG_ATTRIBUTES CAT_ATTRIBUTE_PTR_FORMAT(printf, 4, 5)
 #endif
 
-#define CAT_LOG_UNFINISHED_FMT "<unfinished ...>"
-
 typedef void (*cat_log_t)(CAT_LOG_PARAMETERS);
 
 extern CAT_API cat_log_t cat_log_function CAT_LOG_ATTRIBUTES;
@@ -238,6 +236,9 @@ CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str)
 /* Notice: n will not be limited anyway */
 CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char **tmp_str); CAT_FREE
 
+#define CAT_LOG_UNFILLED_STR "..."
+#define CAT_LOG_UNFINISHED_FMT "<unfinished ...>"
+
 #define CAT_LOG_STRERRNO_FMT "%s%s%s"
 #define CAT_LOG_STRERRNO_C(ret, error) \
             (ret) ? "" : " (", \
@@ -249,10 +250,20 @@ CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char 
         cat_bool_str(ret), \
         CAT_LOG_STRERRNO_C(ret, cat_get_last_error_code())
 
+#define CAT_LOG_RET_RET_FMT "%s" CAT_LOG_STRERRNO_FMT
+#define CAT_LOG_RET_RET_C(n) \
+            cat_ret_str(n), \
+            CAT_LOG_STRERRNO_C(n != CAT_RET_ERROR, cat_get_last_error_code())
+
 #define CAT_LOG_ERROR_RET_FMT CAT_ERRNO_FMT CAT_LOG_STRERRNO_FMT
 #define CAT_LOG_ERROR_RET_C(error) \
             error, \
             CAT_LOG_STRERRNO_C(error == 0, error)
+
+#define CAT_LOG_INT_RET_FMT "%d" CAT_LOG_STRERRNO_FMT
+#define CAT_LOG_INT_RET_C(n) \
+            n, \
+            CAT_LOG_STRERRNO_C(n >= 0, cat_get_last_error_code())
 
 #define CAT_LOG_SSIZE_RET_FMT "%zd" CAT_LOG_STRERRNO_FMT
 #define CAT_LOG_SSIZE_RET_C(n) \
