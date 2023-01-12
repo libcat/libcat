@@ -268,7 +268,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
 
     CAT_LOG_DEBUG_VA(POLL, {
         char *events_str = cat_pollfd_events_str(events);
-        CAT_LOG_DEBUG_D(POLL, "poll_one(fd=" CAT_OS_SOCKET_FMT ", events=%s, *revents=" CAT_LOG_UNFILLED_STR ", timeout=" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_FMT,
+        CAT_LOG_DEBUG_D(POLL, "poll_one(fd=" CAT_OS_SOCKET_FMT ", events=%s, *revents=" CAT_LOG_UNFILLED_STR ", timeout=" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
             fd, events_str, timeout);
         cat_buffer_str_free(events_str);
     });
@@ -515,7 +515,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 {
     CAT_LOG_DEBUG_VA(POLL, {
         char *fds_str = cat_pollfds_str(fds, nfds, cat_false);
-        CAT_LOG_DEBUG_D(POLL, "poll(fds=%s, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_FMT, fds_str, (size_t) nfds, timeout);
+        CAT_LOG_DEBUG_D(POLL, "poll(fds=%s, nfds=%zu, timeout=" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR, fds_str, (size_t) nfds, timeout);
         cat_buffer_str_free(fds_str);
     });
 

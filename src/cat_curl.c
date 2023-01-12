@@ -272,7 +272,7 @@ static CURLcode cat_curl_easy_perform_impl(CURL *ch)
 
 CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
 {
-    CAT_LOG_DEBUG(CURL, "easy_perform(ch: %p) = " CAT_LOG_UNFINISHED_FMT, ch);
+    CAT_LOG_DEBUG(CURL, "easy_perform(ch: %p) = " CAT_LOG_UNFINISHED_STR, ch);
 
     CURLcode code = cat_curl_easy_perform_impl(ch);
 
@@ -564,7 +564,7 @@ CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
         running_handles = &_running_handles;
     }
 
-    CAT_LOG_DEBUG(CURL, "multi_perform(multi: %p, running_handles: %d) = " CAT_LOG_UNFINISHED_FMT, multi, *running_handles);
+    CAT_LOG_DEBUG(CURL, "multi_perform(multi: %p, running_handles: %d) = " CAT_LOG_UNFINISHED_STR, multi, *running_handles);
 
     /* this way even can solve the problem of CPU 100% if we perform in while loop */
     CURLMcode code = cat_curl_multi_wait_impl(multi, NULL, 0, 0, NULL, running_handles);
@@ -587,7 +587,7 @@ CAT_API CURLMcode cat_curl_multi_wait(
         numfds = &_numfds;
     }
 
-    CAT_LOG_DEBUG(CURL, "multi_wait(multi: %p, timeout_ms: %d, numfds: %d) = " CAT_LOG_UNFINISHED_FMT, multi, timeout_ms, *numfds);
+    CAT_LOG_DEBUG(CURL, "multi_wait(multi: %p, timeout_ms: %d, numfds: %d) = " CAT_LOG_UNFINISHED_STR, multi, timeout_ms, *numfds);
 
     CURLMcode mcode = cat_curl_multi_wait_impl(multi, extra_fds, extra_nfds, timeout_ms, numfds, running_handles);
 

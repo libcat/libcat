@@ -237,7 +237,7 @@ CAT_API const char *cat_log_str_quote(const char *str, size_t n, char **tmp_str)
 CAT_API const char *cat_log_str_quote_unlimited(const char *str, size_t n, char **tmp_str); CAT_FREE
 
 #define CAT_LOG_UNFILLED_STR "..."
-#define CAT_LOG_UNFINISHED_FMT "<unfinished ...>"
+#define CAT_LOG_UNFINISHED_STR "<unfinished ...>"
 
 #define CAT_LOG_STRERRNO_FMT "%s%s%s"
 #define CAT_LOG_STRERRNO_C(ret, error) \
