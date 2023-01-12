@@ -78,12 +78,6 @@ typedef enum cat_standard_errno_e {
 #undef CAT_ERRNO_GEN
 } cat_standard_errno_t;
 
-typedef enum cat_ret_e {
-    CAT_RET_ERROR    = -1,
-    CAT_RET_NONE     = 0,
-    CAT_RET_OK       = 1,
-} cat_ret_t;
-
 void cat_error_module_init(void);
 void cat_error_module_shutdown(void);
 
