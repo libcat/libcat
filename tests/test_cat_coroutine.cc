@@ -526,16 +526,23 @@ TEST(cat_coroutine, resume_dead)
 
 TEST(cat_coroutine, resume_running)
 {
-    co([] {
-        co([] {
-            cat_coroutine_t *coroutine = cat_coroutine_get_current();
+    // now we are 1-2-3
+    cat_coroutine_t *coroutine2 = co([&] {
+        cat_coroutine_t *coroutine3;
+        co([&] {
+            coroutine3 = cat_coroutine_get_current();
+            // cross resume (2-3-1)
             ASSERT_TRUE(cat_coroutine_resume(
                 cat_coroutine_get_previous(
-                    cat_coroutine_get_previous(coroutine)
+                    cat_coroutine_get_previous(coroutine3)
                 ), nullptr, nullptr
             ));
         });
+        // recover2 (1-2-3)
+        ASSERT_TRUE(cat_coroutine_resume(coroutine3, nullptr, nullptr));
     });
+    // recover1 (3-1-2)
+    ASSERT_TRUE(cat_coroutine_resume(coroutine2, nullptr, nullptr));
 }
 
 TEST(cat_coroutine, resume_scheduler)
@@ -568,6 +575,21 @@ TEST(cat_coroutine, deadlock_callback)
     DEFER(cat_coroutine_set_deadlock_callback(nullptr));
 
     ASSERT_DEATH_IF_SUPPORTED(cat_coroutine_yield(nullptr, nullptr), "User deadlock callback");
+}
+
+TEST(cat_coroutine, set_mesc_time_function)
+{
+    cat_coroutine_msec_time_function_t original_function =
+        cat_coroutine_set_msec_time_function(cat_time_msec2);
+    cat_msec_t msec = cat_time_msec2();
+    cat_coroutine_t *coroutine = cat_coroutine_run(nullptr, [](cat_data_t *data) -> cat_data_t * {
+        cat_coroutine_yield(nullptr, nullptr);
+        return nullptr;
+    }, nullptr);
+    cat_msec_t diff = coroutine->start_time > msec ? coroutine->start_time - msec : msec - coroutine->start_time;
+    ASSERT_LT(diff, 10);
+    ASSERT_EQ((void *) cat_coroutine_set_msec_time_function(original_function), (void *) cat_time_msec2);
+    ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
 }
 
 TEST(cat_coroutine, get_role_name)
