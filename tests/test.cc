@@ -394,7 +394,6 @@ TEST(test, defer)
     foo = true;
 }
 
-
 TEST(test, wait_group)
 {
     bool done[10] = { false };
