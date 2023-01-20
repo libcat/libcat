@@ -604,9 +604,14 @@ CAT_API cat_bool_t cat_curl_module_init(void)
 
 #ifdef CAT_DEBUG
     curl_version_info_data *curl_vid = curl_version_info(CURLVERSION_NOW);
-    if (curl_vid->version_num != LIBCURL_VERSION_NUM) {
+    int curl_major_version = curl_vid->version_num >> 16;
+    int curl_minor_version = (curl_vid->version_num >> 8) & 0xFF;
+    /* cURL ABI is stable, we just pay attention to new features,
+     * so it should running with same or higher major and minor version */
+    if (curl_major_version < LIBCURL_VERSION_MAJOR ||
+        (curl_major_version == LIBCURL_VERSION_MAJOR && curl_minor_version < LIBCURL_VERSION_MINOR)) {
         CAT_MODULE_ERROR(CURL, "cURL version mismatch, built with \"%s\", but running with \"%s\"",
-            curl_vid->version, curl_version());
+            LIBCURL_VERSION, curl_vid->version);
     }
 #endif
 
