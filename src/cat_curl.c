@@ -306,7 +306,7 @@ static int cat_curl_multi_socket_function(
             fd->sockfd = sockfd;
             curl_multi_assign(multi, sockfd, fd);
         }
-        fd->action = action;
+        fd->action |= action;
     } else {
         cat_queue_remove(&fd->node);
         cat_free(fd);
