@@ -351,7 +351,7 @@ static void cat_poll_callback(uv_poll_t* handle, int status, int revents)
     poll->revents = revents;
 
     if (!context->deferred_done_callback) {
-        (void) cat_event_defer_ex(cat_poll_done_callback, context, cat_true);
+        (void) cat_event_io_defer(cat_poll_done_callback, context);
         context->deferred_done_callback = cat_true;
     }
 }

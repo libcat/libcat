@@ -125,7 +125,7 @@ static void cat_timer_close_callback(uv_handle_t *handle)
     cat_free(timer);
 }
 
-static cat_timer_t *cat_timer_wait(cat_msec_t msec)
+static cat_timer_t *cat_timer_wait_impl(cat_msec_t msec)
 {
     cat_timer_t *timer;
     cat_bool_t ret;
@@ -141,12 +141,6 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
     (void) uv_timer_init(&CAT_EVENT_G(loop), &timer->timer);
     (void) uv_timer_start(&timer->timer, cat_timer_callback, msec, 0);
 
-    CAT_LOG_DEBUG_VA(TIME, {
-        char *s = cat_time_format_msec(msec);
-        CAT_LOG_DEBUG_D(TIME, "Sleep %s", s);
-        cat_free(s);
-    });
-
     timer->coroutine = CAT_COROUTINE_G(current);
 
     ret = cat_coroutine_yield(NULL, NULL);
@@ -157,6 +151,22 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
         cat_update_last_error_with_previous("Time sleep failed");
         return NULL;
     }
+
+    return timer;
+}
+
+static cat_always_inline cat_timer_t *cat_timer_wait(cat_msec_t msec)
+{
+    CAT_LOG_DEBUG(TIME, "timer_wait(" CAT_MSEC_FMT ") = " CAT_LOG_UNFINISHED_STR, msec);
+
+    cat_timer_t *timer = cat_timer_wait_impl(msec);
+
+    CAT_LOG_DEBUG_VA(TIME, {
+        cat_bool_t has_diff = timer != NULL && timer->coroutine != NULL;
+        int64_t diff = has_diff ? ((int64_t) CAT_EVENT_G(loop).time) - ((int64_t) timer->timer.timeout) : 0;
+        CAT_LOG_DEBUG_D(TIME, "timer_wait(" CAT_MSEC_FMT ") = %" PRId64 CAT_LOG_STRERRNO_FMT,
+            msec, diff, CAT_LOG_STRERRNO_C(diff == 0, cat_get_last_error_code()));
+    });
 
     return timer;
 }
