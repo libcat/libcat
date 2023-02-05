@@ -405,7 +405,8 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     if (unlikely(++CAT_COROUTINE_G(count) > CAT_COROUTINE_G(peak_count))) {
         CAT_COROUTINE_G(peak_count) = CAT_COROUTINE_G(count);
     }
-    CAT_LOG_DEBUG(COROUTINE, "Start (count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(count));
+    CAT_LOG_DEBUG(COROUTINE, "coroutine_start(" CAT_COROUTINE_ID_FMT ") (count: " CAT_COROUTINE_COUNT_FMT ")",
+       coroutine->id, CAT_COROUTINE_G(count));
 #if defined(CAT_COROUTINE_USE_BOOST_CONTEXT)
     /* update origin's context */
     coroutine->from->context = transfer.from_context;
@@ -421,7 +422,8 @@ static void cat_coroutine_context_function(cat_coroutine_transfer_t transfer)
     coroutine->end_time = cat_coroutine_msec_time();
     /* finished */
     CAT_COROUTINE_G(count)--;
-    CAT_LOG_DEBUG(COROUTINE, "Finished (count=" CAT_COROUTINE_COUNT_FMT ")", CAT_COROUTINE_G(count));
+    CAT_LOG_DEBUG(COROUTINE, "coroutine_finish(" CAT_COROUTINE_ID_FMT ") (count: " CAT_COROUTINE_COUNT_FMT ")",
+        coroutine->id, CAT_COROUTINE_G(count));
     /* mark as dead */
     coroutine->state = CAT_COROUTINE_STATE_DEAD;
     /* yield to previous */
@@ -582,15 +584,15 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->asan_stack_size = stack_size;
 #endif
 #ifndef CAT_COROUTINE_USE_THREAD_CONTEXT
-    CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " "
-        "with stack = %p, stack_size = %zu, function = %p, "
-        "virtual_memory = %p, virtual_memory_size = %zu",
-        coroutine->id, stack, stack_size, function,
-        virtual_memory, virtual_memory_size);
+    CAT_LOG_DEBUG(COROUTINE, "coroutine_create(function: %p, stack_size: %zu) = R" CAT_COROUTINE_ID_FMT " "
+        "{ stack: %p, virtual_memory: %p, virtual_memory_size: %zu }",
+        function, stack_size,
+        coroutine->id, stack, virtual_memory, virtual_memory_size);
 #else
-    CAT_LOG_DEBUG(COROUTINE, "Create R" CAT_COROUTINE_ID_FMT " "
-        "with tid = %" PRId64 ", stack_size = %zu, function = %p, ",
-        coroutine->id, (int64_t) coroutine->context, stack_size, function);
+    CAT_LOG_DEBUG(COROUTINE, "coroutine_create(function: %p, stack_size: %zu) = R" CAT_COROUTINE_ID_FMT " "
+        "{ tid: %" PRId64 " }",
+        function, stack_size,
+        coroutine->id, (int64_t) coroutine->context);
 #endif
 
     return coroutine;
@@ -598,7 +600,7 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
 
 CAT_API void cat_coroutine_free(cat_coroutine_t *coroutine)
 {
-    CAT_LOG_DEBUG(COROUTINE, "Close R" CAT_COROUTINE_ID_FMT, coroutine->id);
+    CAT_LOG_DEBUG(COROUTINE, "coroutine_close(id: " CAT_COROUTINE_ID_FMT ")", coroutine->id);
     CAT_ASSERT(!cat_coroutine_is_alive(coroutine) && "Coroutine can not be forced to close when it is running or waiting");
 #ifdef CAT_COROUTINE_USE_THREAD_CONTEXT
     if (coroutine->start_time == 0) {
@@ -761,9 +763,9 @@ static cat_always_inline cat_bool_t cat_coroutine_check_resumability(const cat_c
     CAT_LOG_DEBUG_VA(COROUTINE, { \
         const char *name = cat_coroutine_get_role_name(to); \
         if (name != NULL) { \
-            CAT_LOG_DEBUG_D(COROUTINE, "%s to %s", #action, name); \
+            CAT_LOG_DEBUG_D(COROUTINE, "coroutine_" #action "(to: %s)", name); \
         } else { \
-            CAT_LOG_DEBUG_D(COROUTINE, "%s to R" CAT_COROUTINE_ID_FMT, #action, to->id); \
+            CAT_LOG_DEBUG_D(COROUTINE, "coroutine_" #action "(to: " CAT_COROUTINE_ID_FMT ")", to->id); \
         } \
     });
 
