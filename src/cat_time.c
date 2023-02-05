@@ -165,7 +165,7 @@ static cat_always_inline cat_timer_t *cat_timer_wait(cat_msec_t msec)
         cat_bool_t has_diff = timer != NULL && timer->coroutine != NULL;
         int64_t diff = has_diff ? ((int64_t) CAT_EVENT_G(loop).time) - ((int64_t) timer->timer.timeout) : 0;
         CAT_LOG_DEBUG_D(TIME, "timer_wait(" CAT_MSEC_FMT ") = %" PRId64 CAT_LOG_STRERRNO_FMT,
-            msec, diff, CAT_LOG_STRERRNO_C(diff == 0, cat_get_last_error_code()));
+            msec, diff, CAT_LOG_STRERRNO_C(diff == 0, timer == NULL ? cat_get_last_error_code() : CAT_ECANCELED));
     });
 
     return timer;
