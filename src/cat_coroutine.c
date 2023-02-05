@@ -36,10 +36,10 @@
  * if memleak ocurred (e.g. fatal error),
  * so we can not protect memory if ASan is enabled */
 #if defined(CAT_DEBUG) && !defined(CAT_COROUTINE_USE_ASAN) && defined(CAT_COROUTINE_USE_USER_STACK)
-# define CAT_COROUTINE_USE_MEMORY_PROTECT 1
+# define CAT_COROUTINE_MEMORY_PROTECT_SUPPORT 1
 #endif
 
-#if defined(CAT_OS_UNIX_LIKE) && (defined(CAT_COROUTINE_USE_MMAP) || defined(CAT_COROUTINE_USE_MEMORY_PROTECT))
+#if defined(CAT_OS_UNIX_LIKE) && (defined(CAT_COROUTINE_USE_MMAP) || defined(CAT_COROUTINE_MEMORY_PROTECT_SUPPORT))
 # include <sys/mman.h> /* for mmap()/mprotect() */
 #endif
 
@@ -62,7 +62,7 @@
 # define CAT_COROUTINE_MEMORY_INVALID NULL
 #endif
 
-#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+#ifdef CAT_COROUTINE_MEMORY_PROTECT_SUPPORT
 # ifdef CAT_COROUTINE_USE_SYS_MALLOC
 #  define CAT_COROUTINE_STACK_PADDING_PAGE_COUNT 2
 # else
@@ -126,6 +126,10 @@ cat_coroutine_transfer_t cat_coroutine_context_jump(cat_coroutine_context_t cons
 
 /* coroutine */
 
+#ifdef CAT_COROUTINE_MEMORY_PROTECT_SUPPORT
+static cat_bool_t cat_coroutine_use_memory_protect = cat_false;
+#endif
+
 static cat_coroutine_msec_time_function_t cat_coroutine_msec_time = NULL;
 
 static cat_coroutine_stack_size_t cat_coroutine_align_stack_size(size_t size)
@@ -149,6 +153,9 @@ CAT_API CAT_GLOBALS_DECLARE(cat_coroutine);
 CAT_API cat_bool_t cat_coroutine_module_init(void)
 {
     CAT_GLOBALS_REGISTER(cat_coroutine);
+#ifdef CAT_COROUTINE_MEMORY_PROTECT_SUPPORT
+    cat_coroutine_use_memory_protect = cat_env_is_true("CAT_COROUTINE_USE_MEMORY_PROTECT", cat_false);
+#endif
     cat_coroutine_msec_time = cat_time_msec;
     return cat_true;
 }
@@ -511,10 +518,10 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     stack = ((char *) virtual_memory) + padding_size;
     stack_start = ((char *) stack) + stack_size;
 
-#ifdef CAT_COROUTINE_USE_MEMORY_PROTECT
+#ifdef CAT_COROUTINE_MEMORY_PROTECT_SUPPORT
     /* protect a page of memory after the stack top
      * to notify stack overflow */
-    do {
+    if (cat_coroutine_use_memory_protect) {
         void *page = virtual_memory;
         cat_bool_t ret;
 # ifdef CAT_COROUTINE_USE_SYS_MALLOC
@@ -531,8 +538,8 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Protect stack page failed");
         }
-    } while (0);
-#endif /* CAT_COROUTINE_USE_MEMORY_PROTECT */
+    }
+#endif /* CAT_COROUTINE_MEMORY_PROTECT_SUPPORT */
 #endif /* CAT_COROUTINE_USE_USER_STACK */
 
     /* make context */
@@ -603,8 +610,8 @@ CAT_API void cat_coroutine_free(cat_coroutine_t *coroutine)
 #ifdef CAT_HAVE_VALGRIND
     VALGRIND_STACK_DEREGISTER(coroutine->valgrind_stack_id);
 #endif
-#if defined(CAT_COROUTINE_USE_MEMORY_PROTECT) && defined(CAT_COROUTINE_USE_SYS_MALLOC)
-    do {
+#if defined(CAT_COROUTINE_MEMORY_PROTECT_SUPPORT) && defined(CAT_COROUTINE_USE_SYS_MALLOC)
+    if (cat_coroutine_use_memory_protect) {
         void *page = cat_getpageafter(coroutine->virtual_memory);
         cat_bool_t ret;
 # ifndef CAT_OS_WIN
@@ -617,7 +624,7 @@ CAT_API void cat_coroutine_free(cat_coroutine_t *coroutine)
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Unprotect stack page failed");
         }
-    } while (0);
+    }
 #endif
 #if defined(CAT_COROUTINE_USE_MMAP)
     munmap(coroutine->virtual_memory, coroutine->virtual_memory_size);
