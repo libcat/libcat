@@ -443,6 +443,14 @@ static cat_always_inline cat_timeout_t cat_curl_multi_timeout_solve(cat_timeout_
     return operation_timeout;
 }
 
+static cat_always_inline CURLMcode cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
+{
+    CURLMcode mcode = curl_multi_socket_action(multi, sockfd, action, running_handles);
+    CAT_LOG_DEBUG_V2(CURL, "curl_multi_socket_action(multi: %p, fd: %d, %s) = %d (%s)",
+        multi, sockfd, cat_curl_action_name(action), mcode, curl_multi_strerror(mcode));
+    return mcode;
+}
+
 static cat_always_inline CURLMcode cat_curl_multi_socket_all(CURLM *multi, int *running_handles)
 {
     CURLMcode mcode;
@@ -469,11 +477,12 @@ static CURLMcode cat_curl_multi_wait_impl(
 {
     cat_curl_multi_context_t *context;
     cat_pollfd_t *fds = NULL;
+    cat_bool_t use_stacked_fds = cat_false;
     CURLMcode mcode = CURLM_OK;
     cat_msec_t start_line = cat_time_msec_cached();
     cat_timeout_t timeout = timeout_ms; /* maybe reduced in the loop */
     int previous_running_handles;
-    int ret = 0;
+    int poll_rc = 0;
 
     /* TODO: Support it? */
     CAT_ASSERT(extra_fds == NULL && "Not support yet");
@@ -497,7 +506,7 @@ static CURLMcode cat_curl_multi_wait_impl(
             op_timeout = 1;
             while (1) {
                 cat_ret_t ret;
-                CAT_LOG_DEBUG(CURL, "curl_time_delay(multi: %p, timeout: " CAT_TIMEOUT_FMT ") when %s",
+                CAT_LOG_DEBUG_V2(CURL, "curl_time_delay(multi: %p, timeout: " CAT_TIMEOUT_FMT ") when %s",
                     multi, op_timeout, context->nfds == 0 ? "nfds is 0" : "timeout is tiny");
                 ret = cat_time_delay(op_timeout);
                 if (unlikely(ret != CAT_RET_OK)) {
@@ -523,76 +532,94 @@ static CURLMcode cat_curl_multi_wait_impl(
                 break;
             }
         } else {
-            cat_nfds_t i;
-            fds = (cat_pollfd_t *) cat_malloc(sizeof(*fds) * context->nfds);
-#if CAT_ALLOC_HANDLE_ERRORS
-            if (unlikely(fds == NULL)) {
-                mcode = CURLM_OUT_OF_MEMORY;
-                goto _out;
-            }
-#endif
-            i = 0;
-            CAT_QUEUE_FOREACH_DATA_START(&context->fds, cat_curl_pollfd_t, node, curl_fd) {
-                cat_pollfd_t *fd = &fds[i];
-                fd->fd = curl_fd->sockfd;
-                fd->events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
-                i++;
-            } CAT_QUEUE_FOREACH_DATA_END();
-            CAT_LOG_DEBUG(CURL, "poll() for multi<%p>", multi);
-            ret = cat_poll(fds, context->nfds, op_timeout);
-            if (unlikely(ret == CAT_RET_ERROR)) {
-                mcode = CURLM_OUT_OF_MEMORY; // or internal error?
-                goto _out;
-            }
-            if (ret != 0) {
-                cat_bool_t hit = cat_false;
-                for (i = 0; i < context->nfds; i++) {
+            if (context->nfds == 1) {
+                cat_curl_pollfd_t *curl_fd = cat_queue_front_data(&context->fds, cat_curl_pollfd_t, node);
+                CAT_LOG_DEBUG_V2(CURL, "poll_one() for multi<%p>", multi);
+                cat_pollfd_events_t events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
+                cat_pollfd_events_t revents;
+                cat_ret_t ret = cat_poll_one(
+                    curl_fd->sockfd,
+                    events,
+                    &revents,
+                    op_timeout
+                );
+                if (unlikely(ret == CAT_RET_ERROR)) {
+                    mcode = CURLM_OUT_OF_MEMORY; // or internal error?
+                    goto _out;
+                }
+                if (ret == CAT_RET_OK) {
+                    int action = cat_curl_translate_sys_events_to_action(events, revents);
+                    (void) cat_curl_multi_socket_action(multi, curl_fd->sockfd, action, running_handles);
+                    poll_rc = 1;
+                    goto _out;
+                }
+            } else {
+                cat_pollfd_t stacked_fds[8];
+                cat_nfds_t i;
+                use_stacked_fds = context->nfds <= 8;
+                if (use_stacked_fds) {
+                    fds = stacked_fds;
+                } else {
+                    fds = (cat_pollfd_t *) cat_malloc(sizeof(*fds) * context->nfds);
+    #if CAT_ALLOC_HANDLE_ERRORS
+                    if (unlikely(fds == NULL)) {
+                        mcode = CURLM_OUT_OF_MEMORY;
+                        goto _out;
+                    }
+    #endif
+                }
+                i = 0;
+                CAT_QUEUE_FOREACH_DATA_START(&context->fds, cat_curl_pollfd_t, node, curl_fd) {
                     cat_pollfd_t *fd = &fds[i];
-                    int action = cat_curl_translate_sys_events_to_action(fd->events, fd->revents);
-                    if (action != CURL_CSELECT_NONE) {
-                        hit = cat_true;
-                    }
-                    previous_running_handles = *running_handles;
-                    mcode = curl_multi_socket_action(multi, fd->fd, action, running_handles);
-                    CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(multi: %p, fd: %d, %s) = %d (%s)",
-                        multi, fd->fd, cat_curl_action_name(action), mcode, curl_multi_strerror(mcode));
-                    if (unlikely(mcode != CURLM_OK)) {
-                        continue; // shall we handle it?
-                    }
-                }
-                if (*running_handles < previous_running_handles) {
+                    fd->fd = curl_fd->sockfd;
+                    fd->events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
+                    i++;
+                } CAT_QUEUE_FOREACH_DATA_END();
+                CAT_LOG_DEBUG_V2(CURL, "poll() for multi<%p>", multi);
+                poll_rc = cat_poll(fds, context->nfds, op_timeout);
+                if (unlikely(poll_rc == CAT_RET_ERROR)) {
+                    mcode = CURLM_OUT_OF_MEMORY; // or internal error?
                     goto _out;
                 }
-                if (likely(hit)) {
+                if (poll_rc != 0) {
+                    for (i = 0; i < context->nfds; i++) {
+                        cat_pollfd_t *fd = &fds[i];
+                        int action = cat_curl_translate_sys_events_to_action(fd->events, fd->revents);
+                        (void) cat_curl_multi_socket_action(multi, fd->fd, action, running_handles);
+                    }
                     goto _out;
                 }
             }
+            // timeout case
             previous_running_handles = *running_handles;
             mcode = cat_curl_multi_socket_all(multi, running_handles);
             if (unlikely(mcode != CURLM_OK) || *running_handles < previous_running_handles) {
                 goto _out;
             }
-            cat_free(fds);
+            if (fds != NULL && !use_stacked_fds) {
+                cat_free(fds);
+            }
             fds = NULL;
         }
-        do {
+        if (timeout_ms >= 0) {
             cat_msec_t new_start_line = cat_time_msec_cached();
-            timeout -= (new_start_line - start_line);
-            if (timeout <= 0) {
+            cat_msec_t time_passed = new_start_line - start_line;
+            if (((cat_msec_t) timeout) < time_passed) {
                 /* timeout */
                 goto _out;
             }
+            timeout -= ((cat_timeout_t) time_passed);
             CAT_LOG_DEBUG_V2(CURL, "multi_wait() inner loop continue, remaining timeout is " CAT_TIMEOUT_FMT, timeout);
             start_line = new_start_line;
-        } while (0);
+        }
     }
 
     _out:
-    if (fds != NULL) {
+    if (fds != NULL && !use_stacked_fds) {
         cat_free(fds);
     }
     if (numfds != NULL) {
-        *numfds = ret;
+        *numfds = poll_rc;
     }
     return mcode;
 }
