@@ -53,6 +53,11 @@ TEST(cat_poll, base)
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
     ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    do {
+        cat_pollfd_events_t revents;
+        ASSERT_EQ(cat_poll_one(fd, POLLIN|POLLOUT, &revents, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_EQ(revents, POLLIN|POLLOUT);
+    } while (0);
     char buffer[CAT_STRLEN("Hello libcat")];
     ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
