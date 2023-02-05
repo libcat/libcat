@@ -17,23 +17,64 @@
  */
 
 #include "cat_curl.h"
+
+#ifdef CAT_CURL
+
 #include "cat_coroutine.h"
 #include "cat_event.h"
 #include "cat_poll.h"
 #include "cat_queue.h"
 #include "cat_time.h"
 
-#ifdef CAT_CURL
+#include "uv/tree.h"
+
+/* declarations */
+
+typedef struct cat_curl_pollfd_s {
+    cat_queue_node_t node;
+    curl_socket_t sockfd;
+    int action;
+} cat_curl_pollfd_t;
+
+typedef struct cat_curl_multi_context_s {
+    RB_ENTRY(cat_curl_multi_context_s) tree_entry;
+    CURLM *multi;
+    cat_queue_t waiters;
+    cat_queue_t fds;
+    cat_nfds_t nfds;
+    long timeout;
+} cat_curl_multi_context_t;
+
+RB_HEAD(cat_curl_multi_context_tree_s, cat_curl_multi_context_s);
+
+static int cat_curl__multi_context_compare(cat_curl_multi_context_t* c1, cat_curl_multi_context_t* c2)
+{
+    uintptr_t m1 = (uintptr_t) c1->multi;
+    uintptr_t m2 = (uintptr_t) c2->multi;
+    if (m1 < m2) {
+        return -1;
+    }
+    if (m1 > m2) {
+        return 1;
+    }
+    return 0;
+}
+
+RB_GENERATE_STATIC(cat_curl_multi_context_tree_s,
+                   cat_curl_multi_context_s, tree_entry,
+                   cat_curl__multi_context_compare);
+
+/* globals */
 
 CAT_GLOBALS_STRUCT_BEGIN(cat_curl) {
-    cat_queue_t multi_map;
+    struct cat_curl_multi_context_tree_s multi_tree;
 } CAT_GLOBALS_STRUCT_END(cat_curl);
 
 CAT_GLOBALS_DECLARE(cat_curl);
 
 #define CAT_CURL_G(x) CAT_GLOBALS_GET(cat_curl, x)
 
-/* common */
+/* utils */
 
 #define CURL_CSELECT_NONE 0
 
@@ -183,21 +224,6 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
 
 /* multi */
 
-typedef struct cat_curl_multi_context_s {
-    cat_queue_node_t node;
-    CURLM *multi;
-    cat_queue_t waiters;
-    cat_queue_t fds;
-    cat_nfds_t nfds;
-    long timeout;
-} cat_curl_multi_context_t;
-
-typedef struct cat_curl_pollfd_s {
-    cat_queue_node_t node;
-    curl_socket_t sockfd;
-    int action;
-} cat_curl_pollfd_t;
-
 static int cat_curl_multi_socket_function(
     CURL *ch, curl_socket_t sockfd, int action,
     cat_curl_multi_context_t *context, cat_curl_pollfd_t *fd)
@@ -260,9 +286,13 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
     cat_queue_init(&context->fds);
     context->nfds = 0;
     context->timeout = -1;
-    /* latest multi has higher priority
-     * (previous may leak and they would be free'd in shutdown) */
-    cat_queue_push_front(&CAT_CURL_G(multi_map), &context->node);
+    /* following is outdated comment, but I didn't understand
+     * the specific meaning, so I won't remove it yet:
+     *   latest multi has higher priority
+     *   (previous may leak and they would be free'd in shutdown)
+     * code before:
+     *   cat_queue_push_front(&CAT_CURL_G(multi_map), &context->node); */
+    RB_INSERT(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
 
     cat_curl_multi_configure(
         multi,
@@ -274,18 +304,11 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
     return context;
 }
 
-static cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
+static cat_always_inline cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
 {
-    CAT_QUEUE_FOREACH_DATA_START(&CAT_CURL_G(multi_map), cat_curl_multi_context_t, node, context) {
-        if (context->multi == NULL) {
-            return NULL; // eof
-        }
-        if (context->multi == multi) {
-            return context; // hit
-        }
-    } CAT_QUEUE_FOREACH_DATA_END();
-
-    return NULL;
+    cat_curl_multi_context_t lookup;
+    lookup.multi = multi;
+    return RB_FIND(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), &lookup);
 }
 
 static void cat_curl_multi_context_close(cat_curl_multi_context_t *context)
@@ -299,7 +322,7 @@ static void cat_curl_multi_context_close(cat_curl_multi_context_t *context)
     }
 #endif
     CAT_ASSERT(context->nfds == 0);
-    cat_queue_remove(&context->node);
+    RB_REMOVE(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
     cat_free(context);
 }
 
@@ -649,14 +672,13 @@ CAT_API cat_bool_t cat_curl_module_shutdown(void)
 
 CAT_API cat_bool_t cat_curl_runtime_init(void)
 {
-    cat_queue_init(&CAT_CURL_G(multi_map));
 
     return cat_true;
 }
 
 CAT_API cat_bool_t cat_curl_runtime_close(void)
 {
-    CAT_ASSERT(cat_queue_empty(&CAT_CURL_G(multi_map)));
+    CAT_ASSERT(RB_MIN(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree)) == NULL);
 
     return cat_true;
 }
