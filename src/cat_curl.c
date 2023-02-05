@@ -25,29 +25,6 @@
 
 #ifdef CAT_CURL
 
-typedef struct cat_curl_easy_context_s {
-    CURLM *multi;
-    cat_coroutine_t *coroutine;
-    curl_socket_t sockfd;
-    cat_pollfd_events_t events;
-    long timeout;
-} cat_curl_easy_context_t;
-
-typedef struct cat_curl_multi_context_s {
-    cat_queue_node_t node;
-    CURLM *multi;
-    cat_coroutine_t *coroutine;
-    cat_queue_t fds;
-    cat_nfds_t nfds;
-    long timeout;
-} cat_curl_multi_context_t;
-
-typedef struct cat_curl_pollfd_s {
-    cat_queue_node_t node;
-    curl_socket_t sockfd;
-    int action;
-} cat_curl_pollfd_t;
-
 CAT_GLOBALS_STRUCT_BEGIN(cat_curl) {
     cat_queue_t multi_map;
 } CAT_GLOBALS_STRUCT_END(cat_curl);
@@ -131,55 +108,21 @@ static const char *cat_curl_action_name(int action)
 
 /* easy */
 
-static int cat_curl_easy_socket_function(CURL *ch, curl_socket_t sockfd, int action, cat_curl_easy_context_t *context, void *unused)
-{
-    (void) ch;
-    (void) unused;
-    CAT_LOG_DEBUG(CURL, "curl_easy_socket_function(multi: %p, sockfd: %d, action=%s), timeout=%ld",
-        context->multi, sockfd, cat_curl_action_name(action), context->timeout);
-
-    /* make sure only 1 sockfd will be added */
-    CAT_ASSERT(context->sockfd == CURL_SOCKET_BAD || context->sockfd == sockfd);
-
-    context->sockfd = action != CURL_POLL_REMOVE ? sockfd : CURL_SOCKET_BAD;
-    context->events = cat_curl_translate_poll_flags_to_sys(action);
-
-    return 0;
-}
-
-static int cat_curl_easy_timeout_function(CURLM *multi, long timeout, cat_curl_easy_context_t *context)
-{
-    (void) multi;
-    CAT_LOG_DEBUG(CURL, "curl_easy_timeout_function(multi: %p, timeout=%ld)", multi, timeout);
-
-    context->timeout = timeout;
-
-    return 0;
-}
+static CURLMcode cat_curl_multi_wait_impl(CURLM *multi, int timeout_ms, int *numfds, int *running_handles);
 
 static CURLcode cat_curl_easy_perform_impl(CURL *ch)
 {
-    cat_curl_easy_context_t context;
+    CURLM *multi;
     CURLMsg *message = NULL;
-    CURLMcode mcode = CURLM_INTERNAL_ERROR;
     CURLcode code = CURLE_RECV_ERROR;
+    CURLMcode mcode;
     int running_handles;
 
-    context.multi = curl_multi_init();
-    if (unlikely(context.multi == NULL)) {
+    multi = cat_curl_multi_init();
+    if (unlikely(multi == NULL)) {
         return CURLE_OUT_OF_MEMORY;
     }
-    context.coroutine = CAT_COROUTINE_G(current);
-    context.sockfd = CURL_SOCKET_BAD;
-    context.timeout = -1;
-    context.events = POLLNONE;
-    cat_curl_multi_configure(
-        context.multi,
-        (void *) cat_curl_easy_socket_function,
-        (void *) cat_curl_easy_timeout_function,
-        &context
-    );
-    mcode = curl_multi_add_handle(context.multi, ch);
+    mcode = curl_multi_add_handle(multi, ch);
     if (unlikely(mcode != CURLM_OK)) {
 #if LIBCURL_VERSION_NUM >= 0x072001 /* Available since 7.32.1 */
 /* See: https://github.com/curl/curl/commit/19122c07682c268c2383218f62e09c3d24a41e76 */
@@ -193,73 +136,36 @@ static CURLcode cat_curl_easy_perform_impl(CURL *ch)
     }
 
     while (1) {
-        /* workaround for cURL with OpenSSL 3.0 bug... */
-        mcode = curl_multi_perform(context.multi, &running_handles);
-        CAT_LOG_DEBUG(CURL, "curl_multi_perform(ch: %p, running_handles: %d) = %d (%s) workaround",
-            ch, running_handles, mcode, curl_multi_strerror(mcode));
+        int numfds = 0;
+        mcode = cat_curl_multi_wait_impl(multi, -1, &numfds, &running_handles);
         if (unlikely(mcode != CURLM_OK)) {
             goto _error;
         }
         if (running_handles == 0) {
             break;
         }
-        if (context.sockfd == CURL_SOCKET_BAD) {
-            CAT_LOG_DEBUG(CURL, "curl_time_delay(ch: %p, timeout: %ld) when sockfd is BAD", ch, context.timeout);
-            cat_ret_t ret = cat_time_delay(context.timeout);
-            if (unlikely(ret != CAT_RET_OK)) {
-                goto _error;
-            }
-            mcode = curl_multi_socket_action(context.multi, CURL_SOCKET_TIMEOUT, 0, &running_handles);
-            CAT_LOG_DEBUG(CURL, "curl_multi_socket_action(ch: %p, TIMEOUT, running_handles: %d) = %d (%s) after delay",
-                ch, running_handles, mcode, curl_multi_strerror(mcode));
-            if (running_handles == 0) {
-                break;
-            }
-        } else {
-            cat_pollfd_events_t revents;
-            int action;
-            cat_ret_t ret;
-            CAT_LOG_DEBUG(CURL, "poll_one() for ch<%p>", ch);
-            ret = cat_poll_one(context.sockfd, context.events, &revents, context.timeout);
-            if (unlikely(ret == CAT_RET_ERROR)) {
-                goto _error;
-            }
-            action = cat_curl_translate_sys_events_to_action(context.events, revents);
-            if (action == CURL_POLL_NONE) {
-                continue;
-            }
-            mcode = curl_multi_socket_action(
-                context.multi,
-                context.sockfd,
-                action,
-                &running_handles
-            );
-            if (running_handles == 0) {
-                break;
-            }
-        }
-        if (unlikely(mcode != CURLM_OK)) {
+        if (numfds == 0) {
+            // timedout or cancelled
             goto _error;
         }
     }
-    CAT_ASSERT(running_handles == 0);
-    message = curl_multi_info_read(context.multi, &running_handles);
-    CAT_LOG_DEBUG(CURL, "curl_multi_info_read(ch: %p) = %p", ch, message);
+
+    message = curl_multi_info_read(multi, &running_handles);
+    CAT_LOG_DEBUG_V2(CURL, "curl_multi_info_read(ch: %p) = %p", ch, message);
     if (message != NULL) {
         CAT_ASSERT(message->msg == CURLMSG_DONE);
-        CAT_ASSERT(running_handles == 0);
         CAT_LOG_DEBUG_VA(CURL, {
             char *done_url;
             curl_easy_getinfo(message->easy_handle, CURLINFO_EFFECTIVE_URL, &done_url);
-            CAT_LOG_DEBUG(CURL, "curl_easy_getinfo(ch: %p, CURLINFO_EFFECTIVE_URL, url=\"%s\")", message->easy_handle, done_url);
+            CAT_LOG_DEBUG_V2(CURL, "curl_easy_getinfo(ch: %p, CURLINFO_EFFECTIVE_URL, url=\"%s\")", message->easy_handle, done_url);
         });
         code = message->data.result;
     }
 
     _error:
-    curl_multi_remove_handle(context.multi, ch);
+    curl_multi_remove_handle(multi, ch);
     _add_failed:
-    curl_multi_cleanup(context.multi);
+    cat_curl_multi_cleanup(multi);
 
     return code;
 }
@@ -276,6 +182,21 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
 }
 
 /* multi */
+
+typedef struct cat_curl_multi_context_s {
+    cat_queue_node_t node;
+    CURLM *multi;
+    cat_queue_t waiters;
+    cat_queue_t fds;
+    cat_nfds_t nfds;
+    long timeout;
+} cat_curl_multi_context_t;
+
+typedef struct cat_curl_pollfd_s {
+    cat_queue_node_t node;
+    curl_socket_t sockfd;
+    int action;
+} cat_curl_pollfd_t;
 
 static int cat_curl_multi_socket_function(
     CURL *ch, curl_socket_t sockfd, int action,
@@ -335,7 +256,7 @@ static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
 #endif
 
     context->multi = multi;
-    context->coroutine = NULL;
+    cat_queue_init(&context->waiters);
     cat_queue_init(&context->fds);
     context->nfds = 0;
     context->timeout = -1;
@@ -470,12 +391,12 @@ static cat_always_inline CURLMcode cat_curl_multi_socket_all(CURLM *multi, int *
 }
 
 static CURLMcode cat_curl_multi_wait_impl(
-    CURLM *multi,
-    struct curl_waitfd *extra_fds, unsigned int extra_nfds,
-    int timeout_ms, int *numfds, int *running_handles
+    CURLM *multi, int timeout_ms, int *numfds, int *running_handles
 )
 {
     cat_curl_multi_context_t *context;
+    cat_queue_t *waiters;
+    cat_bool_t queued;
     cat_pollfd_t *fds = NULL;
     cat_bool_t use_stacked_fds = cat_false;
     CURLMcode mcode = CURLM_OK;
@@ -484,19 +405,34 @@ static CURLMcode cat_curl_multi_wait_impl(
     int previous_running_handles;
     int poll_rc = 0;
 
-    /* TODO: Support it? */
-    CAT_ASSERT(extra_fds == NULL && "Not support yet");
-    CAT_ASSERT(extra_nfds == 0 && "Not support yet");
     CAT_ASSERT(running_handles != NULL);
 
     context = cat_curl_multi_get_context(multi);
+    waiters = &context->waiters;
 
     CAT_ASSERT(context != NULL);
 
     // first call to update timeout and get running_handles to prevent it has been 0 after the previous call
     mcode = cat_curl_multi_socket_all(multi, running_handles);
     if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
-        goto _out;
+        goto _fast_out;
+    }
+
+    queued = !cat_queue_empty(waiters);
+    cat_queue_push_back(waiters, &CAT_COROUTINE_G(current)->waiter.node);
+    if (queued) {
+        cat_bool_t wait_ret;
+        CAT_TIME_WAIT_START() {
+            wait_ret = cat_time_wait(timeout);
+        } CAT_TIME_WAIT_END(timeout);
+        if (unlikely(!wait_ret)) {
+            // timedout
+            goto _queue_out;
+        }
+        if (cat_queue_front_data(waiters, cat_coroutine_t, waiter.node) != CAT_COROUTINE_G(current)) {
+            // canceled
+            goto _queue_out;
+        }
     }
 
     while (1) {
@@ -618,6 +554,14 @@ static CURLMcode cat_curl_multi_wait_impl(
     if (fds != NULL && !use_stacked_fds) {
         cat_free(fds);
     }
+    _queue_out:
+    cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
+    if (!cat_queue_empty(waiters)) {
+        /* resume the next queued coroutine */
+        cat_coroutine_t *waiter = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node);
+        cat_coroutine_schedule(waiter, CURL, "Multi wait");
+    }
+    _fast_out:
     if (numfds != NULL) {
         *numfds = poll_rc;
     }
@@ -634,7 +578,7 @@ CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
     CAT_LOG_DEBUG(CURL, "multi_perform(multi: %p, running_handles: " CAT_LOG_UNFILLED_STR ") = " CAT_LOG_UNFINISHED_STR, multi);
 
     /* this way even can solve the problem of CPU 100% if we perform in while loop */
-    CURLMcode code = cat_curl_multi_wait_impl(multi, NULL, 0, 0, NULL, running_handles);
+    CURLMcode code = cat_curl_multi_wait_impl(multi, 0, NULL, running_handles);
 
     CAT_LOG_DEBUG(CURL, "multi_perform(multi: %p, running_handles: %d) = %d (%s)", multi, *running_handles, code, curl_multi_strerror(code));
 
@@ -654,9 +598,14 @@ CAT_API CURLMcode cat_curl_multi_wait(
         numfds = &_numfds;
     }
 
+    /* TODO: Support it? */
+    if (unlikely(extra_fds != NULL || extra_nfds != 0)) {
+        return CURLM_INTERNAL_ERROR;
+    }
+
     CAT_LOG_DEBUG(CURL, "multi_wait(multi: %p, timeout_ms: %d, numfds: " CAT_LOG_UNFILLED_STR ") = " CAT_LOG_UNFINISHED_STR, multi, timeout_ms);
 
-    CURLMcode mcode = cat_curl_multi_wait_impl(multi, extra_fds, extra_nfds, timeout_ms, numfds, running_handles);
+    CURLMcode mcode = cat_curl_multi_wait_impl(multi, timeout_ms, numfds, running_handles);
 
     CAT_LOG_DEBUG(CURL, "multi_wait(multi: %p, timeout_ms: %d, numfds: %d, running_handles: %d) = %d (%s)", multi, timeout_ms, *numfds, *running_handles, mcode, curl_multi_strerror(mcode));
 
