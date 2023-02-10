@@ -785,7 +785,7 @@ static cat_always_inline void cat_socket_internal_on_open(cat_socket_internal_t 
 
 CAT_API void cat_socket_init(cat_socket_t *socket)
 {
-    socket->id = 0;
+    socket->id = CAT_SOCKET_INVALID_ID;
     socket->flags = CAT_SOCKET_FLAG_NONE;
     socket->internal = NULL;
 }
