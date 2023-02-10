@@ -215,6 +215,7 @@ namespace testing
     std::string file_get_contents(const char *filename);
     bool file_put_contents(const char *filename, const std::string content);
     bool file_put_contents(const char *filename, const char *content, size_t length);
+    bool remove_file(const char *filename);
 
     std::string get_random_bytes(size_t length = TEST_BUFFER_SIZE_STD);
 

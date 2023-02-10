@@ -24,6 +24,8 @@
 #include "cat_time.h"
 #include "cat_poll.h"
 
+#include "cat_fs.h" /* for sendfile */
+
 #ifdef CAT_IDE_HELPER
 #include "uv-common.h"
 #else
@@ -4320,6 +4322,123 @@ static cat_bool_t cat_socket_internal_recv_handle(cat_socket_internal_t *socket_
     }
 
     return cat_false;
+}
+
+static cat_always_inline cat_bool_t cat_socket_send_file_impl(cat_socket_t *socket, const char *filename, size_t offset, size_t length, cat_timeout_t timeout)
+{
+    // we use IO_FLAG_WRITE instead of IO_FLAG_NONE here, because sendfile includes multi operations
+    CAT_SOCKET_IO_CHECK(socket, socket_i, CAT_SOCKET_IO_FLAG_WRITE, return cat_false);
+#ifdef CAT_SSL
+    char *buffer = NULL;
+#endif
+    size_t remain;
+
+    cat_file_t file = cat_fs_open(filename, O_RDONLY);
+    if (unlikely(file < 0)) {
+        cat_update_last_error_with_previous("Socket sendfile failed when open file");
+        return cat_false;
+    }
+
+    if (length == 0) {
+        cat_stat_t statbuf;
+        if (unlikely(cat_fs_fstat(file, &statbuf) != 0)) {
+            cat_update_last_error_with_previous("Socket sendfile failed when stat file");
+            goto _error;
+        }
+        if (offset > (size_t) statbuf.st_size) {
+            cat_update_last_error(CAT_EINVAL, "Socket sendfile failed, reason: offset is out of range");
+            goto _error;
+        }
+        length = statbuf.st_size - offset;
+    }
+    remain = length;
+
+#ifdef CAT_SSL
+    if (socket_i->ssl == NULL) {
+#endif
+        // TODO: support timeout?
+        size_t start = offset;
+        while (remain > 0) {
+            int written = cat_fs_sendfile(cat_socket_internal_get_fd_fast(socket_i), file, start, remain);
+            if (unlikely(written < 0)) {
+                cat_update_last_error_with_previous("Socket sendfile failed when sendfile");
+                goto _io_error;
+            }
+            start += written;
+            remain -= written;
+        }
+#ifdef CAT_SSL
+    } else {
+        if (unlikely(cat_fs_lseek(file, offset, SEEK_SET) != (off_t) offset)) {
+            cat_update_last_error_with_previous("Socket sendfile failed when seek file");
+            goto _error;
+        }
+
+        /* TODO: libuv uses 64K, we may use a better value in the future */
+        const size_t max_buffer_size = 65536;
+        buffer = cat_malloc(max_buffer_size);
+        if (unlikely(buffer == NULL)) {
+            cat_update_last_error_of_syscall("Socket sendfile failed when allocate buffer");
+            goto _error;
+        }
+
+        while (remain > 0) {
+            size_t n = CAT_MIN(max_buffer_size, remain);
+            ssize_t read_n = cat_fs_read(file, buffer, n);
+            if (unlikely(read_n < 0)) {
+                cat_update_last_error_with_previous("Socket sendfile failed when read file");
+                goto _io_error;
+            }
+            if (unlikely(read_n == 0)) {
+                cat_update_last_error(CAT_EBADF, "Socket sendfile failed when read file, unexpected EOF");
+                goto _io_error;
+            }
+            cat_bool_t written;
+            CAT_TIME_WAIT_START() {
+                written = cat_socket_send_ex(socket, buffer, read_n, timeout);
+            } CAT_TIME_WAIT_END(timeout);
+            if (unlikely(!written)) {
+                cat_update_last_error_with_previous("Socket sendfile failed when send data");
+                goto _io_error;
+            }
+            remain -= read_n;
+        }
+
+        cat_fs_close(file);
+    }
+#endif
+    return cat_true;
+
+    _io_error:
+    if (remain < length) {
+        cat_socket_internal_unrecoverable_io_error(socket_i);
+    }
+#ifdef CAT_SSL
+    if (buffer != NULL) {
+        cat_free(buffer);
+    }
+#endif
+    _error:
+    cat_fs_close(file);
+    return cat_false;
+}
+
+CAT_API cat_bool_t cat_socket_send_file(cat_socket_t *socket, const char *filename, size_t offset, size_t length)
+{
+    return cat_socket_send_file_ex(socket, filename, offset, length, cat_socket_get_write_timeout_fast(socket));
+}
+
+CAT_API cat_bool_t cat_socket_send_file_ex(cat_socket_t *socket, const char *filename, size_t offset, size_t length, cat_timeout_t timeout)
+{
+    CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %zu, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+        socket->id, filename, offset, length, timeout);
+
+    cat_bool_t ret = cat_socket_send_file_impl(socket, filename, offset, length, timeout);
+
+    CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %zu, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
+        socket->id, filename, offset, length, timeout, CAT_LOG_BOOL_RET_C(ret));
+
+    return ret;
 }
 
 static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)

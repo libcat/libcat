@@ -1744,6 +1744,28 @@ TEST(cat_socket, send_yield)
     ASSERT_STREQ(read_buffer, write_buffer);
 }
 
+TEST(cat_socket, send_file)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t client;
+
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&client));
+
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+
+    std::string random_bytes = get_random_bytes(TEST_BUFFER_SIZE_STD);
+    std::string random_filename = "libcat-test-" + get_random_bytes(32);
+    ASSERT_TRUE(file_put_contents(random_filename.c_str(), random_bytes.c_str(), random_bytes.length()));
+    DEFER(remove_file(random_filename.c_str()));
+    ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, 0));
+
+    char read_buffer[TEST_BUFFER_SIZE_STD + 1];
+    ASSERT_EQ(cat_socket_read(&client, CAT_STRL(read_buffer)), CAT_STRLEN(read_buffer));
+    read_buffer[sizeof(read_buffer) - 1] = '\0';
+    ASSERT_STREQ(read_buffer, random_bytes.c_str());
+}
+
 TEST(cat_socket, cross_close_when_connecting_local)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
