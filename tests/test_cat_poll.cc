@@ -66,6 +66,21 @@ TEST(cat_poll, base)
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
 }
 
+TEST(cat_poll, server)
+{
+    cat_socket_t server;
+    ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&server), POLLIN, nullptr, 1), CAT_RET_NONE);
+    cat_socket_t client;
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_connect_to(&client, TEST_LISTEN_IPV4, CAT_STRLEN(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&server), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+}
+
 TEST(cat_poll, duplicate)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
