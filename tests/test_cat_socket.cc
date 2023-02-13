@@ -1755,7 +1755,7 @@ TEST(cat_socket, send_file)
     ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
 
     std::string random_bytes = get_random_bytes(TEST_BUFFER_SIZE_STD);
-    std::string random_filename = "libcat-test-" + get_random_bytes(32);
+    std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
     ASSERT_TRUE(file_put_contents(random_filename.c_str(), random_bytes.c_str(), random_bytes.length()));
     DEFER(remove_file(random_filename.c_str()));
     ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, 0));
@@ -1765,6 +1765,43 @@ TEST(cat_socket, send_file)
     read_buffer[sizeof(read_buffer) - 1] = '\0';
     ASSERT_STREQ(read_buffer, random_bytes.c_str());
 }
+
+#ifdef CAT_SSL
+TEST(cat_socket, send_file_on_ssl_connection)
+{
+    SKIP_IF_OFFLINE();
+    cat_socket_t *client;
+    char buffer[TEST_BUFFER_SIZE_STD];
+    ssize_t nread;
+
+    client = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(client, nullptr);
+    DEFER(cat_socket_close(client));
+
+    ASSERT_TRUE(cat_socket_connect_to(client, TEST_REMOTE_HTTPS_SERVER));
+    ASSERT_TRUE(cat_socket_enable_crypto(client, nullptr));
+
+    char *request = cat_sprintf(
+        "GET / HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "User-Agent: %s\r\n"
+        "Accept: */*\r\n"
+        "\r\n",
+        TEST_REMOTE_HTTPS_SERVER_HOST,
+        TEST_HTTP_CLIENT_FAKE_USERAGENT
+    );
+    ASSERT_NE(request, nullptr);
+    DEFER(cat_free(request));
+    std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
+    ASSERT_TRUE(file_put_contents(random_filename.c_str(), request, strlen(request)));
+    DEFER(remove_file(random_filename.c_str()));
+    ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, 0));
+    nread = cat_socket_recv(client, CAT_STRS(buffer));
+    ASSERT_GT(nread, 0);
+    CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
+    ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
+}
+#endif
 
 TEST(cat_socket, cross_close_when_connecting_local)
 {
