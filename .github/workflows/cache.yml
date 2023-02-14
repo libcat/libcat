@@ -20,13 +20,24 @@ jobs:
     steps:
       - name: Fetch vcpkg versions from github
         run: |
-          function fetchmeta{
+          function fetchmeta {
             param ($Package)
+            $retryCount = 0
             $req = $null
-            try {
-              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/CONTROL"
-            }catch{
-              $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/vcpkg.json"
+            while ($req -eq $null) {
+              try {
+                $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/CONTROL"
+              } catch {
+                try {
+                  $req = Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/microsoft/vcpkg/master/ports/${Package}/vcpkg.json"
+                } catch {
+                  if ($retrycount -ge 5) {
+                    throw
+                  }
+                  $retrycount++
+                  Start-Sleep $retrycount
+                }
+              }
             }
             return $req
           }
