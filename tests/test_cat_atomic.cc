@@ -42,6 +42,9 @@ TEST(cat_atomic, base)
     ASSERT_EQ(cat_atomic_##type_name##_fetch_add(&atomic, 1), max - 1); \
     ASSERT_EQ(cat_atomic_##type_name##_load(&atomic), max); \
     for (auto is_add : std::array<bool, 2>{ false, true }) { \
+        /* FIXME: enhance work(), prefer dynamic expansion, \
+         * there are not always enough available workers, \
+         * some while it lead to dead-lock.  */    \
         const size_t c_max = 4; \
         type_name##_t value = is_add ? 0 : max; \
         cat_atomic_##type_name##_store(&atomic, value); \
@@ -58,7 +61,7 @@ TEST(cat_atomic, base)
                 wg++; \
                 work(CAT_WORK_KIND_CPU, [&] { \
                     uv_mutex_lock(&mutex); \
-                    uv_cond_wait(&cond, &mutex); \
+                    uv_cond_timedwait(&cond, &mutex, 100 * 1000 * 1000); \
                     uv_mutex_unlock(&mutex); \
                     for (type_name##_t i = 0; i < max / (c_max + 1); i++) { \
                         if (is_add) { \
@@ -71,6 +74,7 @@ TEST(cat_atomic, base)
                 wg--; \
             }); \
         } \
+        ASSERT_EQ(cat_sys_usleep(10 * 1000), 0);  \
         uv_cond_broadcast(&cond); \
         for (type_name##_t i = 0; i < max / (c_max + 1); i++) { \
             if (is_add) { \
