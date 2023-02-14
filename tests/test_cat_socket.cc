@@ -1123,30 +1123,6 @@ TEST(cat_socket, set_tcp_keepalive)
     // ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
 }
 
-TEST(cat_socket, set_tcp_accept_balance)
-{
-    cat_socket_t socket;
-
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
-}
-
-TEST(cat_socket, set_tcp_accept_balance_failed)
-{
-#ifdef CAT_OS_UNIX_LIKE
-    SKIP_IF_(1, "Always success on Linux");
-#endif
-    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t socket;
-
-    ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP));
-    DEFER(cat_socket_close(&socket));
-    ASSERT_TRUE(cat_socket_connect_to(&socket, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
-    ASSERT_FALSE(cat_socket_set_tcp_accept_balance(&socket, cat_true));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-}
-
 TEST(cat_socket, set_udp_broadcast)
 {
     cat_socket_t socket;

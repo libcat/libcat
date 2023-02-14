@@ -725,8 +725,6 @@ CAT_API cat_bool_t cat_socket_get_tcp_keepalive(const cat_socket_t *socket);
 CAT_API unsigned int cat_socket_get_tcp_keepalive_delay(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_set_tcp_keepalive(cat_socket_t *socket, cat_bool_t enable, unsigned int delay);
 
-CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_bool_t enable);
-
 CAT_API cat_bool_t cat_socket_get_udp_broadcast(const cat_socket_t *socket);
 CAT_API cat_bool_t cat_socket_set_udp_broadcast(cat_socket_t *socket, cat_bool_t enable);
 

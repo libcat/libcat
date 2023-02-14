@@ -5075,21 +5075,6 @@ CAT_API cat_bool_t cat_socket_set_tcp_keepalive(cat_socket_t *socket, cat_bool_t
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_socket_set_tcp_accept_balance(cat_socket_t *socket, cat_bool_t enable)
-{
-    CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
-    CAT_SOCKET_INTERNAL_TCP_ONLY(socket_i, return cat_false);
-    int error;
-
-    error = uv_tcp_simultaneous_accepts(&socket_i->u.tcp, !enable);
-    if (unlikely(error != 0)) {
-        cat_update_last_error_with_reason(error, "Socket %s TCP balance accepts failed", enable ? "enable" : "disable");
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
 CAT_API cat_bool_t cat_socket_get_udp_broadcast(const cat_socket_t *socket)
 {
     CAT_SOCKET_INTERNAL_GETTER_SILENT(socket, socket_i, return cat_false);
