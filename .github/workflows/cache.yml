@@ -15,6 +15,8 @@ jobs:
         os: [ "windows-latest", "windows-2019" ]
       max-parallel: 2
       fail-fast: false
+    env:
+      CLR_OPENSSL_VERSION_OVERRIDE: 1.1
     steps:
       - name: Fetch vcpkg versions from github
         run: |

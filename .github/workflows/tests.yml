@@ -18,6 +18,8 @@ jobs:
         # build-type: [ "Debug" ]
       max-parallel: 4
       fail-fast: false
+    env:
+      CLR_OPENSSL_VERSION_OVERRIDE: 1.1
     steps:
       - name: Fetch vcpkg versions from github
         run: |
