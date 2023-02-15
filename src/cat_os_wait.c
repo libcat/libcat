@@ -263,8 +263,8 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
     do {
         cat_os_child_process_stat_t *child_process_state = NULL;
         if (pid < 0) {
-            cat_os_child_process_stat_t* tmp_child_process_state_iterator;
-            RB_FOREACH_SAFE(child_process_state, cat_os_child_process_stat_tree_s, &CAT_OS_WAIT_G(child_process_state_tree), tmp_child_process_state_iterator) {
+            RB_FOREACH(child_process_state, cat_os_child_process_stat_tree_s, &CAT_OS_WAIT_G(child_process_state_tree)) {
+                // get the first one
                 break;
             }
         } else {
