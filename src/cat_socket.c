@@ -3010,16 +3010,16 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
 {
     cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(socket_i);
     cat_queue_t *queue = &socket_i->context.io.write.coroutines;
-    cat_bool_t ret = cat_false, queued = !!(socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE);
+    cat_bool_t ret = cat_false;
     ssize_t error;
 
-    socket_i->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
-    cat_queue_push_back(queue, &CAT_COROUTINE_G(current)->waiter.node);
-    if (queued) {
+    if (socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE) {
         cat_bool_t wait_ret;
+        cat_queue_push_back(queue, &CAT_COROUTINE_G(current)->waiter.node);
         CAT_TIME_WAIT_START() {
             wait_ret = cat_time_wait(timeout);
         } CAT_TIME_WAIT_END(timeout);
+        cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (unlikely(!wait_ret)) {
             cat_update_last_error_with_previous("Socket write failed");
             return cat_false;
@@ -3029,6 +3029,7 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
             return cat_false;
         }
     }
+    socket_i->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
 
     while (1) {
         struct msghdr msg;
@@ -3068,10 +3069,8 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
         break;
     }
 
-    cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
-    if (cat_queue_empty(queue)) {
-        socket_i->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
-    } else {
+    socket_i->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
+    if (!cat_queue_empty(queue)) {
         /* resume queued coroutines */
         cat_coroutine_t *waiter = cat_queue_front_data(queue, cat_coroutine_t, waiter.node);
         cat_coroutine_schedule(waiter, SOCKET, "UDG write");
