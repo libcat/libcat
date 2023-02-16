@@ -185,10 +185,28 @@ typedef struct cat_poll_one_s {
     cat_bool_t deferred_done_callback;
 } cat_poll_one_t;
 
+static void cat_poll_one_free_callback(void *data)
+{
+    /** @see poll_free_callback() comments.  */
+    cat_free(data);
+}
+
+static void cat_poll_one_close_callback(uv_handle_t *handle)
+{
+    cat_poll_one_t *poll = cat_container_of(handle, cat_poll_one_t, u.handle);
+    (void) cat_event_defer(cat_poll_one_free_callback, poll);
+}
+
 static void cat_poll_one_done_callback(cat_data_t *data)
 {
     cat_poll_one_t *poll = (cat_poll_one_t *) data;
 
+    /** @note coroutine maybe force resumed when poll_callback() was called
+     * but poll_done_callback() has not been called, so we have to check
+     * if it is done here. */
+    if (unlikely(poll->u.coroutine == NULL)) {
+        return;
+    }
     cat_coroutine_schedule(poll->u.coroutine, EVENT, "Poll one");
 }
 
@@ -208,17 +226,13 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, uv_events_t eve
     poll->ret.events |= events;
 
     /* Note: for get all revents at once,
-     * we should schedule coroutine in io defer callback */
+     * we should schedule coroutine in io defer callback,
+     * and callback may be called multiple times,
+     * so we must check whether defer task has been registered here. */
     if (!poll->deferred_done_callback) {
         (void) cat_event_io_defer(cat_poll_one_done_callback, poll);
         poll->deferred_done_callback = cat_true;
     }
-}
-
-static void cat_poll_one_close_callback(uv_handle_t *handle)
-{
-    cat_poll_one_t *poll = cat_container_of(handle, cat_poll_one_t, u.handle);
-    cat_free(poll);
 }
 
 static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
@@ -273,6 +287,8 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
     poll->deferred_done_callback = cat_false;
 
     ret = cat_time_delay(timeout);
+
+    poll->u.coroutine = NULL; // let defer know it was done
 
 #ifdef CAT_OS_UNIX_LIKE
     if (_fd != fd) {
@@ -378,7 +394,14 @@ typedef struct {
 
 static void cat_poll_free_callback(void *data)
 {
-    /** @record: previously, we double defer here to avoid use-after-free,
+    /** @record: (2) we should guarantee that poll_free_callback() is called
+     * after poll_done_callback(), otherwise, we may got a free'd context
+     * in poll_done_callback(). previously, we use double defer because we
+     * can not guarantee that free_callback is always after done_callback,
+     * now we use io_defer() instead of defer() to guarantee that, because
+     * io_defer() is always called after defer() in uv_crun().
+     */
+    /** @record: (1) previously, we double defer here to avoid use-after-free,
      * but after we refactor defer mechanism in uv_crun(), it seems that
      * we do not need double defer again, but it had to be verified, just
      * let us try to remove the double defer for now.
@@ -397,6 +420,8 @@ static void cat_poll_close_callback(uv_handle_t *handle)
         uv__close(poll->fd_dup);
     }
 #endif
+    /* multi polls uses the same context,
+     * check if other poll has been deferred the free callback */
     if (!context->deferred_free_callback) {
         (void) cat_event_defer(cat_poll_free_callback, context);
         context->deferred_free_callback = cat_true;
@@ -407,8 +432,10 @@ static void cat_poll_done_callback(cat_data_t *data)
 {
     cat_poll_context_t *context = (cat_poll_context_t *) data;
 
+    /** @note coroutine maybe force resumed when poll_callback() was called
+     * but poll_done_callback() has not been called, so we have to check
+     * if it is done here. */
     if (unlikely(context->done)) {
-        // done
         return;
     }
     cat_coroutine_schedule(context->coroutine, EVENT, "Poll");

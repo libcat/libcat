@@ -135,8 +135,8 @@ TEST(cat_poll, defer_bug)
         DEFER(wg--);
         ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
         ASSERT_NE(poller, nullptr);
-        /* it must be before poller, cancel the poller,
-         * poll_one_callback() of poller may has been called,
+        /* it must be done before poller, cancel the poller,
+         * poll_one_callback() of poller has been called,
          * but defer task not yet. */
         cat_coroutine_resume(poller, nullptr, nullptr);
     });
@@ -144,11 +144,15 @@ TEST(cat_poll, defer_bug)
     poller = co([&] {
         wg++;
         DEFER(wg--);
-        ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
+        /* although poller was cancelled by other coroutine,
+         * but status and revents has been set, so this call is success. */
+        ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     });
     /* we expect that poll_one_done_callback() will not be called,
      * otherwise, memory error will occur. */
     ASSERT_TRUE(wg());
+    char buffer[CAT_STRLEN("Hello libcat")];
+    ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
 }
 
 static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
