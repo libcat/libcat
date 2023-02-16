@@ -54,6 +54,7 @@ TEST(cat_poll, base)
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
     ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     do {
+        /** @record: test multi events callback bug */
         cat_pollfd_events_t revents;
         ASSERT_EQ(cat_poll_one(fd, POLLIN|POLLOUT, &revents, TEST_IO_TIMEOUT), CAT_RET_OK);
         ASSERT_EQ(revents, POLLIN|POLLOUT);
@@ -115,6 +116,39 @@ TEST(cat_poll, duplicate)
             });
         }
     }
+}
+
+TEST(cat_poll, defer_bug)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    PREPARE_TCP_SOCKET(socket);
+
+    ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
+    // make sure it's readable before real test
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+
+    wait_group wg;
+    cat_coroutine_t *poller = NULL;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_NE(poller, nullptr);
+        /* it must be before poller, cancel the poller,
+         * poll_one_callback() of poller may has been called,
+         * but defer task not yet. */
+        cat_coroutine_resume(poller, nullptr, nullptr);
+    });
+    // cancel it soon
+    poller = co([&] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_ERROR);
+    });
+    /* we expect that poll_one_done_callback() will not be called,
+     * otherwise, memory error will occur. */
+    ASSERT_TRUE(wg());
 }
 
 static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
