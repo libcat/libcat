@@ -939,5 +939,8 @@ message(STATUS "Summary of build options:
       CXXFLAGS:      ${CMAKE_CXX_FLAGS}
       cat CFLAGS:    ${cat_cflags}
       cat CXXFLAGS:  ${cat_cxxflags}
+      cat DEFINES:   ${cat_defines}
+      cat INCLUDES:  ${cat_includes}
+      cat LIBRARIES: ${cat_libraries}
     Build type:      ${CMAKE_BUILD_TYPE}
 ")
