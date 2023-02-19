@@ -1528,6 +1528,9 @@ static cat_always_inline cat_bool_t cat_socket_listen_impl(cat_socket_t *socket,
         cat_update_last_error_with_reason(error, "Socket listen(%d) failed", backlog);
         return cat_false;
     }
+#ifdef CAT_OS_UNIX_LIKE
+    uv__io_stop(socket_i->u.stream.loop, &socket_i->u.stream.io_watcher, POLLIN);
+#endif
     uv_unref(&socket_i->u.handle);
     socket_i->flags |= CAT_SOCKET_INTERNAL_FLAG_SERVER;
 
@@ -1576,12 +1579,18 @@ static cat_bool_t cat_socket_internal_accept(
             break;
         }
         uv_ref(&iserver->u.handle);
+#ifdef CAT_OS_UNIX_LIKE
+        uv__io_start(iserver->u.stream.loop, &iserver->u.stream.io_watcher, POLLIN);
+#endif
         iserver->context.accept.data.status = CAT_ECANCELED;
         iserver->context.accept.coroutine = CAT_COROUTINE_G(current);
         iserver->io_flags = CAT_SOCKET_IO_FLAG_ACCEPT;
         ret = cat_time_wait(timeout);
         iserver->io_flags = CAT_SOCKET_IO_FLAG_NONE;
         iserver->context.accept.coroutine = NULL;
+#ifdef CAT_OS_UNIX_LIKE
+        uv__io_stop(iserver->u.stream.loop, &iserver->u.stream.io_watcher, POLLIN);
+#endif
         uv_unref(&iserver->u.handle);
         if (unlikely(!ret)) {
             cat_update_last_error_with_previous("Socket accept wait failed");
