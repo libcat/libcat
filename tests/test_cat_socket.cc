@@ -1734,7 +1734,7 @@ TEST(cat_socket, send_file)
     std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
     ASSERT_TRUE(file_put_contents(random_filename.c_str(), random_bytes.c_str(), random_bytes.length()));
     DEFER(remove_file(random_filename.c_str()));
-    ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, 0));
+    ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
 
     char read_buffer[TEST_BUFFER_SIZE_STD + 1];
     ASSERT_EQ(cat_socket_read(&client, CAT_STRL(read_buffer)), CAT_STRLEN(read_buffer));
@@ -1744,6 +1744,46 @@ TEST(cat_socket, send_file)
 
 #ifdef CAT_SSL
 TEST(cat_socket, send_file_on_ssl_connection)
+{
+    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+    cat_socket_t client;
+
+    ASSERT_NE(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&client));
+
+    ASSERT_TRUE(cat_socket_connect_to(&client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("SSL")));
+    char ssl_greeter[CAT_STRLEN("SSL") + 1];
+    ASSERT_EQ(cat_socket_read(&client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
+    ssl_greeter[sizeof(ssl_greeter) - 1] = '\0';
+    ASSERT_STREQ(ssl_greeter, "SSL");
+    cat_socket_crypto_options_t ssl_options;
+    cat_socket_crypto_options_init(&ssl_options, cat_true);
+    ssl_options.allow_self_signed = cat_true;
+    ssl_options.peer_name = "localhost";
+    ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
+    ssl_options.certificate = TEST_CLIENT_SSL_CERTIFICATE;
+    ssl_options.certificate_key = TEST_CLIENT_SSL_CERTIFICATE_KEY;
+    ASSERT_TRUE(cat_socket_enable_crypto(&client, &ssl_options));
+    ASSERT_TRUE(cat_socket_has_crypto(&client));
+    ASSERT_TRUE(cat_socket_is_encrypted(&client));
+
+    std::string random_bytes = get_random_bytes(TEST_BUFFER_SIZE_STD);
+    std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
+    ASSERT_TRUE(file_put_contents(random_filename.c_str(), random_bytes.c_str(), random_bytes.length()));
+    DEFER(remove_file(random_filename.c_str()));
+
+    {
+        ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
+        char read_buffer[TEST_BUFFER_SIZE_STD + 1];
+        ASSERT_EQ(cat_socket_read(&client, CAT_STRL(read_buffer)), CAT_STRLEN(read_buffer));
+        read_buffer[sizeof(read_buffer) - 1] = '\0';
+        ASSERT_STREQ(read_buffer, random_bytes.c_str());
+    }
+}
+
+TEST(cat_socket, send_file_to_remote_ssl_server)
 {
     SKIP_IF_OFFLINE();
     cat_socket_t *client;
@@ -1771,7 +1811,7 @@ TEST(cat_socket, send_file_on_ssl_connection)
     std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
     ASSERT_TRUE(file_put_contents(random_filename.c_str(), request, strlen(request)));
     DEFER(remove_file(random_filename.c_str()));
-    ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, 0));
+    ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
     nread = cat_socket_recv(client, CAT_STRS(buffer));
     ASSERT_GT(nread, 0);
     CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
