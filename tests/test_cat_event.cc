@@ -30,9 +30,12 @@ TEST(cat_event, fork)
 TEST(cat_event, defer)
 {
     bool done = false;
-    ASSERT_TRUE(cat_event_defer([](cat_data_t *data) {
-        *((bool *) data) = true;
-    }, &done));
+    cat_event_loop_defer_task_t * task =
+        cat_event_loop_defer_task_create(NULL, [](cat_event_loop_defer_task_t *task, cat_data_t *data) {
+            *((bool *) data) = true;
+        }, &done);
+    ASSERT_NE(task, nullptr);
+    DEFER(cat_event_loop_defer_task_close(task));
     ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(done);
 }
@@ -108,7 +111,7 @@ TEST(cat_event, runtime_shutdown_function)
         ASSERT_EQ((int) (intptr_t) data, CAT_MAGIC_NUMBER);
     }, (cat_data_t *) (intptr_t) CAT_MAGIC_NUMBER), nullptr);
 
-    cat_event_task_t *task;
+    cat_event_shutdown_task_t *task;
     ASSERT_NE((task = cat_event_register_runtime_shutdown_task([] (cat_data_t *data) {
         ASSERT_TRUE(0 && "never here");
     }, (cat_data_t *) (intptr_t) CAT_MAGIC_NUMBER)), nullptr);
