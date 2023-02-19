@@ -144,7 +144,7 @@ TEST(cat_poll, defer_bug)
     poller = co([&] {
         wg++;
         DEFER(wg--);
-        /* although poller was cancelled by other coroutine,
+        /* although poller was canceled by other coroutine,
          * but status and revents has been set, so this call is success. */
         ASSERT_EQ(cat_poll_one(fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     });
