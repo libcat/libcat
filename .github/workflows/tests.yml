@@ -203,6 +203,9 @@ jobs:
             brew install googletest ||
             brew install googletest ||
             brew install googletest
+            brew install pkg-config
+            brew install openssl@1.1
+            brew install curl
           fi
 
       - name: Checkout libcat sources
