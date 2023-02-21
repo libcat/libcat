@@ -156,36 +156,44 @@ static void cat_log_buffer_append_timestamps(cat_buffer_t *buffer, unsigned int 
     }
 }
 
-static cat_always_inline cat_bool_t cat_log_select_writable(cat_os_fd_t fd)
+static cat_always_inline cat_bool_t cat_log_select_writable(cat_os_socket_t fd)
 {
     fd_set wfd;
     struct timeval tv;
     int ret;
     FD_ZERO(&wfd);
+#ifndef CAT_OS_WIN
     if (fd < FD_SETSIZE) {
+#endif
         FD_SET(fd, &wfd);
+#ifndef CAT_OS_WIN
     }
+#endif
     tv.tv_sec = -1;
     tv.tv_usec = 0;
-    ret = select(fd + 1, NULL, &wfd, NULL, &tv);
+    ret = cat_sys_select(fd + 1, NULL, &wfd, NULL, &tv);
     return ret != -1;
 }
+
+#ifdef CAT_OS_WIN
+# undef fileno
+# define fileno _fileno
+typedef unsigned int cat_syscall_write_length_t;
+#else
+typedef size_t cat_syscall_write_length_t;
+#endif
 
 CAT_API cat_bool_t cat_log_fwrite(FILE *file, const char *str, size_t length)
 {
     const char *p = str;
     const char *pe = p + length;
 
-#ifdef CAT_OS_WIN
-# undef fileno
-# define fileno _fileno
-#endif
     int fd = fileno(file);
     while (1) {
         size_t l = pe - p;
         ssize_t n;
         do {
-            n = write(fd, p, l);
+            n = write(fd, p, (cat_syscall_write_length_t) l);
         } while (n <= 0 && cat_sys_errno == EAGAIN && cat_log_select_writable(fd));
         if (unlikely(n < 0)) {
             fprintf(CAT_LOG_G(error_output), "Write log message failed (%s)\n", cat_strerror(cat_sys_errno));
