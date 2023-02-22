@@ -70,7 +70,6 @@ TEST(cat_poll, base)
 // FIXME: hard to fix on Windows
 TEST(cat_poll, server)
 {
-    SKIP_IF_(cat_os_is_windows(), "Need to fix on Windows");
     cat_socket_t server;
     ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
     DEFER(cat_socket_close(&server));
