@@ -3445,6 +3445,8 @@ static cat_always_inline cat_bool_t cat_socket_internal_write(
 )
 {
 #ifdef CAT_SSL
+    /** @thinking: shall we check and wait for previous hanging write coroutines here?
+     * before previous write() are done (writable/POLLOUT), may SSL can not encrypt more data? */
     if (socket_i->ssl != NULL) {
         return cat_socket_internal_write_encrypted(socket_i, vector, vector_count, address, address_length, timeout);
     }
@@ -3918,15 +3920,15 @@ CAT_API cat_bool_t cat_socket_send_ex(cat_socket_t *socket, const char *buffer, 
     char *buffer_quoted = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
-        CAT_LOG_DEBUG_D(SOCKET, "send(" CAT_SOCKET_ID_FMT ", %s, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "send(" CAT_SOCKET_ID_FMT ", %s, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), length, timeout);
     });
 
     cat_bool_t ret = cat_socket_write_impl(socket, &vector, 1, NULL, 0, timeout);
 
     CAT_LOG_DEBUG_VA(SOCKET, {
-        CAT_LOG_DEBUG_D(SOCKET, "send(" CAT_SOCKET_ID_FMT ", %s, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
-            socket->id, buffer_quoted, timeout, CAT_LOG_BOOL_RET_C(ret));
+        CAT_LOG_DEBUG_D(SOCKET, "send(" CAT_SOCKET_ID_FMT ", %s, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
+            socket->id, buffer_quoted, length, timeout, CAT_LOG_BOOL_RET_C(ret));
         cat_free(buffer_quoted);
     });
 
@@ -3968,15 +3970,15 @@ CAT_API cat_bool_t cat_socket_sendto_ex(cat_socket_t *socket, const char *buffer
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
             break;
         }
-        CAT_LOG_DEBUG_D(SOCKET, "sendto(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), (int) name_length, name, port, timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "sendto(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), length, (int) name_length, name, port, timeout);
     });
 
     cat_bool_t ret = cat_socket_write_impl(socket, &vector, 1, address, address_length, timeout);
 
     CAT_LOG_DEBUG_VA(SOCKET, {
-        CAT_LOG_DEBUG_D(SOCKET, "sendto(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
-            socket->id, buffer_quoted, (int) name_length, name, port, timeout, CAT_LOG_BOOL_RET_C(ret));
+        CAT_LOG_DEBUG_D(SOCKET, "sendto(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
+            socket->id, buffer_quoted, length, (int) name_length, name, port, timeout, CAT_LOG_BOOL_RET_C(ret));
         cat_free(buffer_quoted);
     });
 
@@ -3997,8 +3999,8 @@ CAT_API ssize_t cat_socket_try_sendto(cat_socket_t *socket, const char *buffer, 
         if (cat_sockaddr_to_name_silent(address, address_length, name, &name_length, &port) != 0) {
             break;
         }
-        CAT_LOG_DEBUG_D(SOCKET, "try_sendto(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d) = " CAT_LOG_SSIZE_RET_FMT,
-            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), (int) name_length, name, port, CAT_LOG_SSIZE_RET_C(n));
+        CAT_LOG_DEBUG_D(SOCKET, "try_sendto(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d) = " CAT_LOG_SSIZE_RET_FMT,
+            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), length, (int) name_length, name, port, CAT_LOG_SSIZE_RET_C(n));
         cat_free(buffer_quoted);
     });
 
@@ -4018,15 +4020,15 @@ CAT_API cat_bool_t cat_socket_send_to_ex(cat_socket_t *socket, const char *buffe
     char *buffer_quoted = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
-        CAT_LOG_DEBUG_D(SOCKET, "send_to(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), (int) name_length, name, port, timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "send_to(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), length, (int) name_length, name, port, timeout);
     });
 
     cat_bool_t ret = cat_socket_write_to_impl(socket, &vector, 1, name, name_length, port, timeout);
 
     CAT_LOG_DEBUG_VA(SOCKET, {
-        CAT_LOG_DEBUG_D(SOCKET, "send_to(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
-            socket->id, buffer_quoted, (int) name_length, name, port, timeout, CAT_LOG_BOOL_RET_C(ret));
+        CAT_LOG_DEBUG_D(SOCKET, "send_to(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
+            socket->id, buffer_quoted, length, (int) name_length, name, port, timeout, CAT_LOG_BOOL_RET_C(ret));
         cat_free(buffer_quoted);
     });
 
@@ -4041,8 +4043,8 @@ CAT_API ssize_t cat_socket_try_send_to(cat_socket_t *socket, const char *buffer,
 
     CAT_LOG_DEBUG_VA(SOCKET, {
         char *buffer_quoted;
-        CAT_LOG_DEBUG_D(SOCKET, "try_send_to(" CAT_SOCKET_ID_FMT ", %s, \"%.*s\", %d) = " CAT_LOG_SSIZE_RET_FMT,
-            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), (int) name_length, name, port, CAT_LOG_SSIZE_RET_C(n));
+        CAT_LOG_DEBUG_D(SOCKET, "try_send_to(" CAT_SOCKET_ID_FMT ", %s, %zu, \"%.*s\", %d) = " CAT_LOG_SSIZE_RET_FMT,
+            socket->id, cat_log_str_quote(buffer, length, &buffer_quoted), length, (int) name_length, name, port, CAT_LOG_SSIZE_RET_C(n));
         cat_free(buffer_quoted);
     });
 
@@ -4362,23 +4364,42 @@ static cat_bool_t cat_socket_internal_recv_handle(cat_socket_internal_t *socket_
 #endif
 
 #ifdef CAT_SOCKET_NATIVE_SENDFILE
-static cat_always_inline cat_bool_t cat_socket_internal_native_sendfile(cat_socket_internal_t *socket_i, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
+static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_internal_t *socket_i, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
 {
     /** @see: https://github.com/torvalds/linux/blob/38f8ccde04a3fa317b51b05e63c3cb57e1641931/include/linux/fs.h#L996 */
     const size_t max_non_lfs = ((1UL << 31) - 1);
     size_t remain = length;
     int64_t start = offset;
+    cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(socket_i);
 
     // TODO: support timeout?
     (void) timeout;
     while (remain > 0) {
         int written = cat_fs_sendfile(
-            cat_socket_internal_get_fd_fast(socket_i),
-            file, start, CAT_MIN(remain, max_non_lfs)
+            fd, file, start, CAT_MIN(remain, max_non_lfs)
         );
+        CAT_LOG_DEBUG_V2(SOCKET,
+            "fs_sendfile(" CAT_SOCKET_FD_FMT ", " CAT_OS_FD_FMT ", %" PRId64 ", %zu) = " CAT_LOG_INT_RET_FMT,
+            fd, file, start, CAT_MIN(remain, max_non_lfs), CAT_LOG_INT_RET_C(written));
         if (unlikely(written < 0)) {
-            cat_update_last_error_with_previous("Socket sendfile failed when sendfile");
-            goto _io_error;
+            if (cat_get_last_error_code() == CAT_EAGAIN) {
+                cat_ret_t ret;
+                CAT_TIME_WAIT_START() {
+                    ret = cat_poll_one(fd, POLLOUT, NULL, timeout);
+                } CAT_TIME_WAIT_END(timeout);
+                if (unlikely(ret != CAT_RET_OK)) {
+                    if (ret == CAT_RET_ERROR) {
+                        cat_update_last_error_with_previous("Socket sendfile failed when poll writable");
+                    } else {
+                        cat_update_last_error(CAT_ETIMEDOUT, "Socket sendfile timedout when poll writable");
+                    }
+                    goto _io_error;
+                }
+                continue;
+            } else {
+                cat_update_last_error_with_previous("Socket sendfile failed when sendfile");
+                goto _io_error;
+            }
         }
         if (written == 0) {
             break;
@@ -4387,18 +4408,18 @@ static cat_always_inline cat_bool_t cat_socket_internal_native_sendfile(cat_sock
         remain -= written;
     }
 
-    return cat_true;
+    return length - remain;
 
     _io_error:
     if (remain < length) {
         cat_socket_internal_unrecoverable_io_error(socket_i);
     }
-    return cat_false;
+    return -1;
 }
 #endif
 
 #ifdef CAT_SOCKET_MOCK_SENDFILE
-static cat_always_inline cat_bool_t cat_socket_mock_sendfile(cat_socket_t *socket, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
+static cat_always_inline ssize_t cat_socket_mock_sendfile(cat_socket_t *socket, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
 {
     cat_socket_internal_t *socket_i = socket->internal;
     CAT_ASSERT(socket_i != NULL);
@@ -4443,7 +4464,7 @@ static cat_always_inline cat_bool_t cat_socket_mock_sendfile(cat_socket_t *socke
     }
 
     cat_free(buffer);
-    return cat_true;
+    return length - remain;
 
     _io_error:
     if (remain < length) {
@@ -4451,21 +4472,21 @@ static cat_always_inline cat_bool_t cat_socket_mock_sendfile(cat_socket_t *socke
     }
     cat_free(buffer);
     _error:
-    return cat_false;
+    return -1;
 }
 #endif
 
-static cat_always_inline cat_bool_t cat_socket_send_file_impl(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
+static cat_always_inline ssize_t cat_socket_send_file_impl(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
 {
     // we use IO_FLAG_WRITE instead of IO_FLAG_NONE here, because sendfile includes multi operations
     CAT_SOCKET_IO_CHECK(socket, socket_i, CAT_SOCKET_IO_FLAG_WRITE, return cat_false);
     cat_file_t file;
-    cat_bool_t ret = cat_false;
+    ssize_t written;
 
     file = cat_fs_open(filename, O_RDONLY);
     if (unlikely(file < 0)) {
         cat_update_last_error_with_previous("Socket sendfile failed when open file");
-        return cat_false;
+        return -1;
     }
 
 #ifdef CAT_SOCKET_NATIVE_SENDFILE
@@ -4473,7 +4494,7 @@ static cat_always_inline cat_bool_t cat_socket_send_file_impl(cat_socket_t *sock
     if (!socket_i->ssl)
 # endif
     {
-        ret = cat_socket_internal_native_sendfile(socket_i, file, offset, length, timeout);
+        written = cat_socket_internal_native_sendfile(socket_i, file, offset, length, timeout);
     }
 #endif
 #if defined(CAT_SSL) && defined(CAT_SOCKET_NATIVE_SENDFILE)
@@ -4481,30 +4502,30 @@ static cat_always_inline cat_bool_t cat_socket_send_file_impl(cat_socket_t *sock
 #endif
 #ifdef CAT_SOCKET_MOCK_SENDFILE
     {
-        ret = cat_socket_mock_sendfile(socket, file, offset, length, timeout);
+        written = cat_socket_mock_sendfile(socket, file, offset, length, timeout);
     }
 #endif
 
     cat_fs_close(file);
-    return ret;
+    return written;
 }
 
-CAT_API cat_bool_t cat_socket_send_file(cat_socket_t *socket, const char *filename, int64_t offset, size_t length)
+CAT_API ssize_t cat_socket_send_file(cat_socket_t *socket, const char *filename, int64_t offset, size_t length)
 {
     return cat_socket_send_file_ex(socket, filename, offset, length, cat_socket_get_write_timeout_fast(socket));
 }
 
-CAT_API cat_bool_t cat_socket_send_file_ex(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
+CAT_API ssize_t cat_socket_send_file_ex(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
 {
     CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %" PRId64 ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
         socket->id, filename, offset, length, timeout);
 
-    cat_bool_t ret = cat_socket_send_file_impl(socket, filename, offset, length, timeout);
+    ssize_t written = cat_socket_send_file_impl(socket, filename, offset, length, timeout);
 
-    CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %" PRId64 ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
-        socket->id, filename, offset, length, timeout, CAT_LOG_BOOL_RET_C(ret));
+    CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %" PRId64 ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_SSIZE_RET_FMT,
+        socket->id, filename, offset, length, timeout, CAT_LOG_SSIZE_RET_C(written));
 
-    return ret;
+    return written;
 }
 
 static cat_always_inline void cat_socket_io_cancel(cat_coroutine_t *coroutine, const char *type_name)
