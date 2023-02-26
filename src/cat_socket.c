@@ -3636,8 +3636,8 @@ CAT_API ssize_t cat_socket_read(cat_socket_t *socket, char *buffer, size_t lengt
 
 CAT_API ssize_t cat_socket_read_ex(cat_socket_t *socket, char *buffer, size_t length, cat_timeout_t timeout)
 {
-    CAT_LOG_DEBUG(SOCKET, "read(" CAT_SOCKET_ID_FMT ", %p, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-        socket->id, buffer, length, timeout);
+    CAT_LOG_DEBUG(SOCKET, "read(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+        socket->id, CAT_LOG_READ_BUFFER_C(buffer), length, timeout);
 
     ssize_t n = cat_socket_read_impl(socket, buffer, length, 0, NULL, timeout, cat_false);
 
@@ -3794,8 +3794,8 @@ CAT_API ssize_t cat_socket_recv(cat_socket_t *socket, char *buffer, size_t size)
 
 CAT_API ssize_t cat_socket_recv_ex(cat_socket_t *socket, char *buffer, size_t size, cat_timeout_t timeout)
 {
-    CAT_LOG_DEBUG(SOCKET, "recv(" CAT_SOCKET_ID_FMT ", %p, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-        socket->id, buffer, size, timeout);
+    CAT_LOG_DEBUG(SOCKET, "recv(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+        socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, timeout);
 
     ssize_t n = cat_socket_read_impl(socket, buffer, size, 0, NULL, timeout, cat_true);
 
@@ -3830,8 +3830,8 @@ CAT_API ssize_t cat_socket_recvfrom(cat_socket_t *socket, char *buffer, size_t s
 
 CAT_API ssize_t cat_socket_recvfrom_ex(cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout)
 {
-    CAT_LOG_DEBUG(SOCKET, "recvfrom(" CAT_SOCKET_ID_FMT ", %p, %zu, %p, %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-        socket->id, buffer, size, address, address_length != NULL ? *address_length: 0, timeout);
+    CAT_LOG_DEBUG(SOCKET, "recvfrom(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_LOG_READ_BUFFER_FMT ", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+        socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, CAT_LOG_READ_BUFFER_C(address), address_length != NULL ? *address_length: 0, timeout);
 
     ssize_t n = cat_socket_read_impl(socket, buffer, size, address, address_length, timeout, cat_true);
 
@@ -3878,8 +3878,8 @@ CAT_API ssize_t cat_socket_recv_from(cat_socket_t *socket, char *buffer, size_t 
 
 CAT_API ssize_t cat_socket_recv_from_ex(cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
-    CAT_LOG_DEBUG(SOCKET, "recv_from(" CAT_SOCKET_ID_FMT ", %p, %zu, %p, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-        socket->id, buffer, size, name, name_length != NULL ? *name_length: 0, timeout);
+    CAT_LOG_DEBUG(SOCKET, "recv_from(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+        socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, CAT_LOG_READ_BUFFER_C(name), name_length != NULL ? *name_length: 0, timeout);
 
     ssize_t n = cat_socket_recv_from_impl(socket, buffer, size, name, name_length, port, timeout);
 
@@ -4137,8 +4137,8 @@ CAT_API ssize_t cat_socket_peek(const cat_socket_t *socket, char *buffer, size_t
 CAT_API ssize_t cat_socket_peek_ex(const cat_socket_t *socket, char *buffer, size_t size, cat_timeout_t timeout)
 {
     CAT_LOG_DEBUG_VA(SOCKET, if (timeout != 0) {
-        CAT_LOG_DEBUG_D(SOCKET, "peek(" CAT_SOCKET_ID_FMT ", %p, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, buffer, size, timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "peek(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, timeout);
     });
 
     ssize_t n = cat_socket_peekfrom_impl(socket, buffer, size, NULL, NULL, timeout);
@@ -4161,8 +4161,8 @@ CAT_API ssize_t cat_socket_peekfrom(const cat_socket_t *socket, char *buffer, si
 CAT_API ssize_t cat_socket_peekfrom_ex(const cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout)
 {
     CAT_LOG_DEBUG_VA(SOCKET, if (timeout != 0) {
-        CAT_LOG_DEBUG_D(SOCKET, "peekfrom(" CAT_SOCKET_ID_FMT ", %p, %zu, %p, %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, buffer, size, address, address_length != NULL ? *address_length: 0, timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "peekfrom(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_LOG_READ_BUFFER_FMT ", %d, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, CAT_LOG_READ_BUFFER_C(address), address_length != NULL ? *address_length: 0, timeout);
     });
 
     ssize_t n = cat_socket_peekfrom_impl(socket, buffer, size, address, address_length, timeout);
@@ -4191,8 +4191,8 @@ CAT_API ssize_t cat_socket_peek_from(const cat_socket_t *socket, char *buffer, s
 CAT_API ssize_t cat_socket_peek_from_ex(const cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
     CAT_LOG_DEBUG_VA(SOCKET, if (timeout != 0) {
-        CAT_LOG_DEBUG_D(SOCKET, "peek_from(" CAT_SOCKET_ID_FMT ", %p, %zu, %p, %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, buffer, size, name, name_length != NULL ? *name_length: 0, timeout);
+        CAT_LOG_DEBUG_D(SOCKET, "peek_from(" CAT_SOCKET_ID_FMT ", " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_LOG_READ_BUFFER_FMT ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, CAT_LOG_READ_BUFFER_C(buffer), size, CAT_LOG_READ_BUFFER_C(name), name_length != NULL ? *name_length: 0, timeout);
     });
 
     ssize_t n = cat_socket_peek_from_impl(socket, buffer, size, name, name_length, port, timeout);
