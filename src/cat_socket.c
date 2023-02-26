@@ -4397,7 +4397,7 @@ static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_
                 }
                 continue;
             } else {
-                cat_update_last_error_with_previous("Socket sendfile failed when sendfile");
+                cat_update_last_error_with_previous("Socket sendfile failed");
                 goto _io_error;
             }
         }
