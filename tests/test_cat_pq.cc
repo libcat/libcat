@@ -26,7 +26,7 @@ static void cat_pq_query(int *row_count, int *column_count)
     int stmt_counter = 0;
 
     PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
-    ASSERT_EQ(PQstatus(conn), CONNECTION_OK); // connect successfully
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK)
 
     sprintf(stmt_name, "pdo_stmt_%08x", ++stmt_counter);
     PGresult *result = cat_pq_prepare(conn, stmt_name, "SELECT * FROM pg_catalog.pg_tables limit 1", 0, nullptr);
@@ -44,6 +44,16 @@ static void cat_pq_query(int *row_count, int *column_count)
     PQclear(result);
 
     PQfinish(conn);
+}
+
+TEST(cat_pq, connect_failed)
+{
+    SKIP_IF(cat_os_is_windows());
+
+    PGconn *conn = cat_pq_connectdb("host=127.0.0.1 port=1234 dbname=postgres user='postgres' password='postgres' connect_timeout=30");
+    ASSERT_NE(PQstatus(conn), CONNECTION_OK);
+    std::string error_message = std::string(PQerrorMessage(conn));
+    ASSERT_NE(error_message.find("Connection refused"), std::string::npos);
 }
 
 TEST(cat_pq, query)
