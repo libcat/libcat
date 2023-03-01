@@ -26,7 +26,7 @@ static void cat_pq_query(int *row_count, int *column_count)
     int stmt_counter = 0;
 
     PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
-    ASSERT_EQ(PQstatus(conn), CONNECTION_OK)
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
 
     sprintf(stmt_name, "pdo_stmt_%08x", ++stmt_counter);
     PGresult *result = cat_pq_prepare(conn, stmt_name, "SELECT * FROM pg_catalog.pg_tables limit 1", 0, nullptr);
