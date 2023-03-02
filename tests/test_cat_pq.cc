@@ -54,6 +54,8 @@ TEST(cat_pq, connect_failed)
     ASSERT_NE(PQstatus(conn), CONNECTION_OK);
     std::string error_message = std::string(PQerrorMessage(conn));
     ASSERT_NE(error_message.find("Connection refused"), std::string::npos);
+
+    PQfinish(conn);
 }
 
 TEST(cat_pq, query)
