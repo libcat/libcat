@@ -194,9 +194,11 @@ jobs:
     steps:
       - name: start service containers
         shell: bash
+        working-directory: libcat
         run: |
           pwd
           ls -la ${{github.workspace}}
+          ls -la ${{github.workspace}}/libcat
           if [ "${{runner.os}}" = "Linux" ]
           then
             docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
