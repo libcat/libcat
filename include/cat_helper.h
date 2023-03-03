@@ -30,3 +30,12 @@ static cat_always_inline cat_bool_t cat_os_is_windows(void)
     return cat_true;
 #endif
 }
+
+static cat_always_inline cat_bool_t cat_os_is_linux(void)
+{
+#ifndef CAT_OS_LINUX
+    return cat_false;
+#else
+    return cat_true;
+#endif
+}
