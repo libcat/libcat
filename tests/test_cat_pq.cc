@@ -26,26 +26,24 @@ static cat_always_inline cat_bool_t skip()
 
 static void cat_pq_query(int *row_count, int *column_count)
 {
-    char stmt_name[32];
-    char dtor_stmt_name[48];
     int stmt_counter = 0;
 
     PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
     ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
 
-    sprintf(stmt_name, "pdo_stmt_%08x", ++stmt_counter);
-    PGresult *result = cat_pq_prepare(conn, stmt_name, "SELECT * FROM pg_catalog.pg_tables limit 1", 0, nullptr);
+    std::string stmt_name = string_format("pdo_stmt_%08x", ++stmt_counter);
+    PGresult *result = cat_pq_prepare(conn, stmt_name.c_str(), "SELECT * FROM pg_catalog.pg_tables limit 1", 0, nullptr);
     ASSERT_EQ(PQresultStatus(result), PGRES_COMMAND_OK);
     PQclear(result);
 
-    result = cat_pq_exec_prepared(conn, stmt_name, 0, nullptr, nullptr, nullptr, 0);
+    result = cat_pq_exec_prepared(conn, stmt_name.c_str(), 0, nullptr, nullptr, nullptr, 0);
     ASSERT_EQ(PQresultStatus(result), PGRES_TUPLES_OK);
     *column_count = PQnfields(result);
     *row_count = PQntuples(result);
     PQclear(result);
 
-    sprintf(dtor_stmt_name, "DEALLOCATE %s", stmt_name);
-    result = cat_pq_exec(conn, dtor_stmt_name); // stmt_dtor
+    std::string dtor_stmt_name = string_format("DEALLOCATE %s", stmt_name.c_str());
+    result = cat_pq_exec(conn, dtor_stmt_name.c_str()); // stmt_dtor
     PQclear(result);
 
     PQfinish(conn);
