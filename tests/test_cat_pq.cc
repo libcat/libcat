@@ -19,6 +19,11 @@
 #include "test.h"
 #ifdef CAT_PQ
 
+static cat_always_inline cat_bool_t skip()
+{
+    return cat_env_exists("CI") && (! cat_os_is_linux());
+}
+
 static void cat_pq_query(int *row_count, int *column_count)
 {
     char stmt_name[32];
@@ -48,7 +53,7 @@ static void cat_pq_query(int *row_count, int *column_count)
 
 TEST(cat_pq, connect_failed)
 {
-    SKIP_IF(! cat_os_is_linux());
+    SKIP_IF(skip());
 
     PGconn *conn = cat_pq_connectdb("host=127.0.0.1 port=1234 dbname=postgres user='postgres' password='postgres' connect_timeout=30");
     ASSERT_NE(PQstatus(conn), CONNECTION_OK);
@@ -60,7 +65,7 @@ TEST(cat_pq, connect_failed)
 
 TEST(cat_pq, query)
 {
-    SKIP_IF(! cat_os_is_linux());
+    SKIP_IF(skip());
 
     int row_count = 0;
     int column_count = 0;
@@ -72,7 +77,7 @@ TEST(cat_pq, query)
 
 TEST(cat_pq, concurrency)
 {
-    SKIP_IF(! cat_os_is_linux());
+    SKIP_IF(skip());
 
     ASSERT_TRUE(cat_coroutine_wait_all()); // call it before timing test
     auto concurrency = ([](uint32_t concurrency) {
