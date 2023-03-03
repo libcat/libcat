@@ -1761,7 +1761,7 @@ TEST(cat_socket, send_file)
         std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
         ASSERT_TRUE(file_put_contents(random_filename.c_str(), random_bytes.c_str(), random_bytes.length()));
         DEFER(remove_file(random_filename.c_str()));
-        ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
+        ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, 0));
 
         char read_buffer[TEST_BUFFER_SIZE_STD + 1];
         ASSERT_EQ(cat_socket_read(&client, CAT_STRL(read_buffer)), CAT_STRLEN(read_buffer));
@@ -1831,7 +1831,7 @@ TEST(cat_socket, send_big_file)
         co([&] {
             wg++;
             DEFER(wg--);
-            ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
+            ASSERT_TRUE(cat_socket_send_file(&client, random_filename.c_str(), 0, 0));
         });
 
         char read_buffer[TEST_BUFFER_SIZE_STD + 1];
@@ -1874,7 +1874,7 @@ TEST(cat_socket, send_file_to_remote_ssl_server)
     std::string random_filename =  testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
     ASSERT_TRUE(file_put_contents(random_filename.c_str(), request, strlen(request)));
     DEFER(remove_file(random_filename.c_str()));
-    ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, CAT_SOCKET_SEND_FILE_MAX_LENGTH));
+    ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, 0));
     nread = cat_socket_recv(client, CAT_STRS(buffer));
     ASSERT_GT(nread, 0);
     CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
