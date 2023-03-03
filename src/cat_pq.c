@@ -57,7 +57,7 @@ static PGresult *cat_pq_get_result(PGconn *conn)
     }
 
     CAT_LOG_DEBUG(PQ, "PQgetResult(conn=%p)", conn);
-    while ((result = PQgetResult(conn)) && result != NULL) {
+    while ((result = PQgetResult(conn))) {
         PQclear(last_result);
         last_result = result;
     }
