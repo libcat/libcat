@@ -218,8 +218,6 @@ jobs:
         shell: bash
         if: runner.os == 'Linux'
         working-directory: libcat
-        env:
-          TEST_CAT_POSTGRESQL: 1
         run: |
           docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
 
@@ -229,6 +227,7 @@ jobs:
         run: |
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
+          ${{ runner.os == 'macOS' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
