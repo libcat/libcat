@@ -182,7 +182,6 @@ jobs:
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
-    if: matrix.os != 'macos-latest'
     services:
       postgres:
         image: postgres
@@ -205,6 +204,13 @@ jobs:
       max-parallel: 2
       fail-fast: false
     steps:
+      - name: start service containers
+        shell: bash
+        run: |
+          if [ "${{runner.os}}" = "Linux" ]
+          then
+            docker compose up -d
+          fi
       - name: Install dependencies
         shell: bash
         run: |
