@@ -227,7 +227,7 @@ jobs:
         run: |
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
-          ${{ runner.os == 'macOS' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
+          ${{ runner.os == 'Linux' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
