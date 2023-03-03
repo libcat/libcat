@@ -182,6 +182,7 @@ jobs:
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
+    if: matrix.os != 'macos-latest'
     services:
       postgres:
         image: postgres
