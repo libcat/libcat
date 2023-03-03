@@ -207,6 +207,8 @@ jobs:
       - name: start service containers
         shell: bash
         run: |
+          pwd
+          ls -la
           if [ "${{runner.os}}" = "Linux" ]
           then
             docker compose -f docker-compose.yml up -d
