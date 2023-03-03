@@ -209,7 +209,7 @@ jobs:
         run: |
           if [ "${{runner.os}}" = "Linux" ]
           then
-            docker compose up -d
+            docker compose -f .github/docker-compose.yml up -d
           fi
       - name: Install dependencies
         shell: bash
