@@ -182,18 +182,6 @@ jobs:
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     timeout-minutes: 30
     strategy:
       matrix:
@@ -208,10 +196,10 @@ jobs:
         shell: bash
         run: |
           pwd
-          ls -la
+          ls -la ${{github.workspace}}
           if [ "${{runner.os}}" = "Linux" ]
           then
-            docker compose -f docker-compose.yml up -d
+            docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
           fi
       - name: Install dependencies
         shell: bash
