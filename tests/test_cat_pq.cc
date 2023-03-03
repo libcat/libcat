@@ -21,7 +21,7 @@
 
 static cat_always_inline cat_bool_t skip()
 {
-    return cat_env_exists("CI") && (! cat_os_is_linux());
+    return (! cat_env_is_true("TEST_CAT_POSTGRESQL", cat_false)) && (! cat_os_is_linux());
 }
 
 static void cat_pq_query(int *row_count, int *column_count)

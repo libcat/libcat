@@ -36,8 +36,7 @@ static int cat_pq_flush(PGconn *conn)
 {
     int flush_ret = -1;
 
-    do
-    {
+    do {
         cat_ret_t poll_ret = cat_poll_one(PQsocket(conn), POLLOUT, NULL, -1);
         if (unlikely(poll_ret == CAT_RET_ERROR)) {
             return -1;
@@ -105,7 +104,6 @@ CAT_API PGconn *cat_pq_connectdb(const char *conninfo)
 
     fd = PQsocket(conn);
     if (unlikely(fd < 0)) {
-        cat_update_last_error_of_syscall("PQsocket failed");
         return conn;
     }
 

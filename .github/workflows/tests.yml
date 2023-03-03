@@ -5,6 +5,7 @@ on: [push, pull_request]
 
 env:
   CAT_SHOW_LAST_ERROR: 1
+  TEST_CAT_POSTGRESQL: 1
 
 jobs:
   win-tests:
