@@ -214,7 +214,7 @@ jobs:
         with:
           path: libcat
 
-      - name: start service containers
+      - name: Start service containers
         shell: bash
         working-directory: libcat
         run: |

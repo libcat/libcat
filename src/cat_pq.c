@@ -81,10 +81,8 @@ static cat_bool_t cat_pq_poll_connection(PGconn *conn)
             events |= POLLOUT;
             break;
         case PGRES_POLLING_FAILED:
-            cat_update_last_error_of_syscall("Connect failed: %s", PQerrorMessage(conn));
             return cat_false;
         default:
-            cat_update_last_error_of_syscall("PQconnectPoll unexpected status");
             return cat_false;
         }
 
