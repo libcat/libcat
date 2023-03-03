@@ -192,17 +192,6 @@ jobs:
       max-parallel: 2
       fail-fast: false
     steps:
-      - name: start service containers
-        shell: bash
-        working-directory: libcat
-        run: |
-          pwd
-          ls -la ${{github.workspace}}
-          ls -la ${{github.workspace}}/libcat
-          if [ "${{runner.os}}" = "Linux" ]
-          then
-            docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
-          fi
       - name: Install dependencies
         shell: bash
         run: |
@@ -224,6 +213,18 @@ jobs:
         uses: actions/checkout@v2
         with:
           path: libcat
+
+      - name: start service containers
+        shell: bash
+        working-directory: libcat
+        run: |
+          pwd
+          ls -la ${{github.workspace}}
+          ls -la ${{github.workspace}}/libcat
+          if [ "${{runner.os}}" = "Linux" ]
+          then
+            docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
+          fi
 
       - name: Build libcat and Run tests
         shell: bash
