@@ -5,7 +5,6 @@ on: [push, pull_request]
 
 env:
   CAT_SHOW_LAST_ERROR: 1
-  TEST_CAT_POSTGRESQL: 1
 
 jobs:
   win-tests:
@@ -217,12 +216,12 @@ jobs:
 
       - name: Start service containers
         shell: bash
+        if: runner.os == 'Linux'
         working-directory: libcat
+        env:
+          TEST_CAT_POSTGRESQL: 1
         run: |
-          if [ "${{runner.os}}" = "Linux" ]
-          then
-            docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
-          fi
+          docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
 
       - name: Build libcat and Run tests
         shell: bash
