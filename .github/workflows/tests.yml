@@ -198,7 +198,7 @@ jobs:
           if [ "${{runner.os}}" = "Linux" ]
           then
             sudo apt-get update
-            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev
+            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev libpq-dev postgresql-server-dev-all
           else
             brew install googletest ||
             brew install googletest ||
@@ -206,6 +206,7 @@ jobs:
             brew install pkg-config
             brew install openssl@1.1
             brew install curl
+            brew install libpq
           fi
 
       - name: Checkout libcat sources
@@ -213,12 +214,20 @@ jobs:
         with:
           path: libcat
 
+      - name: Start service containers
+        shell: bash
+        if: runner.os == 'Linux'
+        working-directory: libcat
+        run: |
+          docker compose -f ${{github.workspace}}/libcat/.github/docker-compose.yml up -d
+
       - name: Build libcat and Run tests
         shell: bash
         working-directory: libcat
         run: |
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
           ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
+          ${{ runner.os == 'Linux' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
