@@ -20,73 +20,81 @@
 
 static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *filename, int events, int status)
 {
+    cat_fs_notify_event_t *event;
     cat_fs_notify_watch_context_t *watch =  cat_container_of(handle, cat_fs_notify_watch_context_t, handle);
 
-    watch->event.filename = filename;
-    if (events & UV_RENAME) {
-        watch->event.event = CAT_FS_NOTIFY_EVENT_KIND_RENAME;
-    } else if (events & UV_CHANGE) {
-        watch->event.event = CAT_FS_NOTIFY_EVENT_KIND_CHANGE;
-    } else {
-        watch->event.event = CAT_FS_NOTIFY_EVENT_KIND_UNKNOWN;
-    }
+    size_t filename_len = strlen(filename);
+    event = (cat_fs_notify_event_t *) cat_malloc(sizeof(*event) + filename_len);
 
-    cat_coroutine_t *coroutine = watch->coroutine;
-    watch->coroutine = NULL;
-    cat_coroutine_schedule(coroutine, FS, "Fsnotify");
+    memcpy(event->filename, filename, filename_len);
+    event->filename[filename_len] = 0;
+    event->ops = events;
+
+    cat_queue_push_back(&watch->events, &event->node);
+
+    if (watch->waiting) {
+        cat_coroutine_t *coroutine = watch->coroutine;
+        watch->coroutine = NULL;
+        watch->waiting = cat_false;
+        cat_coroutine_schedule(coroutine, FS, "Fsnotify");
+    }
 }
 
 static void cat_fs_notify_close_callback(uv_handle_t *handle)
 {
     cat_fs_notify_watch_context_t *watch =  cat_container_of(handle, cat_fs_notify_watch_context_t, handle);
 
-    cat_free((cat_fs_notify_t *) watch);
+    cat_free(watch);
 }
 
-void cat_fs_notify_watch_context_init(cat_fs_notify_watch_context_t *watch, const char *path)
+CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const char *path)
 {
-    watch->path = path;
-    watch->event.filename = NULL;
-}
-
-CAT_API cat_bool_t cat_fs_notify_wait(const char *path, cat_fs_notify_event_t *event)
-{
-    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait(path=%s)", path);
-
-    cat_bool_t ret;
-    cat_fs_notify_t *fs_notify = (cat_fs_notify_t *) cat_malloc(sizeof(*fs_notify));
+    cat_fs_notify_watch_context_t *watch = (cat_fs_notify_watch_context_t *) cat_malloc(sizeof(*watch));
 #if CAT_ALLOC_HANDLE_ERRORS
-    if (unlikely(fs_notify == NULL)) {
-        cat_update_last_error_of_syscall("Malloc for fs_notify failed");
+    if (unlikely(watch == NULL)) {
+        cat_update_last_error_of_syscall("Malloc for fs_notify_watch_context failed");
         return NULL;
     }
 #endif
 
-    cat_fs_notify_watch_context_t *watch = &fs_notify->watch;
-    cat_fs_notify_watch_context_init(watch, path);
+    cat_queue_init(&watch->events);
+    watch->path = path;
 
     (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
-
     watch->coroutine = CAT_COROUTINE_G(current);
     (void) uv_fs_event_start(&watch->handle, cat_fs_notify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
-    ret = cat_coroutine_yield(NULL, NULL);
-    if (unlikely(!ret)) {
-        cat_update_last_error_with_previous("Fsnotify watch failed");
-        return cat_false;
-    }
-    if (watch->event.filename != NULL) {
-        event->filename = watch->event.filename;
-        event->event = watch->event.event;
-    }
-    uv_fs_event_stop(&watch->handle);
-    if (watch->coroutine != NULL) {
+
+    return watch;
+}
+
+CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t *watch)
+{
+    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait(path=%s)", watch->path);
+
+    cat_bool_t ret;
+
+    if (cat_queue_empty(&watch->events)) {
+        watch->coroutine = CAT_COROUTINE_G(current);
+        watch->waiting = cat_true;
+        ret = cat_coroutine_yield(NULL, NULL);
+        if (unlikely(!ret)) {
+            cat_update_last_error_with_previous("Fsnotify watch failed");
+            return NULL;
+        }
+        if (watch->coroutine != NULL) {
         cat_update_last_error(CAT_ECANCELED, "Fsnotify has been canceled");
-        return cat_false;
+        return NULL;
+    }
     }
 
-    uv_close((uv_handle_t *) &fs_notify->watch.handle, cat_fs_notify_close_callback);
+    cat_fs_notify_event_t *event = cat_queue_front_data(&watch->events, cat_fs_notify_event_t, node);
+    cat_queue_remove(&event->node);
 
-    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait result(filename=%s, event=%d)", watch->event.filename, watch->event.event);
+    return event;
+}
 
-    return cat_true;
+CAT_API void cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch)
+{
+    uv_fs_event_stop(&watch->handle);
+    uv_close((uv_handle_t *) &watch->handle, cat_fs_notify_close_callback);
 }

@@ -37,11 +37,12 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
     int fs_event_cb_called = 0;
     int fs_event_created = 0;
 
-    cat_coroutine_t *co1 = co([watch_dir, wg, &fs_event_cb_called] {
+    cat_fs_notify_watch_context_t *watch_ctx =cat_fs_notify_watch_context_init(watch_dir.c_str());
+
+    cat_coroutine_t *co1 = co([watch_dir, wg, &fs_event_cb_called, watch_ctx] {
         while (true) {
-            cat_fs_notify_event_t event;
-            cat_bool_t ret = cat_fs_notify_wait(watch_dir.c_str(), &event);
-            if (ret == cat_false) {
+            cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
+            if (event == nullptr) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
             }
@@ -49,9 +50,12 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
 
             cat_time_msleep(0); // TODO
 
-            ASSERT_TRUE(event.event == CAT_FS_NOTIFY_EVENT_KIND_RENAME || event.event == CAT_FS_NOTIFY_EVENT_KIND_CHANGE);
-            ASSERT_STREQ(std::string(watch_dir + "/file1").c_str(), std::string(watch_dir + "/" + event.filename).c_str());
+            ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
+            ASSERT_STREQ(std::string(watch_dir + "/file1").c_str(), std::string(watch_dir + "/" + event->filename).c_str());
+            cat_free(event);
         }
+
+        cat_fs_notify_watch_context_cleanup(watch_ctx);
 
         ASSERT_TRUE(cat_sync_wait_group_done(wg));
     });
@@ -72,5 +76,5 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
 
     ASSERT_TRUE(cat_sync_wait_group_wait(wg, TEST_IO_TIMEOUT));
 
-    ASSERT_EQ(fs_event_created, fs_event_cb_called);
+    ASSERT_EQ(2 * fs_event_created, fs_event_cb_called);
 }
