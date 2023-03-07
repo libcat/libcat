@@ -47,7 +47,7 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
             }
             fs_event_cb_called++;
 
-            cat_time_msleep(0); // 
+            cat_time_msleep(0); // TODO
 
             ASSERT_TRUE(event.event == CAT_FS_NOTIFY_EVENT_KIND_RENAME || event.event == CAT_FS_NOTIFY_EVENT_KIND_CHANGE);
             ASSERT_STREQ(std::string(watch_dir + "/file1").c_str(), std::string(watch_dir + "/" + event.filename).c_str());
