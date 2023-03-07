@@ -97,4 +97,10 @@ CAT_API void cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *
 {
     uv_fs_event_stop(&watch->handle);
     uv_close((uv_handle_t *) &watch->handle, cat_fs_notify_close_callback);
+
+    cat_fs_notify_event_t *event;
+    while ((event = cat_queue_front_data(&watch->events, cat_fs_notify_event_t, node))) {
+        cat_queue_remove(&event->node);
+        cat_free(event);
+    }
 }
