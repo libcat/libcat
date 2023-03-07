@@ -43,7 +43,6 @@ static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *file
 static void cat_fs_notify_close_callback(uv_handle_t *handle)
 {
     cat_fs_notify_watch_context_t *watch =  cat_container_of(handle, cat_fs_notify_watch_context_t, handle);
-
     cat_free(watch);
 }
 
@@ -82,9 +81,9 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t 
             return NULL;
         }
         if (watch->coroutine != NULL) {
-        cat_update_last_error(CAT_ECANCELED, "Fsnotify has been canceled");
-        return NULL;
-    }
+            cat_update_last_error(CAT_ECANCELED, "Fsnotify has been canceled");
+            return NULL;
+        }
     }
 
     cat_fs_notify_event_t *event = cat_queue_front_data(&watch->events, cat_fs_notify_event_t, node);
