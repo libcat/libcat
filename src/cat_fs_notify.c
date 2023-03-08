@@ -30,6 +30,7 @@ static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *file
     event->filename[filename_len] = 0;
     event->ops = events;
 
+    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fs_notify_event_callback(filename=%s, events=%d)", filename, events);
     cat_queue_push_back(&watch->events, &event->node);
 
     if (watch->waiting) {
@@ -60,8 +61,9 @@ CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const ch
     watch->path = path;
 
     (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
-    watch->coroutine = CAT_COROUTINE_G(current);
     (void) uv_fs_event_start(&watch->handle, cat_fs_notify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
+
+    watch->waiting = cat_false;
 
     return watch;
 }

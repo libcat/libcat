@@ -18,28 +18,45 @@
 
 #include "test.h"
 
-TEST(cat_fsnotify, cat_fsnotify_wait)
+static void create_file(const char* name)
+{
+    cat_file_t file = cat_fs_open(name,  O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR);
+    ASSERT_GT(file, 2);
+    int r = cat_fs_close(file);
+    ASSERT_EQ(r, 0);
+    cat_time_msleep(100);
+}
+
+static void touch_file(const char* name) {
+    cat_file_t file = cat_fs_open(name, O_RDWR | O_APPEND);
+    ssize_t bytes = cat_fs_write(file, "foo", 3);
+    ASSERT_EQ(bytes, 3);
+    int r = cat_fs_close(file);
+    ASSERT_EQ(r, 0);
+    cat_time_msleep(100);
+}
+
+TEST(cat_fsnotify, cat_fsnotify_watch_dir)
 {
 
-    std::string watch_dir =  TEST_TMP_PATH + std::string("/cat_tests_dir");
+    std::string watch_dir =  "/tmp/cat_tests_dir";
     std::string file1(watch_dir + "/file1");
+    std::string file2(watch_dir + "/file2");
 
+    remove(file2.c_str());
     remove(file1.c_str());
     remove(watch_dir.c_str());
 
     cat_fs_mkdir(watch_dir.c_str(), 0755);
-
-    cat_sync_wait_group_t *wg, _wg;
-    wg = cat_sync_wait_group_create(&_wg);
-    ASSERT_NE(wg, nullptr);
-    ASSERT_TRUE(cat_sync_wait_group_add(wg, 2));
+    create_file(file1.c_str());
+    create_file(file2.c_str());
 
     int fs_event_cb_called = 0;
-    int fs_event_created = 0;
+    int fs_ops = 0;
 
-    cat_fs_notify_watch_context_t *watch_ctx =cat_fs_notify_watch_context_init(watch_dir.c_str());
+    cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(watch_dir.c_str());
 
-    cat_coroutine_t *co1 = co([watch_dir, wg, &fs_event_cb_called, watch_ctx] {
+    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
             cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
             if (event == nullptr) {
@@ -48,33 +65,24 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
             }
             fs_event_cb_called++;
 
-            cat_time_msleep(0); // TODO
+            // cat_time_msleep(0); // TODO
 
+            std::string filename = std::string(event->filename);
+            ASSERT_TRUE(filename.find("file1") != std::string::npos || filename.find("file2") != std::string::npos);
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
-            ASSERT_STREQ(std::string(watch_dir + "/file1").c_str(), std::string(watch_dir + "/" + event->filename).c_str());
             cat_free(event);
         }
 
         cat_fs_notify_watch_context_cleanup(watch_ctx);
-
-        ASSERT_TRUE(cat_sync_wait_group_done(wg));
     });
 
-    co([watch_dir, wg, co1, &fs_event_created] {
-        int r;
-        std::string filename(watch_dir + "/file1");
-        cat_file_t file = cat_fs_open(filename.c_str(),  O_WRONLY | O_CREAT);
-        ASSERT_GT(file, 2);
-        r = cat_fs_close(file);
-        ASSERT_EQ(r, 0);
-        fs_event_created++;
-
-        ASSERT_TRUE(cat_sync_wait_group_done(wg));
-        cat_time_msleep(100);
-        cat_coroutine_resume(co1, nullptr, nullptr);
-    });
-
-    ASSERT_TRUE(cat_sync_wait_group_wait(wg, TEST_IO_TIMEOUT));
-
-    ASSERT_LE(fs_event_created, fs_event_cb_called);
+    for (size_t i = 0; i < 2; i++) {
+        touch_file(file1.c_str());
+        fs_ops++;
+        touch_file(file2.c_str());
+        fs_ops++;
+    }
+    cat_coroutine_resume(co1, nullptr, nullptr);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(fs_ops, fs_event_cb_called);
 }

@@ -94,6 +94,9 @@ typedef void cat_dir_t;
 #define CAT_LOCK_NB 0x4
 #endif // LOCK_NB
 
+/* fs id */
+#define CAT_FS_ID_FMT "%" PRId32
+
 CAT_API cat_file_t cat_fs_open(const char *path, int flags, ...);
 CAT_API ssize_t cat_fs_pread(cat_file_t fd, void *buffer, size_t size, off_t offset);
 CAT_API ssize_t cat_fs_pwrite(cat_file_t fd, const void *buffer, size_t length, off_t offset);
