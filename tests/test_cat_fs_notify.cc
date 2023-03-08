@@ -92,6 +92,76 @@ TEST(cat_fsnotify, watch_dir)
     cat_fs_notify_watch_context_cleanup(watch_ctx);
 }
 
+TEST(cat_fsnotify, watch_dir_concurrency)
+{
+    std::string watch_dir =  "/tmp/cat_tests_dir";
+    std::string file1(watch_dir + "/file1");
+    std::string file2(watch_dir + "/file2");
+
+    remove(file2.c_str());
+    remove(file1.c_str());
+    remove(watch_dir.c_str());
+
+    cat_fs_mkdir(watch_dir.c_str(), 0755);
+    create_file(file1.c_str());
+    create_file(file2.c_str());
+
+    int fs_event_cb_called = 0;
+    int fs_ops = 0;
+
+    cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(watch_dir.c_str());
+    cat_fs_notify_start(watch_ctx);
+
+    cat_sync_wait_group_t wg;
+    ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
+
+    cat_coroutine_t * co1 = co([watch_dir, &fs_event_cb_called, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
+        while (true) {
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
+            if (event == nullptr) {
+                ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
+                break;
+            }
+            fs_event_cb_called++;
+
+            // cat_time_msleep(0); // TODO
+
+            std::string filename = std::string(event->filename);
+            ASSERT_TRUE(filename.find("file1") != std::string::npos || filename.find("file2") != std::string::npos);
+            ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
+            cat_free(event);
+        }
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
+    });
+
+    co([watch_dir, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
+        while (true) {
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
+            if (event == nullptr) {
+                ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify is in waiting");
+                break;
+            }
+        }
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
+    });
+
+    for (size_t i = 0; i < 2; i++) {
+        touch_file(file1.c_str());
+        fs_ops++;
+        touch_file(file2.c_str());
+        fs_ops++;
+    }
+
+    cat_coroutine_resume(co1, nullptr, nullptr);
+
+    ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
+    ASSERT_EQ(fs_ops, fs_event_cb_called);
+    cat_fs_notify_stop(watch_ctx);
+    cat_fs_notify_watch_context_cleanup(watch_ctx);
+}
+
 TEST(cat_fsnotify, watch_file)
 {
     std::string watch_dir =  "/tmp/cat_tests_dir";

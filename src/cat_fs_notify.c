@@ -76,6 +76,11 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait_event(cat_fs_notify_watch_cont
 
     cat_bool_t ret;
 
+    if (watch->waiting == cat_true) {
+        cat_update_last_error(CAT_EINVAL, "Fsnotify is in waiting");
+        return NULL;
+    }
+
     if (cat_queue_empty(&watch->events)) {
         watch->coroutine = CAT_COROUTINE_G(current);
         watch->waiting = cat_true;
