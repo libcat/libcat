@@ -56,15 +56,18 @@ CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const ch
     }
 #endif
 
+    (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
+
     cat_queue_init(&watch->events);
     watch->path = path;
-
-    (void) uv_fs_event_init(&CAT_EVENT_G(loop), &watch->handle);
-    (void) uv_fs_event_start(&watch->handle, cat_fs_notify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
-
     watch->waiting = cat_false;
 
     return watch;
+}
+
+CAT_API void cat_fs_notify_start(cat_fs_notify_watch_context_t *watch)
+{
+    (void) uv_fs_event_start(&watch->handle, cat_fs_notify_event_callback, watch->path, UV_FS_EVENT_RECURSIVE);
 }
 
 CAT_API cat_fs_notify_event_t* cat_fs_notify_wait_event(cat_fs_notify_watch_context_t *watch)
@@ -94,6 +97,11 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait_event(cat_fs_notify_watch_cont
     return event;
 }
 
+CAT_API void cat_fs_notify_stop(cat_fs_notify_watch_context_t *watch)
+{
+    uv_fs_event_stop(&watch->handle);
+}
+
 CAT_API cat_bool_t cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch)
 {
     CAT_LOG_DEBUG(FS_NOTIFIER, "fs_notify_watch_context_cleanup(path=%s)", watch->path);
@@ -109,7 +117,6 @@ CAT_API cat_bool_t cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_conte
         cat_free(event);
     }
 
-    uv_fs_event_stop(&watch->handle);
     uv_close((uv_handle_t *) &watch->handle, cat_fs_notify_close_callback);
     return cat_true;
 }

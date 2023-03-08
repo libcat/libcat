@@ -54,6 +54,7 @@ TEST(cat_fsnotify, watch_dir)
     int fs_ops = 0;
 
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(watch_dir.c_str());
+    cat_fs_notify_start(watch_ctx);
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
@@ -71,7 +72,7 @@ TEST(cat_fsnotify, watch_dir)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
-
+        cat_fs_notify_stop(watch_ctx);
         cat_fs_notify_watch_context_cleanup(watch_ctx);
     });
 
@@ -104,6 +105,7 @@ TEST(cat_fsnotify, watch_file)
     int fs_ops = 0;
 
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file2.c_str());
+    cat_fs_notify_start(watch_ctx);
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
@@ -123,6 +125,7 @@ TEST(cat_fsnotify, watch_file)
             cat_free(event);
         }
 
+        cat_fs_notify_stop(watch_ctx);
         cat_fs_notify_watch_context_cleanup(watch_ctx);
     });
 
@@ -159,6 +162,7 @@ TEST(cat_fsnotify, watch_file_exact_path)
     int fs_ops = 0;
 
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file2.c_str());
+    cat_fs_notify_start(watch_ctx);
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
@@ -178,6 +182,7 @@ TEST(cat_fsnotify, watch_file_exact_path)
             cat_free(event);
         }
 
+        cat_fs_notify_stop(watch_ctx);
         cat_fs_notify_watch_context_cleanup(watch_ctx);
     });
 
@@ -196,8 +201,12 @@ TEST(cat_fsnotify, watch_file_twice)
     std::string file1(watch_dir + "/empty_file");
 
     cat_fs_notify_watch_context_t *watch_ctx1 = cat_fs_notify_watch_context_init(file1.c_str());
+    cat_fs_notify_start(watch_ctx1);
     cat_fs_notify_watch_context_t *watch_ctx2 = cat_fs_notify_watch_context_init(file1.c_str());
+    cat_fs_notify_start(watch_ctx2);
     cat_time_msleep(100);
+    cat_fs_notify_stop(watch_ctx1);
+    cat_fs_notify_stop(watch_ctx2);
     cat_fs_notify_watch_context_cleanup(watch_ctx1);
     cat_fs_notify_watch_context_cleanup(watch_ctx2);
 }
@@ -217,6 +226,7 @@ TEST(cat_fsnotify, cleanup_when_waiting)
     int fs_ops = 0;
 
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file1.c_str());
+    cat_fs_notify_start(watch_ctx);
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
@@ -234,6 +244,7 @@ TEST(cat_fsnotify, cleanup_when_waiting)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
+        cat_fs_notify_stop(watch_ctx);
         cat_fs_notify_watch_context_cleanup(watch_ctx);
     });
 
