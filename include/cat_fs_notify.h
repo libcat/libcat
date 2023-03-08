@@ -42,7 +42,7 @@ typedef struct cat_fs_notify_watch_context_s {
 
 CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const char *path);
 CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t *watch);
-CAT_API void cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch);
+CAT_API cat_bool_t cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch);
 
 #ifdef __cplusplus
 }

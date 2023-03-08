@@ -36,7 +36,6 @@ static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *file
     if (watch->waiting) {
         cat_coroutine_t *coroutine = watch->coroutine;
         watch->coroutine = NULL;
-        watch->waiting = cat_false;
         cat_coroutine_schedule(coroutine, FS, "Fsnotify");
     }
 }
@@ -78,6 +77,7 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t 
         watch->coroutine = CAT_COROUTINE_G(current);
         watch->waiting = cat_true;
         ret = cat_coroutine_yield(NULL, NULL);
+        watch->waiting = cat_false;
         if (unlikely(!ret)) {
             cat_update_last_error_with_previous("Fsnotify watch failed");
             return NULL;
@@ -94,14 +94,20 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t 
     return event;
 }
 
-CAT_API void cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch)
+CAT_API cat_bool_t cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch)
 {
-    uv_fs_event_stop(&watch->handle);
-    uv_close((uv_handle_t *) &watch->handle, cat_fs_notify_close_callback);
+    if (watch->waiting == cat_true) {
+        cat_update_last_error(CAT_EINVAL, "Fsnotify is in waiting");
+        return cat_false;
+    }
 
     cat_fs_notify_event_t *event;
     while ((event = cat_queue_front_data(&watch->events, cat_fs_notify_event_t, node))) {
         cat_queue_remove(&event->node);
         cat_free(event);
     }
+
+    uv_fs_event_stop(&watch->handle);
+    uv_close((uv_handle_t *) &watch->handle, cat_fs_notify_close_callback);
+    return cat_true;
 }
