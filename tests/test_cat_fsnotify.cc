@@ -117,7 +117,8 @@ TEST(cat_fsnotify, watch_file)
             // cat_time_msleep(0); // TODO
 
             std::string filename = std::string(event->filename);
-            ASSERT_TRUE(filename.find("file1") != std::string::npos || filename.find("file2") != std::string::npos);
+            ASSERT_TRUE(filename.find("file1") == std::string::npos);
+            ASSERT_TRUE(filename.find("file2") != std::string::npos);
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
@@ -171,7 +172,8 @@ TEST(cat_fsnotify, watch_file_exact_path)
             // cat_time_msleep(0); // TODO
 
             std::string filename = std::string(event->filename);
-            ASSERT_TRUE(filename.find("file1") != std::string::npos || filename.find("file2") != std::string::npos);
+            ASSERT_TRUE(filename.find("file.js") == std::string::npos);
+            ASSERT_TRUE(filename.find("file.jsx") == std::string::npos);
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
