@@ -30,7 +30,7 @@ static void cat_fs_notify_event_callback(uv_fs_event_t *handle, const char *file
     event->filename[filename_len] = 0;
     event->ops = events;
 
-    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fs_notify_event_callback(filename=%s, events=%d)", filename, events);
+    CAT_LOG_DEBUG(FS_NOTIFIER, "notify_event_callback(filename=%s, events=%d)", filename, events);
     cat_queue_push_back(&watch->events, &event->node);
 
     if (watch->waiting) {
@@ -70,7 +70,7 @@ CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const ch
 
 CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t *watch)
 {
-    CAT_LOG_DEBUG(FS_NOTIFIER, "cat_fsnotify_wait(path=%s)", watch->path);
+    CAT_LOG_DEBUG(FS_NOTIFIER, "fsnotify_wait(path=%s)", watch->path);
 
     cat_bool_t ret;
 
