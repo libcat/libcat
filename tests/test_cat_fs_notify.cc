@@ -56,7 +56,11 @@ TEST(cat_fsnotify, watch_dir)
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(watch_dir.c_str());
     cat_fs_notify_start(watch_ctx);
 
-    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
+    cat_sync_wait_group_t wg;
+    ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
+
+    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
         while (true) {
             cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
@@ -72,8 +76,7 @@ TEST(cat_fsnotify, watch_dir)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
-        cat_fs_notify_stop(watch_ctx);
-        cat_fs_notify_watch_context_cleanup(watch_ctx);
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
     });
 
     for (size_t i = 0; i < 2; i++) {
@@ -83,8 +86,10 @@ TEST(cat_fsnotify, watch_dir)
         fs_ops++;
     }
     cat_coroutine_resume(co1, nullptr, nullptr);
-    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
     ASSERT_EQ(fs_ops, fs_event_cb_called);
+    cat_fs_notify_stop(watch_ctx);
+    cat_fs_notify_watch_context_cleanup(watch_ctx);
 }
 
 TEST(cat_fsnotify, watch_file)
@@ -107,7 +112,11 @@ TEST(cat_fsnotify, watch_file)
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file2.c_str());
     cat_fs_notify_start(watch_ctx);
 
-    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
+    cat_sync_wait_group_t wg;
+    ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
+
+    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
         while (true) {
             cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
@@ -124,9 +133,7 @@ TEST(cat_fsnotify, watch_file)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
-
-        cat_fs_notify_stop(watch_ctx);
-        cat_fs_notify_watch_context_cleanup(watch_ctx);
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
     });
 
     for (size_t i = 0; i < 2; i++) {
@@ -136,8 +143,10 @@ TEST(cat_fsnotify, watch_file)
         fs_ops++;
     }
     cat_coroutine_resume(co1, nullptr, nullptr);
-    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
     ASSERT_EQ(fs_ops / 2, fs_event_cb_called);
+    cat_fs_notify_stop(watch_ctx);
+    cat_fs_notify_watch_context_cleanup(watch_ctx);
 }
 
 TEST(cat_fsnotify, watch_file_exact_path)
@@ -164,7 +173,11 @@ TEST(cat_fsnotify, watch_file_exact_path)
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file2.c_str());
     cat_fs_notify_start(watch_ctx);
 
-    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
+    cat_sync_wait_group_t wg;
+    ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
+
+    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
         while (true) {
             cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
@@ -181,9 +194,7 @@ TEST(cat_fsnotify, watch_file_exact_path)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
-
-        cat_fs_notify_stop(watch_ctx);
-        cat_fs_notify_watch_context_cleanup(watch_ctx);
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
     });
 
     for (size_t i = 0; i < 2; i++) {
@@ -191,8 +202,10 @@ TEST(cat_fsnotify, watch_file_exact_path)
         fs_ops++;
     }
     cat_coroutine_resume(co1, nullptr, nullptr);
-    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
     ASSERT_EQ(0, fs_event_cb_called);
+    cat_fs_notify_stop(watch_ctx);
+    cat_fs_notify_watch_context_cleanup(watch_ctx);
 }
 
 TEST(cat_fsnotify, watch_file_twice)
@@ -228,7 +241,11 @@ TEST(cat_fsnotify, cleanup_when_waiting)
     cat_fs_notify_watch_context_t *watch_ctx = cat_fs_notify_watch_context_init(file1.c_str());
     cat_fs_notify_start(watch_ctx);
 
-    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
+    cat_sync_wait_group_t wg;
+    ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
+
+    cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx, &wg] {
+        ASSERT_TRUE(cat_sync_wait_group_add(&wg, 1));
         while (true) {
             cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
@@ -244,8 +261,7 @@ TEST(cat_fsnotify, cleanup_when_waiting)
             ASSERT_TRUE(event->ops & UV_RENAME || event->ops & UV_CHANGE);
             cat_free(event);
         }
-        cat_fs_notify_stop(watch_ctx);
-        cat_fs_notify_watch_context_cleanup(watch_ctx);
+        ASSERT_TRUE(cat_sync_wait_group_done(&wg));
     });
 
     cat_bool_t ret = cat_fs_notify_watch_context_cleanup(watch_ctx);
@@ -257,6 +273,8 @@ TEST(cat_fsnotify, cleanup_when_waiting)
     }
 
     cat_coroutine_resume(co1, nullptr, nullptr);
-    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
     ASSERT_EQ(fs_ops, fs_event_cb_called);
+    cat_fs_notify_stop(watch_ctx);
+    cat_fs_notify_watch_context_cleanup(watch_ctx);
 }
