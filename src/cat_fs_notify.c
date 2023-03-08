@@ -67,9 +67,9 @@ CAT_API cat_fs_notify_watch_context_t* cat_fs_notify_watch_context_init(const ch
     return watch;
 }
 
-CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t *watch)
+CAT_API cat_fs_notify_event_t* cat_fs_notify_wait_event(cat_fs_notify_watch_context_t *watch)
 {
-    CAT_LOG_DEBUG(FS_NOTIFIER, "fsnotify_wait(path=%s)", watch->path);
+    CAT_LOG_DEBUG(FS_NOTIFIER, "fs_notify_wait_event(path=%s)", watch->path);
 
     cat_bool_t ret;
 
@@ -96,6 +96,8 @@ CAT_API cat_fs_notify_event_t* cat_fs_notify_wait(cat_fs_notify_watch_context_t 
 
 CAT_API cat_bool_t cat_fs_notify_watch_context_cleanup(cat_fs_notify_watch_context_t *watch)
 {
+    CAT_LOG_DEBUG(FS_NOTIFIER, "fs_notify_watch_context_cleanup(path=%s)", watch->path);
+
     if (watch->waiting == cat_true) {
         cat_update_last_error(CAT_EINVAL, "Fsnotify is in waiting");
         return cat_false;

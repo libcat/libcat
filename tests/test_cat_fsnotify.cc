@@ -57,7 +57,7 @@ TEST(cat_fsnotify, watch_dir)
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
-            cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
@@ -107,7 +107,7 @@ TEST(cat_fsnotify, watch_file)
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
-            cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
@@ -162,7 +162,7 @@ TEST(cat_fsnotify, watch_file_exact_path)
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
-            cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
@@ -220,7 +220,7 @@ TEST(cat_fsnotify, cleanup_when_waiting)
 
     cat_coroutine_t *co1 = co([watch_dir, &fs_event_cb_called, watch_ctx] {
         while (true) {
-            cat_fs_notify_event_t *event = cat_fs_notify_wait(watch_ctx);
+            cat_fs_notify_event_t *event = cat_fs_notify_wait_event(watch_ctx);
             if (event == nullptr) {
                 ASSERT_STREQ(cat_get_last_error_message(), "Fsnotify has been canceled");
                 break;
