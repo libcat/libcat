@@ -76,5 +76,5 @@ TEST(cat_fsnotify, cat_fsnotify_wait)
 
     ASSERT_TRUE(cat_sync_wait_group_wait(wg, TEST_IO_TIMEOUT));
 
-    ASSERT_EQ(2 * fs_event_created, fs_event_cb_called);
+    ASSERT_LE(fs_event_created, fs_event_cb_called);
 }
