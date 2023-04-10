@@ -16,59 +16,48 @@
   +--------------------------------------------------------------------------+
  */
 
-#ifndef CAT_API_H
-#define CAT_API_H
+#ifndef CAT_TS_REF_H
+#define CAT_TS_REF_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "cat.h"
-#include "cat_coroutine.h"
-#include "cat_channel.h"
-#include "cat_sync.h"
-#include "cat_event.h"
-#include "cat_poll.h"
-#include "cat_time.h"
-#include "cat_socket.h"
-#include "cat_dns.h"
-#include "cat_work.h"
-#include "cat_buffer.h"
-#include "cat_fs.h"
-#include "cat_signal.h"
-#include "cat_async.h"
-#include "cat_thread.h"
-#include "cat_process.h"
-#include "cat_os_wait.h"
-#include "cat_watchdog.h"
-#include "cat_ssl.h"
+#include "cat_atomic.h"
 
-typedef enum cat_run_mode_e{
-    CAT_RUN_EASY = 0,
-} cat_run_mode_t;
+typedef uint32_t cat_ts_refcount_t;
 
-CAT_API cat_bool_t cat_init_all(void);
-CAT_API cat_bool_t cat_shutdown_all(void);
+typedef struct cat_ts_ref_s {
+    cat_atomic_uint32_t count;
+} cat_ts_ref_t;
 
-CAT_API cat_bool_t cat_module_init_all(void);
-CAT_API cat_bool_t cat_module_shutdown_all(void);
+#define CAT_TS_REF_FIELD cat_ts_ref_t ref
+#define CAT_TS_REF_INIT(object) cat_ts_ref_init(&((object)->ref))
+#define CAT_TS_REF_GET(object)  cat_ts_ref_get(&((object)->ref))
+#define CAT_TS_REF_ADD(object)  cat_ts_ref_add(&((object)->ref))
+#define CAT_TS_REF_DEL(object)  cat_ts_ref_del(&((object)->ref))
 
-CAT_API cat_bool_t cat_runtime_init_all(void);
-CAT_API cat_bool_t cat_runtime_shutdown_all(void);
-CAT_API cat_bool_t cat_runtime_close_all(void);
+static cat_always_inline void cat_ts_ref_init(cat_ts_ref_t *ref)
+{
+    cat_atomic_uint32_init(&ref->count, 1);
+}
 
-CAT_API cat_bool_t cat_run(cat_run_mode_t run_mode);
-CAT_API cat_bool_t cat_stop(void);
+static cat_always_inline cat_ts_refcount_t cat_ts_ref_get(const cat_ts_ref_t *ref)
+{
+    return cat_atomic_uint32_load(&ref->count);
+}
 
-#ifdef CAT_DEBUG
-CAT_API void cat_enable_debug_mode(void);
-#else
-#define cat_enable_debug_mode()
-#endif
+static cat_always_inline cat_ts_refcount_t cat_ts_ref_add(cat_ts_ref_t *ref)
+{
+    return cat_atomic_uint32_fetch_add(&ref->count, 1) + 1;
+}
 
-CAT_API FILE *cat_get_error_log(void);
-CAT_API void cat_set_error_log(FILE *file);
+static cat_always_inline cat_ts_refcount_t cat_ts_ref_del(cat_ts_ref_t *ref)
+{
+    return cat_atomic_uint32_fetch_sub(&ref->count, 1) - 1;
+}
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* CAT_API_H */
+#endif /* CAT_TS_REF_H */
