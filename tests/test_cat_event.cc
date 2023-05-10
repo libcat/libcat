@@ -91,7 +91,7 @@ TEST(cat_event, defer_backend_time)
     ASSERT_GT(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
     timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     ASSERT_TRUE(defer([]{}));
-    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 0);
 }
 
 TEST(cat_event, wait)

@@ -46,9 +46,19 @@ struct cat_event_io_defer_task_s {
 
 CAT_API CAT_GLOBALS_DECLARE(cat_event);
 
+static int cat_event_alive_function(const uv_loop_t *loop);
+static int cat_event_backend_timeout_function(const uv_loop_t* loop, int *should_return);
+static void cat_event_loop_defer_callback(uv_loop_t *loop);
+static void cat_event_io_defer_callback(uv_loop_t *loop);
+
 CAT_API cat_bool_t cat_event_module_init(void)
 {
     CAT_GLOBALS_REGISTER(cat_event);
+
+    uv_loop_alive_ext = cat_event_alive_function,
+    uv_backend_timeout_ext = cat_event_backend_timeout_function;
+    uv_loop_defer_cb = cat_event_loop_defer_callback;
+    uv_io_poll_defer_cb = cat_event_io_defer_callback;
 
     return cat_true;
 }
@@ -119,11 +129,21 @@ CAT_API cat_bool_t cat_event_runtime_close(void)
     return cat_true;
 }
 
-static int cat_event_alive_callback(uv_loop_t *loop)
+static int cat_event_alive_function(const uv_loop_t *loop)
 {
     (void) loop;
     return !cat_queue_empty(&CAT_EVENT_G(defer_tasks)) ||
            !cat_queue_empty(&CAT_EVENT_G(io_defer_tasks));
+}
+
+static int cat_event_backend_timeout_function(const uv_loop_t* loop, int *should_return)
+{
+    (void) loop;
+    if (!cat_queue_empty(&CAT_EVENT_G(defer_tasks)) ||
+        !cat_queue_empty(&CAT_EVENT_G(io_defer_tasks))) {
+        *should_return = 1;
+    }
+    return 0;
 }
 
 static void cat_event_do_defer_tasks(void)
@@ -175,12 +195,7 @@ static void cat_event_io_defer_callback(uv_loop_t *loop)
 
 CAT_API void cat_event_schedule(void)
 {
-    const uv_run_options_t options = {
-        cat_event_alive_callback,
-        cat_event_loop_defer_callback,
-        cat_event_io_defer_callback,
-    };
-    (void) uv_crun(&CAT_EVENT_G(loop), &options);
+    (void) uv_crun(&CAT_EVENT_G(loop));
 }
 
 CAT_API cat_event_round_t cat_event_get_round(void)
@@ -245,14 +260,16 @@ CAT_API cat_event_loop_defer_task_t *cat_event_loop_defer_task_create(
     return task;
 }
 
-CAT_API void cat_event_loop_defer_task_close(cat_event_loop_defer_task_t *task)
+CAT_API cat_bool_t cat_event_loop_defer_task_close(cat_event_loop_defer_task_t *task)
 {
-    if (task->cancelable) {
+    cat_bool_t cancelable = task->cancelable;
+    if (cancelable) {
         cat_queue_remove(&task->node);
     }
     if (task->allocated) {
         cat_free(task);
     }
+    return !cancelable;
 }
 
 CAT_API cat_event_io_defer_task_t *cat_event_io_defer_task_create(
@@ -273,14 +290,16 @@ CAT_API cat_event_io_defer_task_t *cat_event_io_defer_task_create(
     return task;
 }
 
-CAT_API void cat_event_io_defer_task_close(cat_event_io_defer_task_t *task)
+CAT_API cat_bool_t cat_event_io_defer_task_close(cat_event_io_defer_task_t *task)
 {
-    if (task->cancelable) {
+    cat_bool_t cancelable = task->cancelable;
+    if (cancelable) {
         cat_queue_remove(&task->node);
     }
     if (task->allocated) {
         cat_free(task);
     }
+    return !cancelable;
 }
 
 CAT_API void cat_event_fork(void)
