@@ -164,8 +164,9 @@ static void cat_time_wait_0_callback(cat_event_loop_defer_task_t *task, cat_data
 
 static cat_ret_t cat_time_delay_0(void)
 {
-    cat_event_loop_defer_task_t *task = cat_event_loop_defer_task_create(NULL,
-        cat_time_wait_0_callback, CAT_COROUTINE_G(current)
+    cat_event_loop_defer_task_t *task = cat_event_loop_defer_task_create(
+        cat_time_wait_0_callback,
+        CAT_COROUTINE_G(current)
     );
     cat_bool_t ret = cat_coroutine_yield(NULL, NULL);
     if (unlikely(!ret)) {

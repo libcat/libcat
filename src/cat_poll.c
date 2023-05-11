@@ -228,7 +228,7 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, uv_events_t eve
      * and callback may be called multiple times,
      * so we must check whether defer task has been registered here. */
     if (poll->done_task == NULL) {
-        poll->done_task = cat_event_io_defer_task_create(NULL, cat_poll_one_done_callback, poll);
+        poll->done_task = cat_event_io_defer_task_create(cat_poll_one_done_callback, poll);
     }
 }
 
@@ -452,7 +452,7 @@ static void cat_poll_callback(uv_poll_t* handle, int status, uv_events_t events)
     /* Note: for get all revents of all pollfd at once,
      * we should schedule coroutine in io defer callback */
     if (context->done_task == NULL) {
-        context->done_task = cat_event_io_defer_task_create(NULL, cat_poll_done_callback, context);
+        context->done_task = cat_event_io_defer_task_create(cat_poll_done_callback, context);
     }
 }
 

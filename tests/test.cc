@@ -157,7 +157,7 @@ namespace testing
     bool defer(std::function<void(void)> function)
     {
         std::function<void(void)> *function_ptr = new std::function<void(void)>(function);
-        return cat_event_loop_defer_task_create(NULL, [](cat_event_loop_defer_task_t *task, cat_data_t *data) {
+        return cat_event_loop_defer_task_create([](cat_event_loop_defer_task_t *task, cat_data_t *data) {
             std::function<void(void)> *function = (std::function<void(void)> *) data;
             (*function)();
             delete function;

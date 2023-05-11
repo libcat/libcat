@@ -31,7 +31,7 @@ TEST(cat_event, defer)
 {
     bool done = false;
     cat_event_loop_defer_task_t * task =
-        cat_event_loop_defer_task_create(NULL, [](cat_event_loop_defer_task_t *task, cat_data_t *data) {
+        cat_event_loop_defer_task_create([](cat_event_loop_defer_task_t *task, cat_data_t *data) {
             *((bool *) data) = true;
         }, &done);
     ASSERT_NE(task, nullptr);
@@ -73,25 +73,88 @@ TEST(cat_event, defer_not_blocking)
     ASSERT_TRUE(cat_coroutine_wait_all()); // not blocking
 }
 
-// defer tasks should have no affect on backend time
+/** defer tasks should make backend time be zero,
+ * io defer tasks should have no affect on backend time. */
 TEST(cat_event, defer_backend_time)
 {
-    int timeout;
-
     ASSERT_TRUE(cat_coroutine_wait_all());
-    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     ASSERT_TRUE(defer([]{}));
-    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 0);
 
     ASSERT_TRUE(cat_coroutine_wait_all());
-    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
     co([] {
         ASSERT_TRUE(cat_time_delay(1));
     });
-    ASSERT_GT(uv_backend_timeout(&CAT_EVENT_G(loop)), timeout);
-    timeout = uv_backend_timeout(&CAT_EVENT_G(loop));
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 1);
     ASSERT_TRUE(defer([]{}));
     ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 0);
+
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+        cat_event_io_defer_task_close(task);
+    }, nullptr), nullptr);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 0);
+
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    co([] {
+        ASSERT_TRUE(cat_time_delay(1));
+    });
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 1);
+    ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+        cat_event_io_defer_task_close(task);
+    }, nullptr), nullptr);
+    ASSERT_EQ(uv_backend_timeout(&CAT_EVENT_G(loop)), 1);
+}
+
+TEST(cat_event, defer_order)
+{
+    int i;
+
+    ASSERT_TRUE(cat_coroutine_wait_all());
+
+    i = 0;
+    ASSERT_TRUE(defer([&i]{
+        ASSERT_EQ(i, 0);
+        i = 1;
+        ASSERT_TRUE(defer([&i]{
+            ASSERT_EQ(i, 3);
+        }));
+    }));
+    ASSERT_TRUE(defer([&i]{
+        ASSERT_EQ(i, 1);
+        i = 2;
+    }));
+    ASSERT_TRUE(defer([&i]{
+        ASSERT_EQ(i, 2);
+        i = 3;
+    }));
+    ASSERT_EQ(i, 0);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(i, 3);
+
+    i = 0;
+    ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+        ASSERT_EQ(*((int *) data), 0);
+        *((int *) data) = 1;
+        cat_event_io_defer_task_close(task);
+        ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+            ASSERT_EQ(*((int *) data), 3);
+            cat_event_io_defer_task_close(task);
+        }, data), nullptr);
+    }, &i), nullptr);
+    ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+        ASSERT_EQ(*((int *) data), 1);
+        *((int *) data) = 2;
+        cat_event_io_defer_task_close(task);
+    }, &i), nullptr);
+    ASSERT_NE(cat_event_io_defer_task_create([](cat_event_io_defer_task_t *task, cat_data_t *data) {
+        ASSERT_EQ(*((int *) data), 2);
+        *((int *) data) = 3;
+        cat_event_io_defer_task_close(task);
+    }, &i), nullptr);
+    ASSERT_EQ(i, 0);
+    ASSERT_TRUE(cat_time_delay(0));
+    ASSERT_EQ(i, 3);
 }
 
 TEST(cat_event, wait)
