@@ -463,7 +463,9 @@ mt_boundary_eq_o:
                         goto mt_parameter_name;
                     case '=':
                         if (state != mt_boundary_eq_eq) {
-                            goto error;
+                            p++;
+                            state = mt_parameter_value;
+                            goto mt_parameter_value;
                         }
                         goto mt_boundary_eq_eq;
                     default:
