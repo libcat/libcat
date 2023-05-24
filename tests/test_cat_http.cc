@@ -552,6 +552,26 @@ static const cat_const_string_t multipart_req_heads[] = {
         "conTent-tyPe: MultiPart/fORm; boundarY=%s\r\n"
         "\r\n"
     ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm; param1=\t; param2= ;param=; boundarY=%s\r\n"
+        "\r\n"
+    ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm; b=1; bo=2 \t;boundar=123; boundaryA=222; boundarY=%s\r\n"
+        "\r\n"
+    ),
     // with charset and strange ows
     cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -590,6 +610,27 @@ static const cat_const_string_t multipart_req_heads[] = {
         "Server: SomeBadServer/5\r\n"
         "Content-Length: %d\r\n"
         "Content-Type:   \t  multipart/byteranges;\t foo=bar; boundarY=%s\r\n"
+        "\r\n"
+    ),
+    // NOTE: below two is supported with boundaries with space ending
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm;  boundarY=%s; param=1\r\n"
+        "\r\n"
+    ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm;  boundarY=%s \t; param=1\r\n"
         "\r\n"
     ),
 };
@@ -648,16 +689,16 @@ static const cat_const_string_t multipart_req_heads_bad[] = {
     //     "Content-Type: application/json\r\n"
     //     "\r\n"
     // ),
-    // // duplicate boundary
-    // cat_const_string(
-    //     "HTTP/1.1 206 Partial Content\r\n"
-    //     "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
-    //     "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
-    //     "Server: SomeBadServer/5\r\n"
-    //     "Content-Length: %d\r\n"
-    //     "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
-    //     "\r\n"
-    // )
+    // duplicate boundary
+    cat_const_string(
+        "HTTP/1.1 206 Partial Content\r\n"
+        "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
+        "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
+        "Server: SomeBadServer/5\r\n"
+        "Content-Length: %d\r\n"
+        "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
+        "\r\n"
+    )
 };
 
 static struct {
@@ -670,6 +711,8 @@ static struct {
     {"\"dix's bound-ary_1:OK\"", "dix's bound-ary_1:OK"},
     //{"foo bar", "foo bar"}, // not legal, invalid char
     {"\"foo bar\"", "foo bar"},
+    {"\"foo\\ bar\"", "foo bar"},
+    {"\"foo\\tbar\"", "footbar"},
     {"\" foo bar\"", " foo bar"},
     {
         "1234567890"
@@ -712,10 +755,11 @@ static const char *boundaries_bad[] = {
     "cafebabe\t", // extra part
     "cafebabe\t ", // extra part
     "cafebabe \t", // extra part
+    "\"cafe\\\"babe\"", // bad char
+    "\"cafe\\^babe\"", // bad char
     "\"cafebabe\" \t", // extra part
     "\"cafebabe\" ceshi", // extra part
     "foo bar", // bad char
-    "foo bar ", // extra part + bad char
     " foo bar", // extra part
     "\" foo bar\" ", // extra part
     "1234567890"
@@ -1390,6 +1434,19 @@ TEST(cat_http_parser, multipart_bad_boundaries)
     for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++) {
         for (int j = 0; j < CAT_ARRAY_SIZE(boundaries_bad); j++) {
             const char *boundary = boundaries_bad[j];
+            // the special two heads make boundaries ends with space being legal
+            if (i >= CAT_ARRAY_SIZE(multipart_req_heads) - 2) {
+                // if boundary is end with space
+                if (
+                    strlen(boundary) > 0 && (
+                        boundary[strlen(boundary) - 1] == ' ' ||
+                        boundary[strlen(boundary) - 1] == '\t'
+                    )
+                ) {
+                    // this is legal
+                    continue;
+                }
+            }
             int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary, boundary, boundary);
             int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[i].data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
