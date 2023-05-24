@@ -287,10 +287,9 @@ CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 CAT_HTTP_PARSER_ON_DATA_BEGIN(body, BODY) {
-    if (parser->multipart.boundary_length < 2) {
-        _CAT_HTTP_PARSER_ON_EVENT_END();
+    if (parser->multipart.boundary_length > 2) {
+        return CAT_HTTP_PARSER_E_PAUSED;
     }
-    return CAT_HTTP_PARSER_E_PAUSED;
 } CAT_HTTP_PARSER_ON_EVENT_END()
 
 CAT_HTTP_PARSER_ON_EVENT_BEGIN(chunk_header, CHUNK_HEADER) {
