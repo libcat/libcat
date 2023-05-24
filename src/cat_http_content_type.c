@@ -655,7 +655,7 @@ mt_boundary_quoted_pair:
                 default:
                     goto error;
             }
-            CAT_NEVER_HERE("impossible char");
+            // never here
         case mt_boundary_literal_value_acceptable:
 mt_boundary_literal_value_acceptable:
         mt_dbg();
