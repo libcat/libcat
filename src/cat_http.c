@@ -218,7 +218,18 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(header_value, HEADER_VALUE) {
         _CAT_HTTP_PARSER_ON_EVENT_END();
     }
     switch (parser->multipart_state) {
-        case 0 ... 11:
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 11:
             // not content-type
             CAT_FALLTHROUGH;
         case CAT_MULTIPART_HEADER_FIELD_STATE_NOT_CONTENT_TYPE:
