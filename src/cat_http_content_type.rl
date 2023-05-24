@@ -90,8 +90,10 @@ static cat_always_inline void cat_http_parser_multipart_parse_content_type_init(
     parser->multipart.multipart_boundary[0] = 0;
 }
 
+#ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
 static cat_always_inline cat_bool_t cat_http_parser_multipart_parse_content_type(
     cat_http_parser_t *parser,
     const char *p,
@@ -104,4 +106,6 @@ static cat_always_inline cat_bool_t cat_http_parser_multipart_parse_content_type
     parser->header_value_parser_state = cs;
     return ret;
 }
+#ifdef __GNUC__
 #pragma GCC diagnostic pop
+#endif
