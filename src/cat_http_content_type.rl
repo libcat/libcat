@@ -22,46 +22,6 @@
     ragel -G2 cat_http_content_type.rl -o cat_http_content_type.c
  */
 
-#ifndef HAVE_LIBCAT
-
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-
-typedef struct multipart_parser {
-    /* private holder for callbacks */
-    const void *settings;
-    /* private internal index for matching boundary */
-    size_t index;
-    /* public error unexpected char index */
-    size_t error_i;
-    /* private boundary length + 2 ("--") */
-    unsigned char boundary_length;
-    /* private FSM state */
-    unsigned char state;
-    /* public error reason */
-    unsigned char error_reason;
-    /* private boundary storage: "--" + boundary */
-    char multipart_boundary[(2 + 70)*2 + 9];
-    /* public error expected char */
-    char error_expected;
-    /* public error unexpected char */
-    char error_unexpected;
-    /* public triggered */
-    char event_triggered;
-} multipart_parser;
-
-typedef struct cat_http_parser_s {
-    int header_value_parser_state;
-    multipart_parser multipart;
-} cat_http_parser_t;
-typedef bool cat_bool_t;
-#define cat_true true
-#define cat_false false
-#define cat_always_inline inline
-#endif
-
 %%{
     machine cat_media_type;
 
@@ -145,56 +105,3 @@ static cat_always_inline cat_bool_t cat_http_parser_multipart_parse_content_type
     return ret;
 }
 #pragma GCC diagnostic pop
-
-#ifndef HAVE_LIBCAT
-
-int main() {
-    const char * corpora[] = {
-        "text/plain",
-        "not /good",
-        "",
-        "noslash",
-        "Text/Plain; coding=utf4",
-        "multipart/form-data; coding=utf4",
-        "multipart/form-data; coding=utf4; boundary=dasd",
-        "multipart/form-data; coding=utf4;",
-        "multipArt/form-data; coding=utf4,",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=e=mc^2",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=das d",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=\"das d\"",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=\"das d\" ",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=\"das d\" \t",
-        "MULTIPART/form-data; coding=\"utf4\"; boundary=\"das d",
-        "MULTIPART/form-data; boundary=\""
-            "1234567890"
-            "2234567890"
-            "3234567890"
-            "4234567890"
-            "5234567890"
-            "6234567890"
-            "7234567890"
-        "\"",
-        "MULTIPART/form-data; boundary=\""
-            "1234567890"
-            "2234567890"
-            "3234567890"
-            "4234567890"
-            "5234567890"
-            "6234567890"
-            "7234567890"
-            "out of range"
-        "\"",
-    };
-    cat_http_parser_t parser;
-    for (int i = 0; i < (sizeof(corpora) / sizeof(corpora[0])); i++) {
-        cat_http_parser_multipart_parse_content_type_init(&parser);
-        const char * corpus = corpora[i];
-        int ret = cat_http_parser_multipart_parse_content_type(&parser, corpus, corpus + strlen(corpus), corpus + strlen(corpus));
-        printf("%s: ", corpus);
-        printf("%d\n", ret);
-        printf("%zu %.*s\n", parser.multipart.boundary_length, parser.multipart.boundary_length, parser.multipart.multipart_boundary);
-    }
-
-    return 0;
-}
-#endif
