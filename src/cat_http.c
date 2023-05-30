@@ -738,7 +738,7 @@ CAT_API cat_bool_t cat_http_parser_is_upgrade(const cat_http_parser_t *parser)
 
 CAT_API cat_bool_t cat_http_parser_is_multipart(const cat_http_parser_t *parser)
 {
-    return parser->multipart_state >= CAT_MULTIPART_BOUNDARY_OK;
+    return parser->multipart.boundary_length >= 2;
 }
 
 /* module */
