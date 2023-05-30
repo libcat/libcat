@@ -272,11 +272,11 @@ CAT_HTTP_PARSER_ON_EVENT_BEGIN(headers_complete, HEADERS_COMPLETE) {
     if (!ret) {
         // bad media-type
         parser->multipart.boundary_length = 0;
-        return CAT_HTTP_PARSER_E_OK;
+        _CAT_HTTP_PARSER_ON_EVENT_END();
     }
     if (parser->multipart.boundary_length < 2) {
         // no boundary, not multipart
-        return CAT_HTTP_PARSER_E_OK;
+        _CAT_HTTP_PARSER_ON_EVENT_END();
     }
     CAT_LOG_DEBUG_VA_WITH_LEVEL(HTTP, 3, {
         CAT_LOG_DEBUG_D(HTTP, "multipart boundary is [%d] %.*s",
