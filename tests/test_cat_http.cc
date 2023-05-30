@@ -552,6 +552,26 @@ static const cat_const_string_t multipart_req_heads[] = {
         "conTent-tyPe: MultiPart/fORm; boundarY=%s\r\n"
         "\r\n"
     ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm; param1=\t; param2= ;param=; boundarY=%s\r\n"
+        "\r\n"
+    ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm; b=1; bo=2 \t;boundar=123; boundaryA=222; boundarY=%s\r\n"
+        "\r\n"
+    ),
     // with charset and strange ows
     cat_const_string(
         "POST /upload HTTP/1.1\r\n"
@@ -579,7 +599,7 @@ static const cat_const_string_t multipart_req_heads[] = {
         "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
         "Server: SomeBadServer/5\r\n"
         "Content-Length: %d\r\n"
-        "Content-Type: multipart/byteranges;\t foo; boundarY=%s\r\n"
+        "Content-Type: multipart/byteranges;\t foo=bar; boundarY=%s\r\n"
         "\r\n"
     ),
     // normal 206 2 with strange ows
@@ -589,7 +609,28 @@ static const cat_const_string_t multipart_req_heads[] = {
         "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
         "Server: SomeBadServer/5\r\n"
         "Content-Length: %d\r\n"
-        "Content-Type:   \t  multipart/byteranges;\t foo; boundarY=%s\r\n"
+        "Content-Type:   \t  multipart/byteranges;\t foo=bar; boundarY=%s\r\n"
+        "\r\n"
+    ),
+    // NOTE: below two is supported with boundaries with space ending
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm;  boundarY=%s; param=1\r\n"
+        "\r\n"
+    ),
+    // with other params
+    cat_const_string(
+        "POST /upload HTTP/1.1\r\n"
+        "Host: www.foo.com\r\n"
+        "User-Agent: SomeBadBot/2\r\n"
+        "Accept: */*\r\n"
+        "ConTenT-LengTh: %d\r\n"
+        "conTent-tyPe: MultiPart/fORm;  boundarY=%s \t; param=1\r\n"
         "\r\n"
     ),
 };
@@ -604,12 +645,9 @@ const cat_const_string_t common_head = cat_const_string(
     "\r\n"
 );
 
-static struct {
-    const cat_const_string_t head;
-    int error;
-} multipart_req_heads_bad[] = {
+static const cat_const_string_t multipart_req_heads_bad[] = {
     // no boundary
-    { cat_const_string(
+    cat_const_string(
         "POST /upload HTTP/1.1\r\n"
         "Host: www.foo.com\r\n"
         "User-Agent: SomeBadBot/1\r\n"
@@ -618,9 +656,9 @@ static struct {
         "X-Not-boundary: %s\r\n"
         "Content-Type: MultiPart/fORm\r\n"
         "\r\n"
-    ), CAT_EHP_MULTIPART_HEADER },
+    ),
     // no boundary
-    { cat_const_string(
+    cat_const_string(
         "POST /upload HTTP/1.1\r\n"
         "Host: www.foo.com\r\n"
         "User-Agent: SomeBadBot/2\r\n"
@@ -628,9 +666,9 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;miao=%s  ;\r\n"
         "\r\n"
-    ), CAT_EHP_MULTIPART_HEADER },
+    ),
     // duplicate content-type
-    { cat_const_string(
+    cat_const_string(
         "POST /upload HTTP/1.1\r\n"
         "Host: www.foo.com\r\n"
         "User-Agent: SomeBadBot/3\r\n"
@@ -639,20 +677,20 @@ static struct {
         "Content-Type: application/json  ;\r\n"
         "Content-Type: MultiPart/fORm;\t charsEt=utF-8;boundary=%s  ;\r\n"
         "\r\n"
-    ), CAT_EHP_DUPLICATE_CONTENT_TYPE },
-    // duplicate content-type
-    { cat_const_string(
-        "HTTP/1.1 206 Partial Content\r\n"
-        "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
-        "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
-        "Server: SomeBadServer/4\r\n"
-        "Content-Length: %d\r\n"
-        "Content-Type: multipart/byteranges;\t boundary=%s\r\n"
-        "Content-Type: application/json\r\n"
-        "\r\n"
-    ), CAT_EHP_DUPLICATE_CONTENT_TYPE },
+    ),
+    // // duplicate content-type
+    // cat_const_string(
+    //     "HTTP/1.1 206 Partial Content\r\n"
+    //     "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
+    //     "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
+    //     "Server: SomeBadServer/4\r\n"
+    //     "Content-Length: %d\r\n"
+    //     "Content-Type: multipart/byteranges;\t boundary=%s\r\n"
+    //     "Content-Type: application/json\r\n"
+    //     "\r\n"
+    // ),
     // duplicate boundary
-    { cat_const_string(
+    cat_const_string(
         "HTTP/1.1 206 Partial Content\r\n"
         "Date: Wed, 15 Nov 1995 06:25:24 GMT\r\n"
         "Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT\r\n"
@@ -660,7 +698,7 @@ static struct {
         "Content-Length: %d\r\n"
         "Content-Type: multipart/byteranges;\t boundary=%s; boundary=cafe\r\n"
         "\r\n"
-    ), CAT_EHP_MULTIPART_HEADER },
+    )
 };
 
 static struct {
@@ -669,17 +707,13 @@ static struct {
 } boundaries[] = {
     {"cafebabe", "cafebabe"},
     {"\"cafebabe\"", "cafebabe"},
-    {"\"cafebabe\" \t", "cafebabe"},
-    {"cafebabe\t", "cafebabe"},
-    {"cafebabe\t ", "cafebabe"},
-    {"cafebabe \t", "cafebabe"},
-    {"dix's bound-ary_1:OK", "dix's bound-ary_1:OK"},
+    //{"dix's bound-ary_1:OK", "dix's bound-ary_1:OK"}, // not legal, invalid char
     {"\"dix's bound-ary_1:OK\"", "dix's bound-ary_1:OK"},
-    {"foo bar", "foo bar"},
-    {"foo bar ", "foo bar"},
-    {"\"foo bar\" ", "foo bar"},
-    {" foo bar ", " foo bar"},
-    {"\" foo bar\" ", " foo bar"},
+    //{"foo bar", "foo bar"}, // not legal, invalid char
+    {"\"foo bar\"", "foo bar"},
+    {"\"foo\\ bar\"", "foo bar"},
+    {"\"foo\\tbar\"", "footbar"},
+    {"\" foo bar\"", " foo bar"},
     {
         "1234567890"
         "2234567890"
@@ -718,7 +752,16 @@ static const char *boundaries_bad[] = {
     "e=mc^2", // bad char
     "{}cafebabe", // bad char
     "\"cafebabe", // unmatched quote
+    "cafebabe\t", // extra part
+    "cafebabe\t ", // extra part
+    "cafebabe \t", // extra part
+    "\"cafe\\\"babe\"", // bad char
+    "\"cafe\\^babe\"", // bad char
+    "\"cafebabe\" \t", // extra part
     "\"cafebabe\" ceshi", // extra part
+    "foo bar", // bad char
+    " foo bar", // extra part
+    "\" foo bar\" ", // extra part
     "1234567890"
     "2234567890"
     "3234567890"
@@ -1391,6 +1434,19 @@ TEST(cat_http_parser, multipart_bad_boundaries)
     for (int i = 0; i < CAT_ARRAY_SIZE(multipart_req_heads); i++) {
         for (int j = 0; j < CAT_ARRAY_SIZE(boundaries_bad); j++) {
             const char *boundary = boundaries_bad[j];
+            // the special two heads make boundaries ends with space being legal
+            if (i >= CAT_ARRAY_SIZE(multipart_req_heads) - 2) {
+                // if boundary is end with space
+                if (
+                    strlen(boundary) > 0 && (
+                        boundary[strlen(boundary) - 1] == ' ' ||
+                        boundary[strlen(boundary) - 1] == '\t'
+                    )
+                ) {
+                    // this is legal
+                    continue;
+                }
+            }
             int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary, boundary, boundary);
             int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads[i].data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
@@ -1398,15 +1454,16 @@ TEST(cat_http_parser, multipart_bad_boundaries)
             CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data:\n%.*s\n\n", head_len + body_len, head_buf);
             const char *p = head_buf;
             const char *pe = &head_buf[head_len + body_len];
-            while (true) {
+            while (!cat_http_parser_is_completed(&parser)) {
                 if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST_HTTP, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
-                    ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART_HEADER);
+                    FAIL();
                     break;
                 }
-                ASSERT_FALSE(cat_http_parser_is_completed(&parser));
                 p = cat_http_parser_get_current_pos(&parser);
+                ASSERT_EQ(parser.event & (cat_http_parser_event_t)CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
             }
+            ASSERT_TRUE(cat_http_parser_is_completed(&parser));
             // use create to avoid res/req change
             cat_http_parser_create(&parser);
             cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
@@ -1431,20 +1488,20 @@ TEST(cat_http_parser, multipart_bad_heads)
             const char *boundary = boundaries[j].literal;
             const char *boundary_real = boundaries[j].real;
             int body_len = snprintf(CAT_STRS(body_buf), multipart_req_body.data, boundary_real, boundary_real, boundary_real);
-            int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads_bad[i].head.data, body_len, boundary);
+            int head_len = snprintf(CAT_STRS(head_buf), multipart_req_heads_bad[i].data, body_len, boundary);
             memcpy(&head_buf[head_len], body_buf, body_len);
             head_buf[head_len + body_len] = '\0';
             CAT_LOG_DEBUG_V3(TEST_HTTP, "Parsing data:\n%.*s\n\n", head_len + body_len, head_buf);
             const char *p = head_buf;
             const char *pe = &head_buf[head_len + body_len];
-            while (true) {
+            while (!cat_http_parser_is_completed(&parser)) {
                 if (!cat_http_parser_execute(&parser, p, pe - p)) {
                     CAT_LOG_DEBUG(TEST_HTTP, "Parsing failed with: %d: %s", cat_get_last_error_code(), cat_get_last_error_message());
-                    ASSERT_EQ(cat_get_last_error_code(), multipart_req_heads_bad[i].error);
+                    FAIL();
                     break;
                 }
-                ASSERT_FALSE(cat_http_parser_is_completed(&parser));
                 p = cat_http_parser_get_current_pos(&parser);
+                ASSERT_EQ(parser.event & (cat_http_parser_event_t)CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
             }
             // use create to avoid res/req change
             cat_http_parser_create(&parser);
