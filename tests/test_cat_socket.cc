@@ -2351,6 +2351,8 @@ TEST(cat_socket, open_os_socket)
             ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
         }
 
+        (void) cat_time_msleep(10);
+
         ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
         DEFER(cat_socket_close(&echo_client2));
         if (n == 1) {

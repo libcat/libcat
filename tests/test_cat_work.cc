@@ -43,7 +43,7 @@ TEST(cat_work, base)
 TEST(cat_work, timeout)
 {
     ASSERT_FALSE(work(CAT_WORK_KIND_SLOW_IO, [] {
-        cat_sys_usleep(10 * 1000);
+        cat_sys_usleep(100 * 1000);
     }, 1));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
