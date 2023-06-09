@@ -16,12 +16,12 @@ all:
 	@echo see Makefile for usage >&2
 
 MPP_OBJS = multipart_parser.o
-MPP_SRCDIR = deps/multipart_parser
-MPP_CFLAGS = -I$(CAT_ROOT)/deps/multipart_parser
+MPP_SRCDIR = deps/multipart-parser-c
+MPP_CFLAGS = -I$(CAT_ROOT)/deps/multipart-parser-c
 $(BUILD_DIR)/$(MPP_SRCDIR):
 	mkdir -p $@
 MPP_OBJS_BUILD = $(patsubst %,$(BUILD_DIR)/$(MPP_SRCDIR)/%,$(MPP_OBJS))
-$(MPP_OBJS_BUILD): $(BUILD_DIR)/$(MPP_SRCDIR)/%.o: $(CAT_ROOT)/$(MPP_SRCDIR)/%.c  $(BUILD_DIR)/$(MPP_SRCDIR)
+$(MPP_OBJS_BUILD): $(BUILD_DIR)/$(MPP_SRCDIR)/%.o: $(CAT_ROOT)/$(MPP_SRCDIR)/%.c $(BUILD_DIR)/$(MPP_SRCDIR)
 	$(CC) $(CFLAGS_OBJ) $(MPP_CFLAGS) -c $< -o $@
 
 LLHTTP_OBJS = api.o http.o llhttp.o
@@ -34,7 +34,7 @@ $(LLHTTP_OBJS_BUILD): $(BUILD_DIR)/$(LLHTTP_SRCDIR)/%.o: $(CAT_ROOT)/$(LLHTTP_SR
 	$(CC) $(CFLAGS_OBJ) $(LLHTTP_CFLAGS) -c $< -o $@
 
 # this part is unix(Linux) only
-UV_OBJS = fs-poll.o idna.o inet.o random.o strscpy.o threadpool.o timer.o uv-common.o uv-data-getter-setters.o version.o unix/async.o unix/core.o unix/dl.o unix/fs.o unix/getaddrinfo.o unix/getnameinfo.o unix/loop-watcher.o unix/loop.o unix/pipe.o unix/poll.o unix/process.o unix/random-devurandom.o unix/signal.o unix/stream.o unix/tcp.o unix/thread.o unix/tty.o unix/udp.o unix/proctitle.o unix/linux-core.o unix/linux-inotify.o unix/linux-syscalls.o unix/procfs-exepath.o unix/random-getrandom.o unix/random-sysctl-linux.o
+UV_OBJS = fs-poll.o idna.o inet.o random.o strscpy.o strtok.o threadpool.o timer.o uv-common.o uv-data-getter-setters.o version.o unix/async.o unix/core.o unix/dl.o unix/fs.o unix/getaddrinfo.o unix/getnameinfo.o unix/loop-watcher.o unix/loop.o unix/pipe.o unix/poll.o unix/process.o unix/random-devurandom.o unix/signal.o unix/stream.o unix/tcp.o unix/thread.o unix/tty.o unix/udp.o unix/proctitle.o unix/linux.o unix/procfs-exepath.o unix/random-getrandom.o unix/random-sysctl-linux.o
 UV_SRCDIR = deps/libuv/src
 UV_CFLAGS = -I$(CAT_ROOT)/deps/libuv/include -I$(CAT_ROOT)/deps/libuv/src -DHAVE_LIBCAT=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112
 $(BUILD_DIR)/$(UV_SRCDIR) $(BUILD_DIR)/$(UV_SRCDIR)/unix:
@@ -51,7 +51,7 @@ ASM_OBJS_BUILD = $(patsubst %,$(BUILD_DIR)/$(ASM_SRCDIR)/%,$(ASM_OBJS))
 $(ASM_OBJS_BUILD): $(BUILD_DIR)/$(ASM_SRCDIR)/%.o: $(CAT_ROOT)/$(ASM_SRCDIR)/%.S $(BUILD_DIR)/$(ASM_SRCDIR)
 	$(CC) $(CFLAGS_OBJ) $(ASM_CFLAGS) -c $< -o $@
 
-LIBCAT_OBJS = cat_api.o cat_async.o cat_buffer.o cat.o cat_channel.o cat_coroutine.o cat_cp.o cat_dns.o cat_env.o cat_error.o cat_event.o cat_fs.o cat_http.o cat_log.o cat_memory.o cat_module.o cat_poll.o cat_process.o cat_signal.o cat_socket.o cat_string.o cat_sync.o cat_time.o cat_watchdog.o cat_websocket.o cat_work.o
+LIBCAT_OBJS = cat_cp.o cat_memory.o cat_string.o cat_error.o cat_log.o cat_env.o cat.o cat_api.o cat_coroutine.o cat_channel.o cat_sync.o cat_event.o cat_poll.o cat_time.o cat_socket.o cat_dns.o cat_work.o cat_buffer.o cat_fs.o cat_signal.o cat_os_wait.o cat_async.o cat_watchdog.o cat_process.o cat_http.o cat_websocket.o
 LIBCAT_SRCDIR = src
 LIBCAT_CFLAGS = -I$(CAT_ROOT)/include $(UV_CFLAGS) $(LLHTTP_CFLAGS) $(MPP_CFLAGS)
 $(BUILD_DIR)/$(LIBCAT_SRCDIR):
