@@ -776,7 +776,7 @@ if (LIBCAT_ENABLE_OPENSSL)
         list(APPEND cat_libraries crypt32.lib)
     endif()
 else()
-    find_package(OpenSSL REQUIRED) # throw warning
+    find_package(OpenSSL) # throw warning
     message(STATUS "OpenSSL is not enabled")
 endif()
 
@@ -799,7 +799,7 @@ if (LIBCAT_ENABLE_CURL)
     list(APPEND cat_libraries ${CURL_LIBRARIES})
     list(APPEND cat_sources src/cat_curl.c)
 else()
-    find_package(CURL REQUIRED) # throw warning
+    find_package(CURL) # throw warning
     message(STATUS "cURL is not enabled")
 endif()
 
@@ -827,7 +827,7 @@ if (LIBCAT_ENABLE_POSTGRESQL)
     list(APPEND cat_libraries ${PostgreSQL_LIBRARIES})
     list(APPEND cat_sources src/cat_pq.c)
 else()
-    find_package(PostgreSQL REQUIRED) # throw warning
+    find_package(PostgreSQL) # throw warning
     message(STATUS "PostgreSQL is not enabled")
 endif()
 
