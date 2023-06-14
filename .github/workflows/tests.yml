@@ -7,6 +7,18 @@ env:
   CAT_SHOW_LAST_ERROR: 1
 
 jobs:
+  cs-check:
+    name: Coding style check
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Use action to check for CRLF endings
+        uses: erclu/check-crlf@v1
+        with:
+          path: ./
+
   win-tests:
     name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
     runs-on: ${{matrix.os}}
