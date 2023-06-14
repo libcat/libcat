@@ -80,7 +80,7 @@ jobs:
           vcpkg install curl[core,non-http,ssl]:x64-windows
 
       - name: Checkout libcat sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Prepare coverage dependencies
         if: matrix.build-type == 'Debug'
@@ -210,7 +210,7 @@ jobs:
           fi
 
       - name: Checkout libcat sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: libcat
 
