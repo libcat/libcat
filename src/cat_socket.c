@@ -232,7 +232,7 @@ static int cat_sockaddr__getbyname(cat_sockaddr_t *address, cat_socklen_t *addre
         cat_socklen_t real_length;
         cat_bool_t is_lan;
 
-        if (unlikely(name_length > CAT_SOCKADDR_MAX_PATH)) {
+        if (unlikely(name_length >= CAT_SOCKADDR_MAX_PATH)) {
             *address_length = 0;
             return CAT_ENAMETOOLONG;
         }
