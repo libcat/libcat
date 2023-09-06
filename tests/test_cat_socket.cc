@@ -2353,7 +2353,8 @@ TEST(cat_socket, open_os_socket)
 
         (void) cat_time_msleep(10);
 
-        ASSERT_EQ(cat_socket_open_os_socket(&echo_client2, CAT_SOCKET_TYPE_TCP, cat_socket_get_fd_fast(&echo_client)), &echo_client2);
+        ASSERT_EQ(cat_socket_create(&echo_client2, CAT_SOCKET_TYPE_TCP), &echo_client2);
+        ASSERT_TRUE(cat_socket_open_os_socket(&echo_client2, cat_socket_get_fd_fast(&echo_client)));
         DEFER(cat_socket_close(&echo_client2));
         if (n == 1) {
             char buffer[1];
@@ -2398,9 +2399,11 @@ TEST(cat_socket, pipe)
     std::string random = get_random_bytes(TEST_BUFFER_SIZE_STD - 1);
     char buffer[TEST_BUFFER_SIZE_STD];
     ASSERT_TRUE(cat_pipe(fds, CAT_PIPE_FLAG_NONBLOCK, CAT_PIPE_FLAG_NONBLOCK));
-    ASSERT_EQ(cat_socket_open_os_fd(&read_pipe, CAT_SOCKET_TYPE_PIPE, fds[0]), &read_pipe);
+    ASSERT_EQ(cat_socket_create(&read_pipe, CAT_SOCKET_TYPE_PIPE), &read_pipe);
+    ASSERT_TRUE(cat_socket_open_os_fd(&read_pipe, fds[0]));
     DEFER(cat_socket_close(&read_pipe));
-    ASSERT_EQ(cat_socket_open_os_fd(&write_pipe, CAT_SOCKET_TYPE_PIPE, fds[1]), &write_pipe);
+    ASSERT_EQ(cat_socket_create(&write_pipe, CAT_SOCKET_TYPE_PIPE), &write_pipe);
+    ASSERT_TRUE(cat_socket_open_os_fd(&write_pipe, fds[1]));
     DEFER(cat_socket_close(&write_pipe));
     ASSERT_TRUE(cat_socket_send(&write_pipe, random.c_str(), random.length() + 1));
     ASSERT_EQ(cat_socket_read(&read_pipe, CAT_STRS(buffer)), random.length() + 1);
