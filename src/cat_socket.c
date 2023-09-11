@@ -813,12 +813,6 @@ CAT_API void cat_socket_init(cat_socket_t *socket)
     socket->internal = NULL;
 }
 
-static CAT_COLD void cat_socket_internal_fail_close_callback(uv_handle_t *handle)
-{
-    cat_socket_internal_t *socket_i = cat_container_of(handle, cat_socket_internal_t, u.handle);
-    cat_free(socket_i);
-}
-
 static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *socket, cat_socket_type_t type)
 {
     cat_socket_flags_t flags = CAT_SOCKET_FLAG_NONE;
@@ -965,18 +959,14 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     socket_i->ssl = NULL;
     socket_i->ssl_peer_name = NULL;
 #endif
-if (af != AF_UNSPEC) {
+    if (af != AF_UNSPEC) {
         cat_socket_internal_on_open(socket_i, af);
     }
 
     return socket;
 
-    if (0 && "socket_i should be free in close callback after handle has been initialized") {
-        uv_close(&socket_i->u.handle, cat_socket_internal_fail_close_callback);
-    } else {
-        _init_error:
-        cat_free(socket_i);
-    }
+    _init_error:
+    cat_free(socket_i);
     _type_error:
     cat_update_last_error_with_reason(error, "Socket crate with type %s failed", cat_socket_type_get_name(type));
 #if CAT_ALLOC_HANDLE_ERRORS
