@@ -267,9 +267,12 @@ jobs:
         working-directory: libcat
         shell: bash
         run: |
+          # note: lcov --keep-going option only available on macOS
           ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }} &&
+          ${{ runner.os == 'macOS' && 'export LCOV_CAPTURE_EXT_ARGS="--keep-going"' || 'export LCOV_CAPTURE_EXT_ARGS=""' }} &&
           lcov \
             --capture \
+            $LCOV_CAPTURE_EXT_ARGS \
             --directory "." \
             --output-file coverage.info &&
           lcov \
