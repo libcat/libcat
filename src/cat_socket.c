@@ -959,8 +959,14 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     socket_i->ssl = NULL;
     socket_i->ssl_peer_name = NULL;
 #endif
+
     if (af != AF_UNSPEC) {
         cat_socket_internal_on_open(socket_i, af);
+    }
+    // eq to check_establishment()
+    if ((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY &&
+        ((type & CAT_SOCKET_TYPE_FLAG_STDIN) || (type & CAT_SOCKET_TYPE_FLAG_STDOUT) || (type & CAT_SOCKET_TYPE_FLAG_STDERR))) {
+        socket_i->flags |= CAT_SOCKET_INTERNAL_FLAG_OPENED | CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
     }
 
     return socket;
@@ -994,13 +1000,19 @@ CAT_API cat_socket_t *cat_socket_create(cat_socket_t *socket, cat_socket_type_t 
     return socket;
 }
 
-static void cat_socket_internal_on_manual_open(cat_socket_internal_t *socket_i, cat_socket_type_t type)
+static cat_always_inline void cat_socket_internal_on_manual_open(cat_socket_internal_t *socket_i, cat_socket_type_t type)
 {
     const cat_sockaddr_info_t *address_info = NULL;
     cat_bool_t is_established;
-    if (((type & CAT_SOCKET_TYPE_TTY) == CAT_SOCKET_TYPE_TTY)) {
-        is_established = cat_true;
-    } else if (type & CAT_SOCKET_TYPE_FLAG_STREAM) {
+
+    // detect family and trigger on_open()
+    if (type & CAT_SOCKET_TYPE_FLAG_INET) {
+        address_info = cat_socket_internal_getname_fast(socket_i, cat_true, NULL);
+    }
+    cat_socket_internal_on_open(socket_i, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
+
+    // check_establishment()
+    if (type & CAT_SOCKET_TYPE_FLAG_STREAM) {
         do {
             if ((type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE) {
                 unsigned int flags = socket_i->u.handle.flags & (UV_HANDLE_READABLE | UV_HANDLE_WRITABLE);
@@ -1019,7 +1031,6 @@ static void cat_socket_internal_on_manual_open(cat_socket_internal_t *socket_i, 
     if (is_established) {
         socket_i->flags |= CAT_SOCKET_INTERNAL_FLAG_ESTABLISHED;
     }
-    cat_socket_internal_on_open(socket_i, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
 }
 
 CAT_API cat_bool_t cat_socket_open_os_fd(cat_socket_t *socket, cat_os_fd_t os_fd)
