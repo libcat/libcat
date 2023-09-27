@@ -1047,7 +1047,11 @@ CAT_API cat_bool_t cat_socket_open_os_fd(cat_socket_t *socket, cat_os_fd_t os_fd
     CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
     cat_socket_type_t type = socket_i->type;
     int error;
-    if ((type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE) {
+    if (((type & CAT_SOCKET_TYPE_PIPE) == CAT_SOCKET_TYPE_PIPE)
+#ifdef CAT_OS_UNIX_LIKE
+        || ((type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG)
+#endif
+    ) {
         /* convert SOCKET to int on Windows */
         error = uv_pipe_open(&socket_i->u.pipe, os_fd);
     } else {
