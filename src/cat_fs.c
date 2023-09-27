@@ -797,7 +797,20 @@ CAT_API ssize_t cat_fs_write(cat_file_t fd, const void *buf, size_t length)
     data->fd = fd;
     data->buf = buf;
     data->length = (cat_fs_write_size_t)length;
-    if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_write_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
+#ifdef CAT_ENABLE_DEBUG_LOG
+    char *buffer_quoted = NULL;
+#endif
+    CAT_LOG_DEBUG_VA(FS, {
+        CAT_LOG_DEBUG_D(FS, "write(" CAT_FS_ID_FMT ", %s, %zu) = " CAT_LOG_UNFINISHED_STR,
+            data->fd, cat_log_str_quote(data->buf, data->length, &buffer_quoted), data->length);
+    });
+    cat_bool_t ret = cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_write_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER);
+    CAT_LOG_DEBUG_VA(FS, {
+        CAT_LOG_DEBUG_D(FS, "write(" CAT_FS_ID_FMT ", %s, %zu) = " CAT_LOG_BOOL_RET_FMT,
+            data->fd, buffer_quoted, data->length, CAT_LOG_BOOL_RET_C(ret));
+        cat_free(buffer_quoted);
+    });
+    if (!ret) {
         return -1;
     }
     cat_fs_work_check_error(&data->ret.error, "write");
