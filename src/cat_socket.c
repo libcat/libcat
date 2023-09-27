@@ -759,16 +759,6 @@ static cat_bool_t cat_socket_internal_getaddrbyname(
     return cat_false;
 }
 
-static void cat_socket_internal_detect_family(cat_socket_internal_t *socket_i, cat_sa_family_t af)
-{
-    CAT_ASSERT(af == AF_INET || af == AF_INET6);
-    if (af == AF_INET) {
-        socket_i->type |= CAT_SOCKET_TYPE_FLAG_IPV4;
-    } else if (af == AF_INET6) {
-        socket_i->type |= CAT_SOCKET_TYPE_FLAG_IPV6;
-    }
-}
-
 static cat_always_inline cat_bool_t cat_socket_internal_can_be_transfer_by_ipc(cat_socket_internal_t *socket_i)
 {
     return
@@ -802,7 +792,12 @@ static cat_always_inline void cat_socket_internal_on_open(cat_socket_internal_t 
         }
     }
     if (af != AF_UNSPEC && (socket_i->type & CAT_SOCKET_TYPE_FLAG_INET)) {
-        cat_socket_internal_detect_family(socket_i, af);
+        CAT_ASSERT(af == AF_INET || af == AF_INET6);
+        if (af == AF_INET) {
+            socket_i->type |= CAT_SOCKET_TYPE_FLAG_IPV4;
+        } else if (af == AF_INET6) {
+            socket_i->type |= CAT_SOCKET_TYPE_FLAG_IPV6;
+        }
     }
 }
 
@@ -1002,14 +997,28 @@ CAT_API cat_socket_t *cat_socket_create(cat_socket_t *socket, cat_socket_type_t 
 
 static cat_always_inline void cat_socket_internal_on_manual_open(cat_socket_internal_t *socket_i, cat_socket_type_t type)
 {
+    cat_sa_family_t af = AF_UNSPEC;
     const cat_sockaddr_info_t *address_info = NULL;
     cat_bool_t is_established;
 
     // detect family and trigger on_open()
     if (type & CAT_SOCKET_TYPE_FLAG_INET) {
         address_info = cat_socket_internal_getname_fast(socket_i, cat_true, NULL);
+        if (address_info != NULL) {
+            af = address_info->address.common.sa_family;
+        }
+#ifdef SO_DOMAIN
+        else {
+            cat_socklen_t option_len;
+            cat_sa_family_t _af;
+            option_len = sizeof(af);
+            if (getsockopt(cat_socket_internal_get_fd_fast(socket_i), SOL_SOCKET, SO_DOMAIN, &_af, &option_len) == 0) {
+                af = _af;
+            }
+        }
+#endif
     }
-    cat_socket_internal_on_open(socket_i, address_info != NULL ? address_info->address.common.sa_family : AF_UNSPEC);
+    cat_socket_internal_on_open(socket_i, af);
 
     // check_establishment()
     if (type & CAT_SOCKET_TYPE_FLAG_STREAM) {
@@ -2385,6 +2394,9 @@ static const cat_sockaddr_info_t *cat_socket_internal_getname_fast(cat_socket_in
     _out:
     if (error_ptr != NULL) {
         *error_ptr = error;
+    }
+    if (unlikely(error != 0)) {
+        return NULL;
     }
     return cache;
 }
