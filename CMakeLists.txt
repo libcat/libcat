@@ -6,6 +6,9 @@ cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW) # Enable MSVC_RUNTIME_LIBRARY setting
 endif()
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW) # `find_package()` uses upper-case `<PACKAGENAME>_ROOT` variables.
+endif()
 
 PROJECT(libcat LANGUAGES C)
 
