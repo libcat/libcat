@@ -51,10 +51,10 @@ TEST(cat_sys, nanosleep_failed)
     ASSERT_EQ(cat_translate_sys_error(cat_sys_errno), CAT_EINVAL);
 }
 
-TEST(cat, runtime_init_with_error_log_stdout)
+TEST(cat, runtime_init_with_error_output_stdout)
 {
-    FILE *original_error_log = cat_get_error_log();
-    DEFER(cat_set_error_log(original_error_log));
+    FILE *original_error_output = cat_get_error_output();
+    DEFER(cat_set_error_output(original_error_output));
 
     cat_env_set("CAT_LOG_ERROR_OUTPUT", "stdout");
     cat_runtime_shutdown();
@@ -65,10 +65,10 @@ TEST(cat, runtime_init_with_error_log_stdout)
     ASSERT_NE(output.find("Now error log is stdout"), std::string::npos);
 }
 
-TEST(cat, runtime_init_with_error_log_stderr)
+TEST(cat, runtime_init_with_error_output_stderr)
 {
-    FILE *original_error_log = cat_get_error_log();
-    DEFER(cat_set_error_log(original_error_log));
+    FILE *original_error_output = cat_get_error_output();
+    DEFER(cat_set_error_output(original_error_output));
 
     cat_env_set("CAT_LOG_ERROR_OUTPUT", "stderr");
     cat_runtime_shutdown();
@@ -79,12 +79,14 @@ TEST(cat, runtime_init_with_error_log_stderr)
     ASSERT_NE(output.find("Now error log is stderr"), std::string::npos);
 }
 
-#ifdef CAT_DEBUG
+#ifdef CAT_ENABLE_DEBUG_LOG
 TEST(cat, enable_debug_mode)
 {
     cat_log_types_t log_types = CAT_LOG_G(types);
-    cat_enable_debug_mode();
+    unsigned int debug_log_level = CAT_LOG_G(debug_level);
+    cat_enable_debug_log_mode();
     ASSERT_EQ(CAT_LOG_G(types), CAT_LOG_TYPES_ALL);
+    CAT_LOG_G(debug_level) = debug_log_level;
     CAT_LOG_G(types) = log_types;
 }
 #endif

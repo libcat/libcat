@@ -38,7 +38,7 @@ static cat_always_inline const char *cat_log_type_dispatch(cat_log_type_t type, 
             return NULL;
 #else
             type_name = "Debug";
-            output = stdout;
+            output = CAT_LOG_G(debug_output);
             break;
 #endif
         }

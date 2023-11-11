@@ -239,7 +239,7 @@ public:
 #ifdef CAT_PQ
         ASSERT_TRUE(cat_pq_runtime_init());
 #endif
-        cat_set_error_log(stderr);
+        cat_set_error_output(stderr);
 
         ASSERT_TRUE(cat_run(CAT_RUN_EASY));
         ASSERT_NE(cat_coroutine_get_current(), nullptr);
