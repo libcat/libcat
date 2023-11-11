@@ -16,7 +16,7 @@
   +--------------------------------------------------------------------------+
  */
 
-#if defined(CAT_DEBUG) && !defined(CAT_DISABLE_DEBUG_LOG)
+#ifndef CAT_DISABLE_DEBUG_LOG
 #define CAT_ENABLE_DEBUG_LOG 1
 #endif
 
