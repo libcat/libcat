@@ -753,7 +753,7 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
     CAT_LOG_DEBUG(SSL, "SSL_do_handshake(%p): %d", ssl, n);
     if (n == 1) {
         ssl->flags |= CAT_SSL_FLAG_HANDSHAKE_OK;
-        CAT_LOG_DEBUG_LEVEL_SCOPE_START(SSL) {
+        CAT_LOG_DEBUG_LEVEL_SCOPE_START(1) {
             cat_ssl_handshake_log(ssl);
         } CAT_LOG_DEBUG_LEVEL_SCOPE_END();
 #ifndef SSL_OP_NO_RENEGOTIATION
