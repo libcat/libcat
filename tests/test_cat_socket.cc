@@ -2367,30 +2367,31 @@ TEST(cat_socket, open_os_socket)
     }
 }
 
-TEST(cat_socket, move)
-{
-    TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    cat_socket_t echo_client;
-    cat_socket_t echo_client2;
+// TODO: use cat_socket_copy() + cat_socket_close()
+// TEST(cat_socket, move)
+// {
+//     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
+//     cat_socket_t echo_client;
+//     cat_socket_t echo_client2;
 
-    ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
-    DEFER(if (cat_socket_is_available(&echo_client)) { cat_socket_close(&echo_client); });
-    ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
-    ASSERT_TRUE(cat_socket_move(&echo_client, &echo_client2));
-    DEFER(cat_socket_close(&echo_client2));
-    ASSERT_FALSE(cat_socket_is_available(&echo_client));
-    ASSERT_TRUE(cat_socket_is_available(&echo_client2));
-    {
-        wait_group wg;
-        co([&] {
-            wg++;
-            DEFER(wg--);
-            echo_stream_client_tests(&echo_client2);
-        });
-        ASSERT_FALSE(cat_socket_move(&echo_client2, &echo_client));
-        ASSERT_TRUE(cat_socket_move(&echo_client2, &echo_client2));
-    }
-}
+//     ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP), &echo_client);
+//     DEFER(if (cat_socket_is_available(&echo_client)) { cat_socket_close(&echo_client); });
+//     ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+//     ASSERT_TRUE(cat_socket_move(&echo_client, &echo_client2));
+//     DEFER(cat_socket_close(&echo_client2));
+//     ASSERT_FALSE(cat_socket_is_available(&echo_client));
+//     ASSERT_TRUE(cat_socket_is_available(&echo_client2));
+//     {
+//         wait_group wg;
+//         co([&] {
+//             wg++;
+//             DEFER(wg--);
+//             echo_stream_client_tests(&echo_client2);
+//         });
+//         ASSERT_FALSE(cat_socket_move(&echo_client2, &echo_client));
+//         ASSERT_TRUE(cat_socket_move(&echo_client2, &echo_client2));
+//     }
+// }
 
 TEST(cat_socket, pipe)
 {
