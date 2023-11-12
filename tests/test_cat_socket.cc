@@ -2413,27 +2413,25 @@ TEST(cat_socket, pipe)
 
 TEST(cat_socket, dump_all_and_close_all)
 {
-    bool closed_all = false;
-
     // TODO: now all sockets are unavailable
     cat_socket_t *tcp_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     ASSERT_NE(nullptr, tcp_socket);
-    DEFER(if (!closed_all) { cat_socket_close(tcp_socket); });
+    DEFER(cat_socket_close(tcp_socket));
 
     cat_socket_t *udp_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_UDP);
     ASSERT_NE(nullptr, udp_socket);
-    DEFER(if (!closed_all) { cat_socket_close(udp_socket); });
+    DEFER(cat_socket_close(udp_socket));
 
     cat_socket_t *pipe_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE);
     ASSERT_NE(nullptr, pipe_socket);
-    DEFER(if (!closed_all) { cat_socket_close(pipe_socket); });
+    DEFER(cat_socket_close(pipe_socket));
 
     cat_socket_t *tty_socket = nullptr;
     if (uv_guess_handle(CAT_STDOUT_FILENO) == UV_TTY) {
         cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
         ASSERT_NE(nullptr, tty_socket);
     }
-    DEFER(if (tty_socket != nullptr && !closed_all) { cat_socket_close(tty_socket); });
+    DEFER(if (tty_socket != nullptr) { cat_socket_close(tty_socket); });
 
     /* test dump all */
     {
@@ -2451,7 +2449,6 @@ TEST(cat_socket, dump_all_and_close_all)
     /* test close all */
     {
         cat_socket_close_all();
-        closed_all = true;
         ASSERT_TRUE(cat_coroutine_wait_all());
         testing::internal::CaptureStdout();
         cat_socket_dump_all();
