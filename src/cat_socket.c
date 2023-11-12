@@ -1519,6 +1519,16 @@ static void cat_socket_accept_connection_callback(uv_stream_t *stream, int statu
     // else we can call uv_accept to get it later
 }
 
+#define CAT_LOG_DEBUG_SOCKET_ESTABLISHED_SOCK_ONLY(socket, action, ret) \
+    CAT_LOG_DEBUG_VA(SOCKET, if (ret) { \
+        char sock_address[CAT_SOCKADDR_MAX_PATH] = "unknown"; \
+        size_t sock_address_length = sizeof(sock_address); \
+        cat_socket_get_sock_address(socket, sock_address, &sock_address_length); \
+        CAT_LOG_DEBUG_D(SOCKET, #action " %s { sock: {\"%.*s\", %d} }", \
+            cat_socket_get_type_name(socket), \
+            (int) sock_address_length, sock_address, cat_socket_get_sock_port(socket)); \
+    });
+
 static cat_always_inline cat_bool_t cat_socket_listen_impl(cat_socket_t *socket, int backlog)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
@@ -1529,10 +1539,14 @@ static cat_always_inline cat_bool_t cat_socket_listen_impl(cat_socket_t *socket,
         cat_update_last_error_with_reason(error, "Socket listen(%d) failed", backlog);
         return cat_false;
     }
-    uv_unref(&socket_i->u.handle);
-    socket_i->flags |= CAT_SOCKET_INTERNAL_FLAG_SERVER;
+    /* note: socket maybe copied from the other one, so it may have already unref and in the internal tree. */
+    if (!(socket_i->flags & CAT_SOCKET_INTERNAL_FLAG_SERVER)) {
+        uv_unref(&socket_i->u.handle);
+        RB_INSERT(cat_socket_internal_tree_s, &CAT_SOCKET_G(internal_tree), socket_i);
+        socket_i->flags |= CAT_SOCKET_INTERNAL_FLAG_SERVER;
+    }
 
-    RB_INSERT(cat_socket_internal_tree_s, &CAT_SOCKET_G(internal_tree), socket_i);
+    CAT_LOG_DEBUG_SOCKET_ESTABLISHED_SOCK_ONLY(socket, listened, cat_true);
 
     return cat_true;
 }
