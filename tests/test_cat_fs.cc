@@ -1019,15 +1019,20 @@ TEST(cat_fs, chown_fchown_lchown){
     ASSERT_EQ(cat_fs_fchown(fd, -1, -1), 0);
 #ifndef CAT_OS_WIN
     errno = 0;
+    ASSERT_LT(chown("/", 0, 0), 0);
+    int expected_sys_errno = errno;
+    int expected_errno = cat_translate_sys_error(expected_sys_errno);
+    // expected_sys_errno is always EPERM before, but on macos-12 provided by GitHub Actions, it is EROFS
+    errno = 0;
     cat_clear_last_error();
     ASSERT_LT(cat_fs_chown("/", 0, 0), 0);
-    ASSERT_EQ(errno, EPERM);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+    ASSERT_EQ(errno, expected_sys_errno);
+    ASSERT_EQ(cat_get_last_error_code(), expected_errno);
     errno = 0;
     cat_clear_last_error();
     ASSERT_LT(cat_fs_lchown("/", 0, 0), 0);
-    ASSERT_EQ(errno, EPERM);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EPERM);
+    ASSERT_EQ(errno, expected_sys_errno);
+    ASSERT_EQ(cat_get_last_error_code(), expected_errno);
 #endif
 }
 
