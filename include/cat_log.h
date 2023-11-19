@@ -141,7 +141,7 @@ typedef struct cat_log_globals_s {
 # define CAT_LOG_DEBUG_D(module_name, format, ...)
 #else
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_START(level) do { \
-    if (CAT_LOG_G(debug_level) >= level) { \
+    if (unlikely(CAT_LOG_G(debug_level) >= level)) { \
         CAT_LOG_G(last_debug_log_level) = level; \
 
 # define CAT_LOG_DEBUG_LEVEL_SCOPE_END() \
