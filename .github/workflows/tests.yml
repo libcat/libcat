@@ -158,6 +158,7 @@ jobs:
           ECHO ::group::Make cmake cache
           cmake . -B build ^
             -DLIBCAT_ENABLE_ASAN=ON ^
+            -DLIBCAT_ENABLE_DEBUG_LOG=OFF ^
             -DCMAKE_C_FLAGS="/WX" ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
