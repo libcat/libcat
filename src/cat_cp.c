@@ -202,6 +202,19 @@ CAT_API int cat_sys_select(cat_os_socket_t max_fd, fd_set *rfds, fd_set *wfds, f
         return -1;
     }
 
+    if (max_fd == 0) {
+        fd_set _rfds;
+        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s == INVALID_SOCKET) {
+            return -1;
+        }
+        FD_ZERO(&_rfds);
+        FD_SET(s, &_rfds);
+        select(-1, &_rfds, NULL, NULL, tv);
+        closesocket(s);
+        return 0;
+    }
+
     /* calculate how long we need to wait in milliseconds */
     if (tv == NULL) {
         ms_total = INFINITE;
