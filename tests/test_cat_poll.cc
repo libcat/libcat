@@ -154,7 +154,9 @@ TEST(cat_poll, defer_bug)
     ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
 }
 
-static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
+typedef int (*test_select_function_t)(cat_os_socket_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+
+static cat_ret_t select_is_xxx_able(test_select_function_t select_function, cat_socket_fd_t fd, int type)
 {
     struct timeval timeout;
     fd_set readfds, writefds, exceptfds;
@@ -171,7 +173,7 @@ static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
             FD_SET(fd, &writefds);
             break;
     }
-    int ret = cat_select((int) (fd + 1), &readfds, &writefds, nullptr, &timeout);
+    int ret = select_function((int) (fd + 1), &readfds, &writefds, nullptr, &timeout);
     if (ret < 0) {
         return CAT_RET_ERROR;
     }
@@ -187,32 +189,41 @@ static cat_ret_t select_is_able(cat_socket_fd_t fd, int type)
     CAT_NEVER_HERE("Invalid type");
 }
 
-#define select_is_readable(fd) select_is_able(fd, 0)
-#define select_is_writable(fd) select_is_able(fd, 1)
+#define select_is_readable(select_function, fd) select_is_xxx_able(select_function, fd, 0)
+#define select_is_writable(select_function, fd) select_is_xxx_able(select_function, fd, 1)
 
 TEST(cat_select, base)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
     PREPARE_TCP_SOCKET(socket);
-
-    ASSERT_TRUE(select_is_writable(fd));
+    ASSERT_TRUE(select_is_writable(cat_select, fd));
+    ASSERT_TRUE(select_is_writable(cat_sys_select, fd));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
-    ASSERT_TRUE(select_is_readable(fd));
+    ASSERT_TRUE(select_is_readable(cat_select, fd));
+    ASSERT_TRUE(select_is_readable(cat_sys_select, fd));
     char buffer[CAT_STRLEN("Hello libcat")];
     ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
-    ASSERT_TRUE(select_is_writable(fd));
+    ASSERT_TRUE(select_is_writable(cat_select, fd));
+    ASSERT_TRUE(select_is_writable(cat_sys_select, fd));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("RESET")));
-    ASSERT_TRUE(select_is_readable(fd));
+    ASSERT_TRUE(select_is_readable(cat_select, fd));
+    ASSERT_TRUE(select_is_readable(cat_sys_select, fd));
     ASSERT_FALSE(cat_socket_check_liveness(&socket));
 }
 
 TEST(cat_select, error)
 {
-    ASSERT_LT(cat_select(-1, nullptr, nullptr, nullptr, nullptr), 0);
+    ASSERT_LT(cat_select((cat_os_socket_t) -1, nullptr, nullptr, nullptr, nullptr), 0);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_LT(cat_sys_select((cat_os_socket_t) -1, nullptr, nullptr, nullptr, nullptr), 0);
+    ASSERT_EQ(cat_translate_sys_error(cat_sys_errno), CAT_EINVAL);
 }
 
 TEST(cat_select, empty)
 {
-    ASSERT_EQ(cat_select(0, nullptr, nullptr, nullptr, nullptr), 0);
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 1000;
+    ASSERT_EQ(cat_select(0, nullptr, nullptr, nullptr, &timeout), 0);
+    ASSERT_EQ(cat_sys_select((cat_os_socket_t) 0, nullptr, nullptr, nullptr, &timeout), 0);
 }

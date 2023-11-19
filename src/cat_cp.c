@@ -198,6 +198,7 @@ CAT_API int cat_sys_select(cat_os_socket_t max_fd, fd_set *rfds, fd_set *wfds, f
 
     /* As max_fd is unsigned, non socket might overflow. */
     if (max_fd > (cat_os_socket_t) INT_MAX) {
+        cat_set_sys_errno(WSAEINVAL);
         return -1;
     }
 
