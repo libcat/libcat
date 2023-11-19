@@ -673,6 +673,13 @@ CAT_API int cat_select(int max_fd, fd_set *readfds, fd_set *writefds, fd_set *ex
     }
     /* nothing to do */
     if (nfds == 0) {
+        cat_timeout_t timeout_ms = cat_time_tv2to(timeout);
+        if (timeout_ms > 0) {
+            if (cat_time_delay(timeout_ms) != CAT_RET_OK) {
+                cat_update_last_error_with_previous("Select wait failed");
+                return -1;
+            }
+        }
         return 0;
     }
 
