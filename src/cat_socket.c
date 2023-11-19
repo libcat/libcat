@@ -4570,7 +4570,7 @@ static cat_always_inline ssize_t cat_socket_send_file_impl(cat_socket_t *socket,
     cat_file_t file;
     ssize_t written;
 
-    file = cat_fs_open(filename, O_RDONLY);
+    file = cat_fs_open(filename, CAT_FS_OPEN_FLAG_RDONLY);
     if (unlikely(file < 0)) {
         cat_update_last_error_with_previous("Socket sendfile failed when open file");
         return -1;

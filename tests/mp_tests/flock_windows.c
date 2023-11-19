@@ -165,14 +165,14 @@ typedef struct flock_s {
 } flock_t;
 void* fill_thread_pools(flock_t* data){
     // this function will call cat_fs_flock to try fill thread pools.
-    int ret = cat_fs_flock(data->fd, CAT_LOCK_EX | CAT_LOCK_NB);
+    int ret = cat_fs_flock(data->fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE | CAT_FS_FLOCK_FLAG_NONBLOCK);
     if(ret == 0){
         printf("flock success, this is impossible\n");
         abort();
     };
     // if lock nb done, set count
     locks++;
-    cat_fs_flock(data->fd, CAT_LOCK_EX);
+    cat_fs_flock(data->fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
     return NULL;
 }
 
@@ -193,7 +193,7 @@ int parent(int argc, wchar_t**argvw, HANDLE hIn, HANDLE hOut){
     printf("parent unlink file %s\n", FILENAME);
     cat_fs_unlink(FILENAME);
     printf("parent open file %s\n", FILENAME);
-    int fd = cat_fs_open(FILENAME, CAT_FS_O_CREAT | CAT_FS_O_RDWR, 0666);
+    int fd = cat_fs_open(FILENAME, CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0666);
     if(fd < 0){
         // we failed open target file
         printf("parent failed open file %s: %s\n", FILENAME, cat_get_last_error_message());
@@ -260,7 +260,7 @@ int child(int argc, wchar_t**argvw, HANDLE hIn, HANDLE hOut){
     }
 
     printf("child open %s\n", FILENAME);
-    int fd = cat_fs_open(FILENAME, CAT_FS_O_CREAT | CAT_FS_O_RDWR, 0666);
+    int fd = cat_fs_open(FILENAME, CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0666);
     if(fd < 0){
         // we failed open target file
         printf("child failed open file %s: %s\n", FILENAME, cat_get_last_error_message());
@@ -268,14 +268,14 @@ int child(int argc, wchar_t**argvw, HANDLE hIn, HANDLE hOut){
     }
 
     printf("child lock file\n");
-    cat_fs_flock(fd, CAT_LOCK_EX);
+    cat_fs_flock(fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
     if(contpipe("child", hOut)){
         return 1;
     }
 
     waitpipe("child", hIn);
     printf("child unlock file\n");
-    cat_fs_flock(fd, CAT_LOCK_UN);
+    cat_fs_flock(fd, CAT_FS_FLOCK_FLAG_UNLOCK);
     cat_fs_close(fd);
 
     contpipe("child", hOut);

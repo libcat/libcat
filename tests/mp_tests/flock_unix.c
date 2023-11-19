@@ -99,14 +99,14 @@ typedef struct flock_s {
 } flock_t;
 void* fill_thread_pools(flock_t* data){
     // this function will call cat_fs_flock to try fill thread pools.
-    int ret = cat_fs_flock(data->fd, CAT_LOCK_EX | CAT_LOCK_NB);
+    int ret = cat_fs_flock(data->fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE | CAT_FS_FLOCK_FLAG_NONBLOCK);
     if(ret == 0){
         fprintf(stderr, "flock success, this is impossible\n");
         abort();
     };
     // if lock nb done, set count
     locks++;
-    cat_fs_flock(data->fd, CAT_LOCK_EX);
+    cat_fs_flock(data->fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
     return NULL;
 }
 
@@ -125,7 +125,7 @@ int parent(int rfd, int wfd){
     cat_run(CAT_RUN_EASY);
     // open fd for flock
     cat_fs_unlink(FILENAME);
-    int fd = cat_fs_open(FILENAME, CAT_FS_O_CREAT | CAT_FS_O_RDWR, 0666);
+    int fd = cat_fs_open(FILENAME, CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0666);
     if(fd < 0){
         // failed open file
         printf("parent failed open file: %s\n", cat_get_last_error_message());
@@ -194,7 +194,7 @@ int child(int rfd, int wfd){
     }
 
     printf("child open %s\n", FILENAME);
-    int fd = cat_fs_open(FILENAME, CAT_FS_O_CREAT | CAT_FS_O_RDWR, 0666);
+    int fd = cat_fs_open(FILENAME, CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0666);
     if(fd < 0){
         // we failed open target file
         printf("child failed open file %s: %s\n", FILENAME, cat_get_last_error_message());
@@ -202,14 +202,14 @@ int child(int rfd, int wfd){
     }
 
     printf("child lock file\n");
-    cat_fs_flock(fd, CAT_LOCK_EX);
+    cat_fs_flock(fd, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
     if(contpipe("child", wfd)){
         return 1;
     }
 
     waitpipe("child", rfd);
     printf("child unlock file\n");
-    cat_fs_flock(fd, CAT_LOCK_UN);
+    cat_fs_flock(fd, CAT_FS_FLOCK_FLAG_UNLOCK);
     cat_fs_close(fd);
 
     contpipe("child", wfd);
