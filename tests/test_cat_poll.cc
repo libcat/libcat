@@ -36,7 +36,7 @@ TEST(cat_poll, init_failed)
 #endif
 }
 
-#define PREPARE_TCP_SOCKET(socket) \
+#define PREPARE_TCP_SOCKET(socket, fd) \
     cat_socket_t socket; \
     cat_socket_fd_t fd; \
     \
@@ -48,7 +48,7 @@ TEST(cat_poll, init_failed)
 TEST(cat_poll, base)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    PREPARE_TCP_SOCKET(socket);
+    PREPARE_TCP_SOCKET(socket, fd);
 
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
@@ -87,7 +87,7 @@ TEST(cat_poll, server)
 TEST(cat_poll, duplicate)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    PREPARE_TCP_SOCKET(socket);
+    PREPARE_TCP_SOCKET(socket, fd);
 
     {
         wait_group wg;
@@ -120,7 +120,7 @@ TEST(cat_poll, duplicate)
 TEST(cat_poll, defer_bug)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    PREPARE_TCP_SOCKET(socket);
+    PREPARE_TCP_SOCKET(socket, fd);
 
     ASSERT_EQ(cat_poll_one(fd, POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
@@ -195,7 +195,7 @@ static cat_ret_t select_is_xxx_able(test_select_function_t select_function, cat_
 TEST(cat_select, base)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
-    PREPARE_TCP_SOCKET(socket);
+    PREPARE_TCP_SOCKET(socket, fd);
     ASSERT_TRUE(select_is_writable(cat_select, fd));
     ASSERT_TRUE(select_is_writable(cat_sys_select, fd));
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
