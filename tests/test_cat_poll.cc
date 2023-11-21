@@ -160,7 +160,7 @@ static cat_ret_t select_is_xxx_able(test_select_function_t select_function, cat_
 {
     struct timeval timeout;
     fd_set readfds, writefds, exceptfds;
-    timeout.tv_sec = (cat_timeval_sec_t) TEST_IO_TIMEOUT;
+    timeout.tv_sec = (cat_timeval_sec_t) (TEST_IO_TIMEOUT / 1000);
     timeout.tv_usec = 0;
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);

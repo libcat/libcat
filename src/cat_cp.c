@@ -19,11 +19,11 @@
 #include "cat.h"
 
 #ifdef CAT_IDE_HELPER
-#include "cat_cp.h"
+# include "cat_cp.h"
 #endif
 
 #ifdef CAT_OS_WIN
-#include <windows.h>
+# include <windows.h>
 #endif
 
 /* sleep */
@@ -230,7 +230,7 @@ CAT_API int cat_sys_select(cat_os_socket_t max_fd, fd_set *rfds, fd_set *wfds, f
     /* build an array of handles for non-sockets */
     for (i = 0; (uint32_t)i < max_fd; i++) {
         if (SAFE_FD_ISSET(i, rfds) || SAFE_FD_ISSET(i, wfds) || SAFE_FD_ISSET(i, efds)) {
-            handles[n_handles] = (HANDLE) (uintptr_t) _get_osfhandle(i);
+            handles[n_handles] = uv_get_osfhandle(i);
             if (handles[n_handles] == INVALID_HANDLE_VALUE) {
                 /* socket */
                 if (SAFE_FD_ISSET(i, rfds)) {
