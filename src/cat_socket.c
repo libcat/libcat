@@ -2208,7 +2208,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
 #endif
 #ifdef CAT_SSL_HAVE_TLS_ALPN
     if (ioptions.alpn_protocols != NULL) {
-        if (!cas_ssl_context_set_apln_protocols(context, ioptions.is_client, ioptions.alpn_protocols)) {
+        if (!cas_ssl_context_set_alpn_protocols(context, ioptions.is_client, ioptions.alpn_protocols)) {
             goto _setup_error;
         }
     }
