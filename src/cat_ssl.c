@@ -436,7 +436,7 @@ static int cat_ssl_server_alpn_callback(
     return SSL_TLSEXT_ERR_OK;
 }
 
-CAT_API cat_bool_t cas_ssl_context_set_apln_protocols(cat_ssl_context_t *context, cat_bool_t is_client, const char *alpn_protocols)
+CAT_API cat_bool_t cas_ssl_context_set_alpn_protocols(cat_ssl_context_t *context, cat_bool_t is_client, const char *alpn_protocols)
 {
     CAT_LOG_DEBUG(SSL, "SSL_CTX_set_alpn_protos(%p, \"%s\")", context, alpn_protocols);
     cat_string_t alpn;
