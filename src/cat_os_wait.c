@@ -462,6 +462,8 @@ CAT_API cat_bool_t cat_os_wait_runtime_init(void)
 {
     uv_signal_init(&CAT_EVENT_G(loop), &CAT_OS_WAIT_G(sigchld_watcher));
     cat_queue_init(&CAT_OS_WAIT_G(waiter_list));
+    RB_INIT(&CAT_OS_WAIT_G(waitpid_task_tree));
+    RB_INIT(&CAT_OS_WAIT_G(child_process_state_tree));
 
     return cat_true;
 }
