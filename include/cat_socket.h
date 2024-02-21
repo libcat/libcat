@@ -602,13 +602,20 @@ CAT_API cat_bool_t cat_socket_try_connect(cat_socket_t *socket, const cat_sockad
 CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const char *name, size_t name_length, int port);
 
 #ifdef CAT_SSL
+
+typedef struct cat_socket_crypto_options_s cat_socket_crypto_options_t;
+
+typedef cat_bool_t (*cat_load_certificate_t)(cat_ssl_context_t *context, cat_socket_crypto_options_t *options);
+
 typedef struct cat_socket_crypto_options_s {
     const char *peer_name;
     const char *ca_file;
     const char *ca_path;
+    cat_load_certificate_t load_ca;
     const char *certificate;
     const char *certificate_key;
     const char *passphrase;
+    cat_load_certificate_t load_certficate;
 #ifdef CAT_SSL_HAVE_SECURITY_LEVEL
     int security_level;
 #endif
@@ -624,6 +631,7 @@ typedef struct cat_socket_crypto_options_s {
     cat_bool_t no_ticket;
     cat_bool_t no_compression;
     cat_bool_t no_client_ca_list;
+    void *context; /* context for crypto things */
 } cat_socket_crypto_options_t;
 
 CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options, cat_bool_t is_client);
