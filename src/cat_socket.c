@@ -483,8 +483,12 @@ CAT_API cat_bool_t cat_socket_module_shutdown(void)
 CAT_API cat_bool_t cat_socket_runtime_init(void)
 {
     CAT_SOCKET_G(last_id) = 0;
+
+    memset(&CAT_SOCKET_G(options), 0, sizeof(CAT_SOCKET_G(options)));
     CAT_SOCKET_G(options.timeout) = cat_socket_default_global_timeout_options;
     CAT_SOCKET_G(options.tcp_keepalive_delay) = 60;
+
+    RB_INIT(&CAT_SOCKET_G(internal_tree));
 
     return cat_true;
 }
