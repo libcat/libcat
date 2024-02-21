@@ -2098,9 +2098,11 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->peer_name = NULL;
     options->ca_file = NULL;
     options->ca_path = NULL;
+    options->load_ca = NULL;
     options->certificate = NULL;
     options->certificate_key = NULL;
     options->passphrase = NULL;
+    options->load_certficate = NULL;
 #ifdef CAT_SSL_HAVE_SECURITY_LEVEL
     options->security_level = CAT_SSL_DEFAULT_SECURITY_LEVEL;
 #endif
@@ -2115,6 +2117,7 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->no_ticket = cat_false;
     options->no_compression = cat_false;
     options->no_client_ca_list = cat_false;
+    options->context = NULL;
 }
 
 /* TODO: Support non-blocking SSL handshake? (just for PHP, stupid design) */
@@ -2172,9 +2175,11 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
                 goto _setup_error;
             }
         }
-        if (ioptions.ca_file  != NULL || ioptions.ca_path != NULL) {
+        if (ioptions.ca_file != NULL || ioptions.ca_path != NULL) {
             if (!cat_ssl_context_load_verify_locations(context, ioptions.ca_file, ioptions.ca_path)) {
-                goto _setup_error;
+                if (ioptions.load_ca && !ioptions.load_ca(context, &ioptions)) {
+                    goto _setup_error;
+                }
             }
         } else {
 #ifndef CAT_OS_WIN
@@ -2191,14 +2196,20 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     } else {
         cat_ssl_context_disable_verify_peer(context);
     }
-    if (ioptions.passphrase != NULL) {
-        if (!cat_ssl_context_set_passphrase(context, ioptions.passphrase, strlen(ioptions.passphrase))) {
+    if (ioptions.load_certficate != NULL) {
+        if (!ioptions.load_certficate(context, &ioptions)) {
             goto _setup_error;
         }
-    }
-    if (ioptions.certificate != NULL) {
-        if (!cat_ssl_context_set_certificate(context, ioptions.certificate, ioptions.certificate_key)) {
-            goto _setup_error;
+    } else {
+        if (ioptions.passphrase != NULL) {
+            if (!cat_ssl_context_set_passphrase(context, ioptions.passphrase, strlen(ioptions.passphrase))) {
+                goto _setup_error;
+            }
+        }
+        if (ioptions.certificate != NULL) {
+            if (!cat_ssl_context_set_certificate(context, ioptions.certificate, ioptions.certificate_key)) {
+                goto _setup_error;
+            }
         }
     }
     if (ioptions.no_ticket) {
@@ -2336,9 +2347,11 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     "peer_name: \"%s\", " \
     "ca_file: \"%s\", " \
     "ca_path: \"%s\", " \
+    "load_ca: \"%p\", " \
     "certificate: \"%s\", " \
     "certificate_key: \"%s\", " \
     "passphrase: \"%s\", " \
+    "load_certificate: \"%p\", " \
     "protocols: %s, " \
     "verify_depth: %d, " \
     "is_client: %s, " \
@@ -2354,9 +2367,11 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     CAT_NULLABLE_STR_C(options.peer_name), \
     CAT_NULLABLE_STR_C(options.ca_file), \
     CAT_NULLABLE_STR_C(options.ca_path), \
+    options.load_ca, \
     CAT_NULLABLE_STR_C(options.certificate), \
     CAT_NULLABLE_STR_C(options.certificate_key), \
     CAT_NULLABLE_STR_C(options.passphrase), \
+    options.load_certficate, \
     protocols_str, \
     options.verify_depth, \
     cat_bool_str(options.is_client), \
