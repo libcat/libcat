@@ -88,9 +88,9 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
 
     // load private key
     pkey = EVP_PKEY_new();
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     checkOpenSSL(BIO_write(bio, certs->severKey, strlen(certs->severKey)) <= 0);
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
     checkOpenSSL(pkey == nullptr);
     DEFER(EVP_PKEY_free(pkey));
@@ -99,9 +99,9 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
     DEFER(X509_free(x));
 
     // load server cert
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     checkOpenSSL(BIO_write(bio, certs->severCert, strlen(certs->severCert)) <= 0);
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     x = PEM_read_bio_X509(bio, &x, nullptr, nullptr);
     checkOpenSSL(x == nullptr);
 
@@ -112,9 +112,9 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
     x = X509_new();
 
     // load ca cert
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     checkOpenSSL(BIO_write(bio, certs->caCert, strlen(certs->caCert)) <= 0);
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
     x = PEM_read_bio_X509(bio, &x, nullptr, nullptr);
     checkOpenSSL(x == nullptr);
 
@@ -122,7 +122,7 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
     checkOpenSSL(SSL_CTX_add1_chain_cert(context->ctx, x) != 1);
 
     // rewind
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
 
     checkOpenSSL(SSL_CTX_use_PrivateKey(context->ctx, pkey) != 1);
 
@@ -152,7 +152,7 @@ static cat_bool_t load_ca_test_callback(cat_ssl_context_t *context, cat_socket_c
     DEFER(BIO_free(bio));
 
     checkOpenSSL(BIO_write(bio, certs->caCert, strlen(certs->caCert)) <= 0);
-    BIO_seek(bio, 0);
+    (void) BIO_seek(bio, 0);
 
     cert = X509_new();
     DEFER(X509_free(cert));
