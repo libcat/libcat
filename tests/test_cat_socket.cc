@@ -31,7 +31,7 @@ extern "C"
 
 #include <vector>
 
-static void echo_stream_server_connection_handler(cat_socket_t *server)
+void echo_stream_server_connection_handler(cat_socket_t *server)
 {
     wait_group wg;
     while (true) {

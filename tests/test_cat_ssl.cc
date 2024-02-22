@@ -19,6 +19,17 @@
 #include "test.h"
 #ifdef CAT_SSL
 
+# define checkOpenSSL(failcond) \
+    do { \
+        if (failcond) { \
+            long err = ERR_get_error(); \
+            char buf[256]; \
+            ERR_error_string_n(err, buf, sizeof(buf)); \
+            fprintf(stderr, __FILE__ ":%d OpenSSL error: %s\n", __LINE__, buf); \
+            return cat_false; \
+        } \
+    } while (0)
+
 TEST(cat_ssl, remote_https_server)
 {
     SKIP_IF_OFFLINE();
@@ -49,6 +60,200 @@ TEST(cat_ssl, remote_https_server)
     ASSERT_GT(nread, 0);
     CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
     ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
+}
+
+static testing::X509util *x509;
+
+TEST_REQUIREMENT(cat_ssl, x509)
+{
+    x509 = testing::X509util::newRSA();
+    ASSERT_NE(x509, nullptr);
+}
+
+TEST_REQUIREMENT_DTOR(cat_ssl, x509)
+{
+    delete x509;
+}
+
+typedef struct test_load_cert_s {
+    const char *caCert;
+    const char *caKey;
+    const char *severCert;
+    const char *severKey;
+    const char *clientCert;
+    const char *clientKey;
+} test_load_cert_t;
+
+static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket_crypto_options_t *options)
+{
+    BIO *bio;
+    X509 *x509;
+    EVP_PKEY *pkey;
+    test_load_cert_t *certs = (test_load_cert_t *)options->context;
+    if (!certs || !certs->caCert || !certs->caKey || !certs->severCert || !certs->severKey) {
+        // never here
+        return cat_false;
+    }
+
+    bio = BIO_new(BIO_s_mem());
+    checkOpenSSL(bio == nullptr);
+    DEFER(BIO_free(bio));
+
+    // load private key
+    pkey = EVP_PKEY_new();
+    BIO_seek(bio, 0);
+    checkOpenSSL(BIO_write(bio, certs->severKey, strlen(certs->severKey)) <= 0);
+    BIO_seek(bio, 0);
+    pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
+    checkOpenSSL(pkey == nullptr);
+    DEFER(EVP_PKEY_free(pkey));
+
+    x509 = X509_new();
+    DEFER(X509_free(x509));
+
+    // load server cert
+    BIO_seek(bio, 0);
+    checkOpenSSL(BIO_write(bio, certs->severCert, strlen(certs->severCert)) <= 0);
+    BIO_seek(bio, 0);
+    x509 = PEM_read_bio_X509(bio, &x509, nullptr, nullptr);
+    checkOpenSSL(x509 == nullptr);
+
+    // use server cert
+    checkOpenSSL(SSL_CTX_use_certificate(context->ctx, x509) != 1);
+
+    X509_free(x509);
+    x509 = X509_new();
+
+    // load ca cert
+    BIO_seek(bio, 0);
+    checkOpenSSL(BIO_write(bio, certs->caCert, strlen(certs->caCert)) <= 0);
+    BIO_seek(bio, 0);
+    x509 = PEM_read_bio_X509(bio, &x509, nullptr, nullptr);
+    checkOpenSSL(x509 == nullptr);
+
+    // add ca cert (with add1 +1 refcount)
+    checkOpenSSL(SSL_CTX_add1_chain_cert(context->ctx, x509) != 1);
+
+    // rewind
+    BIO_seek(bio, 0);
+
+    checkOpenSSL(SSL_CTX_use_PrivateKey(context->ctx, pkey) != 1);
+
+    checkOpenSSL(SSL_CTX_check_private_key(context->ctx) != 1);
+
+    return cat_true;
+}
+
+static cat_bool_t load_ca_test_callback(cat_ssl_context_t *context, cat_socket_crypto_options_t *options)
+{
+    printf("load_ca_test_callback\n");
+    test_load_cert_t *certs = (test_load_cert_t *)options->context;
+    if (!certs || !certs->caCert) {
+        // never here
+        return cat_false;
+    }
+
+    BIO *bio;
+    X509 *cert;
+    X509_STORE *cert_store;
+
+    cert_store = SSL_CTX_get_cert_store(context->ctx);
+    checkOpenSSL(cert_store == nullptr);
+
+    bio = BIO_new(BIO_s_mem());
+    checkOpenSSL(bio == nullptr);
+    DEFER(BIO_free(bio));
+
+    checkOpenSSL(BIO_write(bio, certs->caCert, strlen(certs->caCert)) <= 0);
+    BIO_seek(bio, 0);
+
+    cert = X509_new();
+    DEFER(X509_free(cert));
+    cert = PEM_read_bio_X509(bio, &cert, nullptr, nullptr);
+    checkOpenSSL(cert == nullptr);
+
+    int ret = X509_STORE_add_cert(cert_store, cert);
+    checkOpenSSL(ret != 1);
+
+    return cat_true;
+}
+
+TEST(cat_ssl, load_certs)
+{
+    TEST_REQUIRE(x509 != nullptr, cat_ssl, x509);
+
+    cat_socket_t *clientSocket, *serverSocket;
+
+    auto serverKeyCert =
+        x509->newKeyCertPair(CertFlagsServer, x509->newRSAKey(), "localhost", 0, 90 * 24 * 60 * 60, "127.0.0.1");
+
+    DEFER([serverKeyCert]{
+        free((void *)serverKeyCert.cert);
+        free((void *)serverKeyCert.key);
+    }());
+
+    // auto f = fopen("/tmp/ca.crt", "w");
+    // ASSERT_NE(f, nullptr);
+    // DEFER(fclose(f));
+    // ASSERT_GT(fwrite(x509->caCert, 1, strlen(x509->caCert), f), 0);
+    // fflush(f);
+    // auto f2 = fopen("/tmp/svr.key", "w");
+    // ASSERT_NE(f2, nullptr);
+    // DEFER(fclose(f2));
+    // ASSERT_GT(fwrite(serverKeyCert.key, 1, strlen(serverKeyCert.key), f2), 0);
+    // fflush(f2);
+    // auto f3 = fopen("/tmp/svr.crt", "w");
+    // ASSERT_NE(f3, nullptr);
+    // DEFER(fclose(f3));
+    // ASSERT_GT(fwrite(serverKeyCert.cert, 1, strlen(serverKeyCert.cert), f3), 0);
+    // ASSERT_GT(fwrite("\n", 1, 1, f3), 0);
+    // ASSERT_GT(fwrite(x509->caCert, 1, strlen(x509->caCert), f3), 0);
+    // fflush(f3);
+
+    test_load_cert_t certs = {
+        .caCert = x509->caCert,
+        .caKey = x509->caKey,
+        .severCert = serverKeyCert.cert,
+        .severKey = serverKeyCert.key,
+        .clientCert = nullptr,
+        .clientKey = nullptr
+    };
+
+    serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(serverSocket, nullptr);
+    DEFER(cat_socket_close(serverSocket));
+    ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+
+    cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
+    co([serverSocket, connSocket, certs] {
+        ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
+        DEFER(cat_socket_close(connSocket));
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, false);
+        options.context = (void *)&certs;
+        options.load_certficate = load_cert_test_callback;
+        ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
+        char buffer[TEST_BUFFER_SIZE_STD];
+        ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 6);
+    });
+
+    // cat_time_sleep(5);
+
+    clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(clientSocket, nullptr);
+    DEFER(cat_socket_close(clientSocket));
+    ASSERT_TRUE(
+        cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_port(serverSocket, false)));
+    // ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), 1443));
+    cat_socket_crypto_options_t options;
+    cat_socket_crypto_options_init(&options, true);
+    options.ca_file = "."; // must fail
+    options.context = (void *)&certs;
+    options.load_ca = load_ca_test_callback;
+    options.peer_name = "localhost";
+    ASSERT_TRUE(cat_socket_enable_crypto(clientSocket, &options));
+    ASSERT_TRUE(cat_socket_send(clientSocket, "hello!", 6));
 }
 
 #endif
