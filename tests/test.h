@@ -30,6 +30,7 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/x509v3.h>
+#include <openssl/rsa.h>
 #endif // CAT_SSL
 
 #include "cat_api.h"
