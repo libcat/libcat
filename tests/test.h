@@ -101,21 +101,6 @@
 #define TEST_HTTP_STATUS_CODE_OK           200
 #define TEST_HTTP_CLIENT_FAKE_USERAGENT    "curl/7.58.0"
 
-#ifdef CAT_SSL
-#define TEST_SERVER_SSL_CA_FILE                 ::testing::CONFIG_SSL_CA_FILE.c_str()
-
-#define TEST_SERVER_SSL_CERTIFICATE             ::testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str()
-#define TEST_SERVER_SSL_CERTIFICATE_KEY         ::testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str()
-#define TEST_CLIENT_SSL_CERTIFICATE             ::testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str()
-#define TEST_CLIENT_SSL_CERTIFICATE_KEY         ::testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str()
-
-#define TEST_SSL_CERTIFICATE_PASSPHRASE         ::testing::CONFIG_SSL_CERTIFICATE_PASSPHRASE.c_str()
-#define TEST_SERVER_SSL_CERTIFICATE_ENCODED     ::testing::CONFIG_SERVER_SSL_CERTIFICATE_ENCODED.c_str()
-#define TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED ::testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED.c_str()
-#define TEST_CLIENT_SSL_CERTIFICATE_ENCODED     ::testing::CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED.c_str()
-#define TEST_CLIENT_SSL_CERTIFICATE_KEY_ENCODED ::testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED.c_str()
-#endif
-
 #define PP_CAT(a, b) PP_CAT_I(a, b)
 #define PP_CAT_I(a, b) PP_CAT_II(~, a ## b)
 #define PP_CAT_II(p, res) res
@@ -170,19 +155,6 @@ namespace testing
     extern std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST;
     /* TMP_PATH */
     extern std::string CONFIG_TMP_PATH;
-
-#ifdef CAT_SSL
-    extern std::string CONFIG_SSL_CA_FILE;
-    extern std::string CONFIG_SERVER_SSL_CERTIFICATE;
-    extern std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY;
-    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE;
-    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY;
-    extern std::string CONFIG_SSL_CERTIFICATE_PASSPHRASE;
-    extern std::string CONFIG_SERVER_SSL_CERTIFICATE_ENCODED;
-    extern std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
-    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED;
-    extern std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED;
-#endif
 
     /* common functions */
 
@@ -323,6 +295,56 @@ namespace testing
         const char *key;
         const char *cert;
     };
+    class X509KeyCertFilePair
+    {
+        public:
+
+            char keyFile[PATH_MAX];
+            char certFile[PATH_MAX];
+            char caCertFile[PATH_MAX];
+            char chainFile[PATH_MAX];
+
+            X509KeyCertFilePair(const char* caCert, X509KeyCertPair pair) {
+                static std::atomic<int> serial;
+
+                std::string path;
+                std::string random_filename = string_format("%s/libcat_test_%08x", TEST_TMP_PATH, serial.fetch_add(1));
+
+                path = string_format("%s_ca.crt", random_filename.c_str());
+                file_put_contents(path.c_str(), caCert, strlen(caCert));
+                strncpy(caCertFile, path.c_str(), sizeof(caCertFile) - 1);
+
+                path = string_format("%s.crt", random_filename.c_str());
+                file_put_contents(path.c_str(), pair.cert, strlen(pair.cert));
+                strncpy(certFile, path.c_str(), sizeof(certFile) - 1);
+
+                path = string_format("%s.key", random_filename.c_str());
+                file_put_contents(path.c_str(), pair.key, strlen(pair.key));
+                strncpy(keyFile, path.c_str(), sizeof(keyFile) - 1);
+
+                path = string_format("%s_chain.crt", random_filename.c_str());
+                FILE *file = fopen(path.c_str(),
+                    "w"
+#ifdef CAT_OS_WIN
+                    // for no LF -> CRLF auto translation on Windows
+                    "b"
+#endif
+                );
+                fwrite(pair.cert, 1, strlen(pair.cert), file);
+                fwrite("\n", 1, strlen("\n"), file);
+                fwrite(caCert, 1, strlen(caCert), file);
+                fclose(file);
+                strncpy(chainFile, path.c_str(), sizeof(chainFile) - 1);
+                    
+            }
+
+            ~X509KeyCertFilePair() {
+                remove_file(keyFile);
+                remove_file(certFile);
+                remove_file(caCertFile);
+                remove_file(chainFile);
+            }
+    };
 
     struct X509CA
     {
@@ -356,7 +378,7 @@ namespace testing
         static X509util *newRSA()
         {
             X509util *x509 = new X509util();
-            x509->caKey = newRSAKey();
+            x509->caKey = newRSAKey(nullptr);
             if (x509->caKey == nullptr)
             {
                 delete x509;
@@ -378,7 +400,7 @@ namespace testing
             return x509;
         }
 
-        static const char *newRSAKey()
+        static const char *newRSAKey(const char *passpharse)
         {
             int ret;
             BIO *bio = nullptr;
@@ -391,7 +413,11 @@ namespace testing
             pkey = EVP_RSA_gen(rsaBits);
             checkOpenSSL(pkey == nullptr);
 
-            ret = PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+            if (passpharse == nullptr) {
+                ret = PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+            } else {
+                ret = PEM_write_bio_PrivateKey(bio, pkey, EVP_aes_256_cbc(), (unsigned char *)passpharse, strlen(passpharse), nullptr, nullptr);
+            }
             checkOpenSSL(ret != 1);
 
             len = BIO_pending(bio);
@@ -416,14 +442,37 @@ namespace testing
             return pem;
         }
 
-        X509KeyCertPair newKeyCertPair(
+        X509KeyCertFilePair *newCertFile(
             int flags,
-            const char *pemKey,
+            const char *passphrase,
             const char *commonName,
             time_t secNotBeforeOffset,
             time_t secNotAfterOffset,
-            const char *sanIP)
-        {
+            const char *sanIP
+        ) {
+            std::string path;
+            X509KeyCertPair pair = newCert(
+                flags, newRSAKey(passphrase), passphrase, commonName, secNotBeforeOffset, secNotAfterOffset, sanIP);
+            if (pair.cert == nullptr) {
+                return nullptr;
+            }
+            DEFER([pair]{
+                free((void *)pair.cert);
+                free((void *)pair.key);
+            }());
+            
+            return new X509KeyCertFilePair(caCert, pair);
+        }
+
+        X509KeyCertPair newCert(
+            int flags,
+            const char *pemKey,
+            const char *passphrase,
+            const char *commonName,
+            time_t secNotBeforeOffset,
+            time_t secNotAfterOffset,
+            const char *sanIP
+        ) {
             int ret;
             BIO *bio = nullptr;
             EVP_PKEY *pkey = nullptr;
@@ -442,7 +491,15 @@ namespace testing
             ret = BIO_write(bio, pemKey, strlen(pemKey));
             checkOpenSSL(ret <= 0);
             BIO_seek(bio, 0);
-            pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
+            pkey = PEM_read_bio_PrivateKey(
+                bio,
+                &pkey,
+                [](char *buf, int size, int rwflag, void *u) {
+                    strncpy(buf, (const char *)u, size);
+                    return (int)(strlen((const char *)u) > size ? size : strlen((const char *)u));
+                },
+                (void *)passphrase
+            );
             checkOpenSSL(pkey == nullptr);
 
             // generate x509
@@ -703,5 +760,7 @@ namespace testing
     };
 
 #undef checkOpenSSL
+
+    extern X509util *x509;
 #endif // CAT_SSL
 }

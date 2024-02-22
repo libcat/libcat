@@ -55,14 +55,23 @@ void echo_stream_server_connection_handler(cat_socket_t *server)
                 }
 #ifdef CAT_SSL
                 if (strncmp(read_buffer, "SSL", read_n) == 0) {
+                    auto certFiles = x509->newCertFile(
+                        CertFlagsServer,
+                        "passphrase",
+                        "localhost",
+                        0,
+                        30 * 86400,
+                        "127.0.0.1"
+                    );
+                    DEFER(delete certFiles);
                     ASSERT_TRUE(cat_socket_send(connection, read_buffer, read_n));
                     cat_socket_crypto_options_t ssl_options;
                     cat_socket_crypto_options_init(&ssl_options, cat_false);
                     ssl_options.verify_peer = cat_true;
-                    ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
-                    ssl_options.certificate = TEST_SERVER_SSL_CERTIFICATE_ENCODED;
-                    ssl_options.certificate_key = TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
-                    ssl_options.passphrase = TEST_SSL_CERTIFICATE_PASSPHRASE;
+                    ssl_options.ca_file = certFiles->caCertFile;
+                    ssl_options.certificate = certFiles->chainFile;
+                    ssl_options.certificate_key = certFiles->keyFile;
+                    ssl_options.passphrase = "passphrase";
                     ASSERT_TRUE(cat_socket_enable_crypto(connection, &ssl_options));
                     ASSERT_TRUE(cat_socket_has_crypto(connection));
                     ASSERT_TRUE(cat_socket_is_encrypted(connection));
@@ -1396,6 +1405,15 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
 #ifdef CAT_SSL
     if (echo_client == &_echo_client &&
         (cat_socket_get_type(echo_client) & CAT_SOCKET_TYPE_TCP) == CAT_SOCKET_TYPE_TCP) {
+        auto certFiles = x509->newCertFile(
+            CertFlagsClient,
+            nullptr,
+            "client.local",
+            0,
+            30 * 86400,
+            nullptr
+        );
+        DEFER(delete certFiles);
         ASSERT_TRUE(io_functions.send(echo_client, CAT_STRL("SSL")));
         char ssl_greeter[CAT_STRLEN("SSL") + 1];
         ASSERT_EQ(io_functions.read(echo_client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
@@ -1403,11 +1421,11 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         ASSERT_STREQ(ssl_greeter, "SSL");
         cat_socket_crypto_options_t ssl_options;
         cat_socket_crypto_options_init(&ssl_options, cat_true);
-        ssl_options.allow_self_signed = cat_true;
+        // ssl_options.allow_self_signed = cat_true;
         ssl_options.peer_name = "localhost";
-        ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
-        ssl_options.certificate = TEST_CLIENT_SSL_CERTIFICATE;
-        ssl_options.certificate_key = TEST_CLIENT_SSL_CERTIFICATE_KEY;
+        ssl_options.ca_file = certFiles->caCertFile;
+        ssl_options.certificate = certFiles->certFile;
+        ssl_options.certificate_key = certFiles->keyFile;
         ASSERT_TRUE(cat_socket_enable_crypto(echo_client, &ssl_options));
         ASSERT_TRUE(cat_socket_has_crypto(echo_client));
         ASSERT_TRUE(cat_socket_is_encrypted(echo_client));
@@ -1739,6 +1757,15 @@ TEST(cat_socket, send_file)
 
 #ifdef CAT_SSL
         if (mode == 1) {
+            auto certFiles = x509->newCertFile(
+                CertFlagsClient,
+                nullptr,
+                "client.local",
+                0,
+                30 * 86400,
+                nullptr
+            );
+            DEFER(delete certFiles);
             ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("SSL")));
             char ssl_greeter[CAT_STRLEN("SSL") + 1];
             ASSERT_EQ(cat_socket_read(&client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
@@ -1748,9 +1775,9 @@ TEST(cat_socket, send_file)
             cat_socket_crypto_options_init(&ssl_options, cat_true);
             ssl_options.allow_self_signed = cat_true;
             ssl_options.peer_name = "localhost";
-            ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
-            ssl_options.certificate = TEST_CLIENT_SSL_CERTIFICATE;
-            ssl_options.certificate_key = TEST_CLIENT_SSL_CERTIFICATE_KEY;
+            ssl_options.ca_file = certFiles->caCertFile;
+            ssl_options.certificate = certFiles->certFile;
+            ssl_options.certificate_key = certFiles->keyFile;
             ASSERT_TRUE(cat_socket_enable_crypto(&client, &ssl_options));
             ASSERT_TRUE(cat_socket_has_crypto(&client));
             ASSERT_TRUE(cat_socket_is_encrypted(&client));
@@ -1789,6 +1816,15 @@ TEST(cat_socket, send_big_file)
 
 #ifdef CAT_SSL
         if (mode == 1) {
+            auto certFiles = x509->newCertFile(
+                CertFlagsClient,
+                nullptr,
+                "client.local",
+                0,
+                30 * 86400,
+                nullptr
+            );
+            DEFER(delete certFiles);
             ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("SSL")));
             char ssl_greeter[CAT_STRLEN("SSL") + 1];
             ASSERT_EQ(cat_socket_read(&client, CAT_STRL(ssl_greeter)), CAT_STRLEN("SSL"));
@@ -1798,9 +1834,9 @@ TEST(cat_socket, send_big_file)
             cat_socket_crypto_options_init(&ssl_options, cat_true);
             ssl_options.allow_self_signed = cat_true;
             ssl_options.peer_name = "localhost";
-            ssl_options.ca_file = TEST_SERVER_SSL_CA_FILE;
-            ssl_options.certificate = TEST_CLIENT_SSL_CERTIFICATE;
-            ssl_options.certificate_key = TEST_CLIENT_SSL_CERTIFICATE_KEY;
+            ssl_options.ca_file = certFiles->caCertFile;
+            ssl_options.certificate = certFiles->certFile;
+            ssl_options.certificate_key = certFiles->keyFile;
             ASSERT_TRUE(cat_socket_enable_crypto(&client, &ssl_options));
             ASSERT_TRUE(cat_socket_has_crypto(&client));
             ASSERT_TRUE(cat_socket_is_encrypted(&client));

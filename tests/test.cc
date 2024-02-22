@@ -20,8 +20,6 @@
 
 #include "test.h"
 
-#include "test_config.h"
-
 #ifdef CAT_OS_UNIX_LIKE
 #include <sys/types.h>
 #include <sys/ptrace.h>
@@ -49,19 +47,6 @@ namespace testing
     std::string CONFIG_REMOTE_IPV6_HTTP_SERVER_HOST = "www.taobao.com";
     /* TMP_PATH */
     std::string CONFIG_TMP_PATH = "/tmp";
-
-#ifdef CAT_SSL
-    std::string CONFIG_SSL_CA_FILE;
-    std::string CONFIG_SERVER_SSL_CERTIFICATE;
-    std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY;
-    std::string CONFIG_CLIENT_SSL_CERTIFICATE;
-    std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY;
-    std::string CONFIG_SSL_CERTIFICATE_PASSPHRASE;
-    std::string CONFIG_SERVER_SSL_CERTIFICATE_ENCODED;
-    std::string CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED;
-    std::string CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED;
-    std::string CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED;
-#endif
 
     bool has_debugger(void)
     {
@@ -220,6 +205,8 @@ namespace testing
             f();
         }
     }
+
+    X509util *x509 = nullptr;
 }
 
 class BootstrapEnvironment : public testing::Environment
@@ -322,42 +309,15 @@ public:
         }
 
 #ifdef CAT_SSL
-        testing::CONFIG_SSL_CA_FILE = string_format("%s/cat_ssl_ca.crt", TEST_TMP_PATH);
-
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SSL_CA_FILE.c_str(), TEST_SERVER_SSL_CA_CONTENT));
-        testing::CONFIG_SERVER_SSL_CERTIFICATE = string_format("%s/cat_ssl_server.crt", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str(), TEST_SERVER_SSL_CERTIFICATE_CONTENT));
-        testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_server.key", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str(), TEST_SERVER_SSL_CERTIFICATE_KEY_CONTENT));
-        testing::CONFIG_CLIENT_SSL_CERTIFICATE = string_format("%s/cat_ssl_client.crt", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str(), TEST_CLIENT_SSL_CERTIFICATE_CONTENT));
-        testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY = string_format("%s/cat_ssl_client.key", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str(), TEST_CLIENT_SSL_CERTIFICATE_KEY_CONTENT));
-
-        testing::CONFIG_SSL_CERTIFICATE_PASSPHRASE = TEST_SSL_CERTIFICATE_PASSPHRASE_CONTENT;
-        testing::CONFIG_SERVER_SSL_CERTIFICATE_ENCODED = string_format("%s/cat_ssl_server_encoded.crt", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE_ENCODED.c_str(), TEST_SERVER_SSL_CERTIFICATE_ENCODED_CONTENT));
-        testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED = string_format("%s/cat_ssl_server_encoded.key", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED.c_str(), TEST_SERVER_SSL_CERTIFICATE_KEY_ENCODED_CONTENT));
-        testing::CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED = string_format("%s/cat_ssl_client_encoded.crt", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED.c_str(), TEST_CLIENT_SSL_CERTIFICATE_ENCODED_CONTENT));
-        testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED = string_format("%s/cat_ssl_client_encoded.key", TEST_TMP_PATH);
-        ASSERT_TRUE(file_put_contents(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED.c_str(), TEST_CLIENT_SSL_CERTIFICATE_KEY_ENCODED_CONTENT));
+        x509 = X509util::newRSA();
 #endif
     }
 
     virtual void TearDown()
     {
 #if defined(CAT_SSL) && !defined(CAT_DEBUG)
-        remove_file(testing::CONFIG_SSL_CA_FILE.c_str());
-        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE.c_str());
-        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY.c_str());
-        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE.c_str());
-        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY.c_str());
-        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE_ENCODED.c_str());
-        remove_file(testing::CONFIG_SERVER_SSL_CERTIFICATE_KEY_ENCODED.c_str());
-        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE_ENCODED.c_str());
-        remove_file(testing::CONFIG_CLIENT_SSL_CERTIFICATE_KEY_ENCODED.c_str());
+        delete testing::x509;
+        testing::x509 = nullptr;
 #endif
 
         call_shutdown_functions();

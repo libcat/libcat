@@ -2347,11 +2347,11 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     "peer_name: \"%s\", " \
     "ca_file: \"%s\", " \
     "ca_path: \"%s\", " \
-    "load_ca: \"%p\", " \
+    "load_ca: %p, " \
     "certificate: \"%s\", " \
     "certificate_key: \"%s\", " \
-    "passphrase: \"%s\", " \
-    "load_certificate: \"%p\", " \
+    "passphrase: %s, " \
+    "load_certificate: %p, " \
     "protocols: %s, " \
     "verify_depth: %d, " \
     "is_client: %s, " \
@@ -2370,7 +2370,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     options.load_ca, \
     CAT_NULLABLE_STR_C(options.certificate), \
     CAT_NULLABLE_STR_C(options.certificate_key), \
-    CAT_NULLABLE_STR_C(options.passphrase), \
+    options.passphrase ? "<REDEACTED>" : "(not set)", \
     options.load_certficate, \
     protocols_str, \
     options.verify_depth, \
