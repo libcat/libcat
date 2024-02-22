@@ -33,9 +33,30 @@
 #include <openssl/evp.h>
 #include <openssl/x509v3.h>
 #include <openssl/rsa.h>
-#ifndef EVP_RSA_gen
-# define EVP_RSA_gen(bits) EVP_PKEY_Q_keygen(NULL, NULL, "RSA", (size_t)(0 + (bits)))
-#endif
+#undef EVP_RSA_gen
+// #ifndef EVP_RSA_gen
+static inline EVP_PKEY *EVP_RSA_gen(size_t bits) {
+    EVP_PKEY *pkey = nullptr;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+    if (!ctx) {
+        goto fail;
+    }
+    if (!EVP_PKEY_keygen_init(ctx)) {
+        goto fail;
+    }
+    if (!EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits)) {
+        goto fail;
+    }
+    if (!EVP_PKEY_keygen(ctx, &pkey)) {
+        goto fail;
+    }
+fail:
+    if (ctx) {
+        EVP_PKEY_CTX_free(ctx);
+    }
+    return pkey;
+}
+// #endif
 #endif // CAT_SSL
 
 /* optional, not always included in api.h */
@@ -504,7 +525,7 @@ namespace testing
             // read pem
             ret = BIO_write(bio, pemKey, strlen(pemKey));
             checkOpenSSL(ret <= 0);
-            BIO_seek(bio, 0);
+            (void) BIO_seek(bio, 0);
             pkey = PEM_read_bio_PrivateKey(
                 bio,
                 &pkey,
@@ -608,7 +629,7 @@ namespace testing
             checkOpenSSL(ret == 0);
 
             // write pem
-            BIO_reset(bio);
+            (void) BIO_reset(bio);
             ret = PEM_write_bio_X509(bio, x509);
             checkOpenSSL(ret != 1);
 
@@ -680,7 +701,7 @@ namespace testing
             // read pem
             ret = BIO_write(bio, caKey, strlen(caKey));
             checkOpenSSL(ret <= 0);
-            BIO_seek(bio, 0);
+            (void) BIO_seek(bio, 0);
             pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
             checkOpenSSL(pkey == nullptr);
 
@@ -733,7 +754,7 @@ namespace testing
             checkOpenSSL(ret == 0);
 
             // write pem
-            BIO_reset(bio);
+            (void) BIO_reset(bio);
             ret = PEM_write_bio_X509(bio, x509);
             checkOpenSSL(ret != 1);
 
