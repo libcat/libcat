@@ -23,6 +23,14 @@
 #include <memory>
 #include <string>
 #include <array>
+#include <atomic>
+
+#ifdef CAT_SSL
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/x509v3.h>
+#endif // CAT_SSL
 
 #include "cat_api.h"
 
