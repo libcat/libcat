@@ -31,6 +31,9 @@
 #include <openssl/evp.h>
 #include <openssl/x509v3.h>
 #include <openssl/rsa.h>
+#ifndef EVP_RSA_gen
+# define EVP_RSA_gen(bits) EVP_PKEY_Q_keygen(NULL, NULL, "RSA", (size_t)(0 + (bits)))
+#endif
 #endif // CAT_SSL
 
 #include "cat_api.h"
@@ -307,7 +310,9 @@ namespace testing
     class X509KeyCertFilePair
     {
         public:
-
+#ifndef PATH_MAX
+# define PATH_MAX 256
+#endif
             char keyFile[PATH_MAX];
             char certFile[PATH_MAX];
             char caCertFile[PATH_MAX];
