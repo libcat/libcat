@@ -603,9 +603,9 @@ CAT_API cat_bool_t cat_socket_try_connect_to(cat_socket_t *socket, const char *n
 
 #ifdef CAT_SSL
 
-typedef struct cat_socket_crypto_options_s cat_socket_crypto_options_t;
+struct cat_socket_crypto_options_s;
 
-typedef cat_bool_t (*cat_load_certificate_t)(cat_ssl_context_t *context, cat_socket_crypto_options_t *options);
+typedef cat_bool_t (*cat_load_certificate_t)(cat_ssl_context_t *context, struct cat_socket_crypto_options_s *options);
 
 typedef struct cat_socket_crypto_options_s {
     const char *peer_name;
