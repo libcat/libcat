@@ -303,4 +303,405 @@ namespace testing
             return cat_sync_wait_group_wait(&wg, timeout);
         }
     };
+
+#ifdef CAT_SSL
+
+    enum X509Type
+    {
+        X509TypeRSA = 1,
+        X509TypeECDSA = 2,
+        X509TypeSM2 = 3,
+    };
+    enum CertFlags
+    {
+        CertFlagsServer = 1 << 0,
+        CertFlagsClient = 1 << 1,
+    };
+
+    struct X509KeyCertPair
+    {
+        const char *key;
+        const char *cert;
+    };
+
+    struct X509CA
+    {
+        const char *key;
+        const char *cert;
+        EVP_PKEY *pkey;
+        X509 *x509;
+    };
+
+# define checkOpenSSL(failcond) \
+    do { \
+        if (failcond) { \
+            long err = ERR_get_error(); \
+            char buf[256]; \
+            ERR_error_string_n(err, buf, sizeof(buf)); \
+            fprintf(stderr, __FILE__ ":%d OpenSSL error: %s\n", __LINE__, buf); \
+            goto fail; \
+        } \
+    } while (0)
+
+
+    class X509util
+    {
+    public:
+        X509Type type;
+
+        const char *caCert;
+        const char *caKey;
+        std::atomic<long> serial;
+
+        static X509util *newRSA()
+        {
+            X509util *x509 = new X509util();
+            x509->caKey = newRSAKey();
+            if (x509->caKey == nullptr)
+            {
+                delete x509;
+                return nullptr;
+            }
+            X509CA ca = newCA(x509->caKey);
+            if (ca.cert == nullptr)
+            {
+                free((void *)x509->caKey);
+                delete x509;
+                return nullptr;
+            }
+            x509->caCert = ca.cert;
+            x509->caPKEY = ca.pkey;
+            x509->caX509 = ca.x509;
+
+            x509->type = X509TypeRSA;
+            x509->serial.store(2);
+            return x509;
+        }
+
+        static const char *newRSAKey()
+        {
+            int ret;
+            BIO *bio = nullptr;
+            EVP_PKEY *pkey = nullptr;
+            const char *pem = nullptr;
+            size_t len;
+
+            bio = BIO_new(BIO_s_mem());
+
+            pkey = EVP_RSA_gen(rsaBits);
+            checkOpenSSL(pkey == nullptr);
+
+            ret = PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+            checkOpenSSL(ret != 1);
+
+            len = BIO_pending(bio);
+            pem = (char *)calloc(len + 1, 1);
+            checkOpenSSL(pem == nullptr);
+            ret = BIO_read(bio, (void *)pem, len);
+            if (ret <= 0)
+            {
+                checkOpenSSL(true);
+                free((void *)pem);
+            }
+
+        fail:
+            if (bio != nullptr)
+            {
+                BIO_free(bio);
+            }
+            if (pkey != nullptr)
+            {
+                EVP_PKEY_free(pkey);
+            }
+            return pem;
+        }
+
+        X509KeyCertPair newKeyCertPair(
+            int flags,
+            const char *pemKey,
+            const char *commonName,
+            time_t secNotBeforeOffset,
+            time_t secNotAfterOffset,
+            const char *sanIP)
+        {
+            int ret;
+            BIO *bio = nullptr;
+            EVP_PKEY *pkey = nullptr;
+            X509_NAME *name;
+            X509 *x509 = nullptr;
+            X509V3_CTX ctx = {0};
+            X509_EXTENSION *ext = nullptr;
+            const char *pem = nullptr;
+            char *sanConf;
+            size_t len;
+
+            bio = BIO_new(BIO_s_mem());
+            pkey = EVP_PKEY_new();
+
+            // read pem
+            ret = BIO_write(bio, pemKey, strlen(pemKey));
+            checkOpenSSL(ret <= 0);
+            BIO_seek(bio, 0);
+            pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
+            checkOpenSSL(pkey == nullptr);
+
+            // generate x509
+            x509 = X509_new();
+            ret = X509_set_version(x509, 2);
+            checkOpenSSL(ret != 1);
+            ret = X509_set_pubkey(x509, pkey);
+            checkOpenSSL(ret != 1);
+            ASN1_INTEGER_set(X509_get_serialNumber(x509), serial.fetch_add(1));
+
+            name = X509_get_subject_name(x509);
+            ret = X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *)"CN", -1, -1, 0);
+            checkOpenSSL(ret != 1);
+            ret = X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *)commonName, -1, -1, 0);
+            checkOpenSSL(ret != 1);
+            ret = X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *)commonName, -1, -1, 0);
+            checkOpenSSL(ret != 1);
+
+            ret = X509_set_issuer_name(x509, X509_get_subject_name(caX509));
+            checkOpenSSL(ret != 1);
+            X509_gmtime_adj(X509_get_notBefore(x509), secNotBeforeOffset);
+            X509_gmtime_adj(X509_get_notAfter(x509), secNotAfterOffset);
+
+            // set extensions
+            X509V3_set_ctx(&ctx, caX509, x509, nullptr, nullptr, 0);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, "critical,digitalSignature");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            if ((flags & CertFlagsServer) && (flags & CertFlagsClient))
+            {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "serverAuth,clientAuth");
+                checkOpenSSL(ext == nullptr);
+                ret = X509_add_ext(x509, ext, -1);
+            }
+            else if (flags & CertFlagsServer)
+            {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "serverAuth");
+                checkOpenSSL(ext == nullptr);
+                ret = X509_add_ext(x509, ext, -1);
+            }
+            else if (flags & CertFlagsClient)
+            {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "clientAuth");
+                checkOpenSSL(ext == nullptr);
+                ret = X509_add_ext(x509, ext, -1);
+            }
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_basic_constraints, "critical,CA:FALSE");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_key_identifier, "hash");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_authority_key_identifier, "keyid:always");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+
+            sanConf = (char *)calloc(4096, 1); // 懒得算了
+            if (sanIP == nullptr)
+            {
+                snprintf(sanConf, 4096, "DNS:%s", commonName);
+            }
+            else
+            {
+                snprintf(sanConf, 4096, "DNS:%s,IP:%s", commonName, sanIP);
+            }
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_alt_name, sanConf);
+            free(sanConf);
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+
+            // CPS这么搞不行
+            // https://stackoverflow.com/questions/21409677/not-able-to-add-certificate-policy-extension-using-openssl-apis-in-c
+            // ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_certificate_policies, "2.23.140.1.2.1");
+            // checkOpenSSL(ext == nullptr);
+            // ret = X509_add_ext(x509, ext, -1);
+            // checkOpenSSL(ret != 1);
+
+            // sign
+            ret = X509_sign(x509, caPKEY, EVP_sha256());
+            checkOpenSSL(ret == 0);
+
+            // write pem
+            BIO_reset(bio);
+            ret = PEM_write_bio_X509(bio, x509);
+            checkOpenSSL(ret != 1);
+
+            len = BIO_pending(bio);
+            pem = (char *)calloc(len + 1, 1);
+            checkOpenSSL(pem == nullptr);
+            ret = BIO_read(bio, (void *)pem, len);
+            if (ret <= 0)
+            {
+                free((void *)pem);
+                checkOpenSSL(true);
+            }
+
+        fail:
+            if (bio != nullptr)
+            {
+                BIO_free(bio);
+            }
+            if (pkey != nullptr)
+            {
+                EVP_PKEY_free(pkey);
+            }
+            if (x509 != nullptr)
+            {
+                X509_free(x509);
+            }
+            return {pemKey, pem};
+        }
+        ~X509util()
+        {
+            free((void *)caKey);
+            free((void *)caCert);
+            if (caPKEY != nullptr)
+            {
+                EVP_PKEY_free(caPKEY);
+            }
+            if (caX509 != nullptr)
+            {
+                X509_free(caX509);
+            }
+        }
+
+    private:
+        // rsa args
+        static constexpr int rsaBits = 2048;
+
+        // ca args
+        static constexpr const char *caCN = "ca.local";
+
+        EVP_PKEY *caPKEY;
+        X509 *caX509;
+
+        static X509CA newCA(const char *caKey)
+        {
+            int ret;
+            BIO *bio = nullptr;
+            EVP_PKEY *pkey = nullptr;
+            X509_NAME *name;
+            X509 *x509 = nullptr;
+            X509V3_CTX ctx = {0};
+            X509_EXTENSION *ext = nullptr;
+            const char *pem = nullptr;
+            size_t len;
+
+
+            bio = BIO_new(BIO_s_mem());
+            pkey = EVP_PKEY_new();
+
+            // read pem
+            ret = BIO_write(bio, caKey, strlen(caKey));
+            checkOpenSSL(ret <= 0);
+            BIO_seek(bio, 0);
+            pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
+            checkOpenSSL(pkey == nullptr);
+
+            // generate x509
+            x509 = X509_new();
+            ret = X509_set_version(x509, 2);
+            checkOpenSSL(ret != 1);
+            ret = X509_set_pubkey(x509, pkey);
+            checkOpenSSL(ret != 1);
+            ASN1_INTEGER_set(X509_get_serialNumber(x509), 1);
+
+            name = X509_get_subject_name(x509);
+            ret = X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *)"CN", -1, -1, 0);
+            checkOpenSSL(ret != 1);
+            ret = X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *)"local CA", -1, -1, 0);
+            checkOpenSSL(ret != 1);
+            ret = X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *)caCN, -1, -1, 0);
+            checkOpenSSL(ret != 1);
+
+            ret = X509_set_issuer_name(x509, name);
+            checkOpenSSL(ret != 1);
+            X509_gmtime_adj(X509_get_notBefore(x509), 0);
+            X509_gmtime_adj(X509_get_notAfter(x509), 100 * 31536000L);
+
+            // set extensions
+            X509V3_set_ctx(&ctx, x509, x509, nullptr, nullptr, 0);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_basic_constraints, "critical,CA:TRUE");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, "critical,digitalSignature,keyCertSign,cRLSign");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_key_identifier, "hash");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_authority_key_identifier, "keyid:always");
+            checkOpenSSL(ext == nullptr);
+            ret = X509_add_ext(x509, ext, -1);
+            X509_EXTENSION_free(ext);
+            checkOpenSSL(ret != 1);
+
+            // sign
+            ret = X509_sign(x509, pkey, EVP_sha256());
+            checkOpenSSL(ret == 0);
+
+            // write pem
+            BIO_reset(bio);
+            ret = PEM_write_bio_X509(bio, x509);
+            checkOpenSSL(ret != 1);
+
+            len = BIO_pending(bio);
+            pem = (char *)calloc(len + 1, 1);
+            if (pem == nullptr)
+            {
+                // impossible
+                goto fail;
+            }
+            ret = BIO_read(bio, (void *)pem, len);
+            if (ret <= 0)
+            {
+                checkOpenSSL(true);
+                free((void *)pem);
+            }
+
+            if (bio != nullptr)
+            {
+                BIO_free(bio);
+            }
+            return {caKey, pem, pkey, x509};
+        fail:
+            if (bio != nullptr)
+            {
+                BIO_free(bio);
+            }
+            if (pkey != nullptr)
+            {
+                EVP_PKEY_free(pkey);
+            }
+            if (x509 != nullptr)
+            {
+                X509_free(x509);
+            }
+            return {nullptr, nullptr, nullptr, nullptr};
+        }
+    };
+
+#undef checkOpenSSL
+#endif // CAT_SSL
 }
