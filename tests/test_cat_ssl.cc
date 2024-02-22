@@ -62,19 +62,6 @@ TEST(cat_ssl, remote_https_server)
     ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
 }
 
-static testing::X509util *x509;
-
-TEST_REQUIREMENT(cat_ssl, x509)
-{
-    x509 = testing::X509util::newRSA();
-    ASSERT_NE(x509, nullptr);
-}
-
-TEST_REQUIREMENT_DTOR(cat_ssl, x509)
-{
-    delete x509;
-}
-
 typedef struct test_load_cert_s {
     const char *caCert;
     const char *caKey;
@@ -87,7 +74,7 @@ typedef struct test_load_cert_s {
 static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket_crypto_options_t *options)
 {
     BIO *bio;
-    X509 *x509;
+    X509 *x;
     EVP_PKEY *pkey;
     test_load_cert_t *certs = (test_load_cert_t *)options->context;
     if (!certs || !certs->caCert || !certs->caKey || !certs->severCert || !certs->severKey) {
@@ -108,31 +95,31 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
     checkOpenSSL(pkey == nullptr);
     DEFER(EVP_PKEY_free(pkey));
 
-    x509 = X509_new();
-    DEFER(X509_free(x509));
+    x = X509_new();
+    DEFER(X509_free(x));
 
     // load server cert
     BIO_seek(bio, 0);
     checkOpenSSL(BIO_write(bio, certs->severCert, strlen(certs->severCert)) <= 0);
     BIO_seek(bio, 0);
-    x509 = PEM_read_bio_X509(bio, &x509, nullptr, nullptr);
-    checkOpenSSL(x509 == nullptr);
+    x = PEM_read_bio_X509(bio, &x, nullptr, nullptr);
+    checkOpenSSL(x == nullptr);
 
     // use server cert
-    checkOpenSSL(SSL_CTX_use_certificate(context->ctx, x509) != 1);
+    checkOpenSSL(SSL_CTX_use_certificate(context->ctx, x) != 1);
 
-    X509_free(x509);
-    x509 = X509_new();
+    X509_free(x);
+    x = X509_new();
 
     // load ca cert
     BIO_seek(bio, 0);
     checkOpenSSL(BIO_write(bio, certs->caCert, strlen(certs->caCert)) <= 0);
     BIO_seek(bio, 0);
-    x509 = PEM_read_bio_X509(bio, &x509, nullptr, nullptr);
-    checkOpenSSL(x509 == nullptr);
+    x = PEM_read_bio_X509(bio, &x, nullptr, nullptr);
+    checkOpenSSL(x == nullptr);
 
     // add ca cert (with add1 +1 refcount)
-    checkOpenSSL(SSL_CTX_add1_chain_cert(context->ctx, x509) != 1);
+    checkOpenSSL(SSL_CTX_add1_chain_cert(context->ctx, x) != 1);
 
     // rewind
     BIO_seek(bio, 0);
@@ -180,12 +167,17 @@ static cat_bool_t load_ca_test_callback(cat_ssl_context_t *context, cat_socket_c
 
 TEST(cat_ssl, load_certs)
 {
-    TEST_REQUIRE(x509 != nullptr, cat_ssl, x509);
-
     cat_socket_t *clientSocket, *serverSocket;
 
-    auto serverKeyCert =
-        x509->newKeyCertPair(CertFlagsServer, x509->newRSAKey(), "localhost", 0, 90 * 24 * 60 * 60, "127.0.0.1");
+    auto serverKeyCert = x509->newCert(
+        CertFlagsServer,
+        x509->newRSAKey(nullptr),
+        nullptr,
+        "localhost",
+        0,
+        90 * 24 * 60 * 60,
+        "127.0.0.1"
+    );
 
     DEFER([serverKeyCert]{
         free((void *)serverKeyCert.cert);
