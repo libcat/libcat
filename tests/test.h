@@ -25,6 +25,8 @@
 #include <array>
 #include <atomic>
 
+#include "cat_api.h"
+
 #ifdef CAT_SSL
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -35,8 +37,6 @@
 # define EVP_RSA_gen(bits) EVP_PKEY_Q_keygen(NULL, NULL, "RSA", (size_t)(0 + (bits)))
 #endif
 #endif // CAT_SSL
-
-#include "cat_api.h"
 
 /* optional, not always included in api.h */
 #include "cat_http.h"
