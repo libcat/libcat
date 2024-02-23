@@ -370,7 +370,6 @@ namespace testing
                 fwrite(caCert, 1, strlen(caCert), file);
                 fclose(file);
                 strncpy(chainFile, path.c_str(), sizeof(chainFile) - 1);
-                    
             }
 
             ~X509KeyCertFilePair() {
@@ -481,8 +480,8 @@ namespace testing
             int flags,
             const char *passphrase,
             const char *commonName,
-            time_t secNotBeforeOffset,
-            time_t secNotAfterOffset,
+            int32_t secNotBeforeOffset,
+            int32_t secNotAfterOffset,
             const char *sanIP
         ) {
             std::string path;
@@ -504,8 +503,8 @@ namespace testing
             const char *pemKey,
             const char *passphrase,
             const char *commonName,
-            time_t secNotBeforeOffset,
-            time_t secNotAfterOffset,
+            int32_t secNotBeforeOffset,
+            int32_t secNotAfterOffset,
             const char *sanIP
         ) {
             int ret;
@@ -724,7 +723,8 @@ namespace testing
             ret = X509_set_issuer_name(x509, name);
             checkOpenSSL(ret != 1);
             X509_gmtime_adj(X509_get_notBefore(x509), 0);
-            X509_gmtime_adj(X509_get_notAfter(x509), 100 * 31536000L);
+            // pit: this arg is "long" which is int32 under windows, so 100 * 31536000L will become negative
+            X509_gmtime_adj(X509_get_notAfter(x509), 31536000L);
 
             // set extensions
             X509V3_set_ctx(&ctx, x509, x509, nullptr, nullptr, 0);
