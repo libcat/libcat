@@ -206,7 +206,9 @@ namespace testing
         }
     }
 
+#ifdef CAT_SSL
     X509util *x509 = nullptr;
+#endif
 }
 
 class BootstrapEnvironment : public testing::Environment
