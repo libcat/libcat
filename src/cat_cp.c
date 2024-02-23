@@ -24,6 +24,9 @@
 
 #ifdef CAT_OS_WIN
 # include <windows.h>
+# if defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR)
+#  include <crtdbg.h>
+# endif
 #endif
 
 /* sleep */
@@ -170,6 +173,18 @@ CAT_API int cat_clock_gettime_monotonic(struct timespec *tp)
 /* select */
 
 #ifdef CAT_OS_WIN
+#if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
+static int disable_breakpoint(int report_type, char *message, int *ret_val)
+{
+    (void) message;
+    if (report_type == _CRT_ASSERT) {
+        *ret_val = 0;
+        return TRUE;
+    }
+    return FALSE;
+}
+#endif
+
 /* Win32 select() will only work with sockets, so we roll our own implementation here.
  * - If you supply only sockets, this simply passes through to winsock select().
  * - If you supply file handles, there is no way to distinguish between
@@ -227,6 +242,11 @@ CAT_API int cat_sys_select(cat_os_socket_t max_fd, fd_set *rfds, fd_set *wfds, f
     FD_ZERO(&sock_write);
     FD_ZERO(&sock_except);
 
+#if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
+    /* to avoid debug build breakpoint */
+    _CRT_REPORT_HOOK old_hook = _CrtSetReportHook(disable_breakpoint);
+#endif /* _DEBUG && _MSC_VER */
+
     /* build an array of handles for non-sockets */
     for (i = 0; (uint32_t)i < max_fd; i++) {
         if (SAFE_FD_ISSET(i, rfds) || SAFE_FD_ISSET(i, wfds) || SAFE_FD_ISSET(i, efds)) {
@@ -251,6 +271,10 @@ CAT_API int cat_sys_select(cat_os_socket_t max_fd, fd_set *rfds, fd_set *wfds, f
             }
         }
     }
+
+#if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
+    (void) _CrtSetReportHook(old_hook);
+#endif /* _DEBUG && _MSC_VER */
 
     if (n_handles == 0) {
         /* plain sockets only - let winsock handle the whole thing */
