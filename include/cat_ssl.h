@@ -31,6 +31,7 @@ extern "C" {
 #include "cat_buffer.h"
 
 #ifdef _MSC_VER
+# pragma warning(push)
 # pragma warning(disable:4191) /* FIXME: workaround for MSVC bug */
 #endif
 
@@ -62,7 +63,7 @@ extern "C" {
 #include <openssl/ossl_typ.h>
 
 #ifdef _MSC_VER
-# pragma warning(default:4191) /* FIXME: workaround for MSVC bug */
+# pragma warning(pop) /* FIXME: workaround for MSVC bug */
 #endif
 
 #ifdef CAT_OS_WIN
