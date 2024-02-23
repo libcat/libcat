@@ -351,7 +351,7 @@ CAT_API cat_bool_t cat_ssl_context_set_passphrase(cat_ssl_context_t *context, co
     cat_string_t passphrase_storage;
     cat_bool_t ret;
 
-    CAT_LOG_DEBUG(SSL, "SSL_set_default_passwd(%p, passphrase=\"%.*s\")", context, (int) passphrase_length, passphrase);
+    CAT_LOG_DEBUG(SSL, "SSL_set_default_passwd(%p, passphrase=%s)", context, passphrase != NULL ? "<REDEACTED>" : "(not set)");
     ret = cat_string_create(&passphrase_storage, passphrase, passphrase_length);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (unlikely(!ret)) {
@@ -641,11 +641,11 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     int err;
     int ret = preverify_ok;
 
-    CAT_LOG_DEBUG(SSL, "SSL_cert_verify_callback(%p)", ssl);
-
     /* determine the status for the current cert */
     err = X509_STORE_CTX_get_error(ctx);
     depth = X509_STORE_CTX_get_error_depth(ctx);
+
+    CAT_LOG_DEBUG(SSL, "SSL_cert_verify_callback(%p, preverify_ok: %d, err: \"%s\")", ssl, preverify_ok, X509_verify_cert_error_string(err));
 
     /* if allow_self_signed is set, make sure that verification succeeds */
     if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT && ssl->allow_self_signed) {
