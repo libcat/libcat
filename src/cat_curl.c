@@ -248,7 +248,7 @@ static int cat_curl_multi_socket_function(
             fd->sockfd = sockfd;
             curl_multi_assign(multi, sockfd, fd);
         }
-        fd->action |= action;
+        fd->action = action;
     } else {
         cat_queue_remove(&fd->node);
         cat_free(fd);
@@ -387,10 +387,17 @@ CAT_API CURLMcode cat_curl_multi_cleanup(CURLM *multi)
  */
 static cat_always_inline cat_timeout_t cat_curl_multi_timeout_solve(cat_timeout_t option_timeout, cat_timeout_t operation_timeout)
 {
+    cat_timeout_t timeout;
     if (option_timeout < operation_timeout && option_timeout >= 0) {
-        return option_timeout;
+        timeout = option_timeout;
+    } else {
+        timeout = operation_timeout;
     }
-    return operation_timeout;
+    if (timeout == 0) {
+        // use 1 instead of 0 to reduce high cost sys overhead
+        timeout = 1;
+    }
+    return timeout;
 }
 
 static cat_always_inline CURLMcode cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
@@ -405,13 +412,27 @@ static cat_always_inline CURLMcode cat_curl_multi_socket_all(CURLM *multi, int *
 {
     CURLMcode mcode;
     do {
-        /* workaround for cURL SSL connection bug... */
+#ifdef CAT_CURL_MULTI_SOCKET_ALL_WORKAROUND
+        /* workaround for cURL SSL connection bug...
+         * 2024-05-02: the bug seems may be caused by wrong usage,
+         * when timeout is 0, we also need to poll events, so we disable
+         * this workaround temporarily.
+         * BTW, curl_multi_perform() call cause a assertion failure on curl dev version
+         * "Assertion failed: (0), function multi_runsingle, file multi.c, line 2623.".
+         * ```
+         *     case MSTATE_PENDING:
+         *     case MSTATE_MSGSENT:
+         *       /* handles in these states should NOT be in this list *\/
+         *       DEBUGASSERT(0); <- here
+         *       break;
+         */
         mcode = curl_multi_perform(multi, running_handles);
-        CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_perform(multi: %p, running_handles: %d) = %d (%s) workaround",
+        CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_perform(multi: %p, running_handles: %d) = %d (%s) (workaround)",
             multi, *running_handles, mcode, curl_multi_strerror(mcode));
         if (unlikely(mcode != CURLM_OK)) {
             break;
         }
+#endif
         mcode = curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
         CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_socket_action(multi: %p, TIMEOUT, running_handles: %d) = %d (%s) in socket_all()",
             multi, *running_handles, mcode, curl_multi_strerror(mcode));
@@ -470,9 +491,7 @@ static CURLMcode cat_curl_multi_wait_impl(
 
     while (1) {
         cat_timeout_t op_timeout = cat_curl_multi_timeout_solve(context->timeout, timeout);
-        if (context->nfds == 0 || (op_timeout >= 0 && op_timeout <= 1)) {
-            // use 1 instead of 0 to reduce high cost sys overhead
-            op_timeout = 1;
+        if (context->nfds == 0) {
             while (1) {
                 cat_ret_t ret;
                 CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_time_delay(multi: %p, timeout: " CAT_TIMEOUT_FMT ") when %s",
