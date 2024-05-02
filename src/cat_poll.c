@@ -132,7 +132,7 @@ static CAT_COLD int cat_poll_filter_init_error(int error)
 }
 
 #ifdef CAT_ENABLE_DEBUG_LOG
-static CAT_BUFFER_STR_FREE char *cat_poll_uv_events_str(uv_events_t events)
+CAT_BUFFER_STR_FREE char *cat_poll_uv_events_str(uv_events_t events)
 {
     cat_buffer_t buffer;
     cat_buffer_create(&buffer, 64);
