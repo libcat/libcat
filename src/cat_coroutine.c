@@ -996,7 +996,7 @@ static void cat_coroutine_deadlock(cat_coroutine_deadlock_function_t deadlock)
 
 static cat_always_inline cat_bool_t cat_coroutine_is_unfinished(void)
 {
-    return CAT_COROUTINE_G(count) - CAT_COROUTINE_G(waiter_count) > 0;
+    return CAT_COROUTINE_G(count) > CAT_COROUTINE_G(waiter_count);
 }
 
 static cat_data_t *cat_coroutine_scheduler_function(cat_data_t *data)
