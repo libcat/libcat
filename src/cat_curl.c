@@ -21,6 +21,7 @@
 #ifdef CAT_CURL
 
 #include "cat_coroutine.h"
+#include "cat_buffer.h"
 #include "cat_event.h"
 #include "cat_poll.h"
 #include "cat_queue.h"
@@ -30,21 +31,26 @@
 
 /* declarations */
 
-typedef struct cat_curl_pollfd_s {
+typedef struct cat_curl_multi_event_s {
     cat_queue_node_t node;
     curl_socket_t sockfd;
     int action;
-} cat_curl_pollfd_t;
+} cat_curl_multi_event_t;
 
 typedef struct cat_curl_multi_context_s {
     RB_ENTRY(cat_curl_multi_context_s) tree_entry;
     CURLM *multi;
-    cat_queue_t waiters;
-    cat_queue_t fds;
-    cat_nfds_t nfds;
-    long timeout;
-    cat_bool_t waiting;
+    uv_timer_t timer;
+    cat_coroutine_t *waiter;
+    cat_curl_multi_event_t event_storage;
+    cat_queue_t events;
 } cat_curl_multi_context_t;
+
+typedef struct cat_curl_multi_socket_context_s {
+    cat_curl_multi_context_t *context;
+    curl_socket_t sockfd;
+    uv_poll_t poll;
+} cat_curl_multi_socket_context_t;
 
 RB_HEAD(cat_curl_multi_context_tree_s, cat_curl_multi_context_s);
 
@@ -87,48 +93,6 @@ static cat_always_inline void cat_curl_multi_configure(CURLM *multi, void *socke
     curl_multi_setopt(multi, CURLMOPT_TIMERDATA, context);
 }
 
-static cat_always_inline int cat_curl_translate_sys_events_to_action(int events, int revents)
-{
-    int action = CURL_CSELECT_NONE;
-
-    if (revents & POLLIN) {
-        action |= CURL_CSELECT_IN;
-    }
-    if (revents & POLLOUT) {
-        action |= CURL_CSELECT_OUT;
-    }
-    if (revents & POLLERR) {
-        action |= CURL_CSELECT_ERR;
-    }
-    if ((revents &~ (POLLIN | POLLOUT | POLLERR)) != POLLNONE) {
-        if (events & POLLIN) {
-            action |= CURL_CSELECT_IN;
-        } else if (events & POLLOUT) {
-            action |= CURL_CSELECT_OUT;
-        } else if (events & POLLERR) {
-            action |= CURL_CSELECT_ERR;
-        }
-    }
-
-    return action;
-}
-
-static cat_always_inline cat_pollfd_events_t cat_curl_translate_poll_flags_to_sys(int action)
-{
-    cat_pollfd_events_t events = POLLNONE;
-
-    if (action != CURL_POLL_REMOVE) {
-        if (action != CURL_POLL_IN) {
-            events |= POLLOUT;
-        }
-        if (action != CURL_POLL_OUT) {
-            events |= POLLIN;
-        }
-    }
-
-    return events;
-}
-
 #ifdef CAT_ENABLE_DEBUG_LOG
 static const char *cat_curl_action_name(int action)
 {
@@ -148,9 +112,297 @@ static const char *cat_curl_action_name(int action)
 }
 #endif
 
-/* easy */
+#ifdef CAT_ENABLE_DEBUG_LOG
+extern char *cat_poll_uv_events_str(int events);
+#endif
 
-static CURLMcode cat_curl_multi_wait_impl(CURLM *multi, int timeout_ms, int *numfds, int *running_handles);
+/* multi backends */
+
+static cat_always_inline void cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
+{
+    CAT_ASSERT(running_handles != NULL);
+    CURLMcode mcode = curl_multi_socket_action(multi, sockfd, action, running_handles);
+    CAT_LOG_DEBUG_VA_WITH_LEVEL(CURL, 2, {
+        if (sockfd == CURL_SOCKET_TIMEOUT) {
+            CAT_LOG_DEBUG_D(CURL, "libcurl::curl_multi_socket_action(multi: %p, TIMEOUT, running_handles: %d) = %d (%s)",
+                multi, *running_handles, mcode, curl_multi_strerror(mcode));
+        } else {
+            CAT_LOG_DEBUG_D(CURL, "libcurl::curl_multi_socket_action(multi: %p, sockfd: %d, %s, running_handles: %d) = %d (%s)",
+                multi, sockfd, cat_curl_action_name(action), *running_handles, mcode, curl_multi_strerror(mcode));
+        }
+    });
+    CAT_ASSERT(mcode == CURLM_OK);
+    (void) mcode;
+}
+
+static void cat_curl_multi_socket_context_close_callback(uv_handle_t *handle)
+{
+    cat_curl_multi_socket_context_t *socket_context = (cat_curl_multi_socket_context_t*) handle->data;
+    cat_free(socket_context);
+}
+
+static cat_always_inline void cat_curl_multi_socket_schedule(cat_curl_multi_context_t *context, curl_socket_t sockfd, int action)
+{
+    cat_curl_multi_event_t *event;
+    if (cat_queue_empty(&context->events)) {
+        event = &context->event_storage;
+    } else {
+        event = (cat_curl_multi_event_t *) cat_malloc_unrecoverable(sizeof(*event));
+    }
+    event->sockfd = sockfd;
+    event->action = action;
+    cat_queue_push_back(&context->events, &event->node);
+    if (context->waiter != NULL) {
+        cat_coroutine_schedule(context->waiter, CURL, "Poll event");
+    }
+}
+
+static void cat_curl_multi_socket_poll_callback(uv_poll_t *poll, int status, int events)
+{
+    cat_curl_multi_socket_context_t *socket_context = (cat_curl_multi_socket_context_t *) poll->data;
+    cat_curl_multi_context_t *context = socket_context->context;
+    curl_socket_t sockfd = socket_context->sockfd;
+    int action = 0;
+
+    CAT_LOG_DEBUG_VA_WITH_LEVEL(POLL, 2, {
+        char *events_str = cat_poll_uv_events_str(events);
+        CAT_LOG_DEBUG_D(POLL, "curl_multi_socket_poll_callback(sockfd: " CAT_OS_SOCKET_FMT ", status: %d" CAT_LOG_STRERRNO_FMT ", events: %s)",
+            sockfd, status, CAT_LOG_STRERRNO_C(status == 0, status), events_str);
+        cat_buffer_str_free(events_str);
+    });
+
+    if (status < 0) {
+        action = CURL_CSELECT_ERR;
+    } else {
+        if (events & UV_READABLE) {
+            action |= CURL_CSELECT_IN;
+        }
+        if (events & UV_WRITABLE) {
+            action |= CURL_CSELECT_OUT;
+        }
+    }
+
+    cat_curl_multi_socket_schedule(context, sockfd, action);
+}
+
+static int cat_curl_multi_socket_function(
+    CURL *ch, curl_socket_t sockfd, int action,
+    cat_curl_multi_context_t *context,
+    cat_curl_multi_socket_context_t *socket_context
+) {
+    (void) ch;
+    CURLM *multi = context->multi;
+
+    CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_socket_function(multi: %p, sockfd: %d, action=%s)",
+        multi, sockfd, cat_curl_action_name(action));
+
+    if (action == CURL_POLL_IN || action == CURL_POLL_OUT) {
+        if (socket_context == NULL) {
+            socket_context = (cat_curl_multi_socket_context_t *) cat_malloc(sizeof(*socket_context));
+#if CAT_ALLOC_HANDLE_ERRORS
+            if (unlikely(fd == NULL)) {
+                return CURLM_OUT_OF_MEMORY;
+            }
+#endif
+            socket_context->context = context;
+            socket_context->sockfd = sockfd;
+            (void) uv_poll_init_socket(&CAT_EVENT_G(loop), &socket_context->poll, sockfd);
+            socket_context->poll.data = socket_context;
+            curl_multi_assign(multi, sockfd, socket_context);
+        }
+    }
+
+    switch (action) {
+        case CURL_POLL_IN:
+        case CURL_POLL_OUT:
+        case CURL_POLL_INOUT: {
+            int uv_events = 0;
+            if(action != CURL_POLL_OUT) {
+                uv_events |= UV_READABLE;
+            }
+            if(action != CURL_POLL_IN) {
+                uv_events |= UV_WRITABLE;
+            }
+            uv_poll_start(&socket_context->poll, uv_events, cat_curl_multi_socket_poll_callback);
+            break;
+        }
+        case CURL_POLL_REMOVE:
+            if (socket_context != NULL) {
+                curl_multi_assign(multi, sockfd, NULL);
+                uv_poll_stop(&socket_context->poll);
+                uv_close((uv_handle_t*) &socket_context->poll, cat_curl_multi_socket_context_close_callback);
+            }
+            break;
+        default:
+            abort();
+    }
+
+    return CURLM_OK;
+}
+
+static void cat_curl_multi_timeout_callback(uv_timer_t *timer)
+{
+    cat_curl_multi_context_t *context = timer->data;
+    CAT_LOG_DEBUG_V2(CURL, "libcurl::cat_curl_multi_on_timeout(multi: %p)", context->multi);
+    cat_curl_multi_socket_schedule(context, CURL_SOCKET_TIMEOUT, 0);
+}
+
+static int cat_curl_multi_timeout_function(CURLM *multi, long timeout_ms, cat_curl_multi_context_t *context)
+{
+    (void) multi;
+    CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_timeout_function(multi: %p, timeout_ms=%ld)", multi, timeout_ms);
+
+    if (timeout_ms < 0) {
+        (void) uv_timer_stop(&context->timer);
+    } else {
+        if (timeout_ms <= 0) {
+            /* 0 means directly call socket_action, but we'll do it in a bit */
+            timeout_ms = 1;
+        }
+       (void) uv_timer_start(&context->timer, cat_curl_multi_timeout_callback, timeout_ms, 0);
+    }
+
+    return CURLM_OK;
+}
+
+/* multi context */
+
+static cat_always_inline cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
+{
+    cat_curl_multi_context_t lookup;
+    lookup.multi = multi;
+    return RB_FIND(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), &lookup);
+}
+
+static void cat_curl_multi_context_close_callback(uv_handle_t *handle)
+{
+    cat_curl_multi_context_t *context = (cat_curl_multi_context_t *) cat_container_of(handle, cat_curl_multi_context_t, timer);
+    cat_free(context);
+}
+
+static void cat_curl_multi_context_close(cat_curl_multi_context_t *context)
+{
+    /* we assume that all resources should have been released in curl_multi_socket_function() before,
+     * but when fatal error occurred and we called curl_multi_cleanup() without calling
+     * curl_multi_remove_handle(), some will not be removed from context.  */
+    CAT_ASSERT(cat_queue_empty(context->events));
+    RB_REMOVE(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
+    uv_close((uv_handle_t *) &context->timer, cat_curl_multi_context_close_callback);
+}
+
+static void cat_curl_multi_close_context(CURLM *multi)
+{
+    cat_curl_multi_context_t *context;
+
+    context = cat_curl_multi_get_context(multi);
+    CAT_ASSERT(context != NULL);
+    cat_curl_multi_context_close(context);
+}
+
+static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
+{
+    cat_curl_multi_context_t *context;
+
+    CAT_LOG_DEBUG_V2(CURL, "curl_multi_context_create(multi: %p)", multi);
+
+    context = (cat_curl_multi_context_t *) cat_malloc(sizeof(*context));
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (unlikely(context == NULL)) {
+        return NULL;
+    }
+#endif
+
+    context->multi = multi;
+    uv_timer_init(&CAT_EVENT_G(loop), &context->timer);
+    context->timer.data = context;
+    context->waiter = NULL;
+    cat_queue_init(&context->events);
+    /* following is outdated comment, but I didn't understand the specific meaning,
+     * so I won't remove it yet:
+     *   latest multi has higher priority
+     *   (previous may leak and they would be free'd in shutdown)
+     * code before:
+     *   cat_queue_push_front(&CAT_CURL_G(multi_map), &context->node); */
+    RB_INSERT(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
+
+    cat_curl_multi_configure(
+        multi,
+        (void *) cat_curl_multi_socket_function,
+        (void *) cat_curl_multi_timeout_function,
+        context
+    );
+
+    return context;
+}
+
+/* multi impl */
+
+static CURLMcode cat_curl_multi_wait_impl(
+    CURLM *multi, int timeout_ms, int *numfds, int *running_handles
+)
+{
+    CAT_ASSERT(running_handles != NULL);
+    cat_curl_multi_context_t *context = cat_curl_multi_get_context(multi);
+    CAT_ASSERT(context != NULL);
+    CURLMcode mcode = CURLM_OK;
+    cat_timeout_t timeout = timeout_ms;
+    int socket_event_count = 0;
+    int socket_poll_event_count = 0;
+
+    if (context->waiter != NULL) {
+        return CURLM_RECURSIVE_API_CALL;
+    }
+    while (1) {
+        cat_ret_t ret;
+        context->waiter = CAT_COROUTINE_G(current);
+        ret = cat_time_delay(timeout);
+        context->waiter = NULL;
+        if (unlikely(ret != CAT_RET_NONE)) {
+            // timeout or error
+            break;
+        }
+        cat_curl_multi_event_t *event;
+        while ((event = cat_queue_front_data(&context->events, cat_curl_multi_event_t, node))) {
+            cat_queue_remove(&event->node);
+            socket_event_count++;
+            if (event->sockfd != CURL_SOCKET_TIMEOUT) {
+                socket_poll_event_count++;
+            }
+            cat_curl_multi_socket_action(multi, event->sockfd, event->action, running_handles);
+            if (event != &context->event_storage) {
+                cat_free(event);
+            }
+        }
+        if (socket_event_count == 0)  {
+            // cancelled
+            break;
+        }
+        if (socket_poll_event_count > 0) {
+            // has events
+            break;
+        }
+        if (*running_handles == 0) {
+            // done
+            break;
+        }
+    }
+    if (numfds != NULL) {
+        /** @note: socket_poll_event_count maybe bigger than numfds (when repeated),
+         * but it should not matter for our usage scenarios. */
+        *numfds = socket_poll_event_count;
+    }
+    return mcode;
+}
+
+
+static cat_always_inline CURLMcode cat_curl_multi_perform_impl(CURLM *multi, int *running_handles)
+{
+    CAT_ASSERT(running_handles != NULL);
+    cat_curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
+    return CURLM_OK;
+}
+
+/* easy APIs  */
 
 static CURLcode cat_curl_easy_perform_impl(CURL *ch)
 {
@@ -223,124 +475,6 @@ CAT_API CURLcode cat_curl_easy_perform(CURL *ch)
     return code;
 }
 
-/* multi */
-
-static int cat_curl_multi_socket_function(
-    CURL *ch, curl_socket_t sockfd, int action,
-    cat_curl_multi_context_t *context, cat_curl_pollfd_t *fd)
-{
-    (void) ch;
-    CURLM *multi = context->multi;
-
-    CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_socket_function(multi: %p, sockfd: %d, action=%s), nfds=%zu",
-        multi, sockfd, cat_curl_action_name(action), (size_t) context->nfds);
-
-    if (action != CURL_POLL_REMOVE) {
-        if (fd == NULL) {
-            fd = (cat_curl_pollfd_t *) cat_malloc(sizeof(*fd));
-#if CAT_ALLOC_HANDLE_ERRORS
-            if (unlikely(fd == NULL)) {
-                return CURLM_OUT_OF_MEMORY;
-            }
-#endif
-            cat_queue_push_back(&context->fds, &fd->node);
-            context->nfds++;
-            fd->sockfd = sockfd;
-            curl_multi_assign(multi, sockfd, fd);
-        }
-        fd->action = action;
-    } else {
-        cat_queue_remove(&fd->node);
-        cat_free(fd);
-        context->nfds--;
-        curl_multi_assign(multi, sockfd, NULL);
-    }
-
-    return CURLM_OK;
-}
-
-static int cat_curl_multi_timeout_function(CURLM *multi, long timeout, cat_curl_multi_context_t *context)
-{
-    (void) multi;
-    CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_timeout_function(multi: %p, timeout=%ld)", multi, timeout);
-
-    context->timeout = timeout;
-
-    return 0;
-}
-
-static cat_curl_multi_context_t *cat_curl_multi_create_context(CURLM *multi)
-{
-    cat_curl_multi_context_t *context;
-
-    CAT_LOG_DEBUG_V2(CURL, "curl_multi_context_create(multi: %p)", multi);
-
-    context = (cat_curl_multi_context_t *) cat_malloc(sizeof(*context));
-#if CAT_ALLOC_HANDLE_ERRORS
-    if (unlikely(context == NULL)) {
-        return NULL;
-    }
-#endif
-
-    context->multi = multi;
-    cat_queue_init(&context->waiters);
-    cat_queue_init(&context->fds);
-    context->nfds = 0;
-    context->timeout = -1;
-    context->waiting = cat_false;
-    /* following is outdated comment, but I didn't understand
-     * the specific meaning, so I won't remove it yet:
-     *   latest multi has higher priority
-     *   (previous may leak and they would be free'd in shutdown)
-     * code before:
-     *   cat_queue_push_front(&CAT_CURL_G(multi_map), &context->node); */
-    RB_INSERT(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
-
-    cat_curl_multi_configure(
-        multi,
-        (void *) cat_curl_multi_socket_function,
-        (void *) cat_curl_multi_timeout_function,
-        context
-    );
-
-    return context;
-}
-
-static cat_always_inline cat_curl_multi_context_t *cat_curl_multi_get_context(CURLM *multi)
-{
-    cat_curl_multi_context_t lookup;
-    lookup.multi = multi;
-    return RB_FIND(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), &lookup);
-}
-
-static void cat_curl_multi_context_close(cat_curl_multi_context_t *context)
-{
-    /* we assume that fds should have been free'd in curl_multi_socket_function() before,
-     * but when fatal error occurred and we called curl_multi_cleanup() without calling
-     * curl_multi_remove_handle(), fd storage would not be removed from fds.  */
-    if (context->nfds > 0) {
-        CAT_LOG_DEBUG_V2(CURL, "curl_multi_context_close(multi: %p) with %zu fds", context->multi, (size_t) context->nfds);
-        cat_curl_pollfd_t *fd;
-        while ((fd = cat_queue_front_data(&context->fds, cat_curl_pollfd_t, node))) {
-            cat_queue_remove(&fd->node);
-            cat_free(fd);
-            context->nfds--;
-        }
-    }
-    CAT_ASSERT(context->nfds == 0);
-    RB_REMOVE(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
-    cat_free(context);
-}
-
-static void cat_curl_multi_close_context(CURLM *multi)
-{
-    cat_curl_multi_context_t *context;
-
-    context = cat_curl_multi_get_context(multi);
-    CAT_ASSERT(context != NULL);
-    cat_curl_multi_context_close(context);
-}
-
 CAT_API CURLM *cat_curl_multi_init(void)
 {
     CURLM *multi = curl_multi_init();
@@ -379,246 +513,6 @@ CAT_API CURLMcode cat_curl_multi_cleanup(CURLM *multi)
     return mcode;
 }
 
-/**
- * @param option_timeout timeout by timeout_function, usually be 0 when fd is in prepare,
- * it maybe timeout set by curl_multi_setopt().
- * @param operation_timeout timeout which is passed in by argument
- * @return minimal timeout
- */
-static cat_always_inline cat_timeout_t cat_curl_multi_timeout_solve(cat_timeout_t option_timeout, cat_timeout_t operation_timeout)
-{
-    cat_timeout_t timeout;
-    if (option_timeout < operation_timeout && option_timeout >= 0) {
-        timeout = option_timeout;
-    } else {
-        timeout = operation_timeout;
-    }
-    if (timeout == 0) {
-        // use 1 instead of 0 to reduce high cost sys overhead
-        timeout = 1;
-    }
-    return timeout;
-}
-
-static cat_always_inline CURLMcode cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
-{
-    CURLMcode mcode = curl_multi_socket_action(multi, sockfd, action, running_handles);
-    CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_socket_action(multi: %p, fd: %d, %s) = %d (%s)",
-        multi, sockfd, cat_curl_action_name(action), mcode, curl_multi_strerror(mcode));
-    return mcode;
-}
-
-static cat_always_inline CURLMcode cat_curl_multi_socket_all(CURLM *multi, int *running_handles)
-{
-    CURLMcode mcode;
-    do {
-#ifdef CAT_CURL_MULTI_SOCKET_ALL_WORKAROUND
-        /* workaround for cURL SSL connection bug...
-         * 2024-05-02: the bug seems may be caused by wrong usage,
-         * when timeout is 0, we also need to poll events, so we disable
-         * this workaround temporarily.
-         * BTW, curl_multi_perform() call cause a assertion failure on curl dev version
-         * "Assertion failed: (0), function multi_runsingle, file multi.c, line 2623.".
-         * ```
-         *     case MSTATE_PENDING:
-         *     case MSTATE_MSGSENT:
-         *       /* handles in these states should NOT be in this list *\/
-         *       DEBUGASSERT(0); <- here
-         *       break;
-         */
-        mcode = curl_multi_perform(multi, running_handles);
-        CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_perform(multi: %p, running_handles: %d) = %d (%s) (workaround)",
-            multi, *running_handles, mcode, curl_multi_strerror(mcode));
-        if (unlikely(mcode != CURLM_OK)) {
-            break;
-        }
-#endif
-        mcode = curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
-        CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_multi_socket_action(multi: %p, TIMEOUT, running_handles: %d) = %d (%s) in socket_all()",
-            multi, *running_handles, mcode, curl_multi_strerror(mcode));
-    } while (0);
-    return mcode;
-}
-
-static CURLMcode cat_curl_multi_wait_impl(
-    CURLM *multi, int timeout_ms, int *numfds, int *running_handles
-)
-{
-    cat_curl_multi_context_t *context;
-    cat_queue_t *waiters;
-    cat_pollfd_t *fds = NULL;
-    cat_bool_t use_stacked_fds = cat_false;
-    CURLMcode mcode = CURLM_OK;
-    cat_msec_t start_line = cat_time_msec_cached();
-    cat_timeout_t timeout = timeout_ms; /* maybe reduced in the loop */
-    int previous_running_handles;
-    int poll_rc = 0;
-
-    CAT_ASSERT(running_handles != NULL);
-
-    context = cat_curl_multi_get_context(multi);
-    waiters = &context->waiters;
-
-    CAT_ASSERT(context != NULL);
-
-    // first call to update timeout and get running_handles to prevent it has been 0 after the previous call
-    mcode = cat_curl_multi_socket_all(multi, running_handles);
-    if (unlikely(mcode != CURLM_OK) || *running_handles == 0) {
-        goto _fast_out;
-    }
-
-    /** @note we should only push coroutine node to waiters when time_wait(),
-     * even if poll APIs would not modify queue node, but cURL callback functions
-     * may be called in cURL action calls, then user may call any coroutine related
-     * APIs in the callback functions, which may cause the queue node to be modified. */
-    if (context->waiting) {
-        cat_bool_t wait_ret;
-        cat_queue_push_back(waiters, &CAT_COROUTINE_G(current)->waiter.node);
-        CAT_TIME_WAIT_START() {
-            wait_ret = cat_time_wait(timeout);
-        } CAT_TIME_WAIT_END(timeout);
-        cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
-        if (unlikely(!wait_ret)) {
-            // timedout
-            goto _fast_out;
-        }
-        if (cat_queue_front_data(waiters, cat_coroutine_t, waiter.node) != CAT_COROUTINE_G(current)) {
-            // canceled
-            goto _fast_out;
-        }
-    }
-    context->waiting = cat_true;
-
-    while (1) {
-        cat_timeout_t op_timeout = cat_curl_multi_timeout_solve(context->timeout, timeout);
-        if (context->nfds == 0) {
-            while (1) {
-                cat_ret_t ret;
-                CAT_LOG_DEBUG_V2(CURL, "libcurl::curl_time_delay(multi: %p, timeout: " CAT_TIMEOUT_FMT ") when %s",
-                    multi, op_timeout, context->nfds == 0 ? "nfds is 0" : "timeout is tiny");
-                ret = cat_time_delay(op_timeout);
-                if (unlikely(ret != CAT_RET_OK)) {
-                    goto _out;
-                }
-                previous_running_handles = *running_handles;
-                mcode = cat_curl_multi_socket_all(multi, running_handles);
-                if (unlikely(mcode != CURLM_OK) || *running_handles < previous_running_handles) {
-                    goto _out;
-                }
-                if (unlikely(context->nfds == 0)) {
-                    /* as https://curl.se/libcurl/c/curl_multi_wait.html shows:
-                     * 'numfds' being zero means either a timeout or no file descriptors to
-                     * wait for. Try timeout on first occurrence, then assume no file descriptors
-                     * and no file descriptors to wait for means wait for 100 ms. */
-                    if (op_timeout == 1) {
-                        op_timeout = 10;
-                    } else if (op_timeout < 100) {
-                        op_timeout += 10;
-                    }
-                    continue;
-                }
-                break;
-            }
-        } else {
-            if (context->nfds == 1) {
-                cat_curl_pollfd_t *curl_fd = cat_queue_front_data(&context->fds, cat_curl_pollfd_t, node);
-                CAT_LOG_DEBUG_V2(CURL, "poll_one() for multi<%p>", multi);
-                cat_pollfd_events_t events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
-                cat_pollfd_events_t revents;
-                cat_ret_t ret = cat_poll_one(
-                    curl_fd->sockfd,
-                    events,
-                    &revents,
-                    op_timeout
-                );
-                if (unlikely(ret == CAT_RET_ERROR)) {
-                    mcode = CURLM_OUT_OF_MEMORY; // or internal error?
-                    goto _out;
-                }
-                if (ret == CAT_RET_OK) {
-                    int action = cat_curl_translate_sys_events_to_action(events, revents);
-                    (void) cat_curl_multi_socket_action(multi, curl_fd->sockfd, action, running_handles);
-                    poll_rc = 1;
-                    goto _out;
-                }
-            } else {
-                cat_pollfd_t stacked_fds[8];
-                cat_nfds_t i;
-                use_stacked_fds = context->nfds <= 8;
-                if (use_stacked_fds) {
-                    fds = stacked_fds;
-                } else {
-                    fds = (cat_pollfd_t *) cat_malloc(sizeof(*fds) * context->nfds);
-    #if CAT_ALLOC_HANDLE_ERRORS
-                    if (unlikely(fds == NULL)) {
-                        mcode = CURLM_OUT_OF_MEMORY;
-                        goto _out;
-                    }
-    #endif
-                }
-                i = 0;
-                CAT_QUEUE_FOREACH_DATA_START(&context->fds, cat_curl_pollfd_t, node, curl_fd) {
-                    cat_pollfd_t *fd = &fds[i];
-                    fd->fd = curl_fd->sockfd;
-                    fd->events = cat_curl_translate_poll_flags_to_sys(curl_fd->action);
-                    i++;
-                } CAT_QUEUE_FOREACH_DATA_END();
-                CAT_LOG_DEBUG_V2(CURL, "poll() for multi<%p>", multi);
-                poll_rc = cat_poll(fds, context->nfds, op_timeout);
-                if (unlikely(poll_rc == CAT_RET_ERROR)) {
-                    mcode = CURLM_OUT_OF_MEMORY; // or internal error?
-                    goto _out;
-                }
-                if (poll_rc != 0) {
-                    for (i = 0; i < context->nfds; i++) {
-                        cat_pollfd_t *fd = &fds[i];
-                        int action = cat_curl_translate_sys_events_to_action(fd->events, fd->revents);
-                        (void) cat_curl_multi_socket_action(multi, fd->fd, action, running_handles);
-                    }
-                    goto _out;
-                }
-            }
-            // timeout case
-            previous_running_handles = *running_handles;
-            mcode = cat_curl_multi_socket_all(multi, running_handles);
-            if (unlikely(mcode != CURLM_OK) || *running_handles < previous_running_handles) {
-                goto _out;
-            }
-            if (fds != NULL && !use_stacked_fds) {
-                cat_free(fds);
-            }
-            fds = NULL;
-        }
-        if (timeout_ms >= 0) {
-            cat_msec_t new_start_line = cat_time_msec_cached();
-            cat_msec_t time_passed = new_start_line - start_line;
-            if (((cat_msec_t) timeout) < time_passed) {
-                /* timeout */
-                goto _out;
-            }
-            timeout -= ((cat_timeout_t) time_passed);
-            CAT_LOG_DEBUG_V2(CURL, "multi_wait() inner loop continue, remaining timeout is " CAT_TIMEOUT_FMT, timeout);
-            start_line = new_start_line;
-        }
-    }
-    _out:
-    if (fds != NULL && !use_stacked_fds) {
-        cat_free(fds);
-    }
-
-    context->waiting = cat_false;
-    if (!cat_queue_empty(waiters)) {
-        /* resume the next queued coroutine */
-        cat_coroutine_t *waiter = cat_queue_front_data(waiters, cat_coroutine_t, waiter.node);
-        cat_coroutine_schedule(waiter, CURL, "Multi wait");
-    }
-    _fast_out:
-    if (numfds != NULL) {
-        *numfds = poll_rc;
-    }
-    return mcode;
-}
-
 CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
 {
     int _running_handles = -1;
@@ -629,7 +523,7 @@ CAT_API CURLMcode cat_curl_multi_perform(CURLM *multi, int *running_handles)
     CAT_LOG_DEBUG(CURL, "curl_multi_perform(multi: %p, running_handles: " CAT_LOG_UNFILLED_STR ") = " CAT_LOG_UNFINISHED_STR, multi);
 
     /* this way even can solve the problem of CPU 100% if we perform in while loop */
-    CURLMcode code = cat_curl_multi_wait_impl(multi, 0, NULL, running_handles);
+    CURLMcode code = cat_curl_multi_perform_impl(multi, running_handles);
 
     CAT_LOG_DEBUG(CURL, "curl_multi_perform(multi: %p, running_handles: %d) = %d (%s)", multi, *running_handles, code, curl_multi_strerror(code));
 
