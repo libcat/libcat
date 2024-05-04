@@ -118,7 +118,7 @@ extern char *cat_poll_uv_events_str(int events);
 
 /* multi backends */
 
-static cat_always_inline void cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
+static cat_always_inline CURLMcode cat_curl_multi_socket_action(CURLM *multi, curl_socket_t sockfd, int action, int *running_handles)
 {
     CAT_ASSERT(running_handles != NULL);
     CURLMcode mcode = curl_multi_socket_action(multi, sockfd, action, running_handles);
@@ -131,8 +131,7 @@ static cat_always_inline void cat_curl_multi_socket_action(CURLM *multi, curl_so
                 multi, sockfd, cat_curl_action_name(action), *running_handles, mcode, curl_multi_strerror(mcode));
         }
     });
-    CAT_ASSERT(mcode == CURLM_OK);
-    (void) mcode;
+    return mcode;
 }
 
 static void cat_curl_multi_socket_context_close_callback(uv_handle_t *handle)
@@ -345,7 +344,8 @@ static CURLMcode cat_curl_multi_wait_impl(
     cat_curl_multi_context_t *context = cat_curl_multi_get_context(multi);
     CAT_ASSERT(context != NULL);
     CURLMcode mcode = CURLM_OK;
-    cat_timeout_t timeout = timeout_ms;
+    // :) we just use at least 1ms to avoid CPU 100%
+    cat_timeout_t timeout = timeout_ms >= 0 ? CAT_MAX(1, timeout_ms) : timeout_ms;
     int socket_event_count = 0;
     int socket_poll_event_count = 0;
 
@@ -368,9 +368,13 @@ static CURLMcode cat_curl_multi_wait_impl(
             if (event->sockfd != CURL_SOCKET_TIMEOUT) {
                 socket_poll_event_count++;
             }
-            cat_curl_multi_socket_action(multi, event->sockfd, event->action, running_handles);
+            CURLMcode action_mcode;
+            action_mcode = cat_curl_multi_socket_action(multi, event->sockfd, event->action, running_handles);
             if (event != &context->event_storage) {
                 cat_free(event);
+            }
+            if (unlikely(action_mcode != CURLM_OK)) {
+                mcode = action_mcode;
             }
         }
         if (socket_event_count == 0)  {
@@ -387,19 +391,24 @@ static CURLMcode cat_curl_multi_wait_impl(
         }
     }
     if (numfds != NULL) {
-        /** @note: socket_poll_event_count maybe bigger than numfds (when repeated),
+        /** FIXME: socket_poll_event_count maybe bigger than numfds (when repeated),
          * but it should not matter for our usage scenarios. */
         *numfds = socket_poll_event_count;
     }
     return mcode;
 }
 
-
 static cat_always_inline CURLMcode cat_curl_multi_perform_impl(CURLM *multi, int *running_handles)
 {
     CAT_ASSERT(running_handles != NULL);
-    cat_curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
-    return CURLM_OK;
+    CURLMcode mcode;
+
+    mcode = cat_curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
+    if (unlikely(mcode != CURLM_OK)) {
+        return mcode;
+    }
+
+    return cat_curl_multi_wait_impl(multi, 0, NULL, running_handles);
 }
 
 /* easy APIs  */
