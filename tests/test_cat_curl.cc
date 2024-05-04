@@ -170,4 +170,37 @@ TEST(cat_curl_multi, base)
     );
 }
 
+TEST(cat_curl_multi, just_only_perform)
+{
+    CURL *ch;
+    CURLM *mh;
+    int still_running = 0;
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(cat_curl_multi_cleanup(mh));
+    ASSERT_EQ(curl_multi_add_handle(mh, ch), CURLM_OK);
+    DEFER(curl_multi_remove_handle(mh, ch));
+
+    do {
+        ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+    } while (still_running);
+
+    ASSERT_NE(
+        std::string(buffer.value, buffer.length).find(TEST_REMOTE_HTTP_SERVER_KEYWORD),
+        std::string::npos
+    );
+}
+
 #endif
