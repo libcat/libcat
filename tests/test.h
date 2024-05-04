@@ -494,7 +494,7 @@ namespace testing
                 free((void *)pair.cert);
                 free((void *)pair.key);
             }());
-            
+
             return new X509KeyCertFilePair(caCert, pair);
         }
 
