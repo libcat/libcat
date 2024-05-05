@@ -275,7 +275,8 @@ static cat_always_inline cat_curl_multi_context_t *cat_curl_multi_get_context(CU
 
 static void cat_curl_multi_context_close_callback(uv_handle_t *handle)
 {
-    cat_curl_multi_context_t *context = (cat_curl_multi_context_t *) cat_container_of(handle, cat_curl_multi_context_t, timer);
+    uv_timer_t *timer = (uv_timer_t *) handle;
+    cat_curl_multi_context_t *context = cat_container_of(timer, cat_curl_multi_context_t, timer);
     cat_free(context);
 }
 
