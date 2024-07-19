@@ -346,7 +346,6 @@ static CURLMcode cat_curl_multi_wait_impl(
     CURLMcode mcode;
     // :) we just use at least 1ms to avoid CPU 100%
     cat_timeout_t timeout = timeout_ms >= 0 ? CAT_MAX(1, timeout_ms) : timeout_ms;
-    int socket_event_count = 0;
     int socket_poll_event_count = 0;
 
     mcode = cat_curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
@@ -374,6 +373,7 @@ static CURLMcode cat_curl_multi_wait_impl(
             break;
         }
         cat_curl_multi_event_t *event;
+        int socket_event_count = 0;
         while ((event = cat_queue_front_data(&context->events, cat_curl_multi_event_t, node))) {
             cat_queue_remove(&event->node);
             socket_event_count++;
