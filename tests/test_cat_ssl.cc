@@ -224,7 +224,7 @@ TEST(cat_ssl, load_certs)
         cat_socket_crypto_options_t options;
         cat_socket_crypto_options_init(&options, false);
         options.context = (void *)&certs;
-        options.load_certficate = load_cert_test_callback;
+        options.load_certificate = load_cert_test_callback;
         ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
         char buffer[TEST_BUFFER_SIZE_STD];
         ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 6);
