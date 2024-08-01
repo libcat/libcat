@@ -615,7 +615,7 @@ typedef struct cat_socket_crypto_options_s {
     const char *certificate;
     const char *certificate_key;
     const char *passphrase;
-    cat_load_certificate_t load_certficate;
+    cat_load_certificate_t load_certificate;
 #ifdef CAT_SSL_HAVE_SECURITY_LEVEL
     int security_level;
 #endif
