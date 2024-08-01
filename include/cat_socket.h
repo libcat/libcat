@@ -479,17 +479,17 @@ struct cat_socket_internal_s
  * 1 internal_socket may have multiple bound socket objects,
  * also means that the different sockets may share the same internal_socket.
  *
- *  ┌──────┐
- *  │socket◄──────────────┐
- *  └──────┘              │
- *                        │
- *  ┌──────┐     ┌────────▼────────┐
- *  │socket◄─────► socket_i (rc=3) │
- *  └──────┘     └────────▲────────┘
- *                        │
- *  ┌──────┐              │
- *  │socket◄──────────────┘
- *  └──────┘
+ * +------+
+ * |socket<--------------+
+ * +------+              |
+ *                       |
+ * +------+     +--------v--------+
+ * |socket<-----> socket_i (rc=3) |
+ * +------+     +--------^--------+
+ *                       |
+ * +------+              |
+ * |socket<--------------+
+ * +------+
  */
 
 struct cat_socket_s
