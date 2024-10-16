@@ -69,6 +69,7 @@ set(cat_sources
     src/cat_memory.c
     src/cat_string.c
     src/cat_error.c
+    src/cat_tsrm.c
     src/cat_log.c
     src/cat_env.c
     # [public]
@@ -86,10 +87,11 @@ set(cat_sources
     src/cat_buffer.c
     src/cat_fs.c
     src/cat_signal.c
-    src/cat_os_wait.c
     src/cat_async.c
-    src/cat_watchdog.c
+    src/cat_thread.c
     src/cat_process.c
+    src/cat_os_wait.c
+    src/cat_watchdog.c
     src/cat_http.c
     src/cat_websocket.c
 )
@@ -941,6 +943,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_watchdog.cc
         tests/test_cat_process.cc
         tests/test_cat_atomic.cc
+        tests/test_cat_thread.cc
         tests/test_cat_http.cc
         tests/test_cat_websocket.cc
     )
