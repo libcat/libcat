@@ -6,6 +6,9 @@ cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW) # Enable MSVC_RUNTIME_LIBRARY setting
 endif()
+if(POLICY CMP0092)
+  cmake_policy(SET CMP0092 NEW) # disable /W3 warning, if possible
+endif()
 if(POLICY CMP0144)
   cmake_policy(SET CMP0144 NEW) # `find_package()` uses upper-case `<PACKAGENAME>_ROOT` variables.
 endif()
@@ -44,14 +47,17 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 90)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+
 find_package(PkgConfig)
 
 # Qemu Build
 # seems libcat is not used in qemu
-#option(QEMU "build for qemu" OFF)
-#if(QEMU)
-#    add_definitions(-D__QEMU__=1)
-#endif()
+# option(QEMU "build for qemu" OFF)
+# if(QEMU)
+#   list(APPEND uv_defines __QEMU__=1)
+# endif()
 
 # Compiler check
 message(STATUS "C Compiler is ${CMAKE_C_COMPILER_ID}")
@@ -200,6 +206,7 @@ endif()
 # ASan options
 option(LIBCAT_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
 # TODO: TSAN support, see: https://github.com/libuv/libuv/commit/22d62239289c7c6e50e6cc4a93642b3b46bf2dad (@dixyes)
+# TODO: MSAN, UBSAN support
 
 if(LIBCAT_ENABLE_ASAN)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
@@ -415,6 +422,7 @@ if (1)
         ${uv_dir}/src/random.c
         ${uv_dir}/src/strscpy.c
         ${uv_dir}/src/strtok.c
+        ${uv_dir}/src/thread-common.c
         ${uv_dir}/src/threadpool.c
         ${uv_dir}/src/timer.c
         ${uv_dir}/src/uv-common.c
@@ -422,14 +430,17 @@ if (1)
         ${uv_dir}/src/version.c)
 
     if(WIN32)
-      list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0600)
+      list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0602 _CRT_DECLARE_NONSTDC_NAMES=0)
       list(APPEND uv_libraries
            psapi
            user32
            advapi32
            iphlpapi
            userenv
-           ws2_32)
+           ws2_32
+           dbghelp
+           ole32
+           shell32)
       list(APPEND uv_sources
            ${uv_dir}/src/win/async.c
            ${uv_dir}/src/win/core.c
@@ -542,6 +553,7 @@ if (1)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "GNU")
+      list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112 _XOPEN_SOURCE=500)
       list(APPEND uv_libraries dl)
       list(APPEND uv_sources
            src/unix/bsd-ifaddrs.c
@@ -550,11 +562,6 @@ if (1)
            src/unix/posix-hrtime.c
            src/unix/posix-poll.c
            src/unix/hurd.c)
-    endif()
-
-    if(CMAKE_SYSTEM_NAME STREQUAL "kFreeBSD")
-      list(APPEND uv_defines _GNU_SOURCE)
-      list(APPEND uv_libraries dl freebsd-glue)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -613,6 +620,10 @@ if (1)
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+      if(CMAKE_SYSTEM_VERSION STREQUAL "5.10")
+        list(APPEND uv_defines SUNOS_NO_IFADDRS)
+        list(APPEND uv_libraries rt)
+      endif()
       list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500 _REENTRANT)
       list(APPEND uv_libraries kstat nsl sendfile socket)
       list(APPEND uv_sources
@@ -630,6 +641,31 @@ if (1)
           ${uv_dir}/src/unix/no-proctitle.c
           ${uv_dir}/src/unix/posix-hrtime.c
           ${uv_dir}/src/unix/posix-poll.c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "QNX")
+      list(APPEND uv_sources
+        ${uv_dir}/src/unix/posix-hrtime.c
+        ${uv_dir}/src/unix/posix-poll.c
+        ${uv_dir}/src/unix/qnx.c
+        ${uv_dir}/src/unix/bsd-ifaddrs.c
+        ${uv_dir}/src/unix/no-proctitle.c
+        ${uv_dir}/src/unix/no-fsevents.c)
+      list(APPEND uv_libraries socket)
+    endif()
+
+    if(CYGWIN OR MSYS)
+      list(APPEND uv_defines _GNU_SOURCE)
+      list(APPEND uv_sources
+           ${uv_dir}/src/unix/cygwin.c
+           ${uv_dir}/src/unix/bsd-ifaddrs.c
+           ${uv_dir}/src/unix/no-fsevents.c
+           ${uv_dir}/src/unix/no-proctitle.c
+           ${uv_dir}/src/unix/posix-hrtime.c
+           ${uv_dir}/src/unix/posix-poll.c
+           ${uv_dir}/src/unix/procfs-exepath.c
+           ${uv_dir}/src/unix/sysinfo-loadavg.c
+           ${uv_dir}/src/unix/sysinfo-memory.c)
     endif()
 
     # TODO: include => public, src => private
