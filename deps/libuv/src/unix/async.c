@@ -61,8 +61,9 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
 #else
   handle->pending = 0;
 #endif
+  handle->u.fd = 0; /* This will be used as a busy flag. */
 
-  QUEUE_INSERT_TAIL(&loop->async_handles, &handle->queue);
+  uv__queue_insert_tail(&loop->async_handles, &handle->queue);
   uv__handle_start(handle);
 
   return 0;
@@ -72,15 +73,18 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
 int uv_async_send(uv_async_t* handle) {
 #ifdef HAVE_LIBCAT
   hat_atomic_int32_t *pending;
+  hat_atomic_int32_t *busy;
 #else
   _Atomic int* pending;
+  _Atomic int* busy;
 #endif
-  int expected;
 
 #ifdef HAVE_LIBCAT
   pending = (hat_atomic_int32_t *) &handle->pending;
+  busy = (hat_atomic_int32_t *) &handle->u.fd;
 #else
   pending = (_Atomic int*) &handle->pending;
+  busy = (_Atomic int*) &handle->u.fd;
 #endif
 
   /* Do a cheap read first. */
@@ -91,65 +95,71 @@ int uv_async_send(uv_async_t* handle) {
 #endif
     return 0;
 
-  /* Tell the other thread we're busy with the handle. */
-  expected = 0;
+  /* Set the loop to busy. */
 #ifdef HAVE_LIBCAT
-  if (!hat_atomic_int32_compare_exchange_strong(pending, &expected, 1))
+  hat_atomic_int32_fetch_add(busy, 1);
 #else
-  if (!atomic_compare_exchange_strong(pending, &expected, 1))
+  atomic_fetch_add(busy, 1);
 #endif
-    return 0;
 
   /* Wake up the other thread's event loop. */
-  uv__async_send(handle->loop);
-
-  /* Tell the other thread we're done. */
-  expected = 1;
 #ifdef HAVE_LIBCAT
-  if (!hat_atomic_int32_compare_exchange_strong(pending, &expected, 2))
+  if (hat_atomic_int32_exchange(pending, 1) == 0)
 #else
-  if (!atomic_compare_exchange_strong(pending, &expected, 2))
+  if (atomic_exchange(pending, 1) == 0)
 #endif
-    abort();
+    uv__async_send(handle->loop);
+
+  /* Set the loop to not-busy. */
+#ifdef HAVE_LIBCAT
+  hat_atomic_int32_fetch_add(busy, -1);
+#else
+  atomic_fetch_add(busy, -1);
+#endif
 
   return 0;
 }
 
 
-/* Only call this from the event loop thread. */
-static int uv__async_spin(uv_async_t* handle) {
+/* Wait for the busy flag to clear before closing.
+ * Only call this from the event loop thread. */
+static void uv__async_spin(uv_async_t* handle) {
 #ifdef HAVE_LIBCAT
   hat_atomic_int32_t *pending;
+  hat_atomic_int32_t *busy;
 #else
   _Atomic int* pending;
+  _Atomic int* busy;
 #endif
-  int expected;
   int i;
 
 #ifdef HAVE_LIBCAT
   pending = (hat_atomic_int32_t *) &handle->pending;
+  busy = (hat_atomic_int32_t *) &handle->u.fd;
 #else
   pending = (_Atomic int*) &handle->pending;
+  busy = (_Atomic int*) &handle->u.fd;
+#endif
+
+  /* Set the pending flag first, so no new events will be added by other
+   * threads after this function returns. */
+#ifdef HAVE_LIBCAT
+  hat_atomic_int32_store(pending, 1);
+#else
+  atomic_store(pending, 1);
 #endif
 
   for (;;) {
-    /* 997 is not completely chosen at random. It's a prime number, acyclical
-     * by nature, and should therefore hopefully dampen sympathetic resonance.
+    /* 997 is not completely chosen at random. It's a prime number, acyclic by
+     * nature, and should therefore hopefully dampen sympathetic resonance.
      */
     for (i = 0; i < 997; i++) {
-      /* rc=0 -- handle is not pending.
-       * rc=1 -- handle is pending, other thread is still working with it.
-       * rc=2 -- handle is pending, other thread is done.
-       */
-      expected = 2;
 #ifdef HAVE_LIBCAT
-      hat_atomic_int32_compare_exchange_strong(pending, &expected, 0);
+      if (hat_atomic_int32_load(busy) == 0)
 #else
-      atomic_compare_exchange_strong(pending, &expected, 0);
+      if (atomic_load(busy) == 0)
 #endif
-
-      if (expected != 1)
-        return expected;
+        return;
 
       /* Other thread is busy with this handle, spin until it's done. */
       uv__cpu_relax();
@@ -166,7 +176,7 @@ static int uv__async_spin(uv_async_t* handle) {
 
 void uv__async_close(uv_async_t* handle) {
   uv__async_spin(handle);
-  QUEUE_REMOVE(&handle->queue);
+  uv__queue_remove(&handle->queue);
   uv__handle_stop(handle);
 }
 
@@ -174,9 +184,10 @@ void uv__async_close(uv_async_t* handle) {
 static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   char buf[1024];
   ssize_t r;
-  QUEUE queue;
-  QUEUE* q;
+  struct uv__queue queue;
+  struct uv__queue* q;
   uv_async_t* h;
+  _Atomic int *pending;
 
   assert(w == &loop->async_io_watcher);
 
@@ -198,16 +209,18 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     abort();
   }
 
-  QUEUE_MOVE(&loop->async_handles, &queue);
-  while (!QUEUE_EMPTY(&queue)) {
-    q = QUEUE_HEAD(&queue);
-    h = QUEUE_DATA(q, uv_async_t, queue);
+  uv__queue_move(&loop->async_handles, &queue);
+  while (!uv__queue_empty(&queue)) {
+    q = uv__queue_head(&queue);
+    h = uv__queue_data(q, uv_async_t, queue);
 
-    QUEUE_REMOVE(q);
-    QUEUE_INSERT_TAIL(&loop->async_handles, q);
+    uv__queue_remove(q);
+    uv__queue_insert_tail(&loop->async_handles, q);
 
-    if (0 == uv__async_spin(h))
-      continue;  /* Not pending. */
+    /* Atomically fetch and clear pending flag */
+    pending = (_Atomic int*) &h->pending;
+    if (atomic_exchange(pending, 0) == 0)
+      continue;
 
     if (h->async_cb == NULL)
       continue;
@@ -279,19 +292,27 @@ static int uv__async_start(uv_loop_t* loop) {
 }
 
 
-int uv__async_fork(uv_loop_t* loop) {
-  if (loop->async_io_watcher.fd == -1) /* never started */
-    return 0;
-
-  uv__async_stop(loop);
-
-  return uv__async_start(loop);
-}
-
-
 void uv__async_stop(uv_loop_t* loop) {
+  struct uv__queue queue;
+  struct uv__queue* q;
+  uv_async_t* h;
+
   if (loop->async_io_watcher.fd == -1)
     return;
+
+  /* Make sure no other thread is accessing the async handle fd after the loop
+   * cleanup.
+   */
+  uv__queue_move(&loop->async_handles, &queue);
+  while (!uv__queue_empty(&queue)) {
+    q = uv__queue_head(&queue);
+    h = uv__queue_data(q, uv_async_t, queue);
+
+    uv__queue_remove(q);
+    uv__queue_insert_tail(&loop->async_handles, q);
+
+    uv__async_spin(h);
+  }
 
   if (loop->async_wfd != -1) {
     if (loop->async_wfd != loop->async_io_watcher.fd)
@@ -302,6 +323,48 @@ void uv__async_stop(uv_loop_t* loop) {
   uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
   uv__close(loop->async_io_watcher.fd);
   loop->async_io_watcher.fd = -1;
+}
+
+
+int uv__async_fork(uv_loop_t* loop) {
+  struct uv__queue queue;
+  struct uv__queue* q;
+  uv_async_t* h;
+
+  if (loop->async_io_watcher.fd == -1) /* never started */
+    return 0;
+
+  uv__queue_move(&loop->async_handles, &queue);
+  while (!uv__queue_empty(&queue)) {
+    q = uv__queue_head(&queue);
+    h = uv__queue_data(q, uv_async_t, queue);
+
+    uv__queue_remove(q);
+    uv__queue_insert_tail(&loop->async_handles, q);
+
+    /* The state of any thread that set pending is now likely corrupt in this
+     * child because the user called fork, so just clear these flags and move
+     * on. Calling most libc functions after `fork` is declared to be undefined
+     * behavior anyways, unless async-signal-safe, for multithreaded programs
+     * like libuv, and nothing interesting in pthreads is async-signal-safe.
+     */
+    h->pending = 0;
+    /* This is the busy flag, and we just abruptly lost all other threads. */
+    h->u.fd = 0;
+  }
+
+  /* Recreate these, since they still exist, but belong to the wrong pid now. */
+  if (loop->async_wfd != -1) {
+    if (loop->async_wfd != loop->async_io_watcher.fd)
+      uv__close(loop->async_wfd);
+    loop->async_wfd = -1;
+  }
+
+  uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
+  uv__close(loop->async_io_watcher.fd);
+  loop->async_io_watcher.fd = -1;
+
+  return uv__async_start(loop);
 }
 
 

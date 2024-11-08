@@ -32,45 +32,23 @@
 #include "uv.h"
 #include "internal.h"
 
-static void uv__once_inner(uv_once_t* guard, void (*callback)(void)) {
-  DWORD result;
-  HANDLE existing_event, created_event;
+typedef void (*uv__once_cb)(void);
 
-  created_event = CreateEvent(NULL, 1, 0, NULL);
-  if (created_event == 0) {
-    /* Could fail in a low-memory situation? */
-    uv_fatal_error(GetLastError(), "CreateEvent");
-  }
+typedef struct {
+  uv__once_cb callback;
+} uv__once_data_t;
 
-  existing_event = InterlockedCompareExchangePointer(&guard->event,
-                                                     created_event,
-                                                     NULL);
+static BOOL WINAPI uv__once_inner(INIT_ONCE *once, void* param, void** context) {
+  uv__once_data_t* data = param;
 
-  if (existing_event == NULL) {
-    /* We won the race */
-    callback();
+  data->callback();
 
-    result = SetEvent(created_event);
-    assert(result);
-    guard->ran = 1;
-
-  } else {
-    /* We lost the race. Destroy the event we created and wait for the existing
-     * one to become signaled. */
-    CloseHandle(created_event);
-    result = WaitForSingleObject(existing_event, INFINITE);
-    assert(result == WAIT_OBJECT_0);
-  }
+  return TRUE;
 }
 
-
-void uv_once(uv_once_t* guard, void (*callback)(void)) {
-  /* Fast case - avoid WaitForSingleObject. */
-  if (guard->ran) {
-    return;
-  }
-
-  uv__once_inner(guard, callback);
+void uv_once(uv_once_t* guard, uv__once_cb callback) {
+  uv__once_data_t data = { .callback = callback };
+  InitOnceExecuteOnce(&guard->init_once, uv__once_inner, (void*) &data, NULL);
 }
 
 
@@ -252,6 +230,9 @@ int uv_thread_getaffinity(uv_thread_t* tid,
   return 0;
 }
 
+int uv_thread_getcpu(void) {
+  return GetCurrentProcessorNumber();
+}
 
 uv_thread_t uv_thread_self(void) {
   uv_thread_t key;
@@ -446,75 +427,13 @@ void uv_cond_wait(uv_cond_t* cond, uv_mutex_t* mutex) {
     abort();
 }
 
+
 int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   if (SleepConditionVariableCS(&cond->cond_var, mutex, (DWORD)(timeout / 1e6)))
     return 0;
   if (GetLastError() != ERROR_TIMEOUT)
     abort();
   return UV_ETIMEDOUT;
-}
-
-
-int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
-  int err;
-
-  barrier->n = count;
-  barrier->count = 0;
-
-  err = uv_mutex_init(&barrier->mutex);
-  if (err)
-    return err;
-
-  err = uv_sem_init(&barrier->turnstile1, 0);
-  if (err)
-    goto error2;
-
-  err = uv_sem_init(&barrier->turnstile2, 1);
-  if (err)
-    goto error;
-
-  return 0;
-
-error:
-  uv_sem_destroy(&barrier->turnstile1);
-error2:
-  uv_mutex_destroy(&barrier->mutex);
-  return err;
-
-}
-
-
-void uv_barrier_destroy(uv_barrier_t* barrier) {
-  uv_sem_destroy(&barrier->turnstile2);
-  uv_sem_destroy(&barrier->turnstile1);
-  uv_mutex_destroy(&barrier->mutex);
-}
-
-
-int uv_barrier_wait(uv_barrier_t* barrier) {
-  int serial_thread;
-
-  uv_mutex_lock(&barrier->mutex);
-  if (++barrier->count == barrier->n) {
-    uv_sem_wait(&barrier->turnstile2);
-    uv_sem_post(&barrier->turnstile1);
-  }
-  uv_mutex_unlock(&barrier->mutex);
-
-  uv_sem_wait(&barrier->turnstile1);
-  uv_sem_post(&barrier->turnstile1);
-
-  uv_mutex_lock(&barrier->mutex);
-  serial_thread = (--barrier->count == 0);
-  if (serial_thread) {
-    uv_sem_wait(&barrier->turnstile1);
-    uv_sem_post(&barrier->turnstile2);
-  }
-  uv_mutex_unlock(&barrier->mutex);
-
-  uv_sem_wait(&barrier->turnstile2);
-  uv_sem_post(&barrier->turnstile2);
-  return serial_thread;
 }
 
 

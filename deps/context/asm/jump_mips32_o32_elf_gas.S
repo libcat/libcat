@@ -41,6 +41,7 @@
 .file "jump_mips32_o32_elf_gas.S"
 .text
 .globl cat_coroutine_context_jump
+.hidden cat_coroutine_context_jump
 .align 2
 .type cat_coroutine_context_jump,@function
 .ent cat_coroutine_context_jump

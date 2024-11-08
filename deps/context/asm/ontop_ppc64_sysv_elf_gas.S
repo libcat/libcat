@@ -68,6 +68,7 @@
 
 .file "ontop_ppc64_sysv_elf_gas.S"
 .globl cat_coroutine_context_ontop
+.hidden cat_coroutine_context_ontop
 #if _CALL_ELF == 2
 	.text
 	.align 2

@@ -68,6 +68,7 @@
 
 .file "jump_ppc64_sysv_elf_gas.S"
 .globl cat_coroutine_context_jump
+.hidden cat_coroutine_context_jump
 #if _CALL_ELF == 2
 	.text
 	.align 2
