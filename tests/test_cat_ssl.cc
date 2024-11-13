@@ -133,7 +133,7 @@ static cat_bool_t load_cert_test_callback(cat_ssl_context_t *context, cat_socket
 
 static cat_bool_t load_ca_test_callback(cat_ssl_context_t *context, cat_socket_crypto_options_t *options)
 {
-    printf("load_ca_test_callback\n");
+    // printf("load_ca_test_callback\n");
     test_load_cert_t *certs = (test_load_cert_t *)options->context;
     if (!certs || !certs->caCert) {
         // never here
