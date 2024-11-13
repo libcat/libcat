@@ -1493,7 +1493,7 @@ static cat_bool_t cat_socket_internal_bind(
             if (!cat_sockaddr_is_linux_abstract_name(name, name_length)) {
                 name_length = cat_strnlen(name, name_length);
             }
-            error = uv_pipe_bind_ex(&socket_i->u.pipe, name, name_length);
+            error = uv_pipe_bind2(&socket_i->u.pipe, name, name_length, UV_PIPE_NO_TRUNCATE);
         }
     }
     if (unlikely(error != 0)) {
@@ -1845,8 +1845,8 @@ static cat_bool_t cat_socket_internal_connect(
         if (!cat_sockaddr_is_linux_abstract_name(name, name_length)) {
             name_length = cat_strnlen(name, name_length);
         }
-        (void) uv_pipe_connect_ex(
-            request, &socket_i->u.pipe, name, name_length,
+        error = uv_pipe_connect2(
+            request, &socket_i->u.pipe, name, name_length, UV_PIPE_NO_TRUNCATE,
             !is_try ? cat_socket_internal_connect_callback : cat_socket_internal_try_connect_callback
         );
     } else {
