@@ -207,7 +207,8 @@ TEST(cat_http_parser, should_keep_alive)
     ASSERT_FALSE(cat_http_parser_should_keep_alive(parser));
 
     // always incomplete because previous request is "Connection: close"
-    ASSERT_TRUE(cat_http_parser_execute(parser, request_get_http10.data, request_get_http10.length));
+    // llhttp will yield:"Data after `Connection: close`" since nodejs/llhttp@6d04465e8c98c57a17428bf7aa54cc9e0add30ff
+    ASSERT_FALSE(cat_http_parser_execute(parser, request_get_http10.data, request_get_http10.length));
     ASSERT_FALSE(cat_http_parser_is_completed(parser));
     cat_http_parser_reset(parser);
 
@@ -216,7 +217,8 @@ TEST(cat_http_parser, should_keep_alive)
     ASSERT_FALSE(cat_http_parser_should_keep_alive(parser));
 
     // always incomplete because previous request is HTTP/1.0 and "Connection: close" by default
-    ASSERT_TRUE(cat_http_parser_execute(parser, request_get_http10_with_keep_alive.data, request_get_http10_with_keep_alive.length));
+    // llhttp will yield:"Data after `Connection: close`" since nodejs/llhttp@6d04465e8c98c57a17428bf7aa54cc9e0add30ff
+    ASSERT_FALSE(cat_http_parser_execute(parser, request_get_http10_with_keep_alive.data, request_get_http10_with_keep_alive.length));
     ASSERT_FALSE(cat_http_parser_is_completed(parser));
     cat_http_parser_reset(parser);
 
