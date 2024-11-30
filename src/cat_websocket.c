@@ -109,8 +109,9 @@ CAT_API uint64_t cat_websocket_header_get_payload_length(const cat_websocket_hea
         tmp |= header->extended_payload_length[1];
         return tmp;
     } else {
+        int i;
         CAT_ASSERT(header->payload_length == CAT_WEBSOCKET_EXT64_PAYLOAD_LENGTH);
-        for (int i = 0; i < sizeof(uint64_t); i++) {
+        for (i = 0; i < sizeof(uint64_t); i++) {
             tmp <<= 8;
             tmp |= header->extended_payload_length[i];
         }
@@ -143,8 +144,9 @@ CAT_API void cat_websocket_header_set_payload_length(cat_websocket_header_t *hea
         header->extended_payload_length[0] = (uint8_t) (tmp >> 8);
         header->extended_payload_length[1] = (uint8_t) tmp;
     } else {
+        int i;
         header->payload_length = CAT_WEBSOCKET_EXT64_PAYLOAD_LENGTH;
-        for (int i = sizeof(uint64_t) - 1; i >= 0; i--) {
+        for (i = sizeof(uint64_t) - 1; i >= 0; i--) {
             header->extended_payload_length[i] = (uint8_t) tmp;
             tmp >>= 8;
         }
