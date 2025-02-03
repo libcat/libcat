@@ -18,16 +18,17 @@
  */
 
 #include "test.h"
+
 extern "C"
 {
-#include "llhttp.h"
-}
-
 #ifdef CAT_IDE_HELPER
 #include "uv-common.h"
 #else
 #include "../deps/libuv/src/uv-common.h"
 #endif
+
+#include "llhttp.h"
+}
 
 #include <vector>
 
