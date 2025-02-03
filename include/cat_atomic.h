@@ -174,21 +174,16 @@ static cat_always_inline void cat_atomic_##name##_store_explicit(cat_atomic_##na
             case CAT_ATOMIC_MEMORY_ORDER_RELAXED: \
                 __c11_atomic_store(&atomic->value, desired, __ATOMIC_RELAXED); \
                 break; \
-            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
-                __c11_atomic_store(&atomic->value, desired, __ATOMIC_CONSUME); \
-                break; \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
-                __c11_atomic_store(&atomic->value, desired, __ATOMIC_ACQUIRE); \
-                break; \
             case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
                 __c11_atomic_store(&atomic->value, desired, __ATOMIC_RELEASE); \
-                break; \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
-                __c11_atomic_store(&atomic->value, desired, __ATOMIC_ACQ_REL); \
                 break; \
             case CAT_ATOMIC_MEMORY_ORDER_SEQ_CST: \
                 __c11_atomic_store(&atomic->value, desired, __ATOMIC_SEQ_CST); \
                 break; \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
+            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
+                CAT_NEVER_HERE("Invalid memory order for store operation"); \
             default: \
                 CAT_NEVER_HERE("Unknown memory order"); \
         } \
@@ -198,21 +193,16 @@ static cat_always_inline void cat_atomic_##name##_store_explicit(cat_atomic_##na
             case CAT_ATOMIC_MEMORY_ORDER_RELAXED: \
                 __atomic_store(&atomic->value, &desired, __ATOMIC_RELAXED); \
                 break; \
-            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
-                __atomic_store(&atomic->value, &desired, __ATOMIC_CONSUME); \
-                break; \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
-                __atomic_store(&atomic->value, &desired, __ATOMIC_ACQUIRE); \
-                break; \
             case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
                 __atomic_store(&atomic->value, &desired, __ATOMIC_RELEASE); \
-                break; \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
-                __atomic_store(&atomic->value, &desired, __ATOMIC_ACQ_REL); \
                 break; \
             case CAT_ATOMIC_MEMORY_ORDER_SEQ_CST: \
                 __atomic_store(&atomic->value, &desired, __ATOMIC_SEQ_CST); \
                 break; \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
+            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
+                CAT_NEVER_HERE("Invalid memory order for store operation"); \
             default: \
                 CAT_NEVER_HERE("Unknown memory order"); \
         } \
@@ -276,12 +266,11 @@ static cat_always_inline type_name_t cat_atomic_##name##_load_explicit(const cat
                 return __c11_atomic_load(&atomic->value, __ATOMIC_CONSUME); \
             case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
                 return __c11_atomic_load(&atomic->value, __ATOMIC_ACQUIRE); \
-            case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
-                return __c11_atomic_load(&atomic->value, __ATOMIC_RELEASE); \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
-                return __c11_atomic_load(&atomic->value, __ATOMIC_ACQ_REL); \
             case CAT_ATOMIC_MEMORY_ORDER_SEQ_CST: \
                 return __c11_atomic_load(&atomic->value, __ATOMIC_SEQ_CST); \
+            case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
+                CAT_NEVER_HERE("Invalid memory order for load operation"); \
             default: \
                 CAT_NEVER_HERE("Unknown memory order"); \
         } \
@@ -298,15 +287,12 @@ static cat_always_inline type_name_t cat_atomic_##name##_load_explicit(const cat
             case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
                 __atomic_load(&atomic->value, &ret, __ATOMIC_ACQUIRE); \
                 break; \
-            case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
-                __atomic_load(&atomic->value, &ret, __ATOMIC_RELEASE); \
-                break; \
-            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
-                __atomic_load(&atomic->value, &ret, __ATOMIC_ACQ_REL); \
-                break; \
             case CAT_ATOMIC_MEMORY_ORDER_SEQ_CST: \
                 __atomic_load(&atomic->value, &ret, __ATOMIC_SEQ_CST); \
                 break; \
+            case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
+            case CAT_ATOMIC_MEMORY_ORDER_ACQ_REL: \
+                CAT_NEVER_HERE("Invalid memory order for load operation"); \
             default: \
                 CAT_NEVER_HERE("Unknown memory order"); \
         } \
@@ -364,8 +350,6 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange_explicit(cat_a
         switch (order) { \
             case CAT_ATOMIC_MEMORY_ORDER_RELAXED: \
                 return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_RELAXED); \
-            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
-                return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_CONSUME); \
             case CAT_ATOMIC_MEMORY_ORDER_ACQUIRE: \
                 return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_ACQUIRE); \
             case CAT_ATOMIC_MEMORY_ORDER_RELEASE: \
@@ -374,6 +358,8 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange_explicit(cat_a
                 return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_ACQ_REL); \
             case CAT_ATOMIC_MEMORY_ORDER_SEQ_CST: \
                 return __c11_atomic_exchange(&atomic->value, desired, __ATOMIC_SEQ_CST); \
+            case CAT_ATOMIC_MEMORY_ORDER_CONSUME: \
+                CAT_NEVER_HERE("Invalid memory order for exchange operation"); \
             default: \
                 CAT_NEVER_HERE("Unknown memory order"); \
         } \
