@@ -55,8 +55,8 @@ _cat_coroutine_context_jump:
 
     /* return parent fcontext_t */
     movl  %ecx, %eax
-    /* returned data is stored in EDX */ 
- 
+    /* returned data is stored in EDX */
+
     movl  0x18(%esp), %ecx  /* restore EIP */
 
 #if !defined(CAT_USE_TSX)

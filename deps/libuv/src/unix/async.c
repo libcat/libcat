@@ -26,11 +26,7 @@
 #include "internal.h"
 
 #include <errno.h>
-#ifdef HAVE_LIBCAT
-#include "../hat_atomic.h"
-#else
 #include <stdatomic.h>
-#endif
 #include <stdio.h>  /* snprintf() */
 #include <assert.h>
 #include <stdlib.h>
@@ -40,6 +36,34 @@
 
 #ifdef __linux__
 #include <sys/eventfd.h>
+#endif
+
+#if UV__KQUEUE_EVFILT_USER
+static uv_once_t kqueue_runtime_detection_guard = UV_ONCE_INIT;
+static int kqueue_evfilt_user_support = 1;
+
+
+static void uv__kqueue_runtime_detection(void) {
+  int kq;
+  struct kevent ev[2];
+  struct timespec timeout = {0, 0};
+
+  /* Perform the runtime detection to ensure that kqueue with
+   * EVFILT_USER actually works. */
+  kq = kqueue();
+  EV_SET(ev, UV__KQUEUE_EVFILT_USER_IDENT, EVFILT_USER,
+         EV_ADD | EV_CLEAR, 0, 0, 0);
+  EV_SET(ev + 1, UV__KQUEUE_EVFILT_USER_IDENT, EVFILT_USER,
+         0, NOTE_TRIGGER, 0, 0);
+  if (kevent(kq, ev, 2, ev, 1, &timeout) < 1 ||
+      ev[0].filter != EVFILT_USER ||
+      ev[0].ident != UV__KQUEUE_EVFILT_USER_IDENT ||
+      ev[0].flags & EV_ERROR)
+    /* If we wind up here, we can assume that EVFILT_USER is defined but
+     * broken on the current system. */
+    kqueue_evfilt_user_support = 0;
+  uv__close(kq);
+}
 #endif
 
 static void uv__async_send(uv_loop_t* loop);
@@ -56,11 +80,7 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
 
   uv__handle_init(loop, (uv_handle_t*)handle, UV_ASYNC);
   handle->async_cb = async_cb;
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_init((hat_atomic_int32_t *) &handle->pending, 0);
-#else
   handle->pending = 0;
-#endif
   handle->u.fd = 0; /* This will be used as a busy flag. */
 
   uv__queue_insert_tail(&loop->async_handles, &handle->queue);
@@ -71,51 +91,25 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
 
 
 int uv_async_send(uv_async_t* handle) {
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_t *pending;
-  hat_atomic_int32_t *busy;
-#else
   _Atomic int* pending;
   _Atomic int* busy;
-#endif
 
-#ifdef HAVE_LIBCAT
-  pending = (hat_atomic_int32_t *) &handle->pending;
-  busy = (hat_atomic_int32_t *) &handle->u.fd;
-#else
   pending = (_Atomic int*) &handle->pending;
   busy = (_Atomic int*) &handle->u.fd;
-#endif
 
   /* Do a cheap read first. */
-#ifdef HAVE_LIBCAT
-  if (hat_atomic_int32_load(pending) != 0)
-#else
   if (atomic_load_explicit(pending, memory_order_relaxed) != 0)
-#endif
     return 0;
 
   /* Set the loop to busy. */
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_fetch_add(busy, 1);
-#else
   atomic_fetch_add(busy, 1);
-#endif
 
   /* Wake up the other thread's event loop. */
-#ifdef HAVE_LIBCAT
-  if (hat_atomic_int32_exchange(pending, 1) == 0)
-#else
   if (atomic_exchange(pending, 1) == 0)
-#endif
     uv__async_send(handle->loop);
 
   /* Set the loop to not-busy. */
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_fetch_add(busy, -1);
-#else
   atomic_fetch_add(busy, -1);
-#endif
 
   return 0;
 }
@@ -124,41 +118,23 @@ int uv_async_send(uv_async_t* handle) {
 /* Wait for the busy flag to clear before closing.
  * Only call this from the event loop thread. */
 static void uv__async_spin(uv_async_t* handle) {
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_t *pending;
-  hat_atomic_int32_t *busy;
-#else
   _Atomic int* pending;
   _Atomic int* busy;
-#endif
   int i;
 
-#ifdef HAVE_LIBCAT
-  pending = (hat_atomic_int32_t *) &handle->pending;
-  busy = (hat_atomic_int32_t *) &handle->u.fd;
-#else
   pending = (_Atomic int*) &handle->pending;
   busy = (_Atomic int*) &handle->u.fd;
-#endif
 
   /* Set the pending flag first, so no new events will be added by other
    * threads after this function returns. */
-#ifdef HAVE_LIBCAT
-  hat_atomic_int32_store(pending, 1);
-#else
   atomic_store(pending, 1);
-#endif
 
   for (;;) {
     /* 997 is not completely chosen at random. It's a prime number, acyclic by
      * nature, and should therefore hopefully dampen sympathetic resonance.
      */
     for (i = 0; i < 997; i++) {
-#ifdef HAVE_LIBCAT
-      if (hat_atomic_int32_load(busy) == 0)
-#else
       if (atomic_load(busy) == 0)
-#endif
         return;
 
       /* Other thread is busy with this handle, spin until it's done. */
@@ -191,7 +167,11 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
   assert(w == &loop->async_io_watcher);
 
+#if UV__KQUEUE_EVFILT_USER
+  for (;!kqueue_evfilt_user_support;) {
+#else
   for (;;) {
+#endif
     r = read(w->fd, buf, sizeof(buf));
 
     if (r == sizeof(buf))
@@ -247,6 +227,17 @@ static void uv__async_send(uv_loop_t* loop) {
     len = sizeof(val);
     fd = loop->async_io_watcher.fd;  /* eventfd */
   }
+#elif UV__KQUEUE_EVFILT_USER
+  struct kevent ev;
+
+  if (kqueue_evfilt_user_support) {
+    fd = loop->async_io_watcher.fd; /* magic number for EVFILT_USER */
+    EV_SET(&ev, fd, EVFILT_USER, 0, NOTE_TRIGGER, 0, 0);
+    r = kevent(loop->backend_fd, &ev, 1, NULL, 0, NULL);
+    if (r == 0)
+      return;
+    abort();
+  }
 #endif
 
   do
@@ -267,6 +258,9 @@ static void uv__async_send(uv_loop_t* loop) {
 static int uv__async_start(uv_loop_t* loop) {
   int pipefd[2];
   int err;
+#if UV__KQUEUE_EVFILT_USER
+  struct kevent ev;
+#endif
 
   if (loop->async_io_watcher.fd != -1)
     return 0;
@@ -278,6 +272,36 @@ static int uv__async_start(uv_loop_t* loop) {
 
   pipefd[0] = err;
   pipefd[1] = -1;
+#elif UV__KQUEUE_EVFILT_USER
+  uv_once(&kqueue_runtime_detection_guard, uv__kqueue_runtime_detection);
+  if (kqueue_evfilt_user_support) {
+    /* In order not to break the generic pattern of I/O polling, a valid
+     * file descriptor is required to take up a room in loop->watchers,
+     * thus we create one for that, but this fd will not be actually used,
+     * it's just a placeholder and magic number which is going to be closed
+     * during the cleanup, as other FDs. */
+    err = uv__open_cloexec("/dev/null", O_RDONLY);
+    if (err < 0)
+      return err;
+
+    pipefd[0] = err;
+    pipefd[1] = -1;
+
+    /* When using EVFILT_USER event to wake up the kqueue, this event must be
+     * registered beforehand. Otherwise, calling kevent() to issue an
+     * unregistered EVFILT_USER event will get an ENOENT.
+     * Since uv__async_send() may happen before uv__io_poll() with multi-threads,
+     * we can't defer this registration of EVFILT_USER event as we did for other
+     * events, but must perform it right away. */
+    EV_SET(&ev, err, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, 0);
+    err = kevent(loop->backend_fd, &ev, 1, NULL, 0, NULL);
+    if (err < 0)
+      return UV__ERR(errno);
+  } else {
+    err = uv__make_pipe(pipefd, UV_NONBLOCK_PIPE);
+    if (err < 0)
+      return err;
+  }
 #else
   err = uv__make_pipe(pipefd, UV_NONBLOCK_PIPE);
   if (err < 0)
@@ -287,6 +311,13 @@ static int uv__async_start(uv_loop_t* loop) {
   uv__io_init(&loop->async_io_watcher, uv__async_io, pipefd[0]);
   uv__io_start(loop, &loop->async_io_watcher, POLLIN);
   loop->async_wfd = pipefd[1];
+
+#if UV__KQUEUE_EVFILT_USER
+  /* Prevent the EVFILT_USER event from being added to kqueue redundantly
+   * and mistakenly later in uv__io_poll(). */
+  if (kqueue_evfilt_user_support)
+    loop->async_io_watcher.events = loop->async_io_watcher.pevents;
+#endif
 
   return 0;
 }
