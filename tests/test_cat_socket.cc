@@ -2465,7 +2465,7 @@ TEST(cat_socket, dump_all_and_close_all)
 
     cat_socket_t *tty_socket = nullptr;
     if (uv_guess_handle(CAT_STDOUT_FILENO) == UV_TTY) {
-        cat_socket_t *tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
+        tty_socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_STDOUT);
         ASSERT_NE(nullptr, tty_socket);
     }
     DEFER(if (tty_socket != nullptr) { cat_socket_close(tty_socket); });
