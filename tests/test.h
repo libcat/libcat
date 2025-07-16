@@ -24,6 +24,7 @@
 #include <string>
 #include <array>
 #include <atomic>
+#include <unordered_map>
 
 #include "cat_api.h"
 
@@ -310,84 +311,6 @@ namespace testing
     };
 
 #ifdef CAT_SSL
-
-    enum X509Type
-    {
-        X509TypeRSA = 1,
-        X509TypeECDSA = 2,
-        X509TypeSM2 = 3,
-    };
-    enum CertFlags
-    {
-        CertFlagsServer = 1 << 0,
-        CertFlagsClient = 1 << 1,
-    };
-
-    struct X509KeyCertPair
-    {
-        const char *key;
-        const char *cert;
-    };
-    class X509KeyCertFilePair
-    {
-        public:
-#ifndef PATH_MAX
-# define PATH_MAX 256
-#endif
-            char keyFile[PATH_MAX];
-            char certFile[PATH_MAX];
-            char caCertFile[PATH_MAX];
-            char chainFile[PATH_MAX];
-
-            X509KeyCertFilePair(const char* caCert, X509KeyCertPair pair) {
-                static std::atomic<int> serial;
-
-                std::string path;
-                std::string random_filename = string_format("%s/libcat_test_%08x", TEST_TMP_PATH, serial.fetch_add(1));
-
-                path = string_format("%s_ca.crt", random_filename.c_str());
-                file_put_contents(path.c_str(), caCert, strlen(caCert));
-                strncpy(caCertFile, path.c_str(), sizeof(caCertFile) - 1);
-
-                path = string_format("%s.crt", random_filename.c_str());
-                file_put_contents(path.c_str(), pair.cert, strlen(pair.cert));
-                strncpy(certFile, path.c_str(), sizeof(certFile) - 1);
-
-                path = string_format("%s.key", random_filename.c_str());
-                file_put_contents(path.c_str(), pair.key, strlen(pair.key));
-                strncpy(keyFile, path.c_str(), sizeof(keyFile) - 1);
-
-                path = string_format("%s_chain.crt", random_filename.c_str());
-                FILE *file = fopen(path.c_str(),
-                    "w"
-#ifdef CAT_OS_WIN
-                    // for no LF -> CRLF auto translation on Windows
-                    "b"
-#endif
-                );
-                fwrite(pair.cert, 1, strlen(pair.cert), file);
-                fwrite("\n", 1, strlen("\n"), file);
-                fwrite(caCert, 1, strlen(caCert), file);
-                fclose(file);
-                strncpy(chainFile, path.c_str(), sizeof(chainFile) - 1);
-            }
-
-            ~X509KeyCertFilePair() {
-                remove_file(keyFile);
-                remove_file(certFile);
-                remove_file(caCertFile);
-                remove_file(chainFile);
-            }
-    };
-
-    struct X509CA
-    {
-        const char *key;
-        const char *cert;
-        EVP_PKEY *pkey;
-        X509 *x509;
-    };
-
 # define checkOpenSSL(failcond) \
     do { \
         if (failcond) { \
@@ -399,224 +322,233 @@ namespace testing
         } \
     } while (0)
 
+    typedef class X509KeyCertPair X509KeyCertPair;
+    typedef std::unordered_map<std::string, std::variant<
+        std::string,
+        EVP_PKEY *,
+        std::shared_ptr<X509KeyCertPair>,
+        int32_t
+    >> X509KeyCertPairConfig;
+    typedef struct X509KeyPairPath {
+        const char *key;
+        const char *cert;
+    } X509KeyPairPath;
 
-    class X509util
+    class X509KeyCertPair
     {
+    private:
+        EVP_PKEY *pkey;
+        X509 *x509;
+        std::atomic<int> serial;
+        X509KeyPairPath exportPath = {nullptr, nullptr};
     public:
-        X509Type type;
-
-        const char *caCert;
-        const char *caKey;
-        std::atomic<long> serial;
-
-        static X509util *newRSA()
+        X509KeyCertPair(
+            EVP_PKEY *pkey,
+            X509 *x509
+        )
         {
-            X509util *x509 = new X509util();
-            x509->caKey = newRSAKey(nullptr);
-            if (x509->caKey == nullptr)
-            {
-                delete x509;
-                return nullptr;
-            }
-            X509CA ca = newCA(x509->caKey);
-            if (ca.cert == nullptr)
-            {
-                free((void *)x509->caKey);
-                delete x509;
-                return nullptr;
-            }
-            x509->caCert = ca.cert;
-            x509->caPKEY = ca.pkey;
-            x509->caX509 = ca.x509;
-
-            x509->type = X509TypeRSA;
-            x509->serial.store(2);
-            return x509;
+            this->pkey = pkey;
+            this->x509 = x509;
+            this->serial.store(0);
         }
 
-        static const char *newRSAKey(const char *passpharse)
+        ~X509KeyCertPair()
         {
-            int ret;
-            BIO *bio = nullptr;
-            EVP_PKEY *pkey = nullptr;
-            const char *pem = nullptr;
-            size_t len;
-
-            bio = BIO_new(BIO_s_mem());
-
-            pkey = EVP_RSA_gen(rsaBits);
-            checkOpenSSL(pkey == nullptr);
-
-            if (passpharse == nullptr) {
-                ret = PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
-            } else {
-                ret = PEM_write_bio_PrivateKey(bio, pkey, EVP_aes_256_cbc(), (unsigned char *)passpharse, strlen(passpharse), nullptr, nullptr);
-            }
-            checkOpenSSL(ret != 1);
-
-            len = BIO_pending(bio);
-            pem = (char *)calloc(len + 1, 1);
-            checkOpenSSL(pem == nullptr);
-            ret = BIO_read(bio, (void *)pem, len);
-            if (ret <= 0)
-            {
-                checkOpenSSL(true);
-                free((void *)pem);
-            }
-
-        fail:
-            if (bio != nullptr)
-            {
-                BIO_free(bio);
-            }
             if (pkey != nullptr)
             {
                 EVP_PKEY_free(pkey);
             }
-            return pem;
-        }
-
-        X509KeyCertFilePair *newCertFile(
-            int flags,
-            const char *passphrase,
-            const char *commonName,
-            int32_t secNotBeforeOffset,
-            int32_t secNotAfterOffset,
-            const char *sanIP
-        ) {
-            std::string path;
-            X509KeyCertPair pair = newCert(
-                flags, newRSAKey(passphrase), passphrase, commonName, secNotBeforeOffset, secNotAfterOffset, sanIP);
-            if (pair.cert == nullptr) {
-                return nullptr;
+            if (x509 != nullptr)
+            {
+                X509_free(x509);
             }
-            DEFER([pair]{
-                free((void *)pair.cert);
-                free((void *)pair.key);
-            }());
 
-            return new X509KeyCertFilePair(caCert, pair);
+            if (exportPath.key != nullptr) {
+                remove_file(exportPath.key);
+                free((void *)exportPath.key);
+            }
+            if (exportPath.cert != nullptr) {
+                remove_file(exportPath.cert);
+                free((void *)exportPath.cert);
+            }
         }
 
-        X509KeyCertPair newCert(
-            int flags,
-            const char *pemKey,
-            const char *passphrase,
-            const char *commonName,
-            int32_t secNotBeforeOffset,
-            int32_t secNotAfterOffset,
-            const char *sanIP
+        std::string privKeyPEMString(const char *passphrase = nullptr)
+        {
+            BIO *bio = BIO_new(BIO_s_mem());
+            if (passphrase != nullptr) {
+                PEM_write_bio_PrivateKey(bio, pkey, EVP_aes_256_cbc(), (unsigned char *)passphrase, strlen(passphrase), nullptr, nullptr);
+            } else {
+                PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+            }
+            long len = BIO_get_mem_data(bio, nullptr);
+            std::string ret(len, '\0');
+            BIO_read(bio, (unsigned char *)ret.data(), len);
+            BIO_free(bio);
+            return ret;
+        }
+
+        std::string certPEMString()
+        {
+            BIO *bio = BIO_new(BIO_s_mem());
+            PEM_write_bio_X509(bio, x509);
+            long len = BIO_get_mem_data(bio, nullptr);
+            std::string ret(len, '\0');
+            BIO_read(bio, (unsigned char *)ret.data(), len);
+            BIO_free(bio);
+            return ret;
+        }
+
+        X509KeyPairPath exportPEMs(const char *passphrase = nullptr)
+        {
+            if (exportPath.key != nullptr && exportPath.cert != nullptr) {
+                if (passphrase != nullptr) {
+                    throw std::runtime_error("pems is already exported, passphrase is not supported");
+                }
+                return exportPath;
+            }
+            uint64_t exportSerial = 0;
+            while (true) {
+                RAND_bytes((unsigned char *)&exportSerial, sizeof(exportSerial));
+                if (file_exists(string_format("%s/libcat_x509_%016x.key", TEST_TMP_PATH, exportSerial).c_str()) ||
+                    file_exists(string_format("%s/libcat_x509_%016x.crt", TEST_TMP_PATH, exportSerial).c_str())) {
+                    continue;
+                }
+                break;
+            }
+
+            auto keyPath = string_format("%s/libcat_x509_%016x.key", TEST_TMP_PATH, exportSerial);
+            std::string privKeyPEM = privKeyPEMString(passphrase);
+            file_put_contents(keyPath.c_str(), privKeyPEM.c_str(), privKeyPEM.length());
+
+            auto certPath = string_format("%s/libcat_x509_%016x.crt", TEST_TMP_PATH, exportSerial);
+            std::string certPEM = certPEMString();
+            file_put_contents(certPath.c_str(), certPEM.c_str(), certPEM.length());
+
+            exportPath.key = strdup(keyPath.c_str());
+            exportPath.cert = strdup(certPath.c_str());
+            return exportPath;
+        }
+
+        static std::shared_ptr<X509KeyCertPair> create(
+            X509KeyCertPairConfig &config
         ) {
             int ret;
-            BIO *bio = nullptr;
-            EVP_PKEY *pkey = nullptr;
             X509_NAME *name;
-            X509 *x509 = nullptr;
             X509V3_CTX ctx = {0};
             X509_EXTENSION *ext = nullptr;
-            const char *pem = nullptr;
-            char *sanConf;
-            size_t len;
+            EVP_PKEY *pkey = nullptr, *issuerPkey = nullptr;
+            X509 *x509 = nullptr, *issuerX509 = nullptr;
 
-            bio = BIO_new(BIO_s_mem());
-            pkey = EVP_PKEY_new();
-
-            // read pem
-            ret = BIO_write(bio, pemKey, strlen(pemKey));
-            checkOpenSSL(ret <= 0);
-            (void) BIO_seek(bio, 0);
-            pkey = PEM_read_bio_PrivateKey(
-                bio,
-                &pkey,
-                [](char *buf, int size, int rwflag, void *u) {
-                    strncpy(buf, (const char *)u, size);
-                    return (int)(strlen((const char *)u) > size ? size : strlen((const char *)u));
-                },
-                (void *)passphrase
-            );
-            checkOpenSSL(pkey == nullptr);
+            // prepare private key
+            if (config.find("pkey") != config.end()) {
+                pkey = std::get<EVP_PKEY *>(config["pkey"]);
+            } else if (config.find("keyType") != config.end()) {
+                std::string keyType = std::get<std::string>(config["keyType"]);
+                if (keyType == "RSA2048") {
+                    pkey = EVP_RSA_gen(2048);
+                } else if (keyType == "RSA4096") {
+                    pkey = EVP_RSA_gen(4096);
+                } else if (keyType.compare(0, 2, "EC") == 0) {
+                    pkey = EVP_EC_gen(keyType.substr(2).c_str());
+                } else {
+                    throw std::runtime_error("Invalid key type");
+                }
+            } else {
+                throw std::runtime_error("No private key provided and key type not specified");
+            }
 
             // generate x509
             x509 = X509_new();
+            if (config.find("issuer") != config.end()) {
+                auto issuer = std::get<std::shared_ptr<X509KeyCertPair>>(config["issuer"]);
+                issuerPkey = issuer->pkey;
+                issuerX509 = issuer->x509;
+            } else {
+                issuerPkey = pkey;
+                issuerX509 = x509;
+            }
+
             ret = X509_set_version(x509, 2);
             checkOpenSSL(ret != 1);
             ret = X509_set_pubkey(x509, pkey);
             checkOpenSSL(ret != 1);
-            ASN1_INTEGER_set(X509_get_serialNumber(x509), serial.fetch_add(1));
+            if (config.find("issuer") != config.end()) {
+                auto issuer = std::get<std::shared_ptr<X509KeyCertPair>>(config["issuer"]);
+                ASN1_INTEGER_set(X509_get_serialNumber(x509), issuer->serial.fetch_add(1));
+            } else {
+                ASN1_INTEGER_set(X509_get_serialNumber(x509), 0);
+            }
 
             name = X509_get_subject_name(x509);
-            ret = X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *)"CN", -1, -1, 0);
-            checkOpenSSL(ret != 1);
-            ret = X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *)commonName, -1, -1, 0);
-            checkOpenSSL(ret != 1);
-            ret = X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *)commonName, -1, -1, 0);
-            checkOpenSSL(ret != 1);
+            for (std::string key : {"C", "O", "CN"}) {
+                if (config.find(key) != config.end()) {
+                    ret = X509_NAME_add_entry_by_txt(name, key.c_str(), MBSTRING_ASC, (const unsigned char *)std::get<std::string>(config[key]).c_str(), -1, -1, 0);
+                    checkOpenSSL(ret != 1);
+                }
+            }
 
-            ret = X509_set_issuer_name(x509, X509_get_subject_name(caX509));
+            ret = X509_set_issuer_name(x509, X509_get_subject_name(issuerX509));
             checkOpenSSL(ret != 1);
-            X509_gmtime_adj(X509_get_notBefore(x509), secNotBeforeOffset);
-            X509_gmtime_adj(X509_get_notAfter(x509), secNotAfterOffset);
+            if (config.find("notBeforeOffsetSeconds") != config.end()) {
+                X509_gmtime_adj(X509_get_notBefore(x509), std::get<int32_t>(config["notBeforeOffsetSeconds"]));
+            }
+            if (config.find("notAfterOffsetSeconds") != config.end()) {
+                X509_gmtime_adj(X509_get_notAfter(x509), std::get<int32_t>(config["notAfterOffsetSeconds"]));
+            }
+            X509V3_set_ctx(&ctx, issuerX509, x509, nullptr, nullptr, 0);
 
             // set extensions
-            X509V3_set_ctx(&ctx, caX509, x509, nullptr, nullptr, 0);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, "critical,digitalSignature");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-            if ((flags & CertFlagsServer) && (flags & CertFlagsClient))
-            {
-                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "serverAuth,clientAuth");
+            // keyUsage
+            if (config.find("keyUsage") != config.end()) {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, std::get<std::string>(config["keyUsage"]).c_str());
                 checkOpenSSL(ext == nullptr);
                 ret = X509_add_ext(x509, ext, -1);
+                X509_EXTENSION_free(ext);
+                checkOpenSSL(ret != 1);
             }
-            else if (flags & CertFlagsServer)
-            {
-                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "serverAuth");
+
+            // extKeyUsage
+            if (config.find("extKeyUsage") != config.end()) {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, std::get<std::string>(config["extKeyUsage"]).c_str());
                 checkOpenSSL(ext == nullptr);
                 ret = X509_add_ext(x509, ext, -1);
+                X509_EXTENSION_free(ext);
+                checkOpenSSL(ret != 1);
             }
-            else if (flags & CertFlagsClient)
-            {
-                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_ext_key_usage, "clientAuth");
+
+            // basicConstraints
+            if (config.find("basicConstraints") != config.end()) {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_basic_constraints, std::get<std::string>(config["basicConstraints"]).c_str());
                 checkOpenSSL(ext == nullptr);
                 ret = X509_add_ext(x509, ext, -1);
+                X509_EXTENSION_free(ext);
+                checkOpenSSL(ret != 1);
             }
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_basic_constraints, "critical,CA:FALSE");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
+
+            // subjectKeyIdentifier
             ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_key_identifier, "hash");
             checkOpenSSL(ext == nullptr);
             ret = X509_add_ext(x509, ext, -1);
             X509_EXTENSION_free(ext);
             checkOpenSSL(ret != 1);
+
+            // authorityKeyIdentifier
             ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_authority_key_identifier, "keyid:always");
             checkOpenSSL(ext == nullptr);
             ret = X509_add_ext(x509, ext, -1);
             X509_EXTENSION_free(ext);
             checkOpenSSL(ret != 1);
 
-            sanConf = (char *)calloc(4096, 1); // 懒得算了
-            if (sanIP == nullptr)
-            {
-                snprintf(sanConf, 4096, "DNS:%s", commonName);
+            // subjectAltName
+            if (config.find("subjectAltName") != config.end()) {
+                ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_alt_name, std::get<std::string>(config["subjectAltName"]).c_str());
+                checkOpenSSL(ext == nullptr);
+                ret = X509_add_ext(x509, ext, -1);
+                X509_EXTENSION_free(ext);
+                checkOpenSSL(ret != 1);
             }
-            else
-            {
-                snprintf(sanConf, 4096, "DNS:%s,IP:%s", commonName, sanIP);
-            }
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_alt_name, sanConf);
-            free(sanConf);
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-
-            // CPS这么搞不行
+            // TODO: certificate Policies
             // https://stackoverflow.com/questions/21409677/not-able-to-add-certificate-policy-extension-using-openssl-apis-in-c
             // ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_certificate_policies, "2.23.140.1.2.1");
             // checkOpenSSL(ext == nullptr);
@@ -624,29 +556,12 @@ namespace testing
             // checkOpenSSL(ret != 1);
 
             // sign
-            ret = X509_sign(x509, caPKEY, EVP_sha256());
+            ret = X509_sign(x509, issuerPkey, EVP_sha256());
             checkOpenSSL(ret == 0);
 
-            // write pem
-            (void) BIO_reset(bio);
-            ret = PEM_write_bio_X509(bio, x509);
-            checkOpenSSL(ret != 1);
-
-            len = BIO_pending(bio);
-            pem = (char *)calloc(len + 1, 1);
-            checkOpenSSL(pem == nullptr);
-            ret = BIO_read(bio, (void *)pem, len);
-            if (ret <= 0)
-            {
-                free((void *)pem);
-                checkOpenSSL(true);
-            }
+            return std::make_shared<X509KeyCertPair>(pkey, x509);
 
         fail:
-            if (bio != nullptr)
-            {
-                BIO_free(bio);
-            }
             if (pkey != nullptr)
             {
                 EVP_PKEY_free(pkey);
@@ -655,147 +570,11 @@ namespace testing
             {
                 X509_free(x509);
             }
-            return {pemKey, pem};
-        }
-        ~X509util()
-        {
-            free((void *)caKey);
-            free((void *)caCert);
-            if (caPKEY != nullptr)
-            {
-                EVP_PKEY_free(caPKEY);
-            }
-            if (caX509 != nullptr)
-            {
-                X509_free(caX509);
-            }
-        }
-
-    private:
-        // rsa args
-        static constexpr int rsaBits = 2048;
-
-        // ca args
-        static constexpr const char *caCN = "ca.local";
-
-        EVP_PKEY *caPKEY;
-        X509 *caX509;
-
-        static X509CA newCA(const char *caKey)
-        {
-            int ret;
-            BIO *bio = nullptr;
-            EVP_PKEY *pkey = nullptr;
-            X509_NAME *name;
-            X509 *x509 = nullptr;
-            X509V3_CTX ctx = {0};
-            X509_EXTENSION *ext = nullptr;
-            const char *pem = nullptr;
-            size_t len;
-
-
-            bio = BIO_new(BIO_s_mem());
-            pkey = EVP_PKEY_new();
-
-            // read pem
-            ret = BIO_write(bio, caKey, strlen(caKey));
-            checkOpenSSL(ret <= 0);
-            (void) BIO_seek(bio, 0);
-            pkey = PEM_read_bio_PrivateKey(bio, &pkey, nullptr, nullptr);
-            checkOpenSSL(pkey == nullptr);
-
-            // generate x509
-            x509 = X509_new();
-            ret = X509_set_version(x509, 2);
-            checkOpenSSL(ret != 1);
-            ret = X509_set_pubkey(x509, pkey);
-            checkOpenSSL(ret != 1);
-            ASN1_INTEGER_set(X509_get_serialNumber(x509), 1);
-
-            name = X509_get_subject_name(x509);
-            ret = X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *)"CN", -1, -1, 0);
-            checkOpenSSL(ret != 1);
-            ret = X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *)"local CA", -1, -1, 0);
-            checkOpenSSL(ret != 1);
-            ret = X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *)caCN, -1, -1, 0);
-            checkOpenSSL(ret != 1);
-
-            ret = X509_set_issuer_name(x509, name);
-            checkOpenSSL(ret != 1);
-            X509_gmtime_adj(X509_get_notBefore(x509), 0);
-            // pit: this arg is "long" which is int32 under windows, so 100 * 31536000L will become negative
-            X509_gmtime_adj(X509_get_notAfter(x509), 31536000L);
-
-            // set extensions
-            X509V3_set_ctx(&ctx, x509, x509, nullptr, nullptr, 0);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_basic_constraints, "critical,CA:TRUE");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, "critical,digitalSignature,keyCertSign,cRLSign");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_key_identifier, "hash");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-            ext = X509V3_EXT_conf_nid(nullptr, &ctx, NID_authority_key_identifier, "keyid:always");
-            checkOpenSSL(ext == nullptr);
-            ret = X509_add_ext(x509, ext, -1);
-            X509_EXTENSION_free(ext);
-            checkOpenSSL(ret != 1);
-
-            // sign
-            ret = X509_sign(x509, pkey, EVP_sha256());
-            checkOpenSSL(ret == 0);
-
-            // write pem
-            (void) BIO_reset(bio);
-            ret = PEM_write_bio_X509(bio, x509);
-            checkOpenSSL(ret != 1);
-
-            len = BIO_pending(bio);
-            pem = (char *)calloc(len + 1, 1);
-            if (pem == nullptr)
-            {
-                // impossible
-                goto fail;
-            }
-            ret = BIO_read(bio, (void *)pem, len);
-            if (ret <= 0)
-            {
-                checkOpenSSL(true);
-                free((void *)pem);
-            }
-
-            if (bio != nullptr)
-            {
-                BIO_free(bio);
-            }
-            return {caKey, pem, pkey, x509};
-        fail:
-            if (bio != nullptr)
-            {
-                BIO_free(bio);
-            }
-            if (pkey != nullptr)
-            {
-                EVP_PKEY_free(pkey);
-            }
-            if (x509 != nullptr)
-            {
-                X509_free(x509);
-            }
-            return {nullptr, nullptr, nullptr, nullptr};
+            return nullptr;
         }
     };
 
+    extern std::shared_ptr<X509KeyCertPair> publicCAPair;
 #undef checkOpenSSL
-
-    extern X509util *x509;
 #endif // CAT_SSL
 }

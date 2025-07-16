@@ -169,47 +169,35 @@ TEST(cat_ssl, load_certs)
 {
     cat_socket_t *clientSocket, *serverSocket;
 
-    auto serverKeyCert = x509->newCert(
-        CertFlagsServer,
-        x509->newRSAKey(nullptr),
-        nullptr,
-        "localhost",
-        0,
-        90 * 24 * 60 * 60,
-        "127.0.0.1"
-    );
-
-    DEFER([serverKeyCert]{
-        free((void *)serverKeyCert.cert);
-        free((void *)serverKeyCert.key);
-    }());
-
-    // auto f = fopen("/tmp/ca.crt", "w");
-    // ASSERT_NE(f, nullptr);
-    // DEFER(fclose(f));
-    // ASSERT_GT(fwrite(x509->caCert, 1, strlen(x509->caCert), f), 0);
-    // fflush(f);
-    // auto f2 = fopen("/tmp/svr.key", "w");
-    // ASSERT_NE(f2, nullptr);
-    // DEFER(fclose(f2));
-    // ASSERT_GT(fwrite(serverKeyCert.key, 1, strlen(serverKeyCert.key), f2), 0);
-    // fflush(f2);
-    // auto f3 = fopen("/tmp/svr.crt", "w");
-    // ASSERT_NE(f3, nullptr);
-    // DEFER(fclose(f3));
-    // ASSERT_GT(fwrite(serverKeyCert.cert, 1, strlen(serverKeyCert.cert), f3), 0);
-    // ASSERT_GT(fwrite("\n", 1, 1, f3), 0);
-    // ASSERT_GT(fwrite(x509->caCert, 1, strlen(x509->caCert), f3), 0);
-    // fflush(f3);
+    X509KeyCertPairConfig serverConfig = {
+        {"issuer", publicCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto serverPair = X509KeyCertPair::create(serverConfig);
 
     test_load_cert_t certs = {
-        .caCert = x509->caCert,
-        .caKey = x509->caKey,
-        .severCert = serverKeyCert.cert,
-        .severKey = serverKeyCert.key,
+        .caCert = strdup(publicCAPair->certPEMString().c_str()),
+        .caKey = strdup(publicCAPair->privKeyPEMString().c_str()),
+        .severCert = strdup(serverPair->certPEMString().c_str()),
+        .severKey = strdup(serverPair->privKeyPEMString().c_str()),
         .clientCert = nullptr,
         .clientKey = nullptr
     };
+    DEFER([certs] {
+        free((void *)certs.caCert);
+        free((void *)certs.caKey);
+        free((void *)certs.severCert);
+        free((void *)certs.severKey);
+    }());
 
     serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     ASSERT_NE(serverSocket, nullptr);
@@ -248,4 +236,113 @@ TEST(cat_ssl, load_certs)
     ASSERT_TRUE(cat_socket_send(clientSocket, "hello!", 6));
 }
 
+TEST(cat_ssl, x509utils)
+{
+    X509KeyCertPairConfig caConfig = {
+        {"keyType", "RSA4096"},
+        {"C", "CN"},
+        {"O", "TestCA"},
+        {"CN", "TestCA"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 365 * 86400 /* 1 year */},
+        {"keyUsage", "critical,digitalSignature,keyEncipherment,keyAgreement"},
+        {"extKeyUsage", "critical,serverAuth,clientAuth"},
+        {"basicConstraints", "critical,CA:TRUE"},
+    };
+    auto caPair = X509KeyCertPair::create(caConfig);
+    ASSERT_NE(caPair, nullptr);
+    ASSERT_GT(caPair->privKeyPEMString().length(), 0);
+    ASSERT_GT(caPair->privKeyPEMString("123456").length(), 0);
+    ASSERT_GT(caPair->certPEMString().length(), 0);
+    auto caPEMsPath = caPair->exportPEMs();
+    ASSERT_NE(caPEMsPath.key, nullptr);
+    ASSERT_NE(caPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(caPEMsPath.key));
+    ASSERT_TRUE(file_exists(caPEMsPath.cert));
+    ASSERT_THROW(caPair->exportPEMs("123456"), std::runtime_error);
+
+    X509KeyCertPairConfig serverConfig = {
+        {"issuer", std::shared_ptr<X509KeyCertPair>(caPair)},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto serverPair = X509KeyCertPair::create(serverConfig);
+    ASSERT_NE(serverPair, nullptr);
+    ASSERT_GT(serverPair->privKeyPEMString().length(), 0);
+    ASSERT_GT(serverPair->privKeyPEMString("123456").length(), 0);
+    ASSERT_GT(serverPair->certPEMString().length(), 0);
+    auto serverPEMsPath = serverPair->exportPEMs();
+    ASSERT_NE(serverPEMsPath.key, nullptr);
+    ASSERT_NE(serverPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(serverPEMsPath.key));
+    ASSERT_TRUE(file_exists(serverPEMsPath.cert));
+
+    X509KeyCertPairConfig clientConfig = {
+        {"issuer", std::shared_ptr<X509KeyCertPair>(caPair)},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "client"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,clientAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.2"},
+    };
+    if (OBJ_txt2nid("SM2") != NID_undef) {
+        clientConfig["keyType"] = "ECSM2";
+    } else if (OBJ_txt2nid("secp384r1") != NID_undef) {
+        clientConfig["keyType"] = "ECsecp384r1";
+    } else {
+        clientConfig["keyType"] = "RSA2048";
+    }
+    auto clientPair = X509KeyCertPair::create(clientConfig);
+    ASSERT_NE(clientPair, nullptr);
+    ASSERT_GT(clientPair->privKeyPEMString().length(), 0);
+    ASSERT_GT(clientPair->privKeyPEMString("123456").length(), 0);
+    ASSERT_GT(clientPair->certPEMString().length(), 0);
+    auto clientPEMsPath = clientPair->exportPEMs();
+    std::string clientKeyPath = clientPEMsPath.key;
+    std::string clientCertPath = clientPEMsPath.cert;
+    ASSERT_TRUE(file_exists(clientPEMsPath.key));
+    ASSERT_TRUE(file_exists(clientPEMsPath.cert));
+    clientPair.reset();
+    // check if clientKeyPath released
+    ASSERT_FALSE(file_exists(clientKeyPath.c_str()));
+    ASSERT_FALSE(file_exists(clientCertPath.c_str()));
+
+    auto myPrivKey = EVP_RSA_gen(3072);
+    X509KeyCertPairConfig myConfig = {
+        {"issuer", std::shared_ptr<X509KeyCertPair>(caPair)},
+        {"pkey", myPrivKey},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "client2"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,clientAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:client2,IP:127.0.0.3"},
+    };
+    auto myPair = X509KeyCertPair::create(myConfig);
+    ASSERT_NE(myPair, nullptr);
+    ASSERT_GT(myPair->privKeyPEMString().length(), 0);
+    ASSERT_GT(myPair->privKeyPEMString("123456").length(), 0);
+    ASSERT_GT(myPair->certPEMString().length(), 0);
+    auto myPEMsPath = myPair->exportPEMs();
+    ASSERT_NE(myPEMsPath.key, nullptr);
+    ASSERT_NE(myPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(myPEMsPath.key));
+    ASSERT_TRUE(file_exists(myPEMsPath.cert));
+    ASSERT_THROW(myPair->exportPEMs("123456"), std::runtime_error);
+}
 #endif

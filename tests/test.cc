@@ -207,7 +207,7 @@ namespace testing
     }
 
 #ifdef CAT_SSL
-    X509util *x509 = nullptr;
+    std::shared_ptr<X509KeyCertPair> publicCAPair;
 #endif
 }
 
@@ -311,17 +311,27 @@ public:
         }
 
 #ifdef CAT_SSL
-        x509 = X509util::newRSA();
+        X509KeyCertPairConfig caConfig = {
+            {"keyType", "RSA4096"},
+            {"C", "CN"},
+            {"O", "TestCA"},
+            {"CN", "TestCA"},
+            {"notBeforeOffsetSeconds", 0},
+            {"notAfterOffsetSeconds", 365 * 86400 /* 1 year */},
+            {"keyUsage", "critical,digitalSignature,keyCertSign"},
+            {"basicConstraints", "critical,CA:TRUE"},
+        };
+        publicCAPair = X509KeyCertPair::create(caConfig);
+        if (publicCAPair == nullptr) {
+            // ???
+            abort();
+        }
+        publicCAPair->exportPEMs();
 #endif
     }
 
     virtual void TearDown()
     {
-#if defined(CAT_SSL) && !defined(CAT_DEBUG)
-        delete testing::x509;
-        testing::x509 = nullptr;
-#endif
-
         call_shutdown_functions();
 
         ASSERT_TRUE(cat_stop());
