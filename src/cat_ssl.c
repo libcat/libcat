@@ -1185,6 +1185,7 @@ CAT_API cat_bool_t cat_ssl_encrypt(
 #endif
                 encrypted_buffer = new_encrypted_buffer;
                 encrypted_buffer_size = new_encrypted_buffer_size;
+                cat_clear_last_error();
                 continue; // Retry current chunk
             } else if (!ret) {
                 cat_free(encrypted_buffer);
