@@ -948,14 +948,22 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
     long err;
     const char *errmsg;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    cert = SSL_get0_peer_certificate(connection);
+#else
     cert = SSL_get_peer_certificate(connection);
+#endif
 
     if (cert == NULL) {
-        cat_update_last_error(CAT_ENOCERT, "SSL certificate not found");
+        long err_code;
+        while ((err_code = ERR_get_error()) != 0);
+        cat_update_last_error(CAT_ENOCERT, "SSL certificate not found: %s", ERR_error_string(err_code, NULL));
         return cat_false;
     }
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     X509_free(cert);
+#endif
 
     err = SSL_get_verify_result(connection);
 
@@ -997,7 +1005,11 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
 {
     X509 *cert;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    cert = SSL_get0_peer_certificate(ssl->connection);
+#else
     cert = SSL_get_peer_certificate(ssl->connection);
+#endif
 
     if (cert == NULL) {
         return cat_false;
@@ -1005,7 +1017,9 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
 
     cat_bool_t ret = _cat_ssl_check_host(cert, name, name_length);
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     X509_free(cert);
+#endif
     return ret;
 }
 
