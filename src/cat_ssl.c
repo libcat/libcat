@@ -706,8 +706,8 @@ _out:
 
 CAT_API void cat_ssl_context_enable_verify_peer(cat_ssl_context_t *context)
 {
-    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_PEER, ssl_verify_callback)", context);
-    SSL_CTX_set_verify(context->ctx, SSL_VERIFY_PEER, cat_ssl_verify_callback);
+    CAT_LOG_DEBUG(SSL, "SSL_CTX_set_verify(%p, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT | SSL_VERIFY_CLIENT_ONCE, ssl_verify_callback)", context);
+    SSL_CTX_set_verify(context->ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT | SSL_VERIFY_CLIENT_ONCE, cat_ssl_verify_callback);
 }
 
 CAT_API void cat_ssl_context_disable_verify_peer(cat_ssl_context_t *context)
