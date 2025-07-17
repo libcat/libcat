@@ -345,4 +345,614 @@ TEST(cat_ssl, x509utils)
     ASSERT_TRUE(file_exists(myPEMsPath.cert));
     ASSERT_THROW(myPair->exportPEMs("123456"), std::runtime_error);
 }
+
+TEST(cat_ssl, enable_crypto)
+{
+    cat_socket_set_global_accept_timeout(1000);
+    cat_socket_set_global_connect_timeout(1000);
+
+    auto publicCAPath = publicCAPair->exportPEMs();
+
+    X509KeyCertPairConfig caConfig = {
+        {"keyType", "RSA4096"},
+        {"C", "CN"},
+        {"O", "TestCA"},
+        {"CN", "TestCA"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 365 * 86400 /* 1 year */},
+        {"keyUsage", "critical,digitalSignature,keyCertSign"},
+        {"basicConstraints", "critical,CA:TRUE"},
+    };
+    auto anotherCAPair = X509KeyCertPair::create(caConfig);
+    ASSERT_NE(anotherCAPair, nullptr);
+    auto anotherPEMsPath = anotherCAPair->exportPEMs();
+    ASSERT_NE(anotherPEMsPath.key, nullptr);
+    ASSERT_NE(anotherPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(anotherPEMsPath.key));
+    ASSERT_TRUE(file_exists(anotherPEMsPath.cert));
+
+    X509KeyCertPairConfig serverConfig = {
+        {"issuer", publicCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto serverPair = X509KeyCertPair::create(serverConfig);
+    ASSERT_NE(serverPair, nullptr);
+    auto serverPEMsPath = serverPair->exportPEMs();
+    ASSERT_NE(serverPEMsPath.key, nullptr);
+    ASSERT_NE(serverPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(serverPEMsPath.key));
+    ASSERT_TRUE(file_exists(serverPEMsPath.cert));
+
+    X509KeyCertPairConfig clientConfig = {
+        {"issuer", publicCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "client"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,clientAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:client,IP:127.0.0.1"},
+    };
+    auto clientPair = X509KeyCertPair::create(clientConfig);
+    ASSERT_NE(clientPair, nullptr);
+    auto clientPEMsPath = clientPair->exportPEMs();
+    ASSERT_NE(clientPEMsPath.key, nullptr);
+    ASSERT_NE(clientPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(clientPEMsPath.key));
+    ASSERT_TRUE(file_exists(clientPEMsPath.cert));
+
+    X509KeyCertPairConfig anotherClientConfig = {
+        {"issuer", anotherCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "client"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,clientAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:client,IP:127.0.0.1"},
+    };
+    auto anotherClientPair = X509KeyCertPair::create(anotherClientConfig);
+    ASSERT_NE(anotherClientPair, nullptr);
+    auto anotherClientPEMsPath = anotherClientPair->exportPEMs();
+    ASSERT_NE(anotherClientPEMsPath.key, nullptr);
+    ASSERT_NE(anotherClientPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(anotherClientPEMsPath.key));
+    ASSERT_TRUE(file_exists(anotherClientPEMsPath.cert));
+
+    X509KeyCertPairConfig selfsignedConfig = {
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto selfsignedPair = X509KeyCertPair::create(selfsignedConfig);
+    ASSERT_NE(selfsignedPair, nullptr);
+    auto selfsignedPEMsPath = selfsignedPair->exportPEMs();
+    ASSERT_NE(selfsignedPEMsPath.key, nullptr);
+    ASSERT_NE(selfsignedPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(selfsignedPEMsPath.key));
+    ASSERT_TRUE(file_exists(selfsignedPEMsPath.cert));
+
+    // default verify depth is 9
+    std::vector<std::shared_ptr<X509KeyCertPair>> intermediatePairs;
+    std::shared_ptr<X509KeyCertPair> issuerPair = publicCAPair;
+    for (int i = 0; i < 12; i++) {
+        X509KeyCertPairConfig intermediateConfig = {
+            {"issuer", issuerPair},
+            {"keyType", "RSA2048"},
+            {"C", "CN"},
+            {"O", "Test"},
+            {"CN", string_format("intermediate %d", i + 1)},
+            {"notBeforeOffsetSeconds", 0},
+            {"notAfterOffsetSeconds", 90 * 86400 /* 90 days */},
+            {"keyUsage", "critical,digitalSignature,keyCertSign"},
+            {"basicConstraints", "critical,CA:TRUE"},
+        };
+        auto intermediatePair = X509KeyCertPair::create(intermediateConfig);
+        ASSERT_NE(intermediatePair, nullptr);
+        auto intermediatePEMsPath = intermediatePair->exportPEMs();
+        ASSERT_NE(intermediatePEMsPath.key, nullptr);
+        ASSERT_NE(intermediatePEMsPath.cert, nullptr);
+        ASSERT_TRUE(file_exists(intermediatePEMsPath.key));
+        ASSERT_TRUE(file_exists(intermediatePEMsPath.cert));
+        issuerPair = intermediatePair;
+        intermediatePairs.push_back(intermediatePair);
+    }
+
+    X509KeyCertPairConfig verydeepConfig = {
+        {"issuer", intermediatePairs.back()},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto verydeepPair = X509KeyCertPair::create(verydeepConfig);
+    ASSERT_NE(verydeepPair, nullptr);
+    auto verydeepPEMsPath = verydeepPair->exportPEMs();
+    ASSERT_NE(verydeepPEMsPath.key, nullptr);
+    ASSERT_NE(verydeepPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(verydeepPEMsPath.key));
+    ASSERT_TRUE(file_exists(verydeepPEMsPath.cert));
+
+    // append intermediates into cert for chained
+    FILE *fp = fopen(verydeepPEMsPath.cert, "a"
+#ifdef CAT_OS_WINDOWS
+        "b"
+#endif
+    );
+    for (auto &intermediatePair : intermediatePairs) {
+        std::string intermediateCert = intermediatePair->certPEMString();
+        fwrite(intermediateCert.c_str(), intermediateCert.length(), 1, fp);
+    }
+    fclose(fp);
+
+    typedef std::unordered_map<std::string, std::variant<
+        const char*,
+        int
+    >> options_map_t;
+    std::unordered_map<std::string, std::variant<
+        std::string,
+        bool,
+        options_map_t
+    >> test_cases[] = {
+        {
+            {"name", "1. server no options, client no options"},
+            {"expectSuccess", false},
+        },
+        {
+            {"name", "2a. server use valid certs, client have no ca config"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"verify_peer_name", false},
+            }},
+        },
+        {
+            {"name", "2b. server use valid certs, client do not accept ca"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", anotherPEMsPath.cert},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+        },
+        {
+            {"name", "2c. server use valid certs, client accepts ca"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+        },
+        {
+            {"name", "3a. server use valid certs, client accepts ca, bad peer name"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "notlocalhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "3b. server use valid certs, client accepts ca, bad peer name, no check peer name"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "notlocalhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+        },
+        {
+            {"name", "4a. server checks peer, but client have no cert"},
+            {"expectSuccess", false},
+            {"clientSuccessQuirk", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "4b. server checks peer, client have cert, but peer name not match"},
+            {"expectSuccess", false},
+            {"clientSuccessQuirk", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"peer_name", "notclient"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "4c. server checks peer, client have cert"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "4d. server checks peer, client have bad cert"},
+            {"expectSuccess", false},
+            {"clientSuccessQuirk", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", anotherClientPEMsPath.cert},
+                {"certificate_key", anotherClientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "5a. server use selfsigned cert"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", selfsignedPEMsPath.cert},
+                {"certificate_key", selfsignedPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "5b. server use selfsigned cert, but client accept selfsigned"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", selfsignedPEMsPath.cert},
+                {"certificate_key", selfsignedPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"allow_self_signed", true},
+            }},
+        },
+        {
+            {"name", "6a. server use very deep certificate chain"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", verydeepPEMsPath.cert},
+                {"certificate_key", verydeepPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "6b. server use very deep certificate chain, but client accept"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", verydeepPEMsPath.cert},
+                {"certificate_key", verydeepPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"verify_depth", 99},
+            }},
+        },
+    };
+
+    auto assign_options = [](cat_socket_crypto_options_t *options, const options_map_t &options_map) {
+        for (auto &option : options_map) {
+            // std::cout << option.first << ": " << option.second.index() << std::endl;
+            if (option.first == "ca_file") {
+                options->ca_file = std::get<const char*>(option.second);
+            } else if (option.first == "certificate") {
+                options->certificate = std::get<const char*>(option.second);
+            } else if (option.first == "certificate_key") {
+                options->certificate_key = std::get<const char*>(option.second);
+            } else if (option.first == "verify_peer") {
+                options->verify_peer = (cat_bool_t)std::get<int>(option.second);
+            } else if (option.first == "verify_peer_name") {
+                options->verify_peer_name = (cat_bool_t)std::get<int>(option.second);
+            } else if (option.first == "allow_self_signed") {
+                options->allow_self_signed = (cat_bool_t)std::get<int>(option.second);
+            } else if (option.first == "peer_name") {
+                options->peer_name = std::get<const char*>(option.second);
+            } else if (option.first == "verify_depth") {
+                options->verify_depth = std::get<int>(option.second);
+            } else {
+                throw std::runtime_error("Invalid option: " + option.first);
+            }
+        }
+    };
+
+    wait_group wg;
+    for (auto &test_case : test_cases) {
+        for (auto &server_send_first : {false, true}) {
+            // fprintf(stderr, "test_case: %s\n", std::get<std::string>(test_case["name"]).c_str());
+            cat_socket_t *serverSocket;
+            serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+            ASSERT_NE(serverSocket, nullptr);
+            DEFER(cat_socket_close(serverSocket));
+            ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+            ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+            unsigned short port = cat_socket_get_port(serverSocket, false);
+
+            co([&test_case, serverSocket, assign_options, &wg, server_send_first]{
+                wg++;
+                DEFER(wg--);
+                cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
+                ASSERT_NE(connSocket, nullptr);
+                DEFER(cat_socket_close(connSocket));
+                ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
+
+                cat_socket_crypto_options_t serverOptions, *options = nullptr;
+                cat_socket_crypto_options_init(&serverOptions, false);
+                if (test_case.find("serverOptions") != test_case.end()) {
+                    options = &serverOptions;
+                    assign_options(options, std::get<options_map_t>(test_case["serverOptions"]));
+                }
+                cat_bool_t success = cat_socket_enable_crypto(connSocket, options);
+                if (std::get<bool>(test_case["expectSuccess"])) {
+                    ASSERT_TRUE(success);
+                    char buffer[16];
+                    if (server_send_first) {
+                        ASSERT_EQ(cat_socket_send(connSocket, "serverHello", 11), cat_true);
+                        ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 11);
+                        ASSERT_EQ(std::string(buffer, 11), "clientHello");
+                    } else {
+                        ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 11);
+                        ASSERT_EQ(std::string(buffer, 11), "clientHello");
+                        ASSERT_EQ(cat_socket_send(connSocket, "serverHello", 11), cat_true);
+                    }
+                } else {
+                    ASSERT_FALSE(success);
+                }
+            });
+
+            cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+            ASSERT_NE(clientSocket, nullptr);
+            DEFER(cat_socket_close(clientSocket));
+            ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
+        
+            cat_socket_crypto_options_t clientOptions, *options = nullptr;
+            cat_socket_crypto_options_init(&clientOptions, true);
+            if (test_case.find("clientOptions") != test_case.end()) {
+                options = &clientOptions;
+                assign_options(options, std::get<options_map_t>(test_case["clientOptions"]));
+            }
+            cat_bool_t success = cat_socket_enable_crypto(clientSocket, options);
+            char buffer[16];
+            if (
+                test_case.find("clientSuccessQuirk") != test_case.end() &&
+                std::get<bool>(test_case["clientSuccessQuirk"])
+            ) {
+                ASSERT_TRUE(success);
+                // openssl quirk here: cat_socket_send() should fail, but it may return success
+                // ASSERT_FALSE(cat_socket_send(clientSocket, "clientHello", 11));
+                ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 0);
+            } else if (std::get<bool>(test_case["expectSuccess"])) {
+                ASSERT_TRUE(success);
+                ASSERT_TRUE(cat_socket_send(clientSocket, "clientHello", 11));
+                if (server_send_first) {
+                    ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 11);
+                    ASSERT_EQ(std::string(buffer, 11), "serverHello");
+                    ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
+                } else {
+                    ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
+                    ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 11);
+                    ASSERT_EQ(std::string(buffer, 11), "serverHello");
+                }
+            } else {
+                ASSERT_FALSE(success);
+            }
+        }
+    }
+
+    wg();
+}
+
+TEST(cat_ssl, truncate_256k)
+{
+    auto publicCAPath = publicCAPair->exportPEMs();
+    X509KeyCertPairConfig serverConfig = {
+        {"issuer", publicCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto serverPair = X509KeyCertPair::create(serverConfig);
+    ASSERT_NE(serverPair, nullptr);
+    auto serverPEMsPath = serverPair->exportPEMs();
+    ASSERT_NE(serverPEMsPath.key, nullptr);
+    ASSERT_NE(serverPEMsPath.cert, nullptr);
+    ASSERT_TRUE(file_exists(serverPEMsPath.key));
+    ASSERT_TRUE(file_exists(serverPEMsPath.cert));
+
+    for (auto &server_send : {false, false}) {
+        cat_socket_t *serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+        ASSERT_NE(serverSocket, nullptr);
+        DEFER(cat_socket_close(serverSocket));
+        ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+        unsigned short port = cat_socket_get_port(serverSocket, false);
+    
+        wait_group wg;
+        co([&serverSocket, &serverPEMsPath, &publicCAPath, &wg, server_send]{
+            wg++;
+            DEFER(wg--);
+            cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
+            ASSERT_NE(connSocket, nullptr);
+            DEFER(cat_socket_close(connSocket));
+            ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
+            cat_socket_crypto_options_t options;
+            cat_socket_crypto_options_init(&options, false);
+            options.ca_file = publicCAPath.cert;
+            options.certificate = serverPEMsPath.cert;
+            options.certificate_key = serverPEMsPath.key;
+            options.verify_peer = false;
+            ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
+
+            char *buffer = (char *)calloc(257, 1024);
+            DEFER(free(buffer));
+            memcpy(buffer + (256 * 1024), CAT_STRL("hello bug!"));
+
+            if (server_send) {
+                ASSERT_EQ(cat_socket_send(connSocket, buffer, 257 * 1024), cat_true);
+            } else {
+                ASSERT_EQ(cat_socket_read(connSocket, buffer, 257 * 1024), 257 * 1024);
+                ASSERT_STREQ(buffer + (256 * 1024), "hello bug!");
+            }
+        });
+
+        cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+        ASSERT_NE(clientSocket, nullptr);
+        DEFER(cat_socket_close(clientSocket));
+        ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
+
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, true);
+        options.ca_file = publicCAPath.cert;
+        options.verify_peer = true;
+        options.peer_name = "localhost";
+        options.verify_peer_name = true;
+        ASSERT_TRUE(cat_socket_enable_crypto(clientSocket, &options));
+
+        
+        char *buffer = (char *)calloc(257, 1024);
+        DEFER(free(buffer));
+        memcpy(buffer + (256 * 1024), CAT_STRL("hello bug!"));
+
+        if (server_send) {
+            ASSERT_EQ(cat_socket_read(clientSocket, buffer, 257 * 1024), 257 * 1024);
+            ASSERT_STREQ(buffer + (256 * 1024), "hello bug!");
+        } else {
+            ASSERT_EQ(cat_socket_send(clientSocket, buffer, 257 * 1024), cat_true);
+        }
+        wg();
+    }
+}
+
 #endif
