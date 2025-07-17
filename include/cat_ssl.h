@@ -198,8 +198,10 @@ typedef struct cat_ssl_s {
     cat_ssl_bio_t *nbio;
     cat_buffer_t read_buffer;
     cat_buffer_t write_buffer;
-    /* options */
+    /* options for verification */
+    cat_bool_t verify_peer;
     cat_bool_t allow_self_signed;
+    const char *expected_peer_name;
     /* internals */
     cat_ssl_context_t *context; // for free data before SSL_free()
 } cat_ssl_t;

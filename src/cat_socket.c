@@ -2246,9 +2246,15 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     }
 
     /* connection related options */
-    if (ioptions.is_client && ioptions.peer_name != NULL) {
-        cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
+    if (ioptions.peer_name != NULL) {
+        if (ioptions.is_client) {
+            cat_ssl_set_sni_server_name(ssl, ioptions.peer_name);
+        }
+        if (ioptions.verify_peer_name) {
+            ssl->expected_peer_name = cat_strdup(ioptions.peer_name);
+        }
     }
+    ssl->verify_peer = ioptions.verify_peer;
     ssl->allow_self_signed = ioptions.allow_self_signed;
 
     buffer = &ssl->read_buffer;
