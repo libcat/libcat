@@ -491,10 +491,10 @@ namespace testing
             ret = X509_set_issuer_name(x509, X509_get_subject_name(issuerX509));
             checkOpenSSL(ret != 1);
             if (config.find("notBeforeOffsetSeconds") != config.end()) {
-                X509_gmtime_adj(X509_get_notBefore(x509), std::get<int32_t>(config["notBeforeOffsetSeconds"]));
+                X509_gmtime_adj(X509_getm_notBefore(x509), std::get<int32_t>(config["notBeforeOffsetSeconds"]));
             }
             if (config.find("notAfterOffsetSeconds") != config.end()) {
-                X509_gmtime_adj(X509_get_notAfter(x509), std::get<int32_t>(config["notAfterOffsetSeconds"]));
+                X509_gmtime_adj(X509_getm_notAfter(x509), std::get<int32_t>(config["notAfterOffsetSeconds"]));
             }
             X509V3_set_ctx(&ctx, issuerX509, x509, nullptr, nullptr, 0);
 
