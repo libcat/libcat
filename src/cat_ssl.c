@@ -927,12 +927,9 @@ CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl)
     int error = cat_ssl_get_error(ssl, n);
 
     if (error == SSL_ERROR_WANT_WRITE) {
-        fprintf(stderr, "SSL handshake should never return SSL_ERROR_WANT_WRITE with BIO mode.");
-        abort();
-    }
-    if (error == SSL_ERROR_WANT_READ) {
-        CAT_LOG_DEBUG(SSL, "SSL_ERROR_WANT_READ");
-        return CAT_SSL_RET_WANT_IO;
+        return CAT_SSL_RET_WANT_WRITE;
+    } else if (error == SSL_ERROR_WANT_READ) {
+        return CAT_SSL_RET_WANT_READ;
     } else if (error == SSL_ERROR_SYSCALL) {
         cat_update_last_error_of_syscall("SSL_do_handshake() failed");
     } else if (error == SSL_ERROR_ZERO_RETURN || ERR_peek_error() == 0) {

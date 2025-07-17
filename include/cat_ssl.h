@@ -210,9 +210,8 @@ typedef enum cat_ssl_ret_e {
     CAT_SSL_RET_OK         = 1,
     CAT_SSL_RET_NONE       = 0,
     CAT_SSL_RET_ERROR      = -1,
-    CAT_SSL_RET_WANT_READ  = 1 << 0,
-    CAT_SSL_RET_WANT_WRITE = 1 << 1,
-    CAT_SSL_RET_WANT_IO = CAT_SSL_RET_WANT_READ | CAT_SSL_RET_WANT_WRITE,
+    CAT_SSL_RET_WANT_READ  = 2,
+    CAT_SSL_RET_WANT_WRITE = 3,
 } cat_ssl_ret_t;
 
 CAT_API cat_bool_t cat_ssl_module_init(void);
