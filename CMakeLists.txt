@@ -335,7 +335,7 @@ if (LIBCAT_USE_BOOST_CONTEXT)
         )
             set(CAT_CPU_ARCH "mips64")
         elseif(
-            CAT_CPU_ARCH MATCHES "^riscv64" OR
+            CAT_CPU_ARCH MATCHES "^riscv64"
         )
             set(CAT_CPU_ARCH "riscv64")
         endif()
