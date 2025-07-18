@@ -450,8 +450,10 @@ namespace testing
                     pkey = EVP_RSA_gen(2048);
                 } else if (keyType == "RSA4096") {
                     pkey = EVP_RSA_gen(4096);
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
                 } else if (keyType.compare(0, 2, "EC") == 0) {
                     pkey = EVP_EC_gen(keyType.substr(2).c_str());
+#endif // OPENSSL_VERSION_NUMBER >= 0x30000000L
                 } else {
                     throw std::runtime_error("Invalid key type");
                 }
