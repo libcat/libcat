@@ -905,67 +905,80 @@ TEST(cat_ssl, truncate_256k)
     ASSERT_TRUE(file_exists(serverPEMsPath.key));
     ASSERT_TRUE(file_exists(serverPEMsPath.cert));
 
-    for (auto &server_send : {false, false}) {
-        cat_socket_t *serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-        ASSERT_NE(serverSocket, nullptr);
-        DEFER(cat_socket_close(serverSocket));
-        ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
-        ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
-        unsigned short port = cat_socket_get_port(serverSocket, false);
-    
-        wait_group wg;
-        co([&serverSocket, &serverPEMsPath, &publicCAPath, &wg, server_send]{
-            wg++;
-            DEFER(wg--);
+    for (auto tailLength : {1, 2048, 8192, 32768}) {
+        for (auto &server_send : {true, false}) {
+            cat_socket_t *serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+            ASSERT_NE(serverSocket, nullptr);
+            DEFER(cat_socket_close(serverSocket));
+            ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+            ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
+            unsigned short port = cat_socket_get_port(serverSocket, false);
+        
+            wait_group wg;
             cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
             ASSERT_NE(connSocket, nullptr);
             DEFER(cat_socket_close(connSocket));
-            ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
-            cat_socket_crypto_options_t options;
-            cat_socket_crypto_options_init(&options, false);
-            options.ca_file = publicCAPath.cert;
-            options.certificate = serverPEMsPath.cert;
-            options.certificate_key = serverPEMsPath.key;
-            options.verify_peer = false;
-            ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
+            co([&serverSocket, &connSocket, &serverPEMsPath, &publicCAPath, &wg, server_send, tailLength]{
+                wg++;
+                DEFER(wg--);
+                ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
+                cat_socket_crypto_options_t options;
+                cat_socket_crypto_options_init(&options, false);
+                options.ca_file = publicCAPath.cert;
+                options.certificate = serverPEMsPath.cert;
+                options.certificate_key = serverPEMsPath.key;
+                options.verify_peer = false;
+                ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
 
-            char *buffer = (char *)calloc(257, 1024);
+                char *buffer = (char *)calloc(256 * 1024 + tailLength, 1);
+                DEFER(free(buffer));
+                memset(buffer, 'a', 256 * 1024);
+                memset(buffer + (256 * 1024), 'b', tailLength);
+
+                if (server_send) {
+                    ASSERT_EQ(cat_socket_send(connSocket, buffer, 256 * 1024 + tailLength), cat_true);
+                } else {
+                    ASSERT_EQ(cat_socket_read(connSocket, buffer, 256 * 1024 + tailLength), 256 * 1024 + tailLength);
+                    for (size_t offset = 0; offset < 256 * 1024; offset++) {
+                        ASSERT_EQ(buffer[offset], 'a');
+                    }
+                    for (size_t offset = 0; offset < tailLength; offset++) {
+                        ASSERT_EQ(buffer[256 * 1024 + offset], 'b');
+                    }
+                }
+            });
+
+            cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+            ASSERT_NE(clientSocket, nullptr);
+            DEFER(cat_socket_close(clientSocket));
+            ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
+
+            cat_socket_crypto_options_t options;
+            cat_socket_crypto_options_init(&options, true);
+            options.ca_file = publicCAPath.cert;
+            options.verify_peer = true;
+            options.peer_name = "localhost";
+            options.verify_peer_name = true;
+            ASSERT_TRUE(cat_socket_enable_crypto(clientSocket, &options));
+            
+            char *buffer = (char *)calloc(256 * 1024 + tailLength, 1);
             DEFER(free(buffer));
-            memcpy(buffer + (256 * 1024), CAT_STRL("hello bug!"));
+            memset(buffer, 'a', 256 * 1024);
+            memset(buffer + (256 * 1024), 'b', tailLength);
 
             if (server_send) {
-                ASSERT_EQ(cat_socket_send(connSocket, buffer, 257 * 1024), cat_true);
+                ASSERT_EQ(cat_socket_read(clientSocket, buffer, 256 * 1024 + tailLength), 256 * 1024 + tailLength);
+                for (size_t offset = 0; offset < 256 * 1024; offset++) {
+                    ASSERT_EQ(buffer[offset], 'a');
+                }
+                for (size_t offset = 0; offset < tailLength; offset++) {
+                    ASSERT_EQ(buffer[256 * 1024 + offset], 'b');
+                }
             } else {
-                ASSERT_EQ(cat_socket_read(connSocket, buffer, 257 * 1024), 257 * 1024);
-                ASSERT_STREQ(buffer + (256 * 1024), "hello bug!");
+                ASSERT_EQ(cat_socket_send(clientSocket, buffer, 256 * 1024 + tailLength), cat_true);
             }
-        });
-
-        cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-        ASSERT_NE(clientSocket, nullptr);
-        DEFER(cat_socket_close(clientSocket));
-        ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
-
-        cat_socket_crypto_options_t options;
-        cat_socket_crypto_options_init(&options, true);
-        options.ca_file = publicCAPath.cert;
-        options.verify_peer = true;
-        options.peer_name = "localhost";
-        options.verify_peer_name = true;
-        ASSERT_TRUE(cat_socket_enable_crypto(clientSocket, &options));
-
-        
-        char *buffer = (char *)calloc(257, 1024);
-        DEFER(free(buffer));
-        memcpy(buffer + (256 * 1024), CAT_STRL("hello bug!"));
-
-        if (server_send) {
-            ASSERT_EQ(cat_socket_read(clientSocket, buffer, 257 * 1024), 257 * 1024);
-            ASSERT_STREQ(buffer + (256 * 1024), "hello bug!");
-        } else {
-            ASSERT_EQ(cat_socket_send(clientSocket, buffer, 257 * 1024), cat_true);
+            wg();
         }
-        wg();
     }
 }
 
