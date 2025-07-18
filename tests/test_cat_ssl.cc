@@ -791,7 +791,7 @@ TEST(cat_ssl, enable_crypto)
 
             auto read_assert = [](cat_socket_t *socket, const char *expected, size_t expected_size) {
                 // 16 for protect
-                size_t nread = 0, n;
+                ssize_t nread = 0, n;
                 char *buffer = (char *)calloc(expected_size + 16, 1);
                 memcpy(buffer + expected_size, "thisisprotected!", 16);
                 while (nread < expected_size) {
@@ -799,7 +799,7 @@ TEST(cat_ssl, enable_crypto)
                     // assert read encrypted bytes successfully
                     ASSERT_GT(n, 0);
                     // assert the read data is not corrupted (avoid read buffers problem)
-                    ASSERT_LE(n, expected_size - nread);
+                    ASSERT_LE(n + nread, expected_size);
                     nread += n;
                 }
                 ASSERT_EQ(nread, expected_size);
@@ -808,13 +808,14 @@ TEST(cat_ssl, enable_crypto)
                 free(buffer);
             };
 
+            cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
+            ASSERT_NE(connSocket, nullptr);
+            DEFER(cat_socket_close(connSocket));
             wait_group wg;
-            co([&test_case, serverSocket, assign_options, &wg, server_send_first, read_assert]{
+            co([&test_case, serverSocket, &connSocket, assign_options, &wg, server_send_first, read_assert]{
                 wg++;
                 DEFER(wg--);
-                cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
-                ASSERT_NE(connSocket, nullptr);
-                DEFER(cat_socket_close(connSocket));
+
                 ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
 
                 cat_socket_crypto_options_t serverOptions, *options = nullptr;
@@ -863,7 +864,6 @@ TEST(cat_ssl, enable_crypto)
                     ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 0);
                 } else if (std::get<bool>(test_case["expectSuccess"])) {
                     ASSERT_TRUE(success);
-                    ASSERT_TRUE(cat_socket_send(clientSocket, "clientHello", 11));
                     if (server_send_first) {
                         read_assert(clientSocket, "serverHello", 11);
                         ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
