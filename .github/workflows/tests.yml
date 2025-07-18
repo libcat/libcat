@@ -334,6 +334,7 @@ jobs:
           lcov \
             --capture \
             $LCOV_CAPTURE_EXT_ARGS \
+            --ignore-errors inconsistent,format,mismatch \
             --directory "." \
             --output-file coverage.info &&
           lcov \
