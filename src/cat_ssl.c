@@ -1093,7 +1093,8 @@ CAT_API cat_bool_t cat_ssl_encrypt(
 
             cat_ssl_clear_error();
 
-            int nwrote = SSL_write(ssl->connection, current_vector->base + offset, current_vector->length - offset);
+            CAT_ASSUME(current_vector->length - offset < INT_MAX);
+            int nwrote = SSL_write(ssl->connection, current_vector->base + offset, (int) (current_vector->length - offset));
 
             CAT_LOG_DEBUG_VA(SSL, {
                 char *s;
