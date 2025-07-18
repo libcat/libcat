@@ -203,7 +203,7 @@ TEST(cat_ssl, load_certs)
     ASSERT_NE(serverSocket, nullptr);
     DEFER(cat_socket_close(serverSocket));
     ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
-    ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+    ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
 
     cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
     co([serverSocket, connSocket, certs] {
@@ -348,9 +348,6 @@ TEST(cat_ssl, x509utils)
 
 TEST(cat_ssl, enable_crypto)
 {
-    cat_socket_set_global_accept_timeout(1000);
-    cat_socket_set_global_connect_timeout(1000);
-
     auto publicCAPath = publicCAPair->exportPEMs();
 
     X509KeyCertPairConfig caConfig = {
@@ -781,7 +778,6 @@ TEST(cat_ssl, enable_crypto)
         }
     };
 
-    wait_group wg;
     for (auto &test_case : test_cases) {
         for (auto &server_send_first : {false, true}) {
             // fprintf(stderr, "test_case: %s\n", std::get<std::string>(test_case["name"]).c_str());
@@ -790,10 +786,30 @@ TEST(cat_ssl, enable_crypto)
             ASSERT_NE(serverSocket, nullptr);
             DEFER(cat_socket_close(serverSocket));
             ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
-            ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+            ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
             unsigned short port = cat_socket_get_port(serverSocket, false);
 
-            co([&test_case, serverSocket, assign_options, &wg, server_send_first]{
+            auto read_assert = [](cat_socket_t *socket, const char *expected, size_t expected_size) {
+                // 16 for protect
+                size_t nread = 0, n;
+                char *buffer = (char *)calloc(expected_size + 16, 1);
+                memcpy(buffer + expected_size, "thisisprotected!", 16);
+                while (nread < expected_size) {
+                    n = cat_socket_recv(socket, buffer + nread, 16 - nread);
+                    // assert read encrypted bytes successfully
+                    ASSERT_GT(n, 0);
+                    // assert the read data is not corrupted (avoid read buffers problem)
+                    ASSERT_LE(n, expected_size - nread);
+                    nread += n;
+                }
+                ASSERT_EQ(nread, expected_size);
+                ASSERT_EQ(std::string(buffer, nread), expected);
+                ASSERT_EQ(std::string(buffer + nread, 16), "thisisprotected!");
+                free(buffer);
+            };
+
+            wait_group wg;
+            co([&test_case, serverSocket, assign_options, &wg, server_send_first, read_assert]{
                 wg++;
                 DEFER(wg--);
                 cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
@@ -810,14 +826,11 @@ TEST(cat_ssl, enable_crypto)
                 cat_bool_t success = cat_socket_enable_crypto(connSocket, options);
                 if (std::get<bool>(test_case["expectSuccess"])) {
                     ASSERT_TRUE(success);
-                    char buffer[16];
                     if (server_send_first) {
                         ASSERT_EQ(cat_socket_send(connSocket, "serverHello", 11), cat_true);
-                        ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 11);
-                        ASSERT_EQ(std::string(buffer, 11), "clientHello");
+                        read_assert(connSocket, "clientHello", 11);
                     } else {
-                        ASSERT_EQ(cat_socket_recv(connSocket, CAT_STRS(buffer)), 11);
-                        ASSERT_EQ(std::string(buffer, 11), "clientHello");
+                        read_assert(connSocket, "clientHello", 11);
                         ASSERT_EQ(cat_socket_send(connSocket, "serverHello", 11), cat_true);
                     }
                 } else {
@@ -825,46 +838,47 @@ TEST(cat_ssl, enable_crypto)
                 }
             });
 
-            cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
-            ASSERT_NE(clientSocket, nullptr);
-            DEFER(cat_socket_close(clientSocket));
-            ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
-        
-            cat_socket_crypto_options_t clientOptions, *options = nullptr;
-            cat_socket_crypto_options_init(&clientOptions, true);
-            if (test_case.find("clientOptions") != test_case.end()) {
-                options = &clientOptions;
-                assign_options(options, std::get<options_map_t>(test_case["clientOptions"]));
-            }
-            cat_bool_t success = cat_socket_enable_crypto(clientSocket, options);
-            char buffer[16];
-            if (
-                test_case.find("clientSuccessQuirk") != test_case.end() &&
-                std::get<bool>(test_case["clientSuccessQuirk"])
-            ) {
-                ASSERT_TRUE(success);
-                // openssl quirk here: cat_socket_send() should fail, but it may return success
-                // ASSERT_FALSE(cat_socket_send(clientSocket, "clientHello", 11));
-                ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 0);
-            } else if (std::get<bool>(test_case["expectSuccess"])) {
-                ASSERT_TRUE(success);
-                ASSERT_TRUE(cat_socket_send(clientSocket, "clientHello", 11));
-                if (server_send_first) {
-                    ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 11);
-                    ASSERT_EQ(std::string(buffer, 11), "serverHello");
-                    ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
-                } else {
-                    ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
-                    ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 11);
-                    ASSERT_EQ(std::string(buffer, 11), "serverHello");
+            // scope for clientSocket
+            {
+                cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+                ASSERT_NE(clientSocket, nullptr);
+                DEFER(cat_socket_close(clientSocket));
+                ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
+            
+                cat_socket_crypto_options_t clientOptions, *options = nullptr;
+                cat_socket_crypto_options_init(&clientOptions, true);
+                if (test_case.find("clientOptions") != test_case.end()) {
+                    options = &clientOptions;
+                    assign_options(options, std::get<options_map_t>(test_case["clientOptions"]));
                 }
-            } else {
-                ASSERT_FALSE(success);
+                cat_bool_t success = cat_socket_enable_crypto(clientSocket, options);
+                if (
+                    test_case.find("clientSuccessQuirk") != test_case.end() &&
+                    std::get<bool>(test_case["clientSuccessQuirk"])
+                ) {
+                    ASSERT_TRUE(success);
+                    // openssl quirk here: cat_socket_send() should fail, but it may return success
+                    // ASSERT_FALSE(cat_socket_send(clientSocket, "clientHello", 11));
+                    char buffer[16];
+                    ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 0);
+                } else if (std::get<bool>(test_case["expectSuccess"])) {
+                    ASSERT_TRUE(success);
+                    ASSERT_TRUE(cat_socket_send(clientSocket, "clientHello", 11));
+                    if (server_send_first) {
+                        read_assert(clientSocket, "serverHello", 11);
+                        ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
+                    } else {
+                        ASSERT_EQ(cat_socket_send(clientSocket, "clientHello", 11), cat_true);
+                        read_assert(clientSocket, "serverHello", 11);
+                    }
+                } else {
+                    ASSERT_FALSE(success);
+                }
             }
+            wg();
         }
     }
 
-    wg();
 }
 
 TEST(cat_ssl, truncate_256k)
@@ -896,7 +910,7 @@ TEST(cat_ssl, truncate_256k)
         ASSERT_NE(serverSocket, nullptr);
         DEFER(cat_socket_close(serverSocket));
         ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
-        ASSERT_TRUE(cat_socket_listen(serverSocket, 1));
+        ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
         unsigned short port = cat_socket_get_port(serverSocket, false);
     
         wait_group wg;
