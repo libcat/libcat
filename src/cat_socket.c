@@ -2329,7 +2329,10 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
             }
             rbuffer->length += nread;
             nwrite = cat_ssl_write_encrypted_bytes(ssl, rbuffer->value, rbuffer->length);
-            CAT_ASSERT(rbuffer->length >= nwrite);
+            if (unlikely(nwrite <= 0)) {
+                goto _unrecoverable_error;
+            }
+            CAT_ASSERT(rbuffer->length >= (size_t) nwrite);
             // move the remaining data to the beginning of the buffer
             cat_buffer_truncate_from(rbuffer, nwrite, rbuffer->length - nwrite);
         }
