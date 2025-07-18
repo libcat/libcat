@@ -177,6 +177,8 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 else()
     if(MSVC)
         check_add_cflags(/wd4267 cat_cflags HAVE_MSVC_LINT_wd4267)
+        check_add_cflags(/wd5286 cat_cflags HAVE_MSVC_LINT_wd5286)
+        check_add_cflags(/wd5287 cat_cflags HAVE_MSVC_LINT_wd5287)
     endif()
 endif()
 
