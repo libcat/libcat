@@ -125,9 +125,9 @@ jobs:
           Get-Content ${{github.workspace}}/.vcpkgvers
           Write-Host "::endgroup::"
 
-      - name: Cache vcpkg
-        uses: actions/cache@v3
-        id: cache-gtest
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        id: restore-cache
         with:
           path: |
             C:\vcpkg\packages\gtest_x64-windows
@@ -141,7 +141,7 @@ jobs:
             #C:\vcpkg\buildtrees\detect_compiler
             C:\vcpkg\downloads\*
             C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: ${{ matrix.os }}-vcpkg-${{ hashFiles('.vcpkgvers') }}
+          key: ${{ matrix.os }}-vcpkg
 
       - name: Install vcpkg dependencies
         shell: cmd
@@ -149,6 +149,24 @@ jobs:
           vcpkg install gtest:x64-windows && ^
           vcpkg install openssl:x64-windows && ^
           vcpkg install curl[core,non-http,ssl]:x64-windows
+
+      - name: Save vcpkg cache
+        uses: actions/cache/save@v4
+        id: save-cache
+        with:
+          path: |
+            C:\vcpkg\packages\gtest_x64-windows
+            C:\vcpkg\packages\openssl_x64-windows
+            C:\vcpkg\packages\curl_x64-windows
+            C:\vcpkg\packages\zlib_x64-windows
+            C:\vcpkg\installed\*
+            #C:\vcpkg\buildtrees\openssl
+            #C:\vcpkg\buildtrees\curl
+            #C:\vcpkg\buildtrees\gtest
+            #C:\vcpkg\buildtrees\detect_compiler
+            C:\vcpkg\downloads\*
+            C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: ${{ matrix.os }}-vcpkg
 
       - name: Checkout libcat sources
         uses: actions/checkout@v3
@@ -328,6 +346,7 @@ jobs:
         working-directory: libcat
         shell: bash
         run: |
+          set -xe
           # note: lcov --keep-going option only available on macOS
           ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }} &&
           ${{ runner.os == 'macOS' && 'export LCOV_CAPTURE_EXT_ARGS="--keep-going"' || 'export LCOV_CAPTURE_EXT_ARGS=""' }} &&
@@ -341,6 +360,7 @@ jobs:
             --extract coverage.info \
               "${{github.workspace}}/libcat/include/*" \
               "${{github.workspace}}/libcat/src/*" \
+            --ignore-errors inconsistent,format,mismatch \
             --output-file coverage.info &&
           lcov --list coverage.info &&
           curl -s https://codecov.io/bash -o codecov.sh &&
