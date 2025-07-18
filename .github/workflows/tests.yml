@@ -84,7 +84,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       matrix:
-        os: [ "windows-latest", "windows-2019" ]
+        os: [ "windows-latest", "windows-2025" ]
         build-type: [ "Debug", "Release" ]
         # build-type: [ "Debug" ]
       max-parallel: 4
@@ -258,7 +258,7 @@ jobs:
     strategy:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
-        os: [ "ubuntu-20.04", "macos-latest" ]
+        os: [ "ubuntu-latest", "ubuntu-22.04", "macos-latest" ]
         # os: [ "ubuntu-latest"]
         # os: [ "macos-latest"]
       max-parallel: 2
