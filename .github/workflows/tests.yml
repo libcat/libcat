@@ -269,8 +269,9 @@ jobs:
         run: |
           if [ "${{runner.os}}" = "Linux" ]
           then
+            export DEBIAN_FRONTEND=noninteractive
             sudo apt-get update
-            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev libpq-dev postgresql-server-dev-all
+            sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev libpq-dev
           else
             brew install googletest ||
             brew install googletest ||
