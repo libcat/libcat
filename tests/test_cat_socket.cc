@@ -840,10 +840,15 @@ TEST(cat_socket, bind_ex_ip4)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4));
     DEFER(cat_socket_close(&socket));
+    cat_socket_bind_flags_t flags = CAT_SOCKET_BIND_FLAG_REUSEADDR;
+#ifndef CAT_OS_WIN
+    // windows does not support reuseport
+    flags |= CAT_SOCKET_BIND_FLAG_REUSEPORT;
+#endif
     ASSERT_TRUE(cat_socket_bind_to_ex(&socket,
         CAT_STRL(TEST_LISTEN_IPV4),
         0,
-        CAT_SOCKET_BIND_FLAG_REUSEADDR | CAT_SOCKET_BIND_FLAG_REUSEPORT)
+        flags)
     );
 }
 
@@ -853,10 +858,15 @@ TEST(cat_socket, bind_ex_ip6)
 
     ASSERT_NE(nullptr, cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP6));
     DEFER(cat_socket_close(&socket));
+    cat_socket_bind_flags_t flags = CAT_SOCKET_BIND_FLAG_IPV6ONLY | CAT_SOCKET_BIND_FLAG_REUSEADDR;
+#ifndef CAT_OS_WIN
+    // windows does not support reuseport
+    flags |= CAT_SOCKET_BIND_FLAG_REUSEPORT;
+#endif
     ASSERT_TRUE(cat_socket_bind_to_ex(&socket,
         CAT_STRL(TEST_LISTEN_IPV6),
         0,
-        CAT_SOCKET_BIND_FLAG_IPV6ONLY | CAT_SOCKET_BIND_FLAG_REUSEADDR | CAT_SOCKET_BIND_FLAG_REUSEPORT)
+        flags)
     );
 }
 
