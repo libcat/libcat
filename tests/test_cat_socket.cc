@@ -1468,10 +1468,7 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         cat_snrand(CAT_STRS(write_buffer));
         ASSERT_TRUE(io_functions.send(echo_client, CAT_STRS(write_buffer)));
         /* recv response */
-        cat_snrand(CAT_STRS(read_buffer));
         ret = io_functions.read(echo_client, CAT_STRS(read_buffer));
-        // yield to allow the co-routine to finish sending
-        cat_time_msleep(0);
         ASSERT_EQ(ret, (ssize_t) sizeof(read_buffer));
         read_buffer[sizeof(read_buffer) - 1] = '\0';
         write_buffer[sizeof(write_buffer) - 1] = '\0';
@@ -1521,8 +1518,6 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         ASSERT_NE(read_buffers[n], nullptr);
         read_buffer_count++;
         ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
-        // yield to allow the co-routine to finish sending
-        cat_time_msleep(0);
         ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
         read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
         write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
