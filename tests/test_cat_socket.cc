@@ -2422,19 +2422,28 @@ TEST(cat_socket, open_os_socket)
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
 
     for (auto n = 0; n < 2; n++) {
-        cat_socket_t echo_client;
         cat_socket_t echo_client2;
+        cat_os_socket_t os_socket;
 
-        ASSERT_EQ(cat_socket_create(&echo_client, CAT_SOCKET_TYPE_TCP4), &echo_client);
-        DEFER(cat_socket_close(&echo_client));
+        // create an os socket SOCKET / fd int
+        os_socket = socket(AF_INET, SOCK_STREAM, 0);
+        ASSERT_NE(os_socket, CAT_OS_INVALID_SOCKET);
+#ifdef CAT_OS_WIN
+        DEFER(closesocket(os_socket));
+#else
+        DEFER(close(os_socket));
+#endif
         if (n == 0) {
-            ASSERT_TRUE(cat_socket_connect_to(&echo_client, echo_tcp_server_ip, echo_tcp_server_ip_length, echo_tcp_server_port));
+            sockaddr_in addr;
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(echo_tcp_server_port);
+            addr.sin_addr.s_addr = inet_addr(echo_tcp_server_ip);
+
+            ASSERT_EQ(connect(os_socket, (struct sockaddr *)&addr, sizeof(addr)), 0);
         }
 
-        (void) cat_time_msleep(10);
-
         ASSERT_EQ(cat_socket_create(&echo_client2, CAT_SOCKET_TYPE_TCP), &echo_client2);
-        ASSERT_TRUE(cat_socket_open_os_socket(&echo_client2, cat_socket_get_fd_fast(&echo_client)));
+        ASSERT_TRUE(cat_socket_open_os_socket(&echo_client2, os_socket));
         DEFER(cat_socket_close(&echo_client2));
         if (n == 1) {
             char buffer[1];
