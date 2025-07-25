@@ -58,7 +58,9 @@ static PGresult *cat_pq_get_result(PGconn *conn)
 
     CAT_LOG_DEBUG(PQ, "PQgetResult(conn=%p)", conn);
     while ((result = PQgetResult(conn))) {
-        ExecStatusType status = PQresultStatus(result);
+        PQclear(last_result);
+        last_result = result;
+        ExecStatusType status = PQresultStatus(last_result);
         if (
             status == PGRES_COPY_OUT ||
             status == PGRES_COPY_IN ||
