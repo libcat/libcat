@@ -359,8 +359,7 @@ static CURLMcode cat_curl_multi_wait_impl(
     cat_curl_multi_context_t *context = cat_curl_multi_get_context(multi);
     CAT_ASSERT(context != NULL);
     CURLMcode mcode;
-    // :) we just use at least 1ms to avoid CPU 100%
-    cat_timeout_t timeout = timeout_ms >= 0 ? CAT_MAX(1, timeout_ms) : timeout_ms;
+    cat_timeout_t remaining = timeout_ms;
     int socket_poll_event_count = 0;
 
     mcode = cat_curl_multi_socket_action(multi, CURL_SOCKET_TIMEOUT, 0, running_handles);
@@ -381,7 +380,22 @@ static CURLMcode cat_curl_multi_wait_impl(
     while (1) {
         cat_ret_t ret;
         context->waiter = CAT_COROUTINE_G(current);
-        ret = cat_time_delay(timeout);
+        if (remaining >= 0) {
+            if (remaining == 0) {
+                remaining = 1;
+            }
+            uv_timespec64_t ts_start, ts_end;
+            (void) uv_clock_gettime(UV_CLOCK_MONOTONIC, &ts_start);
+            ret = cat_time_delay((cat_timeout_t) remaining);
+            (void) uv_clock_gettime(UV_CLOCK_MONOTONIC, &ts_end);
+            remaining -= (ts_end.tv_sec - ts_start.tv_sec) * 1000 + (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000;
+            if (remaining < 0) {
+                // timed out, avoid it become eternal
+                remaining = 0;
+            }
+        } else {
+            ret = cat_time_delay(-1);
+        }
         context->waiter = NULL;
         if (unlikely(ret != CAT_RET_NONE)) {
             // timeout or error
