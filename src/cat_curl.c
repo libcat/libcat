@@ -272,7 +272,8 @@ static int cat_curl_multi_timeout_function(CURLM *multi, long timeout_ms, cat_cu
             /* 0 means directly call socket_action, but we'll do it in a bit */
             timeout_ms = 1;
         }
-       (void) uv_timer_start(&context->timer, cat_curl_multi_timeout_callback, timeout_ms, 0);
+        uv_update_time(&CAT_EVENT_G(loop));
+        (void) uv_timer_start(&context->timer, cat_curl_multi_timeout_callback, timeout_ms, 0);
     }
 
     return CURLM_OK;
