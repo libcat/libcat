@@ -268,7 +268,7 @@ static int cat_curl_multi_timeout_function(CURLM *multi, long timeout_ms, cat_cu
     if (timeout_ms < 0) {
         (void) uv_timer_stop(&context->timer);
     } else {
-        if (timeout_ms <= 0) {
+        if (timeout_ms == 0) {
             /* 0 means directly call socket_action, but we'll do it in a bit */
             timeout_ms = 1;
         }
