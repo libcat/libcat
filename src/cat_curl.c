@@ -179,6 +179,9 @@ static void cat_curl_multi_socket_poll_callback(uv_poll_t *poll, int status, int
         if (events & UV_WRITABLE) {
             action |= CURL_CSELECT_OUT;
         }
+        if (events & UV_DISCONNECT) {
+            action |= CURL_CSELECT_ERR;
+        }
     }
 
     cat_curl_multi_socket_schedule(context, sockfd, action);
