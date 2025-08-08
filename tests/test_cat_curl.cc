@@ -19,14 +19,14 @@
 #include "test.h"
 #ifdef CAT_CURL
 
-static size_t cat_curl_write_function(const char *ptr, size_t length, size_t n, cat_buffer_t *buffer)
+static size_t cat_test_curl_write_function(const char *ptr, size_t length, size_t n, cat_buffer_t *buffer)
 {
     cat_buffer_append(buffer, ptr, length * n);
 
     return length * n;
 }
 
-static CURLcode cat_curl_query(const char *url, std::string &response, cat_msec_t timeout = TEST_IO_TIMEOUT, CURL **ch_ptr = nullptr)
+static CURLcode cat_test_curl_query(const char *url, std::string &response, cat_msec_t timeout = TEST_IO_TIMEOUT, CURL **ch_ptr = nullptr)
 {
     CURL *ch;
     CURLcode code;
@@ -45,7 +45,7 @@ static CURLcode cat_curl_query(const char *url, std::string &response, cat_msec_
     }
     curl_easy_setopt(ch, CURLOPT_URL, url);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
     curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, timeout);
     code = cat_curl_easy_perform(ch);
@@ -60,7 +60,7 @@ static CURLcode cat_curl_query(const char *url, std::string &response, cat_msec_
 TEST(cat_curl, base)
 {
     std::string response;
-    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
+    ASSERT_EQ(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
     ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
@@ -74,7 +74,7 @@ TEST(cat_curl, concurrency)
         for (size_t n = 0; n < concurrency; n++) {
             co([&wg] {
                 std::string response;
-                ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
+                ASSERT_EQ(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
                 ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
                 ASSERT_TRUE(cat_sync_wait_group_done(&wg));
             });
@@ -99,9 +99,12 @@ TEST(cat_curl, concurrency)
 
 TEST(cat_curl, cancel)
 {
-    cat_coroutine_t *coroutine = co([] {
+    wait_group wg;
+    cat_coroutine_t *coroutine = co([&wg] {
+        wg++;
+        DEFER(wg--);
         std::string response;
-        ASSERT_NE(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
+        ASSERT_NE(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
         ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
     });
     cat_coroutine_resume(coroutine, nullptr, nullptr);
@@ -110,16 +113,19 @@ TEST(cat_curl, cancel)
 TEST(cat_curl, timeout)
 {
     std::string response;
-    ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, 1), CURLE_OPERATION_TIMEDOUT);
+    ASSERT_EQ(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, 1), CURLE_OPERATION_TIMEDOUT);
     ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
 }
 
 TEST(cat_curl, busy)
 {
+    wait_group wg;
     CURL *ch;
     co([&] {
+        wg++;
+        DEFER(wg--);
         std::string response;
-        ASSERT_EQ(cat_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);
+        ASSERT_EQ(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response, TEST_IO_TIMEOUT, &ch), CURLE_OK);
         ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
     });
     ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_AGAIN);
@@ -141,7 +147,7 @@ TEST(cat_curl_multi, base)
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
     mh = cat_curl_multi_init();
     ASSERT_NE(mh, nullptr);
@@ -185,7 +191,7 @@ TEST(cat_curl_multi, just_only_perform)
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
     mh = cat_curl_multi_init();
     ASSERT_NE(mh, nullptr);
@@ -218,7 +224,7 @@ TEST(cat_curl_multi, bad_usage_of_composer)
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
     mh = cat_curl_multi_init();
     ASSERT_NE(mh, nullptr);
