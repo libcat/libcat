@@ -264,10 +264,10 @@ static void cat_curl_multi_timeout_callback(uv_timer_t *timer)
         // should we use real time slice here?
 #ifdef CAT_OS_WIN
         // for default tick 15.6ms
-        int64_t retry_timeout_ms = 16;
+        cat_msec_t retry_timeout_ms = 16;
 #else
         // for CONFIG_HZ=100
-        int64_t retry_timeout_ms = 10;
+        cat_msec_t retry_timeout_ms = 10;
 #endif
         if (retry_timeout_ms < context->timeout_due_time - now) {
             retry_timeout_ms = context->timeout_due_time - now;
