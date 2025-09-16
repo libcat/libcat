@@ -170,6 +170,11 @@ static void cat_curl_multi_socket_poll_callback(uv_poll_t *poll, int status, int
     curl_socket_t sockfd = socket_context->sockfd;
     int action = 0;
 
+    if (unlikely(context->waiter == NULL)) {
+        // no one cares about this event, stop polling
+        uv_poll_stop(&socket_context->poll);
+    }
+
     CAT_LOG_DEBUG_VA_WITH_LEVEL(POLL, 2, {
         char *events_str = cat_poll_uv_events_str(events);
         CAT_LOG_DEBUG_D(POLL, "curl_multi_socket_poll_callback(sockfd: " CAT_OS_SOCKET_FMT ", status: %d" CAT_LOG_STRERRNO_FMT ", events: %s)",
