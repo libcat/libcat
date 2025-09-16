@@ -42,7 +42,6 @@ typedef struct cat_curl_multi_context_s {
     CURLM *multi;
     uv_timer_t timer;
     cat_coroutine_t *waiter;
-    cat_curl_multi_event_t event_storage;
     cat_queue_t events;
     cat_msec_t timeout_due_time;
 } cat_curl_multi_context_t;
@@ -144,11 +143,7 @@ static void cat_curl_multi_socket_context_close_callback(uv_handle_t *handle)
 static cat_always_inline void cat_curl_multi_socket_schedule(cat_curl_multi_context_t *context, curl_socket_t sockfd, int action)
 {
     cat_curl_multi_event_t *event;
-    if (cat_queue_empty(&context->events)) {
-        event = &context->event_storage;
-    } else {
-        event = (cat_curl_multi_event_t *) cat_malloc_unrecoverable(sizeof(*event));
-    }
+    event = (cat_curl_multi_event_t *) cat_mallo~c_unrecoverable(sizeof(*event));
     event->sockfd = sockfd;
     event->action = action;
     cat_queue_push_back(&context->events, &event->node);
@@ -430,9 +425,7 @@ static CURLMcode cat_curl_multi_wait_impl(
             }
             CURLMcode action_mcode;
             action_mcode = cat_curl_multi_socket_action(multi, event->sockfd, event->action, running_handles);
-            if (event != &context->event_storage) {
-                cat_free(event);
-            }
+            cat_free(event);
             if (unlikely(action_mcode != CURLM_OK)) {
                 mcode = action_mcode;
             }
