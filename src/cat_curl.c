@@ -143,10 +143,21 @@ static void cat_curl_multi_socket_context_close_callback(uv_handle_t *handle)
 static cat_always_inline void cat_curl_multi_socket_schedule(cat_curl_multi_context_t *context, curl_socket_t sockfd, int action)
 {
     cat_curl_multi_event_t *event;
-    event = (cat_curl_multi_event_t *) cat_mallo~c_unrecoverable(sizeof(*event));
-    event->sockfd = sockfd;
-    event->action = action;
-    cat_queue_push_back(&context->events, &event->node);
+    cat_bool_t found = cat_false;
+    CAT_QUEUE_FOREACH_START(&context->events, node) {
+        event = (cat_curl_multi_event_t *) node;
+        if (event->sockfd == sockfd) {
+            event->action |= action;
+            found = cat_true;
+            break;
+        }
+    } CAT_QUEUE_FOREACH_END();
+    if (!found) {
+        event = (cat_curl_multi_event_t *) cat_malloc_unrecoverable(sizeof(*event));
+        event->sockfd = sockfd;
+        event->action = action;
+        cat_queue_push_back(&context->events, &event->node);
+    }
     if (context->waiter != NULL) {
         cat_coroutine_schedule(context->waiter, CURL, "Poll event");
     }
