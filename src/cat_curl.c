@@ -329,7 +329,11 @@ static void cat_curl_multi_context_close(cat_curl_multi_context_t *context)
     /* we assume that all resources should have been released in curl_multi_socket_function() before,
      * but when fatal error occurred and we called curl_multi_cleanup() without calling
      * curl_multi_remove_handle(), some will not be removed from context.  */
-    CAT_ASSERT(cat_queue_empty(&context->events));
+    cat_curl_multi_event_t *event;
+    while ((event = cat_queue_front_data(&context->events, cat_curl_multi_event_t, node))) {
+        cat_queue_remove(&event->node);
+        cat_free(event);
+    }
     RB_REMOVE(cat_curl_multi_context_tree_s, &CAT_CURL_G(multi_tree), context);
     uv_close((uv_handle_t *) &context->timer, cat_curl_multi_context_close_callback);
 }
