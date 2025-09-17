@@ -222,7 +222,7 @@ static int cat_curl_multi_socket_function(
             if (socket_context == NULL) {
                 socket_context = (cat_curl_multi_socket_context_t *) cat_malloc(sizeof(*socket_context));
 #if CAT_ALLOC_HANDLE_ERRORS
-                if (unlikely(fd == NULL)) {
+                if (unlikely(socket_context == NULL)) {
                     return CURLM_OUT_OF_MEMORY;
                 }
 #endif
