@@ -176,6 +176,81 @@ TEST(cat_curl_multi, base)
     );
 }
 
+
+TEST(cat_curl_multi, multi)
+{
+    CURL *chs[8];
+    CURLM *mh;
+    int still_running = 0;
+    int repeats = 0;
+    cat_buffer_t buffers[8];
+
+    struct test_case {
+        const char *url;
+        const char *keyword;
+    } test_cases[] = {
+        { "https://www.apple.com", "apple" },
+        { "https://www.bing.com", "bing" },
+        { "https://www.baidu.com", "baidu" },
+        { "https://www.taobao.com", "taobao" },
+    };
+
+    for (size_t i = 0; i < 8; i++) {
+        ASSERT_TRUE(cat_buffer_create(&buffers[i], 0));
+    }
+    DEFER(for (size_t i = 0; i < 8; i++) {
+        cat_buffer_close(&buffers[i]);
+    });
+
+    for (size_t i = 0; i < sizeof(test_cases) / sizeof(test_cases[0]); i++) {
+        for (size_t j = 0; j < 2; j++) {
+            chs[j * 4 + i] = curl_easy_init();
+            ASSERT_NE(chs[j * 4 + i], nullptr);
+            curl_easy_setopt(chs[j * 4 + i], CURLOPT_URL, test_cases[i].url);
+            curl_easy_setopt(chs[j * 4 + i], CURLOPT_FOLLOWLOCATION, 1);
+            curl_easy_setopt(chs[j * 4 + i], CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+            curl_easy_setopt(chs[j * 4 + i], CURLOPT_WRITEDATA, &buffers[j * 4 + i]);
+        }
+    }
+
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(ASSERT_EQ(cat_curl_multi_cleanup(mh), CURLM_OK));
+
+    for (size_t i = 0; i < 8; i++) {
+        ASSERT_EQ(curl_multi_add_handle(mh, chs[i]), CURLM_OK);
+    }
+    DEFER(for (size_t i = 0; i < 8; i++) {
+        ASSERT_EQ(curl_multi_remove_handle(mh, chs[i]), CURLM_OK);
+        curl_easy_cleanup(chs[i]);
+    });
+
+    ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+
+    while (still_running) {
+        int numfds;
+        ASSERT_EQ(cat_curl_multi_wait(mh, NULL, 0, 1000, &numfds), CURLM_OK);
+        if (!numfds) {
+            repeats++;
+            if (repeats > 1) {
+                cat_time_msleep(1);
+            }
+        } else {
+            repeats = 0;
+        }
+        ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+    }
+
+    for (size_t i = 0; i < sizeof(test_cases) / sizeof(test_cases[0]); i++) {
+        for (size_t j = 0; j < 2; j++) {
+            ASSERT_NE(
+                std::string(buffers[j * 4 + i].value, buffers[j * 4 + i].length).find(test_cases[i].keyword),
+                std::string::npos
+            );
+        }
+    }
+}
+
 TEST(cat_curl_multi, just_only_perform)
 {
     CURL *ch;
