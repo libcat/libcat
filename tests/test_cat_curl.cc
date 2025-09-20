@@ -362,4 +362,62 @@ TEST(cat_curl_multi, sleep_without_wait)
     );
 }
 
+TEST(cat_curl_multi, no_wait_sleep_1)
+{
+    CURL *ch;
+    CURLM *mh;
+    int still_running = 0;
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(cat_curl_multi_cleanup(mh));
+
+    ASSERT_EQ(curl_multi_add_handle(mh, ch), CURLM_OK);
+    DEFER(curl_multi_remove_handle(mh, ch));
+
+    ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+
+    ASSERT_EQ(cat_time_msleep(1000), 0);
+}
+
+TEST(cat_curl_multi, no_wait_sleep_0)
+{
+    CURL *ch;
+    CURLM *mh;
+    int still_running = 0;
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(cat_curl_multi_cleanup(mh));
+
+    ASSERT_EQ(curl_multi_add_handle(mh, ch), CURLM_OK);
+    DEFER(curl_multi_remove_handle(mh, ch));
+
+    ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+
+    ASSERT_EQ(cat_time_msleep(0), 0);
+}
+
 #endif
