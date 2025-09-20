@@ -26,6 +26,8 @@
 #include <atomic>
 #include <unordered_map>
 #include <iomanip>
+#include <functional>
+#include <variant>
 
 #include "cat_api.h"
 

@@ -337,12 +337,13 @@ TEST(cat_coroutine, get_state_and_state_name)
     coroutine.state = CAT_COROUTINE_STATE_NONE;
     ASSERT_EQ(CAT_COROUTINE_STATE_NONE, cat_coroutine_get_state(&coroutine));
     ASSERT_STREQ("none", cat_coroutine_get_state_name(&coroutine));
-    ASSERT_EQ(cat_coroutine_create(&coroutine, [](cat_data_t *data)->cat_data_t* {
+    auto func = [](cat_data_t *data)->cat_data_t* {
         EXPECT_EQ(CAT_COROUTINE_STATE_RUNNING, cat_coroutine_get_state(cat_coroutine_get_current()));
         EXPECT_STREQ("running", cat_coroutine_get_state_name(cat_coroutine_get_current()));
         EXPECT_TRUE(cat_coroutine_yield(nullptr, nullptr));
         return nullptr;
-    }), &coroutine);
+    };
+    ASSERT_EQ(cat_coroutine_create(&coroutine, func), &coroutine);
     ASSERT_EQ(CAT_COROUTINE_STATE_WAITING, cat_coroutine_get_state(&coroutine));
     ASSERT_STREQ("waiting", cat_coroutine_get_state_name(&coroutine));
     ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
