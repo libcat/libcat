@@ -420,4 +420,175 @@ TEST(cat_curl_multi, no_wait_sleep_0)
     ASSERT_EQ(cat_time_msleep(0), 0);
 }
 
+TEST(cat_curl_multi, sleep_without_wait_in_coro)
+{
+    CURL *ch;
+    CURLM *mh;
+    int still_running = 0;
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, TEST_REMOTE_HTTP_SERVER_HOST);
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(cat_curl_multi_cleanup(mh));
+    ASSERT_EQ(curl_multi_add_handle(mh, ch), CURLM_OK);
+    DEFER(curl_multi_remove_handle(mh, ch));
+
+    co([&] {
+        // should be "cancelled", but we use internal error for compatibility
+        ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_INTERNAL_ERROR);
+    });
+}
+
+TEST(cat_curl, expect_100_continue)
+{
+    CURL *ch;
+
+    cat_socket_t server, conn;
+    bool connected = false;
+    ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&server));
+    DEFER([&] {
+        if (connected) {
+            cat_socket_close(&conn);
+        }
+    } ());
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    // fake http server that wont send 100-continue
+    co([&] {
+        ASSERT_NE(cat_socket_create(&conn, CAT_SOCKET_TYPE_TCP), nullptr);
+        ASSERT_TRUE(cat_socket_accept(&server, &conn));
+        connected = true;
+        cat_time_msleep(200);
+        ASSERT_TRUE(cat_socket_send(&conn, CAT_STRL(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 13\r\n"
+            "\r\n"
+            "Hello, World!"
+        )));
+        // curl will keep sending data after received 200
+        // so we need to read all data to avoid blocking
+        // then close the connection after curl finished
+        char dummy_buffer[16384];
+        while (cat_socket_try_recv(&conn, dummy_buffer, 16384) > 0);
+    });
+    std::string server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    // curl will expect 100-continue for body size > 1024 * 1024
+    char *body = (char *)malloc(1024 * 1024 + 4096);
+    memset(body, 'a', 1024 * 1024 + 4096);
+    body[1024 * 1024 + 4095] = '\0';
+    DEFER(free(body));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, server_url.c_str());
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_EXPECT_100_TIMEOUT_MS, 1);
+    curl_easy_setopt(ch, CURLOPT_POSTFIELDS, body);
+    curl_easy_setopt(ch, CURLOPT_POSTFIELDSIZE, 1024 * 1024 + 4096);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    // curl_easy_setopt(ch, CURLOPT_VERBOSE, 1);
+
+    ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_OK);
+
+    ASSERT_NE(
+        std::string(buffer.value, buffer.length).find("Hello, World!"),
+        std::string::npos
+    );
+}
+
+TEST(cat_curl_multi, expect_100_continue)
+{
+    CURL *ch;
+    CURLM *mh;
+    int still_running = 1;
+
+    cat_socket_t server, conn;
+    bool connected = false;
+    ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&server));
+    DEFER([&] {
+        if (connected) {
+            cat_socket_close(&conn);
+        }
+    } ());
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    // fake http server that wont send 100-continue
+    co([&] {
+        ASSERT_NE(cat_socket_create(&conn, CAT_SOCKET_TYPE_TCP), nullptr);
+        ASSERT_TRUE(cat_socket_accept(&server, &conn));
+        connected = true;
+        cat_time_msleep(200);
+        ASSERT_TRUE(cat_socket_send(&conn, CAT_STRL(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 13\r\n"
+            "\r\n"
+            "Hello, World!"
+        )));
+        // curl will keep sending data after received 200
+        // so we need to read all data to avoid blocking
+        // then close the connection after curl finished
+        char dummy_buffer[16384];
+        while (cat_socket_try_recv(&conn, dummy_buffer, 16384) > 0);
+    });
+    std::string server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    // curl will expect 100-continue for body size > 1024 * 1024
+    char *body = (char *)malloc(1024 * 1024 + 4096);
+    memset(body, 'a', 1024 * 1024 + 4096);
+    body[1024 * 1024 + 4095] = '\0';
+    DEFER(free(body));
+
+    ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, server_url.c_str());
+    curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(ch, CURLOPT_EXPECT_100_TIMEOUT_MS, 1);
+    curl_easy_setopt(ch, CURLOPT_POSTFIELDS, body);
+    curl_easy_setopt(ch, CURLOPT_POSTFIELDSIZE, 1024 * 1024 + 4096);
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    // curl_easy_setopt(ch, CURLOPT_VERBOSE, 1);
+
+    mh = cat_curl_multi_init();
+    ASSERT_NE(mh, nullptr);
+    DEFER(cat_curl_multi_cleanup(mh));
+    ASSERT_EQ(curl_multi_add_handle(mh, ch), CURLM_OK);
+    DEFER(curl_multi_remove_handle(mh, ch));
+
+    while (still_running) {
+        ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
+    }
+
+    ASSERT_NE(
+        std::string(buffer.value, buffer.length).find("Hello, World!"),
+        std::string::npos
+    );
+}
+
 #endif
