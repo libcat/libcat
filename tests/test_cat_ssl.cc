@@ -388,6 +388,29 @@ TEST(cat_ssl, enable_crypto)
     ASSERT_NE(serverPEMsPath.cert, nullptr);
     ASSERT_TRUE(file_exists(serverPEMsPath.key));
     ASSERT_TRUE(file_exists(serverPEMsPath.cert));
+    // get cert fingerprints
+    unsigned char server_md5_fingerprint[16];
+    unsigned char server_md5_fingerprint_bad[16];
+    unsigned char server_sha1_fingerprint[20];
+    unsigned char server_sha1_fingerprint_bad[20];
+    unsigned char server_sha256_fingerprint[32];
+    unsigned char server_sha256_fingerprint_bad[32];
+    unsigned int len;
+    len = 16;
+    serverPair->getFingerprint(server_md5_fingerprint, &len, "md5");
+    ASSERT_EQ(len, 16);
+    len = 20;
+    serverPair->getFingerprint(server_sha1_fingerprint, &len, "sha1");
+    ASSERT_EQ(len, 20);
+    len = 32;
+    serverPair->getFingerprint(server_sha256_fingerprint, &len, "sha256");
+    ASSERT_EQ(len, 32);
+    memcpy(server_md5_fingerprint_bad, server_md5_fingerprint, 16);
+    server_md5_fingerprint_bad[0] = ~server_md5_fingerprint_bad[0];
+    memcpy(server_sha1_fingerprint_bad, server_sha1_fingerprint, 20);
+    server_sha1_fingerprint_bad[0] = ~server_sha1_fingerprint_bad[0];
+    memcpy(server_sha256_fingerprint_bad, server_sha256_fingerprint, 32);
+    server_sha256_fingerprint_bad[0] = ~server_sha256_fingerprint_bad[0];
 
     X509KeyCertPairConfig clientConfig = {
         {"issuer", publicCAPair},
@@ -409,6 +432,14 @@ TEST(cat_ssl, enable_crypto)
     ASSERT_NE(clientPEMsPath.cert, nullptr);
     ASSERT_TRUE(file_exists(clientPEMsPath.key));
     ASSERT_TRUE(file_exists(clientPEMsPath.cert));
+    // get cert fingerprints
+    unsigned char client_sha1_fingerprint[20];
+    unsigned char client_sha1_fingerprint_bad[20];
+    len = 20;
+    clientPair->getFingerprint(client_sha1_fingerprint, &len, "sha1");
+    ASSERT_EQ(len, 20);
+    memcpy(client_sha1_fingerprint_bad, client_sha1_fingerprint, 20);
+    client_sha1_fingerprint_bad[0] = ~client_sha1_fingerprint_bad[0];
 
     X509KeyCertPairConfig anotherClientConfig = {
         {"issuer", anotherCAPair},
@@ -751,6 +782,159 @@ TEST(cat_ssl, enable_crypto)
                 {"verify_depth", 99},
             }},
         },
+        {
+            {"name", "7a. client check with md5 fingerprint, matched"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
+            }},
+        },
+        {
+            {"name", "7b. client check with md5 fingerprint, not match"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint_bad},
+            }},
+        },
+        {
+            {"name", "7c. client check with fingerprint, md5 match sha1 not match"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
+                {"peer_sha1_fingerprint", (const char *)server_sha1_fingerprint_bad},
+            }},
+        },
+        {
+            {"name", "7d. client check with fingerprint, all set and match"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
+                {"peer_sha1_fingerprint", (const char *)server_sha1_fingerprint},
+                {"peer_sha256_fingerprint", (const char *)server_sha256_fingerprint},
+            }},
+        },
+        {
+            {"name", "7e. client check with fingerprint, sha256 not match"},
+            {"expectSuccess", false},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", false},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_sha256_fingerprint", (const char *)server_sha256_fingerprint_bad},
+            }},
+        },
+        {
+            {"name", "7f. server check with fingerprint, client donot provide certificate"},
+            {"expectSuccess", false},
+            {"clientSuccessQuirk", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "7g. server check with fingerprint, not match"},
+            {"expectSuccess", false},
+            {"clientSuccessQuirk", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint_bad},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "7h. server check with fingerprint, matched"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
     };
 
     auto assign_options = [](cat_socket_crypto_options_t *options, const options_map_t &options_map) {
@@ -770,6 +954,18 @@ TEST(cat_ssl, enable_crypto)
                 options->allow_self_signed = (cat_bool_t)std::get<int>(option.second);
             } else if (option.first == "peer_name") {
                 options->peer_name = std::get<const char*>(option.second);
+            } else if (option.first == "peer_md5_fingerprint") {
+                options->verify_peer_md5_fingerprint = cat_true;
+                const char *fingerprint = std::get<const char*>(option.second);
+                memcpy(options->peer_md5_fingerprint, fingerprint, 16);
+            } else if (option.first == "peer_sha1_fingerprint") {
+                options->verify_peer_sha1_fingerprint = cat_true;
+                const char *fingerprint = std::get<const char*>(option.second);
+                memcpy(options->peer_sha1_fingerprint, fingerprint, 20);
+            } else if (option.first == "peer_sha256_fingerprint") {
+                options->verify_peer_sha256_fingerprint = cat_true;
+                const char *fingerprint = std::get<const char*>(option.second);
+                memcpy(options->peer_sha256_fingerprint, fingerprint, 32);
             } else if (option.first == "verify_depth") {
                 options->verify_depth = std::get<int>(option.second);
             } else {

@@ -192,6 +192,7 @@ typedef struct cat_ssl_context_s {
 #endif
 } cat_ssl_context_t;
 
+
 typedef struct cat_ssl_s {
     cat_ssl_flags_t flags;
     cat_ssl_connection_t *connection;
@@ -199,9 +200,15 @@ typedef struct cat_ssl_s {
     cat_buffer_t read_buffer;
     cat_buffer_t write_buffer;
     /* options for verification */
-    cat_bool_t verify_peer;
-    cat_bool_t allow_self_signed;
+    int verify_peer :1;
+    int allow_self_signed :1;
+    int verify_peer_md5_fingerprint :1;
+    int verify_peer_sha1_fingerprint :1;
+    int verify_peer_sha256_fingerprint :1;
     const char *expected_peer_name;
+    const unsigned char expected_peer_md5_fingerprint[16];
+    const unsigned char expected_peer_sha1_fingerprint[20];
+    const unsigned char expected_peer_sha256_fingerprint[32];
     /* internals */
     cat_ssl_context_t *context; // for free data before SSL_free()
 } cat_ssl_t;

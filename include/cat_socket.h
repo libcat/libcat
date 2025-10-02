@@ -614,6 +614,24 @@ typedef struct cat_socket_crypto_options_s {
      */
     const char *peer_name;
     /*
+     * peer_md5_fingerprint: is used to verify the md5 fingerprint
+     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
+     * the digest is in 16 byte binary.
+     */
+    unsigned char peer_md5_fingerprint[16];
+    /*
+     * peer_sha1_fingerprint: is used to verify the sha1 fingerprint
+     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
+     * the digest is in 20 byte binary.
+     */
+    unsigned char peer_sha1_fingerprint[20];
+    /*
+     * peer_sha256_fingerprint: is used to verify the sha256 fingerprint
+     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
+     * the digest is in 32 byte binary.
+     */
+    unsigned char peer_sha256_fingerprint[32];
+    /*
      * ca_file:
      * ca_file is used to load the CA certificate from a file.
      */
@@ -668,36 +686,51 @@ typedef struct cat_socket_crypto_options_s {
     /*
      * is_client: is_client is used to set the role of the SSL connection.
      */
-    cat_bool_t is_client;
+    int is_client :1;
     /*
      * verify_peer: if verify_peer is true, the SSL connection will verify the peer certificate.
      */
-    cat_bool_t verify_peer;
+    int verify_peer :1;
     /*
      * verify_peer_name: if verify_peer_name is true,
      * the SSL connection will verify the peer name of the peer certificate.
      * If enabled, it will always check the peer name no matter verify_peer is enabled.
      * If enabled, peer_name must be set.
      */
-    cat_bool_t verify_peer_name;
+    int verify_peer_name :1;
+    /*
+     * verify_peer_md5_fingerprint:
+     * the SSL connection will verify the md5 fingerprint of the peer certificate.
+     */
+    int verify_peer_md5_fingerprint :1;
+    /*
+     * verify_peer_sha1_fingerprint:
+     * the SSL connection will verify the sha1 fingerprint of the peer certificate.
+     */
+    int verify_peer_sha1_fingerprint :1;
+    /*
+     * verify_peer_sha256_fingerprint:
+     * the SSL connection will verify the sha256 fingerprint of the peer certificate.
+     */
+    int verify_peer_sha256_fingerprint :1;
     /*
      * allow_self_signed: if allow_self_signed is true,
      * the SSL connection will allow self-signed certificate.
      * note that it will accepts many certificates with errors, not only the self-signed issue.
      */
-    cat_bool_t allow_self_signed;
+    int allow_self_signed :1;
     /*
      * no_ticket: if no_ticket is true, the SSL connection will not use session tickets.
      */
-    cat_bool_t no_ticket;
+    int no_ticket :1;
     /*
      * no_compression: if no_compression is true, the SSL connection will not use compression.
      */
-    cat_bool_t no_compression;
+    int no_compression :1;
     /*
      * no_client_ca_list: if no_client_ca_list is true, the SSL connection will not use client CA list.
      */
-    cat_bool_t no_client_ca_list;
+    int no_client_ca_list :1;
     void *context; /* context for crypto things */
 } cat_socket_crypto_options_t;
 

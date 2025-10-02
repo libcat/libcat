@@ -367,11 +367,11 @@ namespace testing
             }
 
             if (exportPath.key != nullptr) {
-                remove_file(exportPath.key);
+                // remove_file(exportPath.key);
                 free((void *)exportPath.key);
             }
             if (exportPath.cert != nullptr) {
-                remove_file(exportPath.cert);
+                // remove_file(exportPath.cert);
                 free((void *)exportPath.cert);
             }
         }
@@ -431,6 +431,17 @@ namespace testing
             exportPath.key = strdup(keyPath.c_str());
             exportPath.cert = strdup(certPath.c_str());
             return exportPath;
+        }
+
+        void getFingerprint(unsigned char *buf, unsigned int *bufsize, const char *algo)
+        {
+            const EVP_MD *md = EVP_get_digestbyname(algo);
+            if (md == nullptr) {
+                throw std::runtime_error("Invalid digest algorithm: " + std::string(algo));
+            }
+            if (X509_digest(x509, md, buf, bufsize) != 1) {
+                throw std::runtime_error("get fingerprint failed");
+            }
         }
 
         static std::shared_ptr<X509KeyCertPair> create(

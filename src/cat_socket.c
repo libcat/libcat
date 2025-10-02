@@ -2113,6 +2113,9 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->verify_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
     options->verify_peer = is_client;
     options->verify_peer_name = is_client;
+    options->verify_peer_md5_fingerprint = cat_false;
+    options->verify_peer_sha1_fingerprint = cat_false;
+    options->verify_peer_sha256_fingerprint = cat_false;
     options->allow_self_signed = cat_false;
     options->no_ticket = cat_false;
     options->no_compression = cat_false;
@@ -2256,6 +2259,19 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     ssl->verify_peer = ioptions.verify_peer;
     ssl->allow_self_signed = ioptions.allow_self_signed;
 
+    if (ioptions.verify_peer_md5_fingerprint) {
+        ssl->verify_peer_md5_fingerprint = cat_true;
+        memcpy((void *)ssl->expected_peer_md5_fingerprint, ioptions.peer_md5_fingerprint, sizeof(ssl->expected_peer_md5_fingerprint));
+    }
+    if (ioptions.verify_peer_sha1_fingerprint) {
+        ssl->verify_peer_sha1_fingerprint = cat_true;
+        memcpy((void *)ssl->expected_peer_sha1_fingerprint, ioptions.peer_sha1_fingerprint, sizeof(ssl->expected_peer_sha1_fingerprint));
+    }
+    if (ioptions.verify_peer_sha256_fingerprint) {
+        ssl->verify_peer_sha256_fingerprint = cat_true;
+        memcpy((void *)ssl->expected_peer_sha256_fingerprint, ioptions.peer_sha256_fingerprint, sizeof(ssl->expected_peer_sha256_fingerprint));
+    }
+
     rbuffer = &ssl->read_buffer;
     wbuffer = &ssl->write_buffer;
 
@@ -2355,56 +2371,104 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     return cat_false;
 }
 
-#define CAT_SOCKET_CRYPTO_OPTIONS_FMT \
-    "{ " \
-    "peer_name: \"%s\", " \
-    "ca_file: \"%s\", " \
-    "ca_path: \"%s\", " \
-    "load_ca: %p, " \
-    "certificate: \"%s\", " \
-    "certificate_key: \"%s\", " \
-    "passphrase: %s, " \
-    "load_certificate: %p, " \
-    "protocols: %s, " \
-    "verify_depth: %d, " \
-    "is_client: %s, " \
-    "verify_peer: %s, " \
-    "verify_peer_name: %s, " \
-    "allow_self_signed: %s, " \
-    "no_ticket: %s, " \
-    "no_compression: %s, " \
-    "no_client_ca_list: %s" \
-    " }"
-
-#define CAT_SOCKET_CRYPTO_OPTIONS_C(options, protocols_str) \
-    CAT_NULLABLE_STR_C(options.peer_name), \
-    CAT_NULLABLE_STR_C(options.ca_file), \
-    CAT_NULLABLE_STR_C(options.ca_path), \
-    options.load_ca, \
-    CAT_NULLABLE_STR_C(options.certificate), \
-    CAT_NULLABLE_STR_C(options.certificate_key), \
-    options.passphrase ? "<REDEACTED>" : "(not set)", \
-    options.load_certificate, \
-    protocols_str, \
-    options.verify_depth, \
-    cat_bool_str(options.is_client), \
-    cat_bool_str(options.verify_peer), \
-    cat_bool_str(options.verify_peer_name), \
-    cat_bool_str(options.allow_self_signed), \
-    cat_bool_str(options.no_ticket), \
-    cat_bool_str(options.no_compression), \
-    cat_bool_str(options.no_client_ca_list)
-
 CAT_API cat_bool_t cat_socket_enable_crypto(cat_socket_t *socket, const cat_socket_crypto_options_t *options)
 {
     return cat_socket_enable_crypto_ex(socket, options, cat_socket_get_handshake_timeout_fast(socket));
+}
+
+static inline const char *cat_socket_crypto_options_str(const cat_socket_crypto_options_t *options, char **options_str)
+{
+    if (options == NULL) {
+        return "(null)";
+    }
+
+    cat_buffer_t fp_buffer;
+    // the max length of fingerprints is about 150, we use 256 to be safe
+    cat_buffer_create(&fp_buffer, 256);
+    cat_buffer_append_str(&fp_buffer, "{");
+    if (options->verify_peer_md5_fingerprint) {
+        cat_buffer_append_str(&fp_buffer, " md5: ");
+        for (size_t j = 0; j < sizeof(options->peer_md5_fingerprint); j++) {
+            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_md5_fingerprint[j]);
+        }
+        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
+        cat_buffer_append_str(&fp_buffer, ",");
+    }
+    if (options->verify_peer_sha1_fingerprint) {
+        cat_buffer_append_str(&fp_buffer, " sha1: ");
+        for (size_t j = 0; j < sizeof(options->peer_sha1_fingerprint); j++) {
+            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_sha1_fingerprint[j]);
+        }
+        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
+        cat_buffer_append_str(&fp_buffer, ",");
+    }
+    if (options->verify_peer_sha256_fingerprint) {
+        cat_buffer_append_str(&fp_buffer, " sha256: ");
+        for (size_t j = 0; j < sizeof(options->peer_sha256_fingerprint); j++) {
+            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_sha256_fingerprint[j]);
+        }
+        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
+        cat_buffer_append_str(&fp_buffer, ",");
+    }
+    if (fp_buffer.length > 2) {
+        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
+    }
+    cat_buffer_append_str(&fp_buffer, " }");
+
+    char *protocols_str = cat_ssl_protocols_str(options->protocols);
+
+    *options_str = cat_sprintf(
+        "{ "
+            "peer_name: \"%s\", "
+            "verify_peer_fingerprint: %s, "
+            "ca_file: \"%s\", "
+            "ca_path: \"%s\", "
+            "load_ca: %p, "
+            "certificate: \"%s\", "
+            "certificate_key: \"%s\", "
+            "passphrase: %s, "
+            "load_certificate: %p, "
+            "protocols: %s, "
+            "verify_depth: %d, "
+            "is_client: %s, "
+            "verify_peer: %s, "
+            "verify_peer_name: %s, "
+            "allow_self_signed: %s, "
+            "no_ticket: %s, "
+            "no_compression: %s, "
+            "no_client_ca_list: %s"
+        " }",
+        CAT_NULLABLE_STR_C(options->peer_name),
+        cat_buffer_export_str(&fp_buffer),
+        CAT_NULLABLE_STR_C(options->ca_file),
+        CAT_NULLABLE_STR_C(options->ca_path),
+        options->load_ca,
+        CAT_NULLABLE_STR_C(options->certificate),
+        CAT_NULLABLE_STR_C(options->certificate_key),
+        options->passphrase ? "<REDEACTED>" : "(not set)",
+        options->load_certificate,
+        protocols_str,
+        options->verify_depth,
+        cat_bool_str(options->is_client),
+        cat_bool_str(options->verify_peer),
+        cat_bool_str(options->verify_peer_name),
+        cat_bool_str(options->allow_self_signed),
+        cat_bool_str(options->no_ticket),
+        cat_bool_str(options->no_compression),
+        cat_bool_str(options->no_client_ca_list)
+    );
+
+    cat_free(protocols_str);
+    cat_free(fp_buffer.value);
+
+    return *options_str;
 }
 
 CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_socket_crypto_options_t *options, cat_timeout_t timeout)
 {
 #ifdef CAT_ENABLE_DEBUG_LOG
     cat_socket_crypto_options_t log_options = { 0 };
-    char *protocols_str = NULL;
+    char *options_str = NULL;
 #endif
     CAT_LOG_DEBUG_VA(SOCKET, {
         if (options == NULL) {
@@ -2412,19 +2476,19 @@ CAT_API cat_bool_t cat_socket_enable_crypto_ex(cat_socket_t *socket, const cat_s
         } else {
             log_options = *options;
         }
-        protocols_str = cat_ssl_protocols_str(log_options.protocols);
         CAT_LOG_DEBUG_D(SOCKET, "enable_crypto(" CAT_SOCKET_ID_FMT ", " \
-            "options: " CAT_SOCKET_CRYPTO_OPTIONS_FMT ", " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-            socket->id, CAT_SOCKET_CRYPTO_OPTIONS_C(log_options, protocols_str), timeout);
+            "options: %s, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
+            socket->id, cat_socket_crypto_options_str(&log_options, &options_str), timeout);
+        cat_free(options_str);
     });
 
     cat_bool_t ret = cat_socket_enable_crypto_impl(socket, options, timeout);
 
     CAT_LOG_DEBUG_VA(SOCKET, {
         CAT_LOG_DEBUG_D(SOCKET, "enable_crypto(" CAT_SOCKET_ID_FMT ", " \
-            "options: " CAT_SOCKET_CRYPTO_OPTIONS_FMT ", " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
-            socket->id, CAT_SOCKET_CRYPTO_OPTIONS_C(log_options, protocols_str), timeout, CAT_LOG_BOOL_RET_C(ret));
-        cat_buffer_str_free(protocols_str);
+            "options: %s, " CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT,
+            socket->id, cat_socket_crypto_options_str(&log_options, &options_str), timeout, CAT_LOG_BOOL_RET_C(ret));
+        cat_free(options_str);
     });
 
     return ret;
