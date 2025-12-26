@@ -367,11 +367,11 @@ namespace testing
             }
 
             if (exportPath.key != nullptr) {
-                // remove_file(exportPath.key);
+                remove_file(exportPath.key);
                 free((void *)exportPath.key);
             }
             if (exportPath.cert != nullptr) {
-                // remove_file(exportPath.cert);
+                remove_file(exportPath.cert);
                 free((void *)exportPath.cert);
             }
         }
