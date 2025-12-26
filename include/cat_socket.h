@@ -686,51 +686,51 @@ typedef struct cat_socket_crypto_options_s {
     /*
      * is_client: is_client is used to set the role of the SSL connection.
      */
-    int is_client :1;
+    unsigned int is_client :1;
     /*
      * verify_peer: if verify_peer is true, the SSL connection will verify the peer certificate.
      */
-    int verify_peer :1;
+    unsigned int verify_peer :1;
     /*
      * verify_peer_name: if verify_peer_name is true,
      * the SSL connection will verify the peer name of the peer certificate.
      * If enabled, it will always check the peer name no matter verify_peer is enabled.
      * If enabled, peer_name must be set.
      */
-    int verify_peer_name :1;
+    unsigned int verify_peer_name :1;
     /*
      * verify_peer_md5_fingerprint:
      * the SSL connection will verify the md5 fingerprint of the peer certificate.
      */
-    int verify_peer_md5_fingerprint :1;
+    unsigned int verify_peer_md5_fingerprint :1;
     /*
      * verify_peer_sha1_fingerprint:
      * the SSL connection will verify the sha1 fingerprint of the peer certificate.
      */
-    int verify_peer_sha1_fingerprint :1;
+    unsigned int verify_peer_sha1_fingerprint :1;
     /*
      * verify_peer_sha256_fingerprint:
      * the SSL connection will verify the sha256 fingerprint of the peer certificate.
      */
-    int verify_peer_sha256_fingerprint :1;
+    unsigned int verify_peer_sha256_fingerprint :1;
     /*
      * allow_self_signed: if allow_self_signed is true,
      * the SSL connection will allow self-signed certificate.
      * note that it will accepts many certificates with errors, not only the self-signed issue.
      */
-    int allow_self_signed :1;
+    unsigned int allow_self_signed :1;
     /*
      * no_ticket: if no_ticket is true, the SSL connection will not use session tickets.
      */
-    int no_ticket :1;
+    unsigned int no_ticket :1;
     /*
      * no_compression: if no_compression is true, the SSL connection will not use compression.
      */
-    int no_compression :1;
+    unsigned int no_compression :1;
     /*
      * no_client_ca_list: if no_client_ca_list is true, the SSL connection will not use client CA list.
      */
-    int no_client_ca_list :1;
+    unsigned int no_client_ca_list :1;
     void *context; /* context for crypto things */
 } cat_socket_crypto_options_t;
 
