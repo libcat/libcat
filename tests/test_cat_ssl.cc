@@ -389,12 +389,12 @@ TEST(cat_ssl, enable_crypto)
     ASSERT_TRUE(file_exists(serverPEMsPath.key));
     ASSERT_TRUE(file_exists(serverPEMsPath.cert));
     // get cert fingerprints
-    unsigned char server_md5_fingerprint[16];
-    unsigned char server_md5_fingerprint_bad[16];
-    unsigned char server_sha1_fingerprint[20];
-    unsigned char server_sha1_fingerprint_bad[20];
-    unsigned char server_sha256_fingerprint[32];
-    unsigned char server_sha256_fingerprint_bad[32];
+    unsigned char server_md5_fingerprint[EVP_MAX_MD_SIZE];
+    unsigned char server_md5_fingerprint_bad[EVP_MAX_MD_SIZE];
+    unsigned char server_sha1_fingerprint[EVP_MAX_MD_SIZE];
+    unsigned char server_sha1_fingerprint_bad[EVP_MAX_MD_SIZE];
+    unsigned char server_sha256_fingerprint[EVP_MAX_MD_SIZE];
+    unsigned char server_sha256_fingerprint_bad[EVP_MAX_MD_SIZE];
     unsigned int len;
     len = 16;
     serverPair->getFingerprint(server_md5_fingerprint, &len, "md5");
@@ -433,8 +433,8 @@ TEST(cat_ssl, enable_crypto)
     ASSERT_TRUE(file_exists(clientPEMsPath.key));
     ASSERT_TRUE(file_exists(clientPEMsPath.cert));
     // get cert fingerprints
-    unsigned char client_sha1_fingerprint[20];
-    unsigned char client_sha1_fingerprint_bad[20];
+    unsigned char client_sha1_fingerprint[EVP_MAX_MD_SIZE];
+    unsigned char client_sha1_fingerprint_bad[EVP_MAX_MD_SIZE];
     len = 20;
     clientPair->getFingerprint(client_sha1_fingerprint, &len, "sha1");
     ASSERT_EQ(len, 20);
@@ -541,15 +541,8 @@ TEST(cat_ssl, enable_crypto)
     }
     fclose(fp);
 
-    typedef std::unordered_map<std::string, std::variant<
-        const char*,
-        int
-    >> options_map_t;
-    std::unordered_map<std::string, std::variant<
-        std::string,
-        bool,
-        options_map_t
-    >> test_cases[] = {
+    typedef std::unordered_map<std::string, std::any> options_map_t;
+    std::unordered_map<std::string, std::any> test_cases[] = {
         {
             {"name", "1. server no options, client no options"},
             {"expectSuccess", false},
@@ -797,7 +790,10 @@ TEST(cat_ssl, enable_crypto)
                 {"peer_name", "localhost"},
                 {"verify_peer", true},
                 {"verify_peer_name", true},
-                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"md5", (const unsigned char *)server_md5_fingerprint},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
         },
         {
@@ -815,7 +811,10 @@ TEST(cat_ssl, enable_crypto)
                 {"peer_name", "localhost"},
                 {"verify_peer", true},
                 {"verify_peer_name", true},
-                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint_bad},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"md5", (const unsigned char *)server_md5_fingerprint_bad},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
         },
         {
@@ -833,8 +832,11 @@ TEST(cat_ssl, enable_crypto)
                 {"peer_name", "localhost"},
                 {"verify_peer", true},
                 {"verify_peer_name", true},
-                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
-                {"peer_sha1_fingerprint", (const char *)server_sha1_fingerprint_bad},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"md5", (const unsigned char *)server_md5_fingerprint},
+                    {"sha1", (const unsigned char *)server_sha1_fingerprint_bad},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
         },
         {
@@ -852,9 +854,12 @@ TEST(cat_ssl, enable_crypto)
                 {"peer_name", "localhost"},
                 {"verify_peer", true},
                 {"verify_peer_name", true},
-                {"peer_md5_fingerprint", (const char *)server_md5_fingerprint},
-                {"peer_sha1_fingerprint", (const char *)server_sha1_fingerprint},
-                {"peer_sha256_fingerprint", (const char *)server_sha256_fingerprint},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"md5", (const unsigned char *)server_md5_fingerprint},
+                    {"sha1", (const unsigned char *)server_sha1_fingerprint},
+                    {"sha256", (const unsigned char *)server_sha256_fingerprint},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
         },
         {
@@ -872,7 +877,10 @@ TEST(cat_ssl, enable_crypto)
                 {"peer_name", "localhost"},
                 {"verify_peer", true},
                 {"verify_peer_name", true},
-                {"peer_sha256_fingerprint", (const char *)server_sha256_fingerprint_bad},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"sha256", (const unsigned char *)server_sha256_fingerprint_bad},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
         },
         {
@@ -885,7 +893,10 @@ TEST(cat_ssl, enable_crypto)
                 {"certificate_key", serverPEMsPath.key},
                 {"verify_peer", true},
                 {"verify_peer_name", false},
-                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"sha1", (const unsigned char *)client_sha1_fingerprint},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
             {"clientOptions", options_map_t{
                 {"ca_file", publicCAPath.cert},
@@ -904,7 +915,10 @@ TEST(cat_ssl, enable_crypto)
                 {"certificate_key", serverPEMsPath.key},
                 {"verify_peer", true},
                 {"verify_peer_name", false},
-                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint_bad},
+                    {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"sha1", (const unsigned char *)client_sha1_fingerprint_bad},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
             {"clientOptions", options_map_t{
                 {"ca_file", publicCAPath.cert},
@@ -924,7 +938,54 @@ TEST(cat_ssl, enable_crypto)
                 {"certificate_key", serverPEMsPath.key},
                 {"verify_peer", true},
                 {"verify_peer_name", false},
-                {"peer_sha1_fingerprint", (const char *)client_sha1_fingerprint},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    {"sha1", (const unsigned char *)client_sha1_fingerprint},
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+            }},
+        },
+        {
+            {"name", "7i. client check with empty fingerprint"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+            }},
+            {"clientOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", clientPEMsPath.cert},
+                {"certificate_key", clientPEMsPath.key},
+                {"peer_name", "localhost"},
+                {"verify_peer", true},
+                {"verify_peer_name", true},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
+            }},
+        },
+        {
+            {"name", "7j. server check with empty fingerprint"},
+            {"expectSuccess", true},
+            {"serverOptions", options_map_t{
+                {"ca_file", publicCAPath.cert},
+                {"certificate", serverPEMsPath.cert},
+                {"certificate_key", serverPEMsPath.key},
+                {"verify_peer", true},
+                {"verify_peer_name", false},
+                {"peer_fingerprints", std::vector<cat_ssl_peer_fingerprint_t>{
+                    CAT_SSL_PEER_FINGERPRINT_END,
+                }},
             }},
             {"clientOptions", options_map_t{
                 {"ca_file", publicCAPath.cert},
@@ -941,33 +1002,24 @@ TEST(cat_ssl, enable_crypto)
         for (auto &option : options_map) {
             // std::cout << option.first << ": " << option.second.index() << std::endl;
             if (option.first == "ca_file") {
-                options->ca_file = std::get<const char*>(option.second);
+                options->ca_file = std::any_cast<const char*>(option.second);
             } else if (option.first == "certificate") {
-                options->certificate = std::get<const char*>(option.second);
+                options->certificate = std::any_cast<const char*>(option.second);
             } else if (option.first == "certificate_key") {
-                options->certificate_key = std::get<const char*>(option.second);
+                options->certificate_key = std::any_cast<const char*>(option.second);
             } else if (option.first == "verify_peer") {
-                options->verify_peer = (cat_bool_t)std::get<int>(option.second);
+                options->verify_peer = (cat_bool_t)std::any_cast<bool>(option.second);
             } else if (option.first == "verify_peer_name") {
-                options->verify_peer_name = (cat_bool_t)std::get<int>(option.second);
+                options->verify_peer_name = (cat_bool_t)std::any_cast<bool>(option.second);
             } else if (option.first == "allow_self_signed") {
-                options->allow_self_signed = (cat_bool_t)std::get<int>(option.second);
+                options->allow_self_signed = (cat_bool_t)std::any_cast<bool>(option.second);
             } else if (option.first == "peer_name") {
-                options->peer_name = std::get<const char*>(option.second);
-            } else if (option.first == "peer_md5_fingerprint") {
-                options->verify_peer_md5_fingerprint = cat_true;
-                const char *fingerprint = std::get<const char*>(option.second);
-                memcpy(options->peer_md5_fingerprint, fingerprint, 16);
-            } else if (option.first == "peer_sha1_fingerprint") {
-                options->verify_peer_sha1_fingerprint = cat_true;
-                const char *fingerprint = std::get<const char*>(option.second);
-                memcpy(options->peer_sha1_fingerprint, fingerprint, 20);
-            } else if (option.first == "peer_sha256_fingerprint") {
-                options->verify_peer_sha256_fingerprint = cat_true;
-                const char *fingerprint = std::get<const char*>(option.second);
-                memcpy(options->peer_sha256_fingerprint, fingerprint, 32);
+                options->peer_name = std::any_cast<const char*>(option.second);
+            } else if (option.first == "peer_fingerprints") {
+                const auto& fingerprints = std::any_cast<const std::vector<cat_ssl_peer_fingerprint_t>&>(option.second);
+                options->peer_fingerprints = fingerprints.data();
             } else if (option.first == "verify_depth") {
-                options->verify_depth = std::get<int>(option.second);
+                options->verify_depth = std::any_cast<int>(option.second);
             } else {
                 throw std::runtime_error("Invalid option: " + option.first);
             }
@@ -976,7 +1028,7 @@ TEST(cat_ssl, enable_crypto)
 
     for (auto &test_case : test_cases) {
         for (auto &server_send_first : {false, true}) {
-            // fprintf(stderr, "test_case: %s\n", std::get<std::string>(test_case["name"]).c_str());
+            // fprintf(stderr, "test_case: %s\n", std::any_cast<const char*>(test_case["name"]));
             cat_socket_t *serverSocket;
             serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
             ASSERT_NE(serverSocket, nullptr);
@@ -1018,10 +1070,10 @@ TEST(cat_ssl, enable_crypto)
                 cat_socket_crypto_options_init(&serverOptions, false);
                 if (test_case.find("serverOptions") != test_case.end()) {
                     options = &serverOptions;
-                    assign_options(options, std::get<options_map_t>(test_case["serverOptions"]));
+                    assign_options(options, std::any_cast<const options_map_t&>(test_case["serverOptions"]));
                 }
                 cat_bool_t success = cat_socket_enable_crypto(connSocket, options);
-                if (std::get<bool>(test_case["expectSuccess"])) {
+                if (std::any_cast<bool>(test_case["expectSuccess"])) {
                     ASSERT_TRUE(success);
                     if (server_send_first) {
                         ASSERT_EQ(cat_socket_send(connSocket, "serverHello", 11), cat_true);
@@ -1046,19 +1098,19 @@ TEST(cat_ssl, enable_crypto)
                 cat_socket_crypto_options_init(&clientOptions, true);
                 if (test_case.find("clientOptions") != test_case.end()) {
                     options = &clientOptions;
-                    assign_options(options, std::get<options_map_t>(test_case["clientOptions"]));
+                    assign_options(options, std::any_cast<const options_map_t&>(test_case["clientOptions"]));
                 }
                 cat_bool_t success = cat_socket_enable_crypto(clientSocket, options);
                 if (
                     test_case.find("clientSuccessQuirk") != test_case.end() &&
-                    std::get<bool>(test_case["clientSuccessQuirk"])
+                    std::any_cast<bool>(test_case["clientSuccessQuirk"])
                 ) {
                     ASSERT_TRUE(success);
                     // openssl quirk here: cat_socket_send() should fail, but it may return success
                     // ASSERT_FALSE(cat_socket_send(clientSocket, "clientHello", 11));
                     char buffer[16];
                     ASSERT_EQ(cat_socket_recv(clientSocket, CAT_STRS(buffer)), 0);
-                } else if (std::get<bool>(test_case["expectSuccess"])) {
+                } else if (std::any_cast<bool>(test_case["expectSuccess"])) {
                     ASSERT_TRUE(success);
                     if (server_send_first) {
                         read_assert(clientSocket, "serverHello", 11);

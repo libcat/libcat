@@ -2113,9 +2113,7 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
     options->verify_depth = CAT_SSL_DEFAULT_STREAM_VERIFY_DEPTH;
     options->verify_peer = is_client;
     options->verify_peer_name = is_client;
-    options->verify_peer_md5_fingerprint = cat_false;
-    options->verify_peer_sha1_fingerprint = cat_false;
-    options->verify_peer_sha256_fingerprint = cat_false;
+    options->peer_fingerprints = NULL;
     options->allow_self_signed = cat_false;
     options->no_ticket = cat_false;
     options->no_compression = cat_false;
@@ -2259,17 +2257,40 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
     ssl->verify_peer = ioptions.verify_peer;
     ssl->allow_self_signed = ioptions.allow_self_signed;
 
-    if (ioptions.verify_peer_md5_fingerprint) {
-        ssl->verify_peer_md5_fingerprint = cat_true;
-        memcpy((void *)ssl->expected_peer_md5_fingerprint, ioptions.peer_md5_fingerprint, sizeof(ssl->expected_peer_md5_fingerprint));
-    }
-    if (ioptions.verify_peer_sha1_fingerprint) {
-        ssl->verify_peer_sha1_fingerprint = cat_true;
-        memcpy((void *)ssl->expected_peer_sha1_fingerprint, ioptions.peer_sha1_fingerprint, sizeof(ssl->expected_peer_sha1_fingerprint));
-    }
-    if (ioptions.verify_peer_sha256_fingerprint) {
-        ssl->verify_peer_sha256_fingerprint = cat_true;
-        memcpy((void *)ssl->expected_peer_sha256_fingerprint, ioptions.peer_sha256_fingerprint, sizeof(ssl->expected_peer_sha256_fingerprint));
+    // duplicate peer fingerprints
+    if (ioptions.peer_fingerprints != NULL) {
+        int count = 0;
+        size_t size = 0;
+        for (; ioptions.peer_fingerprints[count].algorithm != NULL; count++) {
+            size += strlen(ioptions.peer_fingerprints[count].algorithm) + 1;
+            size += EVP_MAX_MD_SIZE;
+        }
+        if (likely(count > 0)) {
+            size += sizeof(cat_ssl_peer_fingerprint_t) * (count + 1);
+            cat_ssl_peer_fingerprint_t *fps = (cat_ssl_peer_fingerprint_t *) cat_malloc(size);
+#if CAT_ALLOC_HANDLE_ERRORS
+            if (unlikely(fps == NULL)) {
+                goto _setup_error;
+            }
+#endif
+            char *p = (char *) fps + sizeof(cat_ssl_peer_fingerprint_t) * (count + 1);
+            for (int i = 0; i < count; i++) {
+                fps[i].algorithm = (const char *)p;
+                strcpy(p, ioptions.peer_fingerprints[i].algorithm);
+                p += strlen(ioptions.peer_fingerprints[i].algorithm) + 1;
+                fps[i].fingerprint = (unsigned char *) p;
+                memcpy(p, ioptions.peer_fingerprints[i].fingerprint, EVP_MAX_MD_SIZE);
+                p += EVP_MAX_MD_SIZE;
+            }
+            CAT_ASSERT(p == (char *) fps + size);
+            fps[count].algorithm = NULL;
+            fps[count].fingerprint = NULL;
+            ssl->peer_fingerprints = fps;
+        } else {
+            ssl->peer_fingerprints = NULL;
+        }
+    } else {
+        ssl->peer_fingerprints = NULL;
     }
 
     rbuffer = &ssl->read_buffer;
@@ -2383,32 +2404,20 @@ static inline const char *cat_socket_crypto_options_str(const cat_socket_crypto_
     }
 
     cat_buffer_t fp_buffer;
-    // the max length of fingerprints is about 150, we use 256 to be safe
     cat_buffer_create(&fp_buffer, 256);
-    cat_buffer_append_str(&fp_buffer, "{");
-    if (options->verify_peer_md5_fingerprint) {
-        cat_buffer_append_str(&fp_buffer, " md5: ");
-        for (size_t j = 0; j < sizeof(options->peer_md5_fingerprint); j++) {
-            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_md5_fingerprint[j]);
+    cat_buffer_append_str(&fp_buffer, "{ ");
+    if (options->peer_fingerprints) {
+        for (int i = 0; options->peer_fingerprints[i].algorithm != NULL; i++) {
+            cat_buffer_append_str(&fp_buffer, options->peer_fingerprints[i].algorithm);
+            cat_buffer_append_str(&fp_buffer, ": ");
+            // this show all bytes in the fingerprint
+            // i'm too lazy to show different length of fingerprints
+            for (size_t j = 0; j < EVP_MAX_MD_SIZE; j++) {
+                cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_fingerprints[i].fingerprint[j]);
+            }
+            cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
+            cat_buffer_append_str(&fp_buffer, ",");
         }
-        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
-        cat_buffer_append_str(&fp_buffer, ",");
-    }
-    if (options->verify_peer_sha1_fingerprint) {
-        cat_buffer_append_str(&fp_buffer, " sha1: ");
-        for (size_t j = 0; j < sizeof(options->peer_sha1_fingerprint); j++) {
-            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_sha1_fingerprint[j]);
-        }
-        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
-        cat_buffer_append_str(&fp_buffer, ",");
-    }
-    if (options->verify_peer_sha256_fingerprint) {
-        cat_buffer_append_str(&fp_buffer, " sha256: ");
-        for (size_t j = 0; j < sizeof(options->peer_sha256_fingerprint); j++) {
-            cat_buffer_append_printf(&fp_buffer, "%02X:", options->peer_sha256_fingerprint[j]);
-        }
-        cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);
-        cat_buffer_append_str(&fp_buffer, ",");
     }
     if (fp_buffer.length > 2) {
         cat_buffer_truncate_from(&fp_buffer, 0, fp_buffer.length - 1);

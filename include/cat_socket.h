@@ -614,23 +614,10 @@ typedef struct cat_socket_crypto_options_s {
      */
     const char *peer_name;
     /*
-     * peer_md5_fingerprint: is used to verify the md5 fingerprint
-     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
-     * the digest is in 16 byte binary.
+     * peer_fingerprints: is used to verify the peer fingerprints
+     * array of cat_ssl_peer_fingerprint_t, ends with an empty struct. see cat_ssl_peer_fingerprint_t for detail.
      */
-    unsigned char peer_md5_fingerprint[16];
-    /*
-     * peer_sha1_fingerprint: is used to verify the sha1 fingerprint
-     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
-     * the digest is in 20 byte binary.
-     */
-    unsigned char peer_sha1_fingerprint[20];
-    /*
-     * peer_sha256_fingerprint: is used to verify the sha256 fingerprint
-     * of the peer certificate, multiple fingerprints in different algorithms is and'd.
-     * the digest is in 32 byte binary.
-     */
-    unsigned char peer_sha256_fingerprint[32];
+    const cat_ssl_peer_fingerprint_t *peer_fingerprints;
     /*
      * ca_file:
      * ca_file is used to load the CA certificate from a file.
@@ -698,21 +685,6 @@ typedef struct cat_socket_crypto_options_s {
      * If enabled, peer_name must be set.
      */
     unsigned int verify_peer_name :1;
-    /*
-     * verify_peer_md5_fingerprint:
-     * the SSL connection will verify the md5 fingerprint of the peer certificate.
-     */
-    unsigned int verify_peer_md5_fingerprint :1;
-    /*
-     * verify_peer_sha1_fingerprint:
-     * the SSL connection will verify the sha1 fingerprint of the peer certificate.
-     */
-    unsigned int verify_peer_sha1_fingerprint :1;
-    /*
-     * verify_peer_sha256_fingerprint:
-     * the SSL connection will verify the sha256 fingerprint of the peer certificate.
-     */
-    unsigned int verify_peer_sha256_fingerprint :1;
     /*
      * allow_self_signed: if allow_self_signed is true,
      * the SSL connection will allow self-signed certificate.

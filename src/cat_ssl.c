@@ -698,41 +698,33 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     }
 
     /* check peer fingerprints */
-    unsigned int fingerprint_length;
-    unsigned char fingerprint[EVP_MAX_MD_SIZE];
-    const EVP_MD *md;
+    if (ssl->peer_fingerprints != NULL) {
+        unsigned int fingerprint_length;
+        unsigned char fingerprint[EVP_MAX_MD_SIZE];
+        const EVP_MD *md;
 
-#define checkfingerprint(algo) do { \
-        md = EVP_get_digestbyname(#algo); \
-        if (md == NULL) { \
-            /* this should never happen */ \
-            X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED); \
-            ret = 0; \
-            goto _out; \
-        } \
-        fingerprint_length = sizeof(fingerprint); \
-        if (!X509_digest(cert, md, fingerprint, &fingerprint_length)) { \
-            X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED); \
-            ret = 0; \
-            goto _out; \
-        } \
-        if (fingerprint_length != sizeof(ssl->expected_peer_ ## algo ## _fingerprint) || \
-            CRYPTO_memcmp(fingerprint, ssl->expected_peer_ ## algo ## _fingerprint, fingerprint_length) != 0 \
-        ) { \
-            X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED); \
-            ret = 0; \
-            goto _out; \
-        } \
-    } while (0)
-
-    if (ssl->verify_peer_md5_fingerprint) {
-        checkfingerprint(md5);
-    }
-    if (ssl->verify_peer_sha1_fingerprint) {
-        checkfingerprint(sha1);
-    }
-    if (ssl->verify_peer_sha256_fingerprint) {
-        checkfingerprint(sha256);
+        for (int i = 0; ssl->peer_fingerprints[i].algorithm != NULL; i++) {
+            md = EVP_get_digestbyname(ssl->peer_fingerprints[i].algorithm);
+            if (md == NULL) {
+                /* this should never happen */
+                X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED);
+                ret = 0;
+                goto _out;
+            }
+            fingerprint_length = sizeof(fingerprint);
+            if (!X509_digest(cert, md, fingerprint, &fingerprint_length)) {
+                X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED);
+                ret = 0;
+                goto _out;
+            }
+            if (
+                CRYPTO_memcmp(fingerprint, ssl->peer_fingerprints[i].fingerprint, fingerprint_length) != 0
+            ) {
+                X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSPECIFIED);
+                ret = 0;
+                goto _out;
+            }
+        }
     }
 
 _out:
@@ -819,9 +811,6 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
     ssl->context = context;
     ssl->verify_peer = cat_true;
     ssl->allow_self_signed = cat_false;
-    ssl->verify_peer_md5_fingerprint = cat_false;
-    ssl->verify_peer_sha1_fingerprint = cat_false;
-    ssl->verify_peer_sha256_fingerprint = cat_false;
     ssl->expected_peer_name = NULL;
 
     return ssl;
@@ -858,6 +847,10 @@ CAT_API void cat_ssl_close(cat_ssl_t *ssl)
     /* free peer name */
     if (ssl->expected_peer_name != NULL) {
         cat_free((void *) ssl->expected_peer_name);
+    }
+    /* free peer fingerprints */
+    if (ssl->peer_fingerprints != NULL) {
+        cat_free((void *) ssl->peer_fingerprints);
     }
     /* free */
     if (ssl->flags & CAT_SSL_FLAG_ALLOC) {
