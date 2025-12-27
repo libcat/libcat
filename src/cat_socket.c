@@ -2468,8 +2468,8 @@ static inline const char *cat_socket_crypto_options_str(const cat_socket_crypto_
         cat_bool_str((cat_bool_t) options->no_client_ca_list)
     );
 
-    cat_free(protocols_str);
-    cat_free(fp_buffer.value);
+    cat_buffer_str_free(protocols_str);
+    cat_buffer_str_free(fp_buffer.value);
 
     return *options_str;
 }
