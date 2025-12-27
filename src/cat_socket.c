@@ -18,6 +18,7 @@
 
 #include "cat_socket.h"
 
+#include "cat.h"
 #include "cat_buffer.h"
 
 #include "cat_event.h"
@@ -2223,7 +2224,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
 #endif
 #ifdef CAT_SSL_HAVE_TLS_ALPN
     if (ioptions.alpn_protocols != NULL) {
-        if (!cas_ssl_context_set_alpn_protocols(context, ioptions.is_client, ioptions.alpn_protocols)) {
+        if (!cas_ssl_context_set_alpn_protocols(context, (cat_bool_t) ioptions.is_client, ioptions.alpn_protocols)) {
             goto _setup_error;
         }
     }
@@ -2458,13 +2459,13 @@ static inline const char *cat_socket_crypto_options_str(const cat_socket_crypto_
         options->load_certificate,
         protocols_str,
         options->verify_depth,
-        cat_bool_str(options->is_client),
-        cat_bool_str(options->verify_peer),
-        cat_bool_str(options->verify_peer_name),
-        cat_bool_str(options->allow_self_signed),
-        cat_bool_str(options->no_ticket),
-        cat_bool_str(options->no_compression),
-        cat_bool_str(options->no_client_ca_list)
+        cat_bool_str((cat_bool_t) options->is_client),
+        cat_bool_str((cat_bool_t) options->verify_peer),
+        cat_bool_str((cat_bool_t) options->verify_peer_name),
+        cat_bool_str((cat_bool_t) options->allow_self_signed),
+        cat_bool_str((cat_bool_t) options->no_ticket),
+        cat_bool_str((cat_bool_t) options->no_compression),
+        cat_bool_str((cat_bool_t) options->no_client_ca_list)
     );
 
     cat_free(protocols_str);
