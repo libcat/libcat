@@ -481,7 +481,10 @@ TEST(cat_curl, expect_100_continue)
         // so we need to read all data to avoid blocking
         // then close the connection after curl finished
         char dummy_buffer[16384];
-        while (cat_socket_try_recv(&conn, dummy_buffer, 16384) > 0);
+        ssize_t n = -CAT_EAGAIN;
+        while (n > 0 || n == -CAT_EAGAIN) {
+            n = cat_socket_recv(&conn, dummy_buffer, sizeof(dummy_buffer));
+        }
     });
     std::string server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
 
@@ -549,7 +552,10 @@ TEST(cat_curl_multi, expect_100_continue)
         // so we need to read all data to avoid blocking
         // then close the connection after curl finished
         char dummy_buffer[16384];
-        while (cat_socket_try_recv(&conn, dummy_buffer, 16384) > 0);
+        ssize_t n = -CAT_EAGAIN;
+        while (n > 0 || n == -CAT_EAGAIN) {
+            n = cat_socket_recv(&conn, dummy_buffer, sizeof(dummy_buffer));
+        }
     });
     std::string server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
 
