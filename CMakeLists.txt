@@ -990,6 +990,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_work.cc
         tests/test_cat_buffer.cc
         tests/test_cat_fs.cc
+        tests/test_cat_fs_errors.cc
         tests/test_cat_signal.cc
         tests/test_cat_os_wait.cc
         tests/test_cat_async.cc
