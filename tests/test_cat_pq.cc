@@ -111,4 +111,54 @@ TEST(cat_pq, concurrency)
     }
 }
 
+TEST(cat_pq, parameterized_query)
+{
+    SKIP_IF(skip());
+    PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
+    const char *values[] = {"42", nullptr};
+    PGresult *result = cat_pq_exec_params(conn,
+        "SELECT $1::integer + 1, $2::text", 2, nullptr, values, nullptr, nullptr, 0);
+    ASSERT_NE(result, nullptr);
+    DEFER(PQclear(result));
+    ASSERT_EQ(PQresultStatus(result), PGRES_TUPLES_OK);
+    ASSERT_EQ(PQntuples(result), 1);
+    ASSERT_EQ(PQnfields(result), 2);
+    ASSERT_STREQ(PQgetvalue(result, 0, 0), "43");
+    ASSERT_EQ(PQgetisnull(result, 0, 1), 1);
+}
+
+TEST(cat_pq, query_error_and_recovery)
+{
+    SKIP_IF(skip());
+    PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
+    PGresult *error = cat_pq_exec(conn, "SELECT ();");
+    ASSERT_NE(error, nullptr);
+    DEFER(PQclear(error));
+    ASSERT_EQ(PQresultStatus(error), PGRES_FATAL_ERROR);
+    ASSERT_STREQ(PQresultErrorField(error, PG_DIAG_SQLSTATE), "42601");
+    // SQL 错误只影响该语句；连接仍可执行下一次合法查询。
+    PGresult *result = cat_pq_exec(conn, "SELECT 17; SELECT 23;");
+    ASSERT_NE(result, nullptr);
+    DEFER(PQclear(result));
+    ASSERT_EQ(PQresultStatus(result), PGRES_TUPLES_OK);
+    ASSERT_EQ(PQntuples(result), 1);
+    ASSERT_STREQ(PQgetvalue(result, 0, 0), "23");
+}
+
+TEST(cat_pq, invalid_connection_options)
+{
+    SKIP_IF(skip());
+    PGconn *conn = cat_pq_connectdb("invalid_connection_option=value");
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_BAD);
+    ASSERT_LT(PQsocket(conn), 0);
+}
+
 #endif
