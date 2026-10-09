@@ -1429,7 +1429,8 @@ CAT_API cat_bool_t cat_ssl_encrypt(
                     // since we hardcoded to disable it, just error out
                     /* fall through */
                 default:
-                    cat_update_last_error_with_previous("SSL_write() error");
+                    cat_ssl_update_last_error(CAT_ESSL, "SSL_write() error");
+                    cat_ssl_unrecoverable_error(ssl);
                     goto error_free;
             }
         }
@@ -1752,6 +1753,7 @@ CAT_API CAT_COLD cat_bool_t cat_ssl_is_down(const cat_ssl_t *ssl)
 
 CAT_API CAT_COLD void cat_ssl_unrecoverable_error(cat_ssl_t *ssl)
 {
+    ssl->flags |= CAT_SSL_FLAG_UNRECOVERABLE_ERROR;
     cat_ssl_set_shutdown(ssl, CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
 }
 

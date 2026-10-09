@@ -268,4 +268,60 @@ TEST(cat_socket, crypto_send_file_errors_then_slice_transfer)
     ASSERT_EQ(cat_socket_read(&connection, tail, sizeof(tail)), sizeof(tail));
     ASSERT_EQ(std::string(tail, sizeof(tail)), "after-eof");
 }
+TEST(cat_socket, crypto_write_after_tls_shutdown_closes_connection)
+{
+    for (bool nonblocking : {false, true}) {
+        SCOPED_TRACE(nonblocking);
+        auto paths = publicCAPair->exportPEMs();
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t client_options, server_options;
+        cat_socket_crypto_options_init(&server_options, cat_false);
+        server_options.verify_peer = cat_false;
+        server_options.certificate = paths.cert;
+        server_options.certificate_key = paths.key;
+        cat_socket_crypto_options_init(&client_options, cat_true);
+        client_options.ca_file = paths.cert;
+        client_options.peer_name = "TestCA";
+        cat_ssl_t *client_ssl = nullptr;
+        client_options.before_handshake_callback_data = &client_ssl;
+        client_options.before_handshake_callback = [](cat_ssl_t *ssl, void *data) -> cat_bool_t {
+            *static_cast<cat_ssl_t **>(data) = ssl;
+            return cat_true;
+        };
+        cat_bool_t server_ready = cat_false;
+        wait_group wg;
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            server_ready = cat_socket_enable_crypto(&connection, &server_options);
+        });
+        ASSERT_TRUE(cat_socket_enable_crypto(&client, &client_options));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(server_ready);
+        ASSERT_NE(client_ssl, nullptr);
+        cat_ssl_set_shutdown(client_ssl, CAT_SSL_SENT_SHUTDOWN);
+        cat_clear_last_error();
+        if (nonblocking) {
+            ASSERT_EQ(cat_socket_try_send(&client, CAT_STRL("after-shutdown")), CAT_ESSL);
+            ASSERT_EQ(cat_get_last_error_code(), 0);
+        } else {
+            ASSERT_FALSE(cat_socket_send(&client, CAT_STRL("after-shutdown")));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+        }
+        ASSERT_FALSE(cat_socket_is_available(&client));
+        ASSERT_TRUE(cat_socket_close(&client));
+    }
+}
 #endif

@@ -146,6 +146,7 @@ TEST(cat_ssl, connection_without_peer)
     cat_ssl_set_quiet_shutdown(&ssl, cat_true);
     ASSERT_EQ(SSL_get_quiet_shutdown(ssl.connection), 1);
     cat_ssl_unrecoverable_error(&ssl);
+    ASSERT_TRUE(cat_ssl_is_down(&ssl));
     ASSERT_EQ(cat_ssl_get_shutdown(&ssl), CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
 }
 
@@ -444,6 +445,7 @@ TEST(cat_ssl, plaintext_decrypt_error)
     ASSERT_EQ(length, 0);
     ASSERT_FALSE(eof);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+    ASSERT_TRUE(cat_ssl_is_down(&ssl));
     ASSERT_EQ(cat_ssl_get_shutdown(&ssl), CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
 }
 
