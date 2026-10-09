@@ -18,6 +18,10 @@
 
 #include "test.h"
 
+#ifdef CAT_OS_UNIX_LIKE
+#include <sys/resource.h>
+#endif
+
 extern cat_coroutine_t *echo_tcp_server;
 extern char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 extern size_t echo_tcp_server_ip_length;
@@ -344,5 +348,39 @@ TEST(cat_poll, regular_file_readiness_preserves_descriptor)
     char buffer[CAT_STRLEN("file-data")];
     ASSERT_EQ(cat_fs_read(fd, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "file-data");
+}
+
+TEST(cat_poll, descriptor_limit_errors_preserve_original_fd)
+{
+    std::string path = get_random_path();
+    ASSERT_EQ(cat_fs_put_contents(path.c_str(), CAT_STRL("data")), CAT_STRLEN("data"));
+    DEFER(cat_fs_unlink(path.c_str()));
+    int fd = open(path.c_str(), O_RDONLY);
+    ASSERT_GE(fd, 0);
+    DEFER(close(fd));
+    ASSERT_EXIT({
+        struct rlimit limit;
+        if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {
+            exit(1);
+        }
+        rlim_t original_limit = limit.rlim_cur;
+        // Restrict only this test child; the inherited original fd remains open.
+        limit.rlim_cur = static_cast<rlim_t>(fd) + 1;
+        if (setrlimit(RLIMIT_NOFILE, &limit) != 0) {
+            exit(1);
+        }
+        bool valid = cat_poll_one(fd, POLLIN, nullptr, 0) == CAT_RET_ERROR && cat_get_last_error_code() == CAT_EMFILE;
+        cat_pollfd_t descriptor;
+        descriptor.fd = fd;
+        descriptor.events = POLLIN;
+        descriptor.revents = POLLNONE;
+        valid = valid && cat_poll(&descriptor, 1, 0) == 1 && descriptor.revents == POLLERR;
+        char buffer[CAT_STRLEN("data")];
+        valid = valid && read(fd, buffer, sizeof(buffer)) == static_cast<ssize_t>(sizeof(buffer)) && memcmp(buffer, "data", sizeof(buffer)) == 0;
+        limit.rlim_cur = original_limit;
+        int restored = setrlimit(RLIMIT_NOFILE, &limit);
+        valid = valid && restored == 0;
+        exit(valid ? 0 : 1);
+    }, ::testing::ExitedWithCode(0), "");
 }
 #endif
