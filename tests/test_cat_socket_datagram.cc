@@ -57,6 +57,91 @@ TEST(cat_socket, datagram_vector_destinations)
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), std::string("a\0bc", 4));
 }
 
+#ifdef CAT_OS_LINUX
+TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
+{
+    enum class action { send, cancel_head, cancel_tail };
+    for (action operation : {action::send, action::cancel_head, action::cancel_tail}) {
+        SCOPED_TRACE(static_cast<int>(operation));
+        std::string path = get_random_path();
+        cat_socket_t receiver, sender;
+        ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDG), &receiver);
+        DEFER(cat_socket_close(&receiver));
+        ASSERT_TRUE(cat_socket_bind_to(&receiver, path.data(), path.length(), 0));
+        DEFER(cat_fs_unlink(path.c_str()));
+        ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDG), &sender);
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+        ASSERT_TRUE(cat_socket_connect_to(&sender, path.data(), path.length(), 0));
+        ASSERT_TRUE(cat_socket_set_write_timeout(&sender, TEST_IO_TIMEOUT));
+
+        std::string packet(1024, 'f');
+        int capacity = cat_socket_get_send_buffer_size(&sender);
+        ASSERT_GT(capacity, 0);
+        size_t limit = static_cast<size_t>(capacity) / packet.length() + 1;
+        size_t filled = 0;
+        ssize_t n = 0;
+        while (filled < limit) {
+            n = cat_socket_try_send(&sender, packet.data(), packet.length());
+            if (n == CAT_EAGAIN) {
+                break;
+            }
+            ASSERT_EQ(n, static_cast<ssize_t>(packet.length()));
+            filled++;
+        }
+        ASSERT_EQ(n, CAT_EAGAIN);
+        ASSERT_GT(filled, 0);
+
+        std::array<cat_bool_t, 3> sent = {};
+        std::array<cat_errno_t, 3> errors = {};
+        std::array<bool, 3> done = {};
+        std::array<cat_coroutine_t *, 3> writers = {};
+        wait_group wg;
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+        // The full peer queue makes co() yield with the first writer active and the others queued.
+        for (size_t i = 0; i < writers.size(); i++) {
+            writers[i] = co([&, i] {
+                wg++;
+                DEFER(wg--);
+                char value = static_cast<char>('a' + i);
+                sent[i] = cat_socket_send(&sender, &value, sizeof(value));
+                errors[i] = sent[i] ? 0 : cat_get_last_error_code();
+                done[i] = true;
+            });
+            ASSERT_FALSE(done[i]);
+            ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
+        }
+        size_t canceled = writers.size();
+        if (operation == action::cancel_head || operation == action::cancel_tail) {
+            canceled = operation == action::cancel_head ? 1 : 2;
+            ASSERT_TRUE(cat_coroutine_resume(writers[canceled], nullptr, nullptr));
+            ASSERT_TRUE(done[canceled]);
+            ASSERT_FALSE(sent[canceled]);
+            ASSERT_EQ(errors[canceled], CAT_ECANCELED);
+            ASSERT_FALSE(done[0]);
+            ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
+        }
+        std::string buffer(packet.length(), '\0');
+        for (size_t i = 0; i < filled; i++) {
+            ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer.data(), buffer.length(), TEST_IO_TIMEOUT),
+                static_cast<ssize_t>(packet.length()));
+            ASSERT_EQ(buffer, packet);
+        }
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        for (size_t i = 0; i < writers.size(); i++) {
+            if (i == canceled) {
+                continue;
+            }
+            ASSERT_TRUE(sent[i]) << cat_strerror(errors[i]);
+            char value;
+            ASSERT_EQ(cat_socket_recv_ex(&receiver, &value, sizeof(value), TEST_IO_TIMEOUT), 1);
+            ASSERT_EQ(value, static_cast<char>('a' + i));
+        }
+        ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_NONE);
+        ASSERT_EQ(cat_socket_try_recv(&receiver, buffer.data(), buffer.length()), CAT_EAGAIN);
+    }
+}
+#endif
+
 TEST(cat_socket, datagram_try_recv_address)
 {
     cat_socket_t receiver, sender;

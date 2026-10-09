@@ -3415,16 +3415,20 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
 
     if (socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE) {
         cat_bool_t wait_ret;
+        cat_bool_t can_write;
         cat_queue_push_back(queue, &CAT_COROUTINE_G(current)->waiter.node);
         CAT_TIME_WAIT_START() {
             wait_ret = cat_time_wait(timeout);
         } CAT_TIME_WAIT_END(timeout);
+        /* A canceled waiter must not take ownership from the active writer. */
+        can_write = !(socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE) &&
+            cat_queue_front_data(queue, cat_coroutine_t, waiter.node) == CAT_COROUTINE_G(current);
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         if (unlikely(!wait_ret)) {
             cat_update_last_error_with_previous("Socket write failed");
             return cat_false;
         }
-        if (cat_queue_front_data(queue, cat_coroutine_t, waiter.node) != CAT_COROUTINE_G(current)) {
+        if (!can_write) {
             cat_update_last_error(CAT_ECANCELED, "Socket write has been canceled");
             return cat_false;
         }
