@@ -66,3 +66,45 @@ TEST(cat_env, is_true)
     ASSERT_FALSE(cat_env_is_true(TEST_ENV_NAME, cat_true));
     ASSERT_TRUE(cat_env_unset(TEST_ENV_NAME));
 }
+
+TEST(cat_env, caller_buffer)
+{
+    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, "value"));
+    DEFER(cat_env_unset(TEST_ENV_NAME));
+    char buffer[16];
+    size_t size = sizeof(buffer);
+    cat_errno_t error = CAT_EINVAL;
+    ASSERT_EQ(cat_env_get_silent_ex(TEST_ENV_NAME, buffer, &size, &error), buffer);
+    ASSERT_EQ(error, 0);
+    ASSERT_EQ(size, CAT_STRLEN("value"));
+    ASSERT_STREQ(buffer, "value");
+    size = 1;
+    ASSERT_EQ(cat_env_get_silent_ex(TEST_ENV_NAME, buffer, &size, &error), nullptr);
+    ASSERT_EQ(error, CAT_ENOBUFS);
+    ASSERT_EQ(size, sizeof("value"));
+    size = CAT_ENV_BUFFER_SIZE * 2;
+    char *allocated = cat_env_get_silent_ex(TEST_ENV_NAME, nullptr, &size, &error);
+    ASSERT_NE(allocated, nullptr);
+    DEFER(cat_free(allocated));
+    ASSERT_EQ(error, 0);
+    ASSERT_STREQ(allocated, "value");
+    ASSERT_TRUE(cat_env_unset(TEST_ENV_NAME));
+    size = CAT_ENV_BUFFER_SIZE * 2;
+    ASSERT_EQ(cat_env_get_silent_ex(TEST_ENV_NAME, nullptr, &size, &error), nullptr);
+    ASSERT_EQ(error, CAT_ENOENT);
+}
+
+TEST(cat_env, integer_and_empty)
+{
+    ASSERT_TRUE(cat_env_unset(TEST_ENV_NAME));
+    DEFER(cat_env_unset(TEST_ENV_NAME));
+    ASSERT_EQ(cat_env_get_i(TEST_ENV_NAME, 17), 17);
+    ASSERT_TRUE(cat_env_is_empty(TEST_ENV_NAME));
+    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, ""));
+    ASSERT_TRUE(cat_env_exists(TEST_ENV_NAME));
+    ASSERT_TRUE(cat_env_is_empty(TEST_ENV_NAME));
+    ASSERT_EQ(cat_env_get_i(TEST_ENV_NAME, 17), 0);
+    ASSERT_TRUE(cat_env_set(TEST_ENV_NAME, "-42"));
+    ASSERT_FALSE(cat_env_is_empty(TEST_ENV_NAME));
+    ASSERT_EQ(cat_env_get_i(TEST_ENV_NAME, 17), -42);
+}

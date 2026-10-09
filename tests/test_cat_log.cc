@@ -67,3 +67,90 @@ TEST(cat_log, buffer_quote)
     ASSERT_STREQ(str, "\"foo\\r\\n\"");
     cat_free(tmp_str);
 }
+
+TEST(cat_log, timestamps)
+{
+    cat_log_globals_t globals = CAT_G(log_globals);
+    DEFER(CAT_G(log_globals) = globals);
+    CAT_LOG_G(timestamps_format) = "stamp";
+    for (unsigned int level : {1U, 2U, 3U, 4U}) {
+        for (cat_bool_t relative : {cat_false, cat_true}) {
+            CAT_LOG_G(show_timestamps) = level;
+            CAT_LOG_G(show_timestamps_as_relative) = relative;
+            testing::internal::CaptureStdout();
+            CAT_LOG_INFO(TEST, "timestamp log");
+            std::string output = testing::internal::GetCapturedStdout();
+            ASSERT_EQ(output.front(), '[');
+            ASSERT_NE(output.find("] [    MAIN    ] Info: <TEST> timestamp log\n"), std::string::npos);
+            if (!relative) {
+                ASSERT_EQ(output.find("[stamp"), 0);
+            }
+        }
+    }
+}
+
+TEST(cat_log, quote_limit)
+{
+    size_t size = CAT_LOG_G(str_size);
+    DEFER(CAT_LOG_G(str_size) = size);
+    CAT_LOG_G(str_size) = 3;
+    char *temporary = nullptr;
+    const char *quoted = cat_log_str_quote(CAT_STRL("abcdef"), &temporary);
+    ASSERT_NE(temporary, nullptr);
+    DEFER(cat_free(temporary));
+    ASSERT_STREQ(quoted, "\"abc...\"");
+    char *unlimited = nullptr;
+    quoted = cat_log_str_quote_unlimited(CAT_STRL("abcdef"), &unlimited);
+    ASSERT_NE(unlimited, nullptr);
+    DEFER(cat_free(unlimited));
+    ASSERT_STREQ(quoted, "\"abcdef\"");
+}
+
+TEST(cat_log, filtered_module)
+{
+    cat_log_globals_t globals = CAT_G(log_globals);
+    DEFER(CAT_G(log_globals) = globals);
+    char modules[] = "OTHER, TEST";
+    CAT_LOG_G(module_name_filter) = modules;
+    testing::internal::CaptureStdout();
+    CAT_LOG_INFO(IGNORED, "hidden");
+    CAT_LOG_INFO(TEST, "visible");
+    std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> visible\n");
+}
+
+TEST(cat_log, write_failure_and_libc_fallback)
+{
+    // fallback 状态属于进程；在子进程验证写入失败及后续恢复，不影响其它日志用例。
+    ASSERT_EXIT({
+        bool valid = false;
+        {
+            std::string path = get_random_path();
+            FILE *created = fopen(path.c_str(), "w");
+            if (created == nullptr) {
+                exit(1);
+            }
+            fclose(created);
+            FILE *readonly = fopen(path.c_str(), "r");
+            if (readonly == nullptr) {
+                unlink(path.c_str());
+                exit(1);
+            }
+            bool rejected = !cat_log_fwrite(readonly, CAT_STRL("cannot write"));
+            fclose(readonly);
+            FILE *writable = fopen(path.c_str(), "w+");
+            if (writable == nullptr) {
+                unlink(path.c_str());
+                exit(1);
+            }
+            bool written = cat_log_fwrite(writable, CAT_STRL("fallback works"));
+            rewind(writable);
+            char buffer[CAT_STRLEN("fallback works")];
+            valid = rejected && written && fread(buffer, 1, sizeof(buffer), writable) == sizeof(buffer) &&
+                memcmp(buffer, CAT_STRL("fallback works")) == 0;
+            fclose(writable);
+            unlink(path.c_str());
+        }
+        exit(valid ? 0 : 1);
+    }, testing::ExitedWithCode(0), "un-outputted log message");
+}
