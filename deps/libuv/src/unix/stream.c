@@ -779,7 +779,11 @@ static int uv__try_write(uv_stream_t* stream,
    */
   if (send_handle != NULL) {
     int fd_to_send;
+#ifdef HAVE_LIBCAT
+    struct msghdr msg = {0};
+#else
     struct msghdr msg;
+#endif
     union uv__cmsg cmsg;
 
     if (uv__is_closing(send_handle))
@@ -1025,7 +1029,11 @@ static int uv__stream_recv_cmsg(uv_stream_t* stream, struct msghdr* msg) {
 static void uv__read(uv_stream_t* stream) {
   uv_buf_t buf;
   ssize_t nread;
+#ifdef HAVE_LIBCAT
+  struct msghdr msg = {0};
+#else
   struct msghdr msg;
+#endif
   union uv__cmsg cmsg;
   int count;
   int err;

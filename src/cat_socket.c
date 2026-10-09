@@ -3432,7 +3432,7 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
     socket_i->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
 
     while (1) {
-        struct msghdr msg;
+        struct msghdr msg = {0};
         msg.msg_name = (struct sockaddr *) address;
         msg.msg_namelen = address_length;
         msg.msg_iov = (struct iovec *) vector;
@@ -3591,7 +3591,7 @@ static cat_never_inline ssize_t cat_socket_internal_udg_try_write(
 )
 {
     cat_socket_fd_t fd;
-    struct msghdr msg;
+    struct msghdr msg = {0};
     ssize_t nwrite;
 
     if (!!(socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE)) {
