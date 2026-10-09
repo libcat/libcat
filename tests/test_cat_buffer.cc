@@ -51,11 +51,15 @@ TEST(cat_buffer, realloc_standard)
 
     src = cat_buffer_allocator.alloc_function(CAT_TEST_DEFAULT_BUFFER_SIZE);
     ASSERT_NE(nullptr, src);
+    memset(src, 'a', CAT_TEST_DEFAULT_BUFFER_SIZE);
 
     dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE * 2);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
-    ASSERT_NE(src, dst);
+    // realloc may retain the original address; verify data and writable capacity.
+    ASSERT_EQ(std::string(dst, CAT_TEST_DEFAULT_BUFFER_SIZE), std::string(CAT_TEST_DEFAULT_BUFFER_SIZE, 'a'));
+    memset(dst + CAT_TEST_DEFAULT_BUFFER_SIZE, 'b', CAT_TEST_DEFAULT_BUFFER_SIZE);
+    ASSERT_EQ(std::string(dst + CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE), std::string(CAT_TEST_DEFAULT_BUFFER_SIZE, 'b'));
 }
 
 TEST(cat_buffer, realloc_standard_data)
@@ -76,7 +80,6 @@ TEST(cat_buffer, realloc_standard_data)
     dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE + 1);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
-    ASSERT_NE(src, dst);
 
     src_tmp[CAT_TEST_DEFAULT_BUFFER_SIZE] = 0;
     dst[CAT_TEST_DEFAULT_BUFFER_SIZE] = 0;
@@ -101,7 +104,6 @@ TEST(cat_buffer, realloc_standard_less_data)
     dst = cat_buffer_allocator.realloc_function(src, CAT_TEST_DEFAULT_BUFFER_SIZE / 2 + 1);
     DEFER(cat_buffer_allocator.free_function(dst));
     ASSERT_NE(nullptr, dst);
-    ASSERT_NE(src, dst);
 
     src_tmp[CAT_TEST_DEFAULT_BUFFER_SIZE / 2] = 0;
     dst[CAT_TEST_DEFAULT_BUFFER_SIZE / 2] = 0;
