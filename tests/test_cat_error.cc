@@ -317,3 +317,29 @@ TEST(cat_error, orig_errno){
     ORIG_ERRNO_MAP(ORIG_ASSERT);
     #undef ORIG_ASSERT
 }
+
+TEST(cat_error, custom_stringify_handlers)
+{
+    constexpr cat_errno_t custom_error = INT_MIN;
+    // 处理器由模块持有并在 shutdown 释放；重复运行测试时只注册一次。
+    static bool registered = false;
+    if (!registered) {
+        ASSERT_STREQ(cat_strerror(custom_error), "Unknown error");
+        ASSERT_STREQ(cat_strerrno(custom_error), "UNKNOWN");
+        cat_strerror_handler_register([](cat_errno_t) -> const char * { return nullptr; });
+        cat_strerrno_handler_register([](cat_errno_t) -> const char * { return nullptr; });
+        cat_strerror_handler_register([](cat_errno_t error) -> const char * {
+            return error == custom_error ? "Custom test error" : nullptr;
+        });
+        cat_strerrno_handler_register([](cat_errno_t error) -> const char * {
+            return error == custom_error ? "TEST_CUSTOM_ERROR" : nullptr;
+        });
+        registered = true;
+    }
+    ASSERT_STREQ(cat_strerror(custom_error), "Custom test error");
+    ASSERT_STREQ(cat_strerrno(custom_error), "TEST_CUSTOM_ERROR");
+    ASSERT_STREQ(cat_strerror(custom_error + 1), "Unknown error");
+    ASSERT_STREQ(cat_strerrno(custom_error + 1), "UNKNOWN");
+    ASSERT_STREQ(cat_strerrno(CAT_EBADF), "EBADF");
+    ASSERT_STREQ(cat_strerror(CAT_EBADF), "Bad file descriptor");
+}
