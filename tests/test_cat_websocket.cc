@@ -94,3 +94,23 @@ TEST(cat_websocket, mask_and_unmask)
     );
     ASSERT_STREQ(raw, processed);
 }
+
+TEST(cat_websocket, mask_binary_data)
+{
+    const char input[] = {'\0', '\x7f', '\x01', '\x02', '\x03', '\0', '\x04'};
+    const char key[] = {'\x01', '\0', '\x02', '\x03'};
+    for (uint64_t index : {UINT64_C(0), UINT64_C(1), UINT64_C(3), UINT64_C(4)}) {
+        char output[sizeof(input)] = {};
+        cat_websocket_mask_ex(input, output, sizeof(input), key, index);
+        for (size_t i = 0; i < sizeof(input); i++) {
+            ASSERT_EQ(output[i], static_cast<char>(input[i] ^ key[(index + i) % sizeof(key)]));
+        }
+        cat_websocket_unmask_ex(output, sizeof(output), key, index);
+        ASSERT_EQ(memcmp(output, input, sizeof(input)), 0);
+        cat_websocket_mask_ex(output, output, sizeof(output), key, index);
+        cat_websocket_unmask_ex(output, sizeof(output), key, index);
+        ASSERT_EQ(memcmp(output, input, sizeof(input)), 0);
+        cat_websocket_mask_ex(input, output, 0, key, index);
+        ASSERT_EQ(memcmp(output, input, sizeof(input)), 0);
+    }
+}
