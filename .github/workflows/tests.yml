@@ -360,19 +360,25 @@ jobs:
         run: |
           set -xe
           # note: lcov --keep-going option only available on macOS
-          ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }} &&
-          ${{ runner.os == 'macOS' && 'export LCOV_CAPTURE_EXT_ARGS="--keep-going"' || 'export LCOV_CAPTURE_EXT_ARGS=""' }} &&
+          ${{ runner.os == 'macOS' && 'brew install lcov' || 'sudo apt-get install lcov' }}
+          ${{ runner.os == 'macOS' && 'export LCOV_CAPTURE_EXT_ARGS="--keep-going"' || 'export LCOV_CAPTURE_EXT_ARGS=""' }}
+          lcov_ignore_errors=()
+          lcov_version=$(lcov --version | awk '{print $NF}')
+          # LCOV 1.x does not recognize the error classes used by newer releases.
+          if [ "${lcov_version%%.*}" -ge 2 ]; then
+            lcov_ignore_errors=(--ignore-errors inconsistent,format,mismatch)
+          fi
           lcov \
             --capture \
             $LCOV_CAPTURE_EXT_ARGS \
-            --ignore-errors inconsistent,format,mismatch \
+            "${lcov_ignore_errors[@]}" \
             --directory "." \
             --output-file coverage.info &&
           lcov \
             --extract coverage.info \
               "${{github.workspace}}/libcat/include/*" \
               "${{github.workspace}}/libcat/src/*" \
-            --ignore-errors inconsistent,format,mismatch \
+            "${lcov_ignore_errors[@]}" \
             --output-file coverage.info &&
           lcov --list coverage.info &&
           curl -s https://codecov.io/bash -o codecov.sh &&
