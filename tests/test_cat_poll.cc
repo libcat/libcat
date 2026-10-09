@@ -253,3 +253,56 @@ TEST(cat_poll, datagram_ready_and_timeout)
     ASSERT_EQ(cat_poll(&descriptor, 1, 1), 0);
     ASSERT_EQ(descriptor.revents, POLLNONE);
 }
+
+TEST(cat_poll, canceled_wait_then_descriptor_reuse)
+{
+    for (bool multiple : {false, true}) {
+        SCOPED_TRACE(multiple);
+        cat_socket_t first, second;
+        ASSERT_EQ(cat_socket_create(&first, CAT_SOCKET_TYPE_UDP4), &first);
+        DEFER(cat_socket_close(&first));
+        ASSERT_EQ(cat_socket_create(&second, CAT_SOCKET_TYPE_UDP4), &second);
+        DEFER(cat_socket_close(&second));
+        ASSERT_TRUE(cat_socket_bind_to(&first, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_bind_to(&second, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        cat_pollfd_t descriptors[] = {
+            {cat_socket_get_fd(&first), POLLIN, POLLNONE},
+            {cat_socket_get_fd(&second), POLLIN, POLLNONE},
+        };
+        int result = 0;
+        cat_pollfd_events_t revents = POLLNONE;
+        cat_errno_t error = 0;
+        bool done = false;
+        wait_group wg;
+        cat_coroutine_t *poller = co([&] {
+            wg++;
+            DEFER(wg--);
+            cat_clear_last_error();
+            result = multiple ? cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), TEST_IO_TIMEOUT)
+                : cat_poll_one(descriptors[0].fd, POLLIN, &revents, TEST_IO_TIMEOUT);
+            error = cat_get_last_error_code();
+            done = true;
+        });
+        DEFER(if (!done) { cat_coroutine_resume(poller, nullptr, nullptr); });
+        ASSERT_FALSE(done);
+        ASSERT_TRUE(cat_coroutine_resume(poller, nullptr, nullptr));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(done);
+        // Multi-poll returns the ready count on cancellation, including zero.
+        ASSERT_EQ(result, multiple ? 0 : CAT_RET_ERROR);
+        ASSERT_EQ(error, multiple ? 0 : CAT_ECANCELED);
+        ASSERT_EQ(revents, POLLNONE);
+        ASSERT_EQ(descriptors[0].revents, POLLNONE);
+        ASSERT_EQ(descriptors[1].revents, POLLNONE);
+        ASSERT_TRUE(cat_socket_send_to(&first, CAT_STRL("first"), CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&first)));
+        ASSERT_TRUE(cat_socket_send_to(&second, CAT_STRL("second"), CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&second)));
+        ASSERT_EQ(cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), TEST_IO_TIMEOUT), 2);
+        ASSERT_EQ(descriptors[0].revents, POLLIN);
+        ASSERT_EQ(descriptors[1].revents, POLLIN);
+        char buffer[TEST_BUFFER_SIZE_STD];
+        ASSERT_EQ(cat_socket_recv(&first, buffer, sizeof(buffer)), CAT_STRLEN("first"));
+        ASSERT_EQ(std::string(buffer, CAT_STRLEN("first")), "first");
+        ASSERT_EQ(cat_socket_recv(&second, buffer, sizeof(buffer)), CAT_STRLEN("second"));
+        ASSERT_EQ(std::string(buffer, CAT_STRLEN("second")), "second");
+    }
+}
