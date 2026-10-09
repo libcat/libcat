@@ -92,6 +92,7 @@ TEST(cat_ssl, context_certificate_errors)
     ASSERT_TRUE(cat_ssl_context_load_verify_locations(context, paths.cert, nullptr));
     ASSERT_FALSE(cat_ssl_context_set_client_ca_list(context, paths.key));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+    ASSERT_NE(std::string(cat_get_last_error_message()).find(paths.key), std::string::npos);
     ASSERT_TRUE(cat_ssl_context_set_client_ca_list(context, paths.cert));
 }
 

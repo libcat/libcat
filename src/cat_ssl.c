@@ -304,7 +304,7 @@ CAT_API cat_bool_t cat_ssl_context_set_client_ca_list(cat_ssl_context_t *context
     CAT_LOG_DEBUG(SSL, "SSL_load_client_CA_file(%p, \"%s\")", context, ca_file);
     STACK_OF(X509_NAME) *cert_names = SSL_load_client_CA_file(ca_file);
     if (cert_names == NULL) {
-        cat_ssl_update_last_error(CAT_ESSL, "SSL_load_client_CA_file(\"%s\") failed", context, ca_file);
+        cat_ssl_update_last_error(CAT_ESSL, "SSL_load_client_CA_file(\"%s\") failed", ca_file);
         return cat_false;
     }
     CAT_LOG_DEBUG(SSL, "SSL_CTX_set_client_CA_list(%p)", context);
