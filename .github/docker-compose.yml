@@ -3,7 +3,8 @@ version: '3'
 services:
   postgres:
     container_name: postgres
-    image: postgres:latest
+    # Avoid Docker Hub's anonymous pull limit on shared CI runners.
+    image: mirror.gcr.io/library/postgres:latest
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
