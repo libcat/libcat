@@ -1231,4 +1231,17 @@ TEST(cat_ssl, truncate_256k)
     }
 }
 
+#ifdef CAT_SSL_HAVE_TLS_ALPN
+TEST(cat_ssl, alpn_client_protocols)
+{
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+    ASSERT_TRUE(cas_ssl_context_set_alpn_protocols(context, cat_true, "h2,http/1.1"));
+    const char expected[] = "\x02h2\x08http/1.1";
+    ASSERT_EQ(context->alpn.length, sizeof(expected) - 1);
+    ASSERT_EQ(memcmp(context->alpn.value, expected, sizeof(expected) - 1), 0);
+}
+#endif
+
 #endif
