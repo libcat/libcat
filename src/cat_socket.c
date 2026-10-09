@@ -1163,7 +1163,7 @@ CAT_API cat_bool_t cat_socket_open_os_socket(cat_socket_t *socket, cat_os_socket
 static cat_always_inline cat_bool_t cat_socket_open_socket_impl(cat_socket_t *socket, const cat_socket_t *origin_socket)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
-    cat_socket_flags_t inherited_flags = socket_i->flags & CAT_SOCKET_FLAGS_NON_TRANSFERABLE_BITS;
+    cat_socket_flags_t inherited_flags = socket->flags & CAT_SOCKET_FLAGS_NON_TRANSFERABLE_BITS;
 
     if (unlikely(!cat_socket_is_available(origin_socket))) {
         cat_update_last_error(CAT_EBADF, "Socket to copy is not available");

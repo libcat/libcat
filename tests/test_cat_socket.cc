@@ -2551,3 +2551,36 @@ TEST(cat_socket, dump_all_and_close_all)
         }
     }
 }
+
+TEST(cat_socket, open_socket_preserves_connection)
+{
+    cat_socket_t server, client, connection, alias;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+    DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(cat_socket_close(&connection));
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+    ASSERT_EQ(cat_socket_create(&alias, CAT_SOCKET_TYPE_TCP4), &alias);
+    DEFER(cat_socket_close(&alias));
+    cat_socket_id_t id = cat_socket_get_id(&alias);
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &client));
+    ASSERT_EQ(cat_socket_get_id(&alias), id);
+    ASSERT_EQ(cat_socket_get_fd(&alias), cat_socket_get_fd(&client));
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &client));
+    ASSERT_TRUE(cat_socket_close(&client));
+
+    // 关闭其中一个引用不关闭共享连接；最后一个引用仍可读写。
+    ASSERT_TRUE(cat_socket_is_established(&alias));
+    ASSERT_TRUE(cat_socket_send(&alias, CAT_STRL("shared")));
+    char buffer[CAT_STRLEN("shared")];
+    ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "shared");
+    ASSERT_TRUE(cat_socket_send(&connection, buffer, sizeof(buffer)));
+    ASSERT_EQ(cat_socket_read(&alias, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "shared");
+}
