@@ -336,6 +336,9 @@ TEST(cat_socket, closed_socket_io_and_options)
     ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), 0);
     ASSERT_FALSE(cat_socket_get_udp_broadcast(&socket));
     ASSERT_EQ(cat_socket_get_fd(&socket), CAT_SOCKET_INVALID_FD);
+    std::string path = get_random_path();
+    ASSERT_EQ(cat_socket_send_file(&socket, path.c_str(), 0, 0), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     ASSERT_FALSE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     ASSERT_FALSE(cat_socket_listen(&socket, TEST_SERVER_BACKLOG));

@@ -4847,7 +4847,7 @@ static cat_always_inline ssize_t cat_socket_mock_sendfile(cat_socket_t *socket, 
 static cat_always_inline ssize_t cat_socket_send_file_impl(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
 {
     // we use IO_FLAG_WRITE instead of IO_FLAG_NONE here, because sendfile includes multi operations
-    CAT_SOCKET_IO_CHECK(socket, socket_i, CAT_SOCKET_IO_FLAG_WRITE, return cat_false);
+    CAT_SOCKET_IO_CHECK(socket, socket_i, CAT_SOCKET_IO_FLAG_WRITE, return -1);
     cat_file_t file;
     ssize_t written;
 
