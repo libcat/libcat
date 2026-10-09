@@ -262,19 +262,21 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
     }
 #endif
 #ifdef CAT_OS_UNIX_LIKE
-    if (unlikely(uv__fd_exists(&CAT_EVENT_G(loop), fd))) {
-        _fd = dup(fd);
-        if (unlikely(_fd == CAT_OS_INVALID_SOCKET)) {
-            cat_update_last_error_of_syscall("Dup for poll_one() failed");
-            cat_free(poll);
-            return CAT_RET_ERROR;
-        }
-        /* uv_poll_init_socket() and uv_poll_start() must return success if fd exists */
+    /* A later stream operation may register the original fd while this poll waits. */
+    _fd = dup(fd);
+    if (unlikely(_fd == CAT_OS_INVALID_SOCKET)) {
+        cat_update_last_error_of_syscall("Dup for poll_one() failed");
+        cat_free(poll);
+        return CAT_RET_ERROR;
     }
+    /* uv_poll_init_socket() and uv_poll_start() must return success if fd exists */
 #endif
     error = uv_poll_init_socket(&CAT_EVENT_G(loop), &poll->u.poll, _fd);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll init failed");
+#ifdef CAT_OS_UNIX_LIKE
+        uv__close(_fd);
+#endif
         cat_free(poll);
         *revents = cat_poll_translate_error_to_sys_events(events, cat_poll_filter_init_error(error));
         return CAT_RET_ERROR;
@@ -505,17 +507,14 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
         do {
             cat_os_socket_t fd_no = fd->fd;
 #ifdef CAT_OS_UNIX_LIKE
-            poll->fd_dup = CAT_OS_INVALID_FD;
-            if (unlikely(uv__fd_exists(&CAT_EVENT_G(loop), fd->fd))) {
-                /* uv_poll_init_socket() and uv_poll_start() will return error if fd exists */
-                poll->fd_dup = dup(fd->fd);
-                if (unlikely(fd->fd == CAT_OS_INVALID_SOCKET)) {
-                    poll->ret.status = cat_translate_sys_error(cat_sys_errno);
-                    e++;
-                    break;
-                }
-                fd_no = poll->fd_dup;
+            /* uv_poll_init_socket() and uv_poll_start() will return error if fd exists */
+            poll->fd_dup = dup(fd->fd);
+            if (unlikely(poll->fd_dup == CAT_OS_INVALID_FD)) {
+                poll->ret.status = cat_translate_sys_error(cat_sys_errno);
+                e++;
+                break;
             }
+            fd_no = poll->fd_dup;
 #endif
             error = uv_poll_init_socket(&CAT_EVENT_G(loop), &poll->u.poll, fd_no);
             if (unlikely(error != 0)) {
@@ -561,6 +560,11 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
         if (poll->initialized) {
             uv_close(&poll->u.handle, cat_poll_close_callback);
         }
+#ifdef CAT_OS_UNIX_LIKE
+        else if (poll->fd_dup != CAT_OS_INVALID_FD) {
+            uv__close(poll->fd_dup);
+        }
+#endif
         if (unlikely(ret == CAT_RET_ERROR)) {
             /* just close handle and go to the next one */
             continue;

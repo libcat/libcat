@@ -306,3 +306,43 @@ TEST(cat_poll, canceled_wait_then_descriptor_reuse)
         ASSERT_EQ(std::string(buffer, CAT_STRLEN("second")), "second");
     }
 }
+
+#ifdef CAT_OS_UNIX_LIKE
+TEST(cat_poll, regular_file_readiness_preserves_descriptor)
+{
+    std::string path = get_random_path();
+    ASSERT_EQ(cat_fs_put_contents(path.c_str(), CAT_STRL("file-data")), CAT_STRLEN("file-data"));
+    DEFER(cat_fs_unlink(path.c_str()));
+    cat_file_t fd = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_RDONLY);
+    ASSERT_GE(fd, 0);
+    DEFER(cat_fs_close(fd));
+    int next_fd = dup(fd);
+    ASSERT_GE(next_fd, 0);
+    ASSERT_EQ(close(next_fd), 0);
+    cat_pollfd_events_t revents = POLLNONE;
+    cat_ret_t ready = cat_poll_one(fd, POLLIN, &revents, TEST_IO_TIMEOUT);
+    if (ready == CAT_RET_ERROR) {
+        ASSERT_NE(cat_get_last_error_code(), 0);
+    } else {
+        ASSERT_EQ(ready, CAT_RET_OK);
+    }
+    ASSERT_NE(revents & POLLIN, 0);
+    cat_pollfd_t descriptors[] = {
+        {fd, POLLIN, POLLNONE},
+        {fd, POLLIN, POLLNONE},
+    };
+    ASSERT_EQ(cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), TEST_IO_TIMEOUT), 2);
+    ASSERT_NE(descriptors[0].revents & POLLIN, 0);
+    ASSERT_NE(descriptors[1].revents & POLLIN, 0);
+    if (ready == CAT_RET_ERROR) {
+        // Initialization failures must release duplicates without closing the caller's fd.
+        int probe = dup(fd);
+        ASSERT_GE(probe, 0);
+        DEFER(close(probe));
+        ASSERT_EQ(probe, next_fd);
+    }
+    char buffer[CAT_STRLEN("file-data")];
+    ASSERT_EQ(cat_fs_read(fd, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "file-data");
+}
+#endif

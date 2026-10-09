@@ -168,9 +168,13 @@ TEST(cat_socket, crypto_try_send_handles_queued_completion_and_close)
         client_options.ca_file = paths.cert;
         client_options.peer_name = "TestCA";
         cat_bool_t server_ready = cat_false;
+        cat_coroutine_t *reader = nullptr;
+        cat_ret_t read_ready = CAT_RET_NONE;
+        bool reader_done = true;
         wait_group wg;
         DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
         DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        DEFER(if (reader != nullptr && !reader_done) { cat_coroutine_resume(reader, nullptr, nullptr); });
         co([&] {
             wg++;
             DEFER(wg--);
@@ -179,6 +183,18 @@ TEST(cat_socket, crypto_try_send_handles_queued_completion_and_close)
         ASSERT_TRUE(cat_socket_enable_crypto(&client, &client_options));
         ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
         ASSERT_TRUE(server_ready);
+        if (!close_pending) {
+            char buffer[8];
+            ASSERT_EQ(cat_socket_try_recv(&client, buffer, sizeof(buffer)), CAT_EAGAIN);
+            reader_done = false;
+            reader = co([&] {
+                wg++;
+                DEFER(wg--);
+                read_ready = cat_poll_one(cat_socket_get_fd(&client), POLLIN, nullptr, TEST_IO_TIMEOUT);
+                reader_done = true;
+            });
+            ASSERT_FALSE(reader_done);
+        }
         ASSERT_GT(cat_socket_set_send_buffer_size(&client, TEST_BUFFER_SIZE_STD), 0);
         int send_size = cat_socket_get_send_buffer_size(&client);
         int recv_size = cat_socket_get_recv_buffer_size(&connection);
@@ -198,6 +214,14 @@ TEST(cat_socket, crypto_try_send_handles_queued_completion_and_close)
         std::string received(payload.length(), '\0');
         ASSERT_EQ(cat_socket_read(&connection, received.data(), received.length()), received.length());
         ASSERT_EQ(received, payload);
+        if (!close_pending) {
+            ASSERT_TRUE(cat_socket_send(&connection, CAT_STRL("reply")));
+            ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+            ASSERT_EQ(read_ready, CAT_RET_OK);
+            char reply[CAT_STRLEN("reply")];
+            ASSERT_EQ(cat_socket_read(&client, reply, sizeof(reply)), sizeof(reply));
+            ASSERT_EQ(std::string(reply, sizeof(reply)), "reply");
+        }
         // Waiting for write readiness runs the real asynchronous completion callback.
         ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&client), POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
         ASSERT_EQ(client.internal->ssl->write_buffer.length, 0);
