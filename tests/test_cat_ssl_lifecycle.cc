@@ -74,4 +74,73 @@ TEST(cat_socket, rejected_handshake_callback_releases_ssl_and_preserves_tcp)
     ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "plain-after-rejection");
 }
+TEST(cat_socket, crypto_peer_fingerprint_verification)
+{
+    auto paths = publicCAPair->exportPEMs();
+    BIO *bio = BIO_new_file(paths.cert, "r");
+    ASSERT_NE(bio, nullptr);
+    DEFER(BIO_free(bio));
+    X509 *certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+    ASSERT_NE(certificate, nullptr);
+    DEFER(X509_free(certificate));
+    std::array<unsigned char, EVP_MAX_MD_SIZE> digest = {};
+    unsigned int digest_length = 0;
+    ASSERT_EQ(X509_digest(certificate, EVP_sha256(), digest.data(), &digest_length), 1);
+    ASSERT_GT(digest_length, 0);
+    for (unsigned int mode = 0; mode < 4; mode++) {
+        SCOPED_TRACE(mode);
+        std::array<unsigned char, EVP_MAX_MD_SIZE> expected = digest;
+        if (mode == 1) {
+            expected[0] ^= 1;
+        }
+        cat_ssl_peer_fingerprint_t fingerprints[] = {
+            {mode == 2 ? "unknown-digest" : "sha256", expected.data()},
+            {nullptr, nullptr},
+        };
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t client_options, server_options;
+        cat_socket_crypto_options_init(&server_options, cat_false);
+        server_options.verify_peer = cat_false;
+        server_options.certificate = paths.cert;
+        server_options.certificate_key = paths.key;
+        cat_socket_crypto_options_init(&client_options, cat_true);
+        client_options.ca_file = paths.cert;
+        client_options.peer_name = "TestCA";
+        client_options.peer_fingerprints = mode == 3 ? &fingerprints[1] : fingerprints;
+        cat_bool_t server_ready = cat_false;
+        wait_group wg;
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            server_ready = cat_socket_enable_crypto(&connection, &server_options);
+        });
+        cat_bool_t ready = cat_socket_enable_crypto(&client, &client_options);
+        cat_errno_t error = cat_get_last_error_code();
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_EQ(ready, mode == 0 || mode == 3);
+        if (!ready) {
+            ASSERT_NE(error, 0);
+            ASSERT_FALSE(cat_socket_is_available(&client));
+            continue;
+        }
+        ASSERT_TRUE(server_ready);
+        ASSERT_TRUE(cat_socket_is_encrypted(&client));
+        ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("pinned")));
+        char buffer[CAT_STRLEN("pinned")];
+        ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), "pinned");
+    }
+}
 #endif
