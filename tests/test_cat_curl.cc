@@ -518,6 +518,69 @@ TEST(cat_curl, expect_100_continue)
     );
 }
 
+static int cat_test_curl_yield_and_close_socket(void *clientp, curl_socket_t sockfd)
+{
+    (void) clientp;
+    // libcurl has called socket function with CURL_POLL_REMOVE before this callback,
+    // yield to let the event loop free the removed socket context while socket_action() is still running
+    cat_time_msleep(1);
+#ifndef CAT_OS_WIN
+    return close(sockfd);
+#else
+    return closesocket(sockfd);
+#endif
+}
+
+TEST(cat_curl, yield_after_socket_removed)
+{
+    cat_socket_t server;
+    ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    wait_group wg;
+    // "Connection: close" makes libcurl close the socket inside socket_action() of the same socket
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        cat_socket_t conn;
+        ASSERT_NE(cat_socket_create(&conn, CAT_SOCKET_TYPE_TCP), nullptr);
+        DEFER(cat_socket_close(&conn));
+        ASSERT_TRUE(cat_socket_accept(&server, &conn));
+        std::string request;
+        char buffer[4096];
+        while (request.find("\r\n\r\n") == std::string::npos) {
+            ssize_t n = cat_socket_recv(&conn, buffer, sizeof(buffer));
+            ASSERT_GT(n, 0);
+            request.append(buffer, n);
+        }
+        ASSERT_TRUE(cat_socket_send(&conn, CAT_STRL(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 2\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "OK"
+        )));
+    });
+    std::string server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
+
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    CURL *ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_URL, server_url.c_str());
+    curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+    curl_easy_setopt(ch, CURLOPT_CLOSESOCKETFUNCTION, cat_test_curl_yield_and_close_socket);
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
+
+    ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_OK);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "OK");
+}
+
 TEST(cat_curl_multi, expect_100_continue)
 {
     CURL *ch;
