@@ -835,6 +835,7 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
     ssl->pending_renegotiations = 0;
     ssl->owned_data = NULL;
     ssl->owned_data_free = NULL;
+    ssl->peer_fingerprints = NULL;
 
     return ssl;
 
