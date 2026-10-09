@@ -453,22 +453,22 @@ TEST(cat_curl, expect_100_continue)
 {
     CURL *ch;
 
-    cat_socket_t server, conn;
-    bool connected = false;
+    cat_socket_t server;
     ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    wait_group wg;
+    // Close the client and listener before joining the server coroutine.
+    // The accepted connection stays alive until its sender and reader finish.
     DEFER(cat_socket_close(&server));
-    DEFER([&] {
-        if (connected) {
-            cat_socket_close(&conn);
-        }
-    } ());
     ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
     ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
     // fake http server that wont send 100-continue
     co([&] {
+        wg++;
+        DEFER(wg--);
+        cat_socket_t conn;
         ASSERT_NE(cat_socket_create(&conn, CAT_SOCKET_TYPE_TCP), nullptr);
+        DEFER(cat_socket_close(&conn));
         ASSERT_TRUE(cat_socket_accept(&server, &conn));
-        connected = true;
         cat_time_msleep(200);
         ASSERT_TRUE(cat_socket_send(&conn, CAT_STRL(
             "HTTP/1.1 200 OK\r\n"
@@ -587,22 +587,22 @@ TEST(cat_curl_multi, expect_100_continue)
     CURLM *mh;
     int still_running = 1;
 
-    cat_socket_t server, conn;
-    bool connected = false;
+    cat_socket_t server;
     ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+    wait_group wg;
+    // Close the client and listener before joining the server coroutine.
+    // The accepted connection stays alive until its sender and reader finish.
     DEFER(cat_socket_close(&server));
-    DEFER([&] {
-        if (connected) {
-            cat_socket_close(&conn);
-        }
-    } ());
     ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
     ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
     // fake http server that wont send 100-continue
     co([&] {
+        wg++;
+        DEFER(wg--);
+        cat_socket_t conn;
         ASSERT_NE(cat_socket_create(&conn, CAT_SOCKET_TYPE_TCP), nullptr);
+        DEFER(cat_socket_close(&conn));
         ASSERT_TRUE(cat_socket_accept(&server, &conn));
-        connected = true;
         cat_time_msleep(200);
         ASSERT_TRUE(cat_socket_send(&conn, CAT_STRL(
             "HTTP/1.1 200 OK\r\n"

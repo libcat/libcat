@@ -45,11 +45,21 @@ TEST(cat_async, notify_later)
 
 TEST(cat_async, notify_timeout)
 {
+    uv_sem_t sem;
+    ASSERT_EQ(uv_sem_init(&sem, 0), 0);
+    DEFER(uv_sem_destroy(&sem));
+
     cat_async_t *async = cat_async_create(nullptr);
     ASSERT_NE(async, nullptr);
-    co([async] {
-        ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [async] {
-            cat_sys_usleep(1000);
+    wait_group wg;
+    // Release notification after checking the timeout, even when an assertion fails.
+    // The wait group joins the worker before the semaphore leaves scope.
+    DEFER(uv_sem_post(&sem));
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_TRUE(work(CAT_WORK_KIND_SLOW_IO, [&] {
+            uv_sem_wait(&sem);
             cat_async_notify(async);
         }, TEST_IO_TIMEOUT));
     });
