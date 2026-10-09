@@ -205,6 +205,8 @@ if(MSVC)
     check_add_cflags_global(/we4013 HAVE_MSVC_LINT_we4013)
 else()
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        # Libcat intentionally combines separately named enums as bitmasks.
+        check_add_cflags(-Wno-enum-enum-conversion cat_cflags HAVE_CAT_LINT_NO_ENUM_ENUM_CONVERSION)
         # Keep libuv's original constant-array declarations under newer Clang.
         check_add_cflags(-Wno-gnu-folding-constant uv_cflags HAVE_UV_LINT_NO_GNU_FOLDING_CONSTANT)
     endif()
