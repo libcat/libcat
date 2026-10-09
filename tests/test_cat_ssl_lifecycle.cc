@@ -143,4 +143,68 @@ TEST(cat_socket, crypto_peer_fingerprint_verification)
         ASSERT_EQ(std::string(buffer, sizeof(buffer)), "pinned");
     }
 }
+TEST(cat_socket, crypto_try_send_handles_queued_completion_and_close)
+{
+    for (bool close_pending : {false, true}) {
+        SCOPED_TRACE(close_pending);
+        auto paths = publicCAPair->exportPEMs();
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t client_options, server_options;
+        cat_socket_crypto_options_init(&server_options, cat_false);
+        server_options.verify_peer = cat_false;
+        server_options.certificate = paths.cert;
+        server_options.certificate_key = paths.key;
+        cat_socket_crypto_options_init(&client_options, cat_true);
+        client_options.ca_file = paths.cert;
+        client_options.peer_name = "TestCA";
+        cat_bool_t server_ready = cat_false;
+        wait_group wg;
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            server_ready = cat_socket_enable_crypto(&connection, &server_options);
+        });
+        ASSERT_TRUE(cat_socket_enable_crypto(&client, &client_options));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(server_ready);
+        ASSERT_GT(cat_socket_set_send_buffer_size(&client, TEST_BUFFER_SIZE_STD), 0);
+        int send_size = cat_socket_get_send_buffer_size(&client);
+        int recv_size = cat_socket_get_recv_buffer_size(&connection);
+        ASSERT_GT(send_size, 0);
+        ASSERT_GT(recv_size, 0);
+        // Exceed both kernel buffers without yielding; the peer has not read yet.
+        std::string payload = get_random_bytes(2 * (static_cast<size_t>(send_size) + recv_size));
+        ASSERT_EQ(cat_socket_try_send(&client, payload.data(), payload.length()), payload.length());
+        ASSERT_GT(client.internal->ssl->write_buffer.length, 0);
+        cat_set_last_error_code(CAT_EBUSY);
+        ASSERT_EQ(cat_socket_try_send(&client, CAT_STRL("next")), CAT_EAGAIN);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+        if (close_pending) {
+            ASSERT_TRUE(cat_socket_close(&client));
+            continue;
+        }
+        std::string received(payload.length(), '\0');
+        ASSERT_EQ(cat_socket_read(&connection, received.data(), received.length()), received.length());
+        ASSERT_EQ(received, payload);
+        // Waiting for write readiness runs the real asynchronous completion callback.
+        ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&client), POLLOUT, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_EQ(client.internal->ssl->write_buffer.length, 0);
+        ASSERT_EQ(cat_socket_try_send(&client, CAT_STRL("next")), CAT_STRLEN("next"));
+        char next[CAT_STRLEN("next")];
+        ASSERT_EQ(cat_socket_read(&connection, next, sizeof(next)), sizeof(next));
+        ASSERT_EQ(std::string(next, sizeof(next)), "next");
+    }
+}
 #endif

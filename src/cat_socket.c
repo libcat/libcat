@@ -3706,6 +3706,7 @@ static void cat_socket_internal_try_write_encrypted_callback(uv_write_t *request
     if (status == 0) {
         socket_i->ssl->write_buffer.length = 0;
     }
+    cat_free(request);
 }
 
 static ssize_t cat_socket_internal_try_write_encrypted(
@@ -3781,6 +3782,7 @@ static ssize_t cat_socket_internal_try_write_encrypted(
                 buf.len = (cat_io_vector_length_t) ssl->write_buffer.length;
                 int error = uv_write(request, &socket_i->u.stream, &buf, 1, cat_socket_internal_try_write_encrypted_callback);
                 if (unlikely(error != 0)) {
+                    cat_free(request);
                     nwrite = error;
                 }
             }
