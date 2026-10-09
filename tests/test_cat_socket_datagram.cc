@@ -60,8 +60,8 @@ TEST(cat_socket, datagram_vector_destinations)
 #ifdef CAT_OS_LINUX
 TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
 {
-    enum class action { send, cancel_head, cancel_tail };
-    for (action operation : {action::send, action::cancel_head, action::cancel_tail}) {
+    enum class action { send, cancel_head, cancel_tail, close_one, close_all };
+    for (action operation : {action::send, action::cancel_head, action::cancel_tail, action::close_one, action::close_all}) {
         SCOPED_TRACE(static_cast<int>(operation));
         std::string path = get_random_path();
         cat_socket_t receiver, sender;
@@ -98,7 +98,8 @@ TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
         wait_group wg;
         DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
         // The full peer queue makes co() yield with the first writer active and the others queued.
-        for (size_t i = 0; i < writers.size(); i++) {
+        size_t writer_count = operation == action::close_one ? 1 : writers.size();
+        for (size_t i = 0; i < writer_count; i++) {
             writers[i] = co([&, i] {
                 wg++;
                 DEFER(wg--);
@@ -111,6 +112,25 @@ TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
             ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
         }
         size_t canceled = writers.size();
+        if (operation == action::close_one || operation == action::close_all) {
+            ASSERT_TRUE(cat_socket_close(&sender));
+            ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+            ASSERT_FALSE(cat_socket_is_available(&sender));
+            for (size_t i = 0; i < writer_count; i++) {
+                ASSERT_TRUE(done[i]);
+                ASSERT_FALSE(sent[i]);
+                ASSERT_EQ(errors[i], CAT_ECANCELED);
+            }
+            // Closing must cancel blocked writes rather than delivering their packets.
+            std::string buffer(packet.length(), '\0');
+            for (size_t i = 0; i < filled; i++) {
+                ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer.data(), buffer.length(), TEST_IO_TIMEOUT),
+                    static_cast<ssize_t>(packet.length()));
+                ASSERT_EQ(buffer, packet);
+            }
+            ASSERT_EQ(cat_socket_try_recv(&receiver, buffer.data(), buffer.length()), CAT_EAGAIN);
+            continue;
+        }
         if (operation == action::cancel_head || operation == action::cancel_tail) {
             canceled = operation == action::cancel_head ? 1 : 2;
             ASSERT_TRUE(cat_coroutine_resume(writers[canceled], nullptr, nullptr));

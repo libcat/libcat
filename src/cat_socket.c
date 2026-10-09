@@ -898,6 +898,7 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
             }
             socket_i->u.udg.readfd = CAT_SOCKET_INVALID_FD;
             socket_i->u.udg.writefd = CAT_SOCKET_INVALID_FD;
+            socket_i->u.udg.write_coroutine = NULL;
         }
         else
 #endif
@@ -3455,7 +3456,9 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
                         goto _syscall_error;
                     }
                 }
+                socket_i->u.udg.write_coroutine = CAT_COROUTINE_G(current);
                 cat_ret_t poll_ret = cat_poll_one(socket_i->u.udg.writefd, POLLOUT, NULL, timeout);
+                socket_i->u.udg.write_coroutine = NULL;
                 if (poll_ret == CAT_RET_OK) {
                     continue;
                 } else if (poll_ret == CAT_RET_NONE) {
@@ -5000,6 +5003,12 @@ static void cat_socket_internal_close_impl(cat_socket_internal_t *socket_i, cat_
                 cat_socket_io_cancel(write_coroutine, "write");
             }
             CAT_ASSERT(cat_queue_empty(write_coroutines));
+#ifdef CAT_OS_UNIX_LIKE
+            if ((socket_i->type & CAT_SOCKET_TYPE_UDG) == CAT_SOCKET_TYPE_UDG) {
+                /* Stop the active poll before closing its fd; queued writers are already canceled. */
+                cat_socket_io_cancel(socket_i->u.udg.write_coroutine, "UDG write");
+            }
+#endif
         }
         if (socket_i->io_flags & CAT_SOCKET_IO_FLAG_READ) {
             cat_socket_io_cancel(socket_i->context.io.read.coroutine, "read");
