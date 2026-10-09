@@ -89,6 +89,34 @@ TEST(cat_log, timestamps)
     }
 }
 
+TEST(cat_log, runtime_configuration_matches_environment)
+{
+#ifdef CAT_ENABLE_DEBUG_LOG
+    char *output = cat_env_get_silent("CAT_LOG_DEBUG_OUTPUT", nullptr);
+    DEFER(cat_free(output));
+    if (output != nullptr) {
+        if (cat_strcasecmp(output, "stdout") == 0) {
+            ASSERT_EQ(cat_get_debug_output(), stdout);
+        } else if (cat_strcasecmp(output, "stderr") == 0) {
+            ASSERT_EQ(cat_get_debug_output(), stderr);
+        }
+    }
+#endif
+    char *format = cat_env_get_silent("CAT_LOG_TIMESTAMPS_FORMAT", nullptr);
+    DEFER(cat_free(format));
+    const char *expected = "%F %T";
+    if (format != nullptr) {
+        if (cat_strcasecmp(format, "time") == 0) {
+            expected = "%T";
+        } else if (cat_strcasecmp(format, "unix") == 0) {
+            expected = "%s";
+        }
+    }
+    ASSERT_STREQ(CAT_LOG_G(timestamps_format), expected);
+    ASSERT_EQ(CAT_LOG_G(show_timestamps), cat_env_get_i("CAT_LOG_SHOW_TIMESTAMPS", 0));
+    ASSERT_EQ(CAT_LOG_G(show_timestamps_as_relative), cat_env_is_true("CAT_LOG_SHOW_TIMESTAMPS_AS_RELATIVE", cat_false));
+}
+
 TEST(cat_log, quote_limit)
 {
     size_t size = CAT_LOG_G(str_size);

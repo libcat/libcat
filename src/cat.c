@@ -144,9 +144,8 @@ CAT_API cat_bool_t cat_runtime_init(void)
             } else if (cat_strcasecmp(timestamps_format, "unix") == 0) {
                 CAT_LOG_G(timestamps_format) = "%s";
             }
-        } else {
-            cat_free(timestamps_format);
         }
+        cat_free(timestamps_format);
     } while (0);
     if (cat_env_is_true("CAT_LOG_SHOW_TIMESTAMPS_AS_RELATIVE", cat_false)) {
         CAT_LOG_G(show_timestamps_as_relative) = cat_true;
