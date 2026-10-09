@@ -95,6 +95,79 @@ TEST(cat_websocket, mask_and_unmask)
     ASSERT_STREQ(raw, processed);
 }
 
+TEST(cat_websocket, header_payload_lengths)
+{
+    const struct {
+        uint64_t length;
+        uint8_t encoded_length;
+        uint8_t extension_size;
+    } cases[] = {
+        {0, 0, 0},
+        {125, 125, 0},
+        {126, CAT_WEBSOCKET_EXT16_PAYLOAD_LENGTH, 2},
+        {65535, CAT_WEBSOCKET_EXT16_PAYLOAD_LENGTH, 2},
+        {65536, CAT_WEBSOCKET_EXT64_PAYLOAD_LENGTH, 8},
+        {UINT64_C(0x0102030405060708), CAT_WEBSOCKET_EXT64_PAYLOAD_LENGTH, 8},
+    };
+    const char masking_key[] = {'\0', '\x12', '\x34', '\x56'};
+
+    for (const auto &c : cases) {
+        SCOPED_TRACE(c.length);
+        for (cat_bool_t mask : {cat_false, cat_true}) {
+            cat_websocket_header_t header = {};
+            cat_websocket_header_init(&header);
+            ASSERT_EQ(header.opcode, 0);
+            ASSERT_EQ(header.fin, 0);
+            ASSERT_EQ(cat_websocket_header_get_payload_length(&header), 0);
+            ASSERT_EQ(cat_websocket_header_get_masking_key(&header), nullptr);
+            header.opcode = CAT_WEBSOCKET_OPCODE_BINARY;
+            header.fin = 1;
+            cat_websocket_header_set_payload_info(&header, c.length, mask ? masking_key : nullptr);
+
+            size_t offset = CAT_WEBSOCKET_HEADER_MIN_SIZE + c.extension_size;
+            size_t size = offset + (mask ? CAT_WEBSOCKET_MASKING_KEY_LENGTH : 0);
+            ASSERT_EQ(cat_websocket_calculate_masking_key_offset(c.length), offset);
+            ASSERT_EQ(cat_websocket_calculate_header_size(c.length, mask), size);
+            ASSERT_EQ(cat_websocket_header_get_size(&header), size);
+            ASSERT_EQ(cat_websocket_header_get_payload_length(&header), c.length);
+            ASSERT_EQ(header.payload_length, c.encoded_length);
+            ASSERT_EQ(header.mask, mask);
+            ASSERT_EQ(header.opcode, CAT_WEBSOCKET_OPCODE_BINARY);
+            ASSERT_EQ(header.fin, 1);
+            for (size_t i = 0; i < c.extension_size; i++) {
+                ASSERT_EQ(header.extended_payload_length[i],
+                    (c.length >> (8 * (c.extension_size - i - 1))) & 0xff);
+            }
+            const char *key = cat_websocket_header_get_masking_key(&header);
+            if (mask) {
+                ASSERT_EQ(key, reinterpret_cast<const char *>(&header) + offset);
+                ASSERT_EQ(memcmp(key, masking_key, sizeof(masking_key)), 0);
+            } else {
+                ASSERT_EQ(key, nullptr);
+            }
+        }
+    }
+}
+
+TEST(cat_websocket, header_preserves_masking_key)
+{
+    cat_websocket_header_t header = {};
+    cat_websocket_header_init(&header);
+    const char key[] = {'\x12', '\0', '\x34', '\x56'};
+    cat_websocket_header_set_masking_key(&header, key);
+
+    // 长度编码变化时，mask 从短 header 移至扩展长度之后，再移回原位。
+    for (uint64_t length : {UINT64_C(125), UINT64_C(126), UINT64_C(65536), UINT64_C(0), UINT64_C(65535)}) {
+        SCOPED_TRACE(length);
+        cat_websocket_header_set_payload_length(&header, length);
+        ASSERT_EQ(cat_websocket_header_get_payload_length(&header), length);
+        ASSERT_EQ(memcmp(cat_websocket_header_get_masking_key(&header), key, sizeof(key)), 0);
+    }
+    cat_websocket_header_set_masking_key(&header, nullptr);
+    ASSERT_EQ(cat_websocket_header_get_masking_key(&header), nullptr);
+    ASSERT_EQ(cat_websocket_header_get_size(&header), 4);
+}
+
 TEST(cat_websocket, mask_binary_data)
 {
     const char input[] = {'\0', '\x7f', '\x01', '\x02', '\x03', '\0', '\x04'};
