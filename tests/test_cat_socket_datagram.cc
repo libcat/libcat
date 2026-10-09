@@ -60,8 +60,9 @@ TEST(cat_socket, datagram_vector_destinations)
 #ifdef CAT_OS_LINUX
 TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
 {
-    enum class action { send, cancel_head, cancel_tail, close_one, close_all };
-    for (action operation : {action::send, action::cancel_head, action::cancel_tail, action::close_one, action::close_all}) {
+    enum class action { send, cancel_head, cancel_tail, timeout_active, timeout_queued, close_one, close_all };
+    for (action operation : {action::send, action::cancel_head, action::cancel_tail,
+        action::timeout_active, action::timeout_queued, action::close_one, action::close_all}) {
         SCOPED_TRACE(static_cast<int>(operation));
         std::string path = get_random_path();
         cat_socket_t receiver, sender;
@@ -96,15 +97,22 @@ TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
         std::array<bool, 3> done = {};
         std::array<cat_coroutine_t *, 3> writers = {};
         wait_group wg;
+        wait_group timed;
         DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
         // The full peer queue makes co() yield with the first writer active and the others queued.
         size_t writer_count = operation == action::close_one ? 1 : writers.size();
+        size_t timed_index = operation == action::timeout_active ? 0
+            : operation == action::timeout_queued ? 1 : writers.size();
         for (size_t i = 0; i < writer_count; i++) {
             writers[i] = co([&, i] {
                 wg++;
                 DEFER(wg--);
+                if (i == timed_index) {
+                    timed++;
+                }
+                DEFER(if (i == timed_index) { timed--; });
                 char value = static_cast<char>('a' + i);
-                sent[i] = cat_socket_send(&sender, &value, sizeof(value));
+                sent[i] = cat_socket_send_ex(&sender, &value, sizeof(value), i == timed_index ? 0 : TEST_IO_TIMEOUT);
                 errors[i] = sent[i] ? 0 : cat_get_last_error_code();
                 done[i] = true;
             });
@@ -112,6 +120,14 @@ TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
             ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
         }
         size_t canceled = writers.size();
+        if (timed_index < writers.size()) {
+            ASSERT_TRUE(timed(TEST_IO_TIMEOUT));
+            canceled = timed_index;
+            ASSERT_TRUE(done[canceled]);
+            ASSERT_FALSE(sent[canceled]);
+            ASSERT_EQ(errors[canceled], CAT_ETIMEDOUT);
+            ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
+        }
         if (operation == action::close_one || operation == action::close_all) {
             ASSERT_TRUE(cat_socket_close(&sender));
             ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
