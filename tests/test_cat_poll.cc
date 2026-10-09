@@ -227,3 +227,29 @@ TEST(cat_select, empty)
     ASSERT_EQ(cat_select(0, nullptr, nullptr, nullptr, &timeout), 0);
     ASSERT_EQ(cat_sys_select((cat_os_socket_t) 0, nullptr, nullptr, nullptr, &timeout), 0);
 }
+
+TEST(cat_poll, invalid_descriptors)
+{
+    cat_pollfd_t descriptors[] = {
+        {CAT_OS_INVALID_SOCKET, POLLIN, POLLNONE},
+        {CAT_OS_INVALID_SOCKET, POLLOUT, POLLNONE},
+    };
+    ASSERT_EQ(cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), 0), 2);
+    // libuv 的无效句柄映射依平台不同，必须报告错误，不能当成可读写。
+    ASSERT_NE(descriptors[0].revents & (POLLERR | POLLNVAL), 0);
+    ASSERT_NE(descriptors[1].revents & (POLLERR | POLLNVAL), 0);
+}
+
+TEST(cat_poll, datagram_ready_and_timeout)
+{
+    cat_socket_t socket;
+    ASSERT_EQ(cat_socket_create(&socket, CAT_SOCKET_TYPE_UDP4), &socket);
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    cat_pollfd_t descriptor = {cat_socket_get_fd(&socket), POLLOUT, POLLNONE};
+    ASSERT_EQ(cat_poll(&descriptor, 1, TEST_IO_TIMEOUT), 1);
+    ASSERT_NE(descriptor.revents & POLLOUT, 0);
+    descriptor.events = POLLIN;
+    ASSERT_EQ(cat_poll(&descriptor, 1, 1), 0);
+    ASSERT_EQ(descriptor.revents, POLLNONE);
+}
