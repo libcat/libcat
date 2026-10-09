@@ -638,6 +638,84 @@ TEST(cat_curl, yield_after_socket_removed)
     ASSERT_EQ(std::string(buffer.value, buffer.length), "OK");
 }
 
+TEST(cat_curl_multi, cleanup_unfinished_transfer)
+{
+    // Finish the next request with a fresh multi after closing an unfinished one.
+    for (bool complete : {false, true}) {
+        SCOPED_TRACE(complete);
+        cat_socket_t server;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        bool received = false;
+        ssize_t final_read = -1;
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            cat_socket_t connection;
+            ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+            DEFER(cat_socket_close(&connection));
+            ASSERT_TRUE(cat_socket_accept(&server, &connection));
+            ASSERT_TRUE(cat_socket_set_read_timeout(&connection, TEST_IO_TIMEOUT));
+            std::string request;
+            char buffer[4096];
+            while (request.find("\r\n\r\n") == std::string::npos) {
+                ssize_t n = cat_socket_recv(&connection, buffer, sizeof(buffer));
+                ASSERT_GT(n, 0);
+                request.append(buffer, n);
+            }
+            received = true;
+            if (complete) {
+                ASSERT_TRUE(cat_socket_send(&connection, CAT_STRL(
+                    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK")));
+            }
+            final_read = cat_socket_recv(&connection, buffer, sizeof(buffer));
+        });
+        std::string url = std::string("http://") + TEST_LISTEN_IPV4 + ":" +
+            std::to_string(cat_socket_get_sock_port(&server));
+        cat_buffer_t response;
+        ASSERT_TRUE(cat_buffer_create(&response, 0));
+        DEFER(cat_buffer_close(&response));
+        CURL *easy = curl_easy_init();
+        ASSERT_NE(easy, nullptr);
+        DEFER(curl_easy_cleanup(easy));
+        ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_URL, url.c_str()), CURLE_OK);
+        ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_PROXY, ""), CURLE_OK);
+        ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT), CURLE_OK);
+        ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function), CURLE_OK);
+        ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response), CURLE_OK);
+        CURLM *multi = cat_curl_multi_init();
+        ASSERT_NE(multi, nullptr);
+        DEFER(if (multi != nullptr) { cat_curl_multi_cleanup(multi); });
+        ASSERT_EQ(curl_multi_add_handle(multi, easy), CURLM_OK);
+        int running = 1;
+        while (!received || (complete && running != 0)) {
+            ASSERT_EQ(cat_curl_multi_perform(multi, &running), CURLM_OK);
+            ASSERT_TRUE(received || running != 0);
+        }
+        if (complete) {
+            int remaining;
+            CURLMsg *message = curl_multi_info_read(multi, &remaining);
+            ASSERT_NE(message, nullptr);
+            ASSERT_EQ(message->msg, CURLMSG_DONE);
+            ASSERT_EQ(message->data.result, CURLE_OK);
+            ASSERT_EQ(std::string(response.value, response.length), "OK");
+        } else {
+            ASSERT_EQ(running, 1);
+            ASSERT_EQ(response.length, 0);
+        }
+        // Exercise cleanup without remove_handle, after the request reached the peer.
+        ASSERT_EQ(cat_curl_multi_cleanup(multi), CURLM_OK);
+        multi = nullptr;
+        curl_easy_cleanup(easy);
+        easy = nullptr;
+        wg();
+        ASSERT_EQ(final_read, 0);
+    }
+}
+
 TEST(cat_curl_multi, expect_100_continue)
 {
     CURL *ch;
