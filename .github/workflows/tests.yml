@@ -266,8 +266,11 @@ jobs:
           EXIT /b 0
           REM error condition
           :error
+          SET test_exit_code=%errorlevel%
+          ECHO ASan log:
+          IF EXIST asan.log* TYPE asan.log*
           ECHO ::error::Test failed
-          EXIT /b %errorlevel%
+          EXIT /b %test_exit_code%
 
   unix-tests:
     name: Test on ${{matrix.os}}
@@ -295,7 +298,7 @@ jobs:
             brew install googletest ||
             brew install googletest
             brew install pkg-config
-            brew install openssl@1.1
+            brew install openssl@3
             brew install curl
             brew install libpq
           fi
@@ -316,14 +319,23 @@ jobs:
         shell: bash
         working-directory: libcat
         run: |
-          ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
-          ${{ runner.os == 'macOS' && 'export PKG_CONFIG_PATH="/usr/local/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH"' || '' }}
+          cmake_options=()
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            openssl_prefix=$(brew --prefix openssl@3)
+            curl_prefix=$(brew --prefix curl)
+            libpq_prefix=$(brew --prefix libpq)
+            export OPENSSL_ROOT_DIR="$openssl_prefix"
+            export CMAKE_PREFIX_PATH="$openssl_prefix:$curl_prefix:$libpq_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+            export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig:$curl_prefix/lib/pkgconfig:$libpq_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+            cmake_options+=(-DLIBCAT_ENABLE_OPENSSL=ON -DLIBCAT_ENABLE_CURL=ON)
+          fi
           ${{ runner.os == 'Linux' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
           echo "::group::Make cmake cache"
           cmake .. \
+            "${cmake_options[@]}" \
             -DLIBCAT_ENABLE_ASAN=ON \
             -DCODE_COVERAGE=ON \
             -DCMAKE_C_FLAGS="-Werror" || exit 1

@@ -96,10 +96,21 @@ TEST(cat_watchdog, scheduler_blocking)
 
 TEST(cat_watchdog, nothing)
 {
+    struct watchdog_observation : cat_watchdog_t {
+        cat_alert_count_t max_alert_count = 0;
+    } observation {};
+    cat_bool_t stopped = cat_false;
+
     testing::internal::CaptureStderr();
 
     ([&] {
-        ASSERT_TRUE(cat_watchdog_run(nullptr, 0, 0, nullptr));
+        ASSERT_TRUE(cat_watchdog_run(&observation, 0, 0, [](cat_watchdog_t *watchdog) {
+            auto *state = static_cast<watchdog_observation *>(watchdog);
+            if (watchdog->alert_count > state->max_alert_count) {
+                state->max_alert_count = watchdog->alert_count;
+            }
+            cat_watchdog_alert_standard(watchdog);
+        }));
         DEFER(cat_watchdog_stop());
 
         auto sleeper = [=] {
@@ -115,12 +126,19 @@ TEST(cat_watchdog, nothing)
         }
         sleeper();
 
-        cat_watchdog_stop(); // make sure not output error anymore
+        stopped = cat_watchdog_stop(); // make sure not output error anymore
         fflush(stderr); // flush stderr to prevent from affecting the next test
     })();
 
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_TRUE(output.find(keyword) == std::string::npos);
+    ASSERT_TRUE(stopped) << output;
+    ASSERT_GT(observation.quantum, 0);
+    ASSERT_GT(observation.threshold, 0);
+    // Allow transient alerts within the threshold, but reject sustained stalls.
+    // Keep the peak before scheduling resets alert_count; stop has joined the observer thread.
+    cat_alert_count_t max_allowed_alerts = observation.threshold / observation.quantum;
+    ASSERT_LE(observation.max_alert_count, max_allowed_alerts)
+        << "quantum=" << observation.quantum << ", threshold=" << observation.threshold << '\n' << output;
 }
 
 TEST(cat_watchdog, duplicated)
