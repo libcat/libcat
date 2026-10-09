@@ -257,6 +257,66 @@ TEST(cat_ssl, bio_handshake_and_binary_records)
 
 }
 
+TEST(cat_ssl, self_signed_and_expired_peer_certificates)
+{
+    for (bool expired : {false, true}) {
+        SCOPED_TRACE(expired);
+        X509KeyCertPairConfig config = {
+            {"keyType", "RSA2048"},
+            {"CN", "localhost"},
+            {"notBeforeOffsetSeconds", -3600},
+            {"notAfterOffsetSeconds", expired ? -1800 : 86400},
+        };
+        auto pair = X509KeyCertPair::create(config);
+        ASSERT_NE(pair, nullptr);
+        auto paths = pair->exportPEMs();
+        ASSERT_NE(paths.cert, nullptr);
+        ASSERT_NE(paths.key, nullptr);
+        cat_ssl_context_t *server_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(server_context, nullptr);
+        DEFER(cat_ssl_context_close(server_context));
+        ASSERT_TRUE(cat_ssl_context_set_certificate(server_context, paths.cert, paths.key));
+        cat_ssl_context_t *client_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(client_context, nullptr);
+        DEFER(cat_ssl_context_close(client_context));
+        // Let the handshake finish, then check the real verification result explicitly.
+        cat_ssl_context_disable_verify_peer(client_context);
+        if (expired) {
+            ASSERT_TRUE(cat_ssl_context_load_verify_locations(client_context, paths.cert, nullptr));
+        }
+        cat_ssl_t server = {}, client = {};
+        ASSERT_EQ(cat_ssl_create(&server, server_context), &server);
+        DEFER(cat_ssl_close(&server));
+        ASSERT_EQ(cat_ssl_create(&client, client_context), &client);
+        DEFER(cat_ssl_close(&client));
+        cat_ssl_set_accept_state(&server);
+        cat_ssl_set_connect_state(&client);
+        bool established = false;
+        for (size_t attempt = 0; attempt < 32; attempt++) {
+            cat_ssl_ret_t client_ret = cat_ssl_handshake(&client);
+            ASSERT_NE(client_ret, CAT_SSL_RET_ERROR);
+            ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&client, &server));
+            cat_ssl_ret_t server_ret = cat_ssl_handshake(&server);
+            ASSERT_NE(server_ret, CAT_SSL_RET_ERROR);
+            ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&server, &client));
+            if (client_ret == CAT_SSL_RET_OK && server_ret == CAT_SSL_RET_OK) {
+                established = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(established);
+        ASSERT_EQ(SSL_get_verify_result(client.connection),
+            expired ? X509_V_ERR_CERT_HAS_EXPIRED : X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT);
+        ASSERT_FALSE(cat_ssl_verify_peer(&client, cat_false));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECERT);
+        ASSERT_EQ(cat_ssl_verify_peer(&client, cat_true), !expired);
+        if (expired) {
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ECERT);
+        }
+        ASSERT_TRUE(cat_ssl_check_host(&client, CAT_STRL("localhost")));
+    }
+}
+
 TEST(cat_socket, crypto_setup_errors_and_timeout)
 {
     cat_socket_t server, client, connection;
