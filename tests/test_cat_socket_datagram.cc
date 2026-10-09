@@ -154,3 +154,62 @@ TEST(cat_socket, missing_datagram_destination_preserves_socket)
     ASSERT_EQ(cat_socket_recv(&receiver, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "packet");
 }
+
+TEST(cat_socket, datagram_cancel_receive_then_reuse)
+{
+    std::vector<cat_socket_type_t> types = {CAT_SOCKET_TYPE_UDP4};
+#ifdef CAT_OS_UNIX_LIKE
+    types.push_back(CAT_SOCKET_TYPE_UDG);
+#endif
+    for (cat_socket_type_t type : types) {
+        SCOPED_TRACE(cat_socket_type_get_name(type));
+        cat_socket_t receiver, sender;
+        ASSERT_EQ(cat_socket_create(&receiver, type), &receiver);
+        DEFER(cat_socket_close(&receiver));
+        ASSERT_EQ(cat_socket_create(&sender, type), &sender);
+        DEFER(cat_socket_close(&sender));
+        std::string address = type == CAT_SOCKET_TYPE_UDP4 ? TEST_LISTEN_IPV4 : get_random_path();
+        std::string sender_address = type == CAT_SOCKET_TYPE_UDP4 ? TEST_LISTEN_IPV4 : get_random_path();
+        ASSERT_TRUE(cat_socket_bind_to(&receiver, address.data(), address.length(), 0));
+        DEFER(if (type != CAT_SOCKET_TYPE_UDP4) { cat_fs_unlink(address.c_str()); });
+        ASSERT_TRUE(cat_socket_bind_to(&sender, sender_address.data(), sender_address.length(), 0));
+        DEFER(if (type != CAT_SOCKET_TYPE_UDP4) { cat_fs_unlink(sender_address.c_str()); });
+        int port = type == CAT_SOCKET_TYPE_UDP4 ? cat_socket_get_sock_port(&receiver) : 0;
+        for (bool peek : {false, true}) {
+            SCOPED_TRACE(peek);
+            ssize_t result = -2;
+            cat_errno_t error = 0;
+            bool done = false;
+            wait_group wg;
+            cat_coroutine_t *reader = co([&] {
+                wg++;
+                DEFER(wg--);
+                char buffer[8];
+                cat_sockaddr_union_t source;
+                cat_socklen_t source_length = sizeof(source);
+                if (peek) {
+                    result = cat_socket_peekfrom_ex(&receiver, buffer, sizeof(buffer),
+                        &source.common, &source_length, TEST_IO_TIMEOUT);
+                } else {
+                    result = cat_socket_recvfrom_ex(&receiver, buffer, sizeof(buffer),
+                        &source.common, &source_length, TEST_IO_TIMEOUT);
+                }
+                error = cat_get_last_error_code();
+                done = true;
+            });
+            DEFER(if (!done) { cat_coroutine_resume(reader, nullptr, nullptr); });
+            ASSERT_FALSE(done);
+            ASSERT_TRUE(cat_coroutine_resume(reader, nullptr, nullptr));
+            ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+            ASSERT_TRUE(done);
+            ASSERT_EQ(result, peek ? 0 : -1);
+            ASSERT_EQ(error, CAT_ECANCELED);
+            ASSERT_TRUE(cat_socket_is_available(&receiver));
+            ASSERT_EQ(cat_socket_get_io_state(&receiver), CAT_SOCKET_IO_FLAG_NONE);
+            ASSERT_TRUE(cat_socket_send_to(&sender, CAT_STRL("reuse"), address.data(), address.length(), port));
+            char buffer[CAT_STRLEN("reuse")];
+            ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT), sizeof(buffer));
+            ASSERT_EQ(std::string(buffer, sizeof(buffer)), "reuse");
+        }
+    }
+}
