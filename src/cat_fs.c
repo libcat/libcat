@@ -1393,6 +1393,10 @@ static void cat_fs_fread_cb(cat_data_t *ptr)
     if (0 != errno) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
+    } else if (data->size != 0 && data->ret.ret.num < data->nmemb && ferror(data->stream)) {
+        // Some C libraries set only the stream error indicator on failure.
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = EIO;
     }
 }
 
@@ -1454,6 +1458,9 @@ static void cat_fs_fwrite_cb(cat_data_t *ptr)
     if (0 != errno) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
+    } else if (data->size != 0 && data->ret.ret.num < data->nmemb && ferror(data->stream)) {
+        data->ret.error.type = CAT_FS_ERROR_ERRNO;
+        data->ret.error.val.error = EIO;
     }
 }
 

@@ -92,15 +92,42 @@ TEST(cat_fs, stdio_seek_and_write_state)
     ASSERT_EQ(cat_fs_fseek(stream, -1, SEEK_SET), -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
     ASSERT_EQ(cat_fs_ftell(stream), 0);
+    cat_clear_last_error();
     ASSERT_EQ(cat_fs_fwrite("x", 1, 1, stream), 0);
     ASSERT_NE(ferror(stream), 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
     clearerr(stream);
+    cat_clear_last_error();
     char buffer[8];
     ASSERT_EQ(cat_fs_fread(buffer, 1, sizeof(buffer), stream), 4);
     ASSERT_EQ(std::string(buffer, 4), "data");
     ASSERT_NE(feof(stream), 0);
     ASSERT_EQ(ferror(stream), 0);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
     ASSERT_EQ(cat_fs_ftell(stream), 4);
+}
+
+TEST(cat_fs, stdio_read_error_then_write_reuse)
+{
+    std::string path = get_random_path();
+    FILE *stream = fopen(path.c_str(), "w");
+    ASSERT_NE(stream, nullptr);
+    DEFER(cat_fs_unlink(path.c_str()));
+    DEFER(cat_fs_fclose(stream));
+    char buffer[8];
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_fread(buffer, 1, sizeof(buffer), stream), 0);
+    ASSERT_NE(ferror(stream), 0);
+    ASSERT_NE(cat_get_last_error_code(), 0);
+    cat_clear_last_error();
+    // A zero-sized operation does not report a previously latched stream error.
+    ASSERT_EQ(cat_fs_fread(buffer, 0, sizeof(buffer), stream), 0);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
+    clearerr(stream);
+    ASSERT_EQ(cat_fs_fwrite("data", 1, 4, stream), 4);
+    ASSERT_EQ(cat_fs_fflush(stream), 0);
+    ASSERT_EQ(ferror(stream), 0);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
 }
 
 TEST(cat_fs, stdio_closed_descriptor_errors)
