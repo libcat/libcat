@@ -110,6 +110,12 @@ Libcat's language, compatibility, dependency and validation requirements.
 
 ## Delivery
 
+- Keep Git history linear; do not create merge commits.
+- Group commits by one coherent behavior, defect or development rule. Keep the
+  implementation and its regression tests together. Separate independent changes,
+  but avoid splitting a complete change into mechanical micro-commits or bundling
+  unrelated changes into one large commit. Do not rewrite shared history to adjust
+  commit grouping.
 - Keep changes limited to the approved repair or request. Preserve unrelated code
   and comments; clean temporary diagnostic hooks and artifacts after recording
   useful evidence.
