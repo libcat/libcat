@@ -2320,7 +2320,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
             cat_ssl_peer_fingerprint_t *fps = (cat_ssl_peer_fingerprint_t *) cat_malloc(size);
 #if CAT_ALLOC_HANDLE_ERRORS
             if (unlikely(fps == NULL)) {
-                goto _setup_error;
+                goto _ssl_setup_error;
             }
 #endif
             char *p = (char *) fps + sizeof(cat_ssl_peer_fingerprint_t) * (count + 1);
@@ -2353,7 +2353,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
 
     if (ioptions.before_handshake_callback != NULL) {
         if (!ioptions.before_handshake_callback(ssl, ioptions.before_handshake_callback_data)) {
-            goto _setup_error;
+            goto _ssl_setup_error;
         }
     }
 
@@ -2448,6 +2448,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
         ioptions.after_handshake_callback(ssl, cat_false, ioptions.after_handshake_callback_data);
     }
     cat_socket_internal_unrecoverable_io_error(socket_i);
+    _ssl_setup_error:
     cat_ssl_close(ssl);
     if (0) {
         _setup_error:
