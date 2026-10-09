@@ -555,3 +555,76 @@ TEST(cat_buffer, make_pair)
     DEFER(cat_buffer_close(&write_buffer));
     ASSERT_EQ(read_buffer, write_buffer);
 }
+
+TEST(cat_buffer, append_formatted_values)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 1));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append_unsigned(&buffer, 42));
+    ASSERT_TRUE(cat_buffer_append_char(&buffer, ':'));
+    ASSERT_TRUE(cat_buffer_append_signed(&buffer, -17));
+    ASSERT_TRUE(cat_buffer_append_str(&buffer, ":"));
+    ASSERT_TRUE(cat_buffer_append_double(&buffer, 1.5));
+    ASSERT_TRUE(cat_buffer_append_printf(&buffer, ":%s:%d", "item", 3));
+    ASSERT_TRUE(cat_buffer_zero_terminate(&buffer));
+    ASSERT_STREQ(buffer.value, "42:-17:1.500000:item:3");
+    ASSERT_EQ(buffer.length, strlen(buffer.value));
+    ASSERT_EQ(cat_buffer_export_str(&buffer), buffer.value);
+}
+
+TEST(cat_buffer, append_with_padding)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append_str_with_padding(&buffer, "abc", '.', 8));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "..abc...");
+    cat_buffer_clear(&buffer);
+    ASSERT_TRUE(cat_buffer_append_with_padding(&buffer, CAT_STRL("ab"), '-', 2));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "ab");
+}
+
+TEST(cat_buffer, realloc_failure_preserves_data)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 16));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("content")));
+    char *value = buffer.value;
+    size_t size = buffer.size;
+    size_t length = buffer.length;
+    cat_buffer_allocator_t allocator = cat_buffer_allocator;
+    DEFER(cat_buffer_register_allocator(&allocator));
+    cat_buffer_allocator_t failing_allocator = allocator;
+    failing_allocator.realloc_function = [](char *, size_t) -> char * { return nullptr; };
+    ASSERT_TRUE(cat_buffer_register_allocator(&failing_allocator));
+
+    // 扩容失败不能丢弃已经写入的内容，也不能提前更新 size／length。
+    ASSERT_FALSE(cat_buffer_realloc(&buffer, size * 2));
+    ASSERT_FALSE(cat_buffer_write(&buffer, size, CAT_STRL("more")));
+    ASSERT_FALSE(cat_buffer_append_printf(&buffer, "%032d", 1));
+    ASSERT_EQ(buffer.value, value);
+    ASSERT_EQ(buffer.size, size);
+    ASSERT_EQ(buffer.length, length);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "content");
+}
+
+TEST(cat_buffer, pair_allocation_failure)
+{
+    cat_buffer_allocator_t allocator = cat_buffer_allocator;
+    DEFER(cat_buffer_register_allocator(&allocator));
+    cat_buffer_allocator_t failing_allocator = allocator;
+    // 只让第二个 buffer 的分配失败，验证第一个 buffer 会被释放。
+    failing_allocator.alloc_function = [](size_t size) -> char * {
+        return size == 16 ? nullptr : static_cast<char *>(cat_malloc(size));
+    };
+    failing_allocator.free_function = [](char *value) { cat_free(value); };
+    ASSERT_TRUE(cat_buffer_register_allocator(&failing_allocator));
+    cat_buffer_t first = {}, second = {};
+    ASSERT_FALSE(cat_buffer_make_pair(&first, 8, &second, 16));
+    ASSERT_EQ(first.value, nullptr);
+    ASSERT_EQ(first.length, 0);
+    ASSERT_EQ(first.size, 0);
+    ASSERT_EQ(second.value, nullptr);
+}

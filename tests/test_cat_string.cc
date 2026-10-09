@@ -92,6 +92,97 @@ TEST(cat_string, create)
     cat_string_close(&string);
 }
 
+TEST(cat_string, bounded_search_and_copy)
+{
+    const char input[] = "abc\0def";
+    ASSERT_EQ(cat_strnlen(input, sizeof(input)), 3);
+    ASSERT_EQ(cat_strnlen(input, 2), 2);
+    ASSERT_EQ(cat_strnlen(input, 0), 0);
+    ASSERT_EQ(cat_strlchr(input, input + 2, 'c'), nullptr);
+    ASSERT_EQ(cat_strlchr(input, input, 'a'), nullptr);
+    char output[sizeof(input)] = {};
+    ASSERT_EQ(cat_stpcpy(output, input), output + 3);
+    ASSERT_STREQ(output, "abc");
+    ASSERT_EQ(cat_stpcpy(output, ""), output);
+    ASSERT_STREQ(output, "");
+    ASSERT_TRUE(cat_str_is_print("", 0));
+    ASSERT_TRUE(cat_str_is_print(CAT_STRL("hello 123")));
+    ASSERT_FALSE(cat_str_is_print(input, sizeof(input)));
+}
+
+TEST(cat_string, formatted_string)
+{
+    size_t length = 0;
+    char *output = cat_slprintf("%s:%d", &length, "item", 42);
+    ASSERT_NE(output, nullptr);
+    DEFER(cat_free(output));
+    ASSERT_STREQ(output, "item:42");
+    ASSERT_EQ(length, strlen(output));
+    char *empty = cat_sprintf("%s", "");
+    ASSERT_NE(empty, nullptr);
+    DEFER(cat_free(empty));
+    ASSERT_STREQ(empty, "");
+}
+
+TEST(cat_string, list_contains_ci)
+{
+    const struct {
+        const char *list;
+        const char *value;
+        cat_bool_t contains;
+    } cases[] = {
+        {"one,two three", "TWO", cat_true},
+        {"one,two three", "three", cat_true},
+        {" , one,, two ,", "one", cat_true},
+        {"one,two", "on", cat_false},
+        {"one,two", "two more", cat_false},
+        {"", "one", cat_false},
+        {"one", "", cat_false},
+    };
+    for (const auto &c : cases) {
+        SCOPED_TRACE(c.list);
+        ASSERT_EQ(cat_str_list_contains_ci(c.list, c.value, strlen(c.value)), c.contains);
+    }
+}
+
+TEST(cat_string, quote_completion)
+{
+    char output[64];
+    size_t length = 0;
+    ASSERT_TRUE(cat_str_quote_ex2("abc", 3, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED, nullptr));
+    ASSERT_STREQ(output, "\"abc\"");
+    ASSERT_EQ(length, strlen(output));
+    ASSERT_FALSE(cat_str_quote_ex2("abcd", 3, output, nullptr,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_ELLIPSIS, nullptr));
+    ASSERT_STREQ(output, "\"abc...\"");
+    ASSERT_TRUE(cat_str_quote_ex2("a\0b", 3, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT, nullptr));
+    ASSERT_STREQ(output, " /* \"a\" */");
+    ASSERT_TRUE(cat_str_quote_ex2("a", 2, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_OMIT_TRAILING_0, nullptr));
+    ASSERT_STREQ(output, "\"a\"");
+    ASSERT_TRUE(cat_str_quote_ex2("a", 2, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_PRINT_ALL_STRINGS_IN_HEX, nullptr));
+    ASSERT_STREQ(output, "\"\\x61\"");
+    ASSERT_TRUE(cat_str_quote_ex2("a", 2, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCII_STRINGS_IN_HEX, nullptr));
+    ASSERT_STREQ(output, "\"a\"");
+
+    const char control[] = {'\x01', '\0'};
+    ASSERT_TRUE(cat_str_quote_ex2(control, sizeof(control), output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_PRINT_NON_ASCII_STRINGS_IN_HEX, nullptr));
+    ASSERT_STREQ(output, "\"\\x01\"");
+    ASSERT_TRUE(cat_str_quote_ex2("a\0b", 3, output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_ZERO_TERMINATED | CAT_STR_QUOTE_STYLE_FLAG_ELLIPSIS |
+        CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT, nullptr));
+    ASSERT_STREQ(output, " /* \"a...\" */");
+    const char octal[] = {'\x01', '2', '\x1f', '\x7f'};
+    ASSERT_FALSE(cat_str_quote_ex2(octal, sizeof(octal), output, &length,
+        CAT_STR_QUOTE_STYLE_FLAG_NONE, nullptr));
+    ASSERT_STREQ(output, "\"\\0012\\37\\177\"");
+}
+
 TEST(cat_string, byte_to_hexstr)
 {
     char out[3];
