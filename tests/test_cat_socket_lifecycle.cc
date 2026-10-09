@@ -161,6 +161,86 @@ TEST(cat_socket, stream_write_vector)
     }
 }
 
+TEST(cat_socket, raw_address_bind_connect_and_names)
+{
+    for (bool explicit_options : {false, true}) {
+        SCOPED_TRACE(explicit_options);
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        cat_sockaddr_info_t address = {};
+        address.address.common.sa_family = AF_INET;
+        address.length = sizeof(address.address);
+        ASSERT_TRUE(cat_sockaddr_getbyname(&address.address.common, &address.length, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        if (explicit_options) {
+            ASSERT_TRUE(cat_socket_bind_ex(&server, &address.address.common, address.length, CAT_SOCKET_BIND_FLAG_REUSEADDR));
+        } else {
+            ASSERT_TRUE(cat_socket_bind(&server, &address.address.common, address.length));
+        }
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        address.length = sizeof(address.address);
+        ASSERT_TRUE(cat_socket_getsockname(&server, &address.address.common, &address.length));
+        ASSERT_GT(cat_sockaddr_get_port(&address.address.common), 0);
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(cat_socket_close(&client));
+        if (explicit_options) {
+            ASSERT_TRUE(cat_socket_connect_ex(&client, &address.address.common, address.length, TEST_IO_TIMEOUT));
+        } else {
+            ASSERT_TRUE(cat_socket_connect(&client, &address.address.common, address.length));
+        }
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(cat_socket_close(&connection));
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_sockaddr_info_t peer;
+        peer.length = sizeof(peer.address);
+        ASSERT_TRUE(cat_socket_getpeername(&client, &peer.address.common, &peer.length));
+        ASSERT_EQ(cat_sockaddr_get_port(&peer.address.common), cat_socket_get_sock_port(&server));
+        const cat_sockaddr_info_t *cached = cat_socket_getsockname_fast(&client);
+        ASSERT_NE(cached, nullptr);
+        peer.length = sizeof(peer.address);
+        ASSERT_TRUE(cat_socket_getsockname(&client, &peer.address.common, &peer.length));
+        ASSERT_EQ(peer.length, cached->length);
+        ASSERT_EQ(cat_sockaddr_get_port(&peer.address.common), cat_sockaddr_get_port(&cached->address.common));
+        ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("raw-address")));
+        char buffer[CAT_STRLEN("raw-address")];
+        ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), "raw-address");
+    }
+}
+
+TEST(cat_socket, raw_address_validation_then_datagram_reuse)
+{
+    cat_socket_t receiver, sender;
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDP4), &sender);
+    DEFER(cat_socket_close(&sender));
+    cat_sockaddr_info_t address = {};
+    address.address.common.sa_family = AF_INET;
+    address.length = sizeof(address.address);
+    ASSERT_TRUE(cat_sockaddr_getbyname(&address.address.common, &address.length, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_FALSE(cat_socket_bind(&receiver, &address.address.common, CAT_SOCKADDR_HEADER_LENGTH));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_TRUE(cat_socket_bind(&receiver, &address.address.common, address.length));
+    address.length = sizeof(address.address);
+    ASSERT_TRUE(cat_socket_getsockname(&receiver, &address.address.common, &address.length));
+    ASSERT_TRUE(cat_socket_bind_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    cat_set_last_error_code(CAT_EBUSY);
+    ASSERT_EQ(cat_socket_try_sendto(&sender, CAT_STRL("bad"), &address.address.common, CAT_SOCKADDR_HEADER_LENGTH), CAT_EINVAL);
+    const cat_socket_write_vector_t vector = cat_socket_write_vector_init("bad", 3);
+    ASSERT_EQ(cat_socket_try_writeto(&sender, &vector, 1, &address.address.common, CAT_SOCKADDR_HEADER_LENGTH), CAT_EINVAL);
+    cat_sockaddr_info_t invalid = address;
+    invalid.address.common.sa_family = AF_UNSPEC;
+    ASSERT_EQ(cat_socket_try_sendto(&sender, CAT_STRL("bad"), &invalid.address.common, invalid.length), CAT_EAFNOSUPPORT);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+    ASSERT_EQ(cat_socket_try_sendto(&sender, CAT_STRL("valid"), &address.address.common, address.length), CAT_STRLEN("valid"));
+    char buffer[CAT_STRLEN("valid")];
+    ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "valid");
+    ASSERT_TRUE(cat_socket_is_available(&receiver));
+    ASSERT_TRUE(cat_socket_is_available(&sender));
+}
+
 TEST(cat_socket, accept_requires_lazy_connection)
 {
     cat_socket_t server, opened, unavailable, wrong_type;

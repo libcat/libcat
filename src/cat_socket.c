@@ -3630,7 +3630,7 @@ static ssize_t cat_socket_internal_try_write_raw(
     const cat_sockaddr_t *address, cat_socklen_t address_length
 )
 {
-    CAT_SOCKET_CHECK_INPUT_ADDRESS_SILENT(address, address_length, return cat_false);
+    CAT_SOCKET_CHECK_INPUT_ADDRESS_SILENT(address, address_length, return error);
     cat_bool_t is_dgram = (socket_i->type & CAT_SOCKET_TYPE_FLAG_DGRAM);
 
 #ifdef CAT_OS_UNIX_LIKE
