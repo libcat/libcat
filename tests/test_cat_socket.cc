@@ -1938,7 +1938,8 @@ TEST(cat_socket, send_file_to_remote_ssl_server)
     DEFER(cat_socket_close(client));
 
     ASSERT_TRUE(cat_socket_connect_to(client, TEST_REMOTE_HTTPS_SERVER));
-    ASSERT_TRUE(cat_socket_enable_crypto(client, nullptr));
+    ASSERT_TRUE(cat_socket_enable_crypto(client, nullptr))
+        << cat_get_last_error_code() << ": " << cat_get_last_error_message();
 
     char *request = cat_sprintf(
         "GET / HTTP/1.1\r\n"
