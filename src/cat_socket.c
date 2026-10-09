@@ -4797,7 +4797,8 @@ static cat_always_inline ssize_t cat_socket_mock_sendfile(cat_socket_t *socket, 
     }
     remain = length;
 
-    if (unlikely(cat_fs_lseek(file, (off_t) offset, SEEK_SET) != (off_t) offset)) {
+    off_t position = cat_fs_lseek(file, (off_t) offset, SEEK_SET);
+    if (unlikely(position < 0 || position != (off_t) offset)) {
         cat_update_last_error_with_previous("Socket sendfile failed when seek file");
         goto _error;
     }
