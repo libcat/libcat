@@ -18,6 +18,39 @@
 
 #include "test.h"
 
+#include <clocale>
+#include <cwchar>
+
+TEST(cat_string, formatting_encoding_failure_and_recovery)
+{
+    const char *locale = std::setlocale(LC_CTYPE, nullptr);
+    ASSERT_NE(locale, nullptr);
+    const std::string original_locale = locale;
+    DEFER(std::setlocale(LC_CTYPE, original_locale.c_str()));
+    ASSERT_NE(std::setlocale(LC_CTYPE, "C"), nullptr);
+    size_t length = 0;
+    char *valid = cat_slprintf("%s", &length, "valid");
+    ASSERT_NE(valid, nullptr);
+    DEFER(cat_free(valid));
+    ASSERT_EQ(length, CAT_STRLEN("valid"));
+    const wint_t character = static_cast<wint_t>(L'\u0100');
+    errno = 0;
+    ASSERT_EQ(cat_slprintf("%lc", &length, character), nullptr);
+    ASSERT_EQ(errno, EILSEQ);
+    ASSERT_EQ(length, 0);
+    ASSERT_EQ(cat_sprintf("%lc", character), nullptr);
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 16));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("prefix")));
+    errno = 0;
+    ASSERT_FALSE(cat_buffer_append_printf(&buffer, "%lc", character));
+    ASSERT_EQ(errno, EILSEQ);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "prefix");
+    ASSERT_TRUE(cat_buffer_append_printf(&buffer, "-%d", 7));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "prefix-7");
+}
+
 #define CAT_TEST_DEFAULT_STRING_LENGTH    16
 
 TEST(cat_string, hexprint)
