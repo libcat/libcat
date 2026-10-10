@@ -2279,6 +2279,12 @@ static inline void test_tty(int fd)
     ASSERT_EQ(ptr, &client);
     DEFER(cat_socket_close(&client));
     ASSERT_TRUE(cat_socket_is_available(&client));
+    ASSERT_GE(cat_socket_get_fd(&client), 0);
+    testing::internal::CaptureStdout();
+    cat_socket_dump_all();
+    const std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_NE(output.find(cat_socket_get_type_name(&client)), std::string::npos);
+    ASSERT_TRUE(cat_socket_is_available(&client));
 }
 
 TEST(cat_socket, tty_stdin)
