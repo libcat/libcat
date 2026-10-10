@@ -46,6 +46,30 @@ TEST(cat_socket, recreate_allocated)
     ASSERT_GT(cat_socket_get_sock_port(socket), 0);
 }
 
+TEST(cat_socket, rejected_creation_preserves_caller_storage)
+{
+    const cat_socket_type_t types[] = {
+        CAT_SOCKET_TYPE_ANY,
+        CAT_SOCKET_TYPE_TTY,
+        static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_FLAG_LOCAL),
+#ifdef CAT_OS_UNIX_LIKE
+        static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_UDG | CAT_SOCKET_TYPE_FLAG_IPC),
+#endif
+    };
+    for (cat_socket_type_t type : types) {
+        SCOPED_TRACE(type);
+        cat_socket_t socket;
+        cat_socket_init(&socket);
+        ASSERT_EQ(cat_socket_create(&socket, type), nullptr);
+        ASSERT_NE(cat_get_last_error_code(), 0);
+        ASSERT_FALSE(cat_socket_is_available(&socket));
+        ASSERT_EQ(cat_socket_create(nullptr, type), nullptr);
+        ASSERT_NE(cat_get_last_error_code(), 0);
+        ASSERT_EQ(cat_socket_create(&socket, CAT_SOCKET_TYPE_TCP4), &socket);
+        ASSERT_TRUE(cat_socket_close(&socket));
+    }
+}
+
 TEST(cat_socket, open_invalid_source)
 {
     cat_socket_t destination, source;
