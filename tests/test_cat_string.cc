@@ -53,6 +53,53 @@ TEST(cat_string, formatting_encoding_failure_and_recovery)
 
 #define CAT_TEST_DEFAULT_STRING_LENGTH    16
 
+TEST(cat_string, nullable_empty_strings)
+{
+    ASSERT_TRUE(cat_str_is_empty(nullptr));
+    ASSERT_TRUE(cat_str_is_empty(""));
+    ASSERT_EQ(cat_str_dempty(nullptr), nullptr);
+    ASSERT_EQ(cat_str_dempty(""), nullptr);
+    for (const char *value : {"text", " "}) {
+        ASSERT_FALSE(cat_str_is_empty(value));
+        ASSERT_EQ(cat_str_dempty(value), value);
+    }
+}
+
+TEST(cat_string, append_binary_data_preserves_boundaries)
+{
+    char output[8];
+    memset(output, '#', sizeof(output));
+    const char data[] = {'a', '\0', 'b'};
+    char *end = cat_strnappend(output + 1, data, sizeof(data));
+    ASSERT_EQ(end, output + 1 + sizeof(data));
+    ASSERT_EQ(memcmp(output + 1, data, sizeof(data)), 0);
+    ASSERT_EQ(output[0], '#');
+    ASSERT_EQ(*end, '#');
+    ASSERT_EQ(cat_strnappend(end, data, 0), end);
+    end = cat_strnappend(end, "c", 1);
+    ASSERT_EQ(end, output + 5);
+    ASSERT_EQ(end[-1], 'c');
+    ASSERT_EQ(*end, '#');
+}
+
+TEST(cat_string, const_string_borrows_exact_range)
+{
+    cat_const_string_t view;
+    cat_const_string_init(&view);
+    ASSERT_EQ(view.data, nullptr);
+    ASSERT_EQ(view.length, 0);
+    char data[] = {'a', '\0', 'b'};
+    cat_const_string_create(&view, data, sizeof(data));
+    ASSERT_EQ(view.data, data);
+    ASSERT_EQ(view.length, sizeof(data));
+    ASSERT_EQ(memcmp(view.data, data, view.length), 0);
+    data[2] = 'c';
+    ASSERT_EQ(view.data[2], 'c');
+    cat_const_string_create(&view, nullptr, 0);
+    ASSERT_EQ(view.data, nullptr);
+    ASSERT_EQ(view.length, 0);
+}
+
 TEST(cat_string, hexprint)
 {
     char in[] = "hello";
