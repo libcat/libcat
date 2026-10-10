@@ -317,6 +317,74 @@ TEST(cat_buffer, extend_no_zero_size)
     ASSERT_NE(nullptr, buffer.value);
 }
 
+TEST(cat_buffer, prepare_rejects_size_overflow)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("abc")));
+    char *value = buffer.value;
+    size_t size = buffer.size;
+    ASSERT_FALSE(cat_buffer_prepare(&buffer, SIZE_MAX));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(buffer.value, value);
+    ASSERT_EQ(buffer.size, size);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abc");
+    ASSERT_TRUE(cat_buffer_prepare(&buffer, 1));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("d")));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abcd");
+}
+
+TEST(cat_buffer, growth_rejects_size_overflow)
+{
+    const size_t largest_aligned = SIZE_MAX - (CAT_MEMORY_DEFAULT_ALIGNED_SIZE - 1);
+    ASSERT_EQ(cat_buffer_align_size(largest_aligned, 0), largest_aligned);
+    ASSERT_EQ(cat_buffer_align_size(largest_aligned + 1, 0), 0);
+    ASSERT_EQ(cat_buffer_align_size(SIZE_MAX, 0), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(cat_buffer_align_size(SIZE_MAX, 1), SIZE_MAX);
+    cat_buffer_t buffer;
+    cat_buffer_init(&buffer);
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_FALSE(cat_buffer_extend(&buffer, SIZE_MAX));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(buffer.value, nullptr);
+    ASSERT_EQ(buffer.size, 0);
+    ASSERT_EQ(buffer.length, 0);
+    ASSERT_TRUE(cat_buffer_alloc(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("abc")));
+    char *value = buffer.value;
+    size_t size = buffer.size;
+    ASSERT_FALSE(cat_buffer_extend(&buffer, SIZE_MAX));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(buffer.value, value);
+    ASSERT_EQ(buffer.size, size);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abc");
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("d")));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abcd");
+}
+
+TEST(cat_buffer, writes_reject_size_overflow)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("abc")));
+    char *value = buffer.value;
+    size_t size = buffer.size;
+    errno = 0;
+    ASSERT_FALSE(cat_buffer_write(&buffer, SIZE_MAX, "x", 1));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(errno, cat_orig_errno(CAT_EOVERFLOW));
+    ASSERT_FALSE(cat_buffer_append(&buffer, "x", SIZE_MAX));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(buffer.value, value);
+    ASSERT_EQ(buffer.size, size);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abc");
+    ASSERT_TRUE(cat_buffer_write(&buffer, 1, "x", 1));
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "axc");
+}
+
 TEST(cat_buffer, malloc_trim)
 {
     cat_buffer_t buffer = { };
