@@ -1760,13 +1760,24 @@ static cat_always_inline cat_bool_t cat_socket_accept_impl(cat_socket_t *server,
         cat_update_last_error(CAT_EMISUSE, "Socket accept can only act on a lazy socket");
         return cat_false;
     }
+    if (unlikely(connection_i->io_flags != CAT_SOCKET_IO_FLAG_NONE)) {
+        cat_update_last_error(CAT_ELOCKED, "Socket accept destination is already in use");
+        return cat_false;
+    }
 
+    /* Closing either socket must cancel the wait before the destination is released. */
+    connection_i->context.accept.coroutine = CAT_COROUTINE_G(current);
+    connection_i->io_flags = CAT_SOCKET_IO_FLAG_ACCEPT;
+    cat_bool_t ret;
     if (!(server_i->type & CAT_SOCKET_TYPE_FLAG_IPC)) {
-        return cat_socket_internal_accept(server_i, connection_i, NULL, timeout);
+        ret = cat_socket_internal_accept(server_i, connection_i, NULL, timeout);
     } else {
         CAT_LOG_DEBUG_V2(SOCKET, "accept() via IPC");
-        return cat_socket_internal_recv_handle(server_i, connection_i, timeout);
+        ret = cat_socket_internal_recv_handle(server_i, connection_i, timeout);
     }
+    connection_i->io_flags = CAT_SOCKET_IO_FLAG_NONE;
+    connection_i->context.accept.coroutine = NULL;
+    return ret;
 }
 
 #define CAT_LOG_DEBUG_SOCKET_ESTABLISHED(socket, action, ret) \

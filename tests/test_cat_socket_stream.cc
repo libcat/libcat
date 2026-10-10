@@ -141,6 +141,53 @@ TEST(cat_socket, close_cancels_pending_accept)
     ASSERT_FALSE(cat_socket_is_established(&connection));
 }
 
+TEST(cat_socket, closing_accept_destination_cancels_wait)
+{
+    cat_socket_t server, connection;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); });
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+    wait_group wg;
+    bool completed = false;
+    cat_bool_t accepted = cat_true;
+    cat_errno_t error = 0;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        accepted = cat_socket_accept(&server, &connection);
+        error = cat_get_last_error_code();
+        completed = true;
+    });
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); } wg(TEST_IO_TIMEOUT));
+    ASSERT_FALSE(completed);
+    ASSERT_EQ(cat_socket_get_io_state(&server), CAT_SOCKET_IO_FLAG_ACCEPT);
+    ASSERT_EQ(cat_socket_get_io_state(&connection), CAT_SOCKET_IO_FLAG_ACCEPT);
+    cat_socket_t other_server;
+    ASSERT_EQ(cat_socket_create(&other_server, CAT_SOCKET_TYPE_TCP4), &other_server);
+    DEFER(cat_socket_close(&other_server));
+    ASSERT_TRUE(cat_socket_bind_to(&other_server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&other_server, TEST_SERVER_BACKLOG));
+    ASSERT_FALSE(cat_socket_accept_ex(&other_server, &connection, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+    ASSERT_TRUE(cat_socket_close(&connection));
+    ASSERT_TRUE(completed);
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_FALSE(accepted);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    ASSERT_TRUE(cat_socket_is_available(&server));
+    ASSERT_EQ(cat_socket_get_io_state(&server), CAT_SOCKET_IO_FLAG_NONE);
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    cat_socket_t client;
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+    ASSERT_TRUE(cat_socket_is_established(&connection));
+}
+
 TEST(cat_socket, failed_second_listener_can_recreate)
 {
     cat_socket_t first, second;
