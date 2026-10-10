@@ -45,6 +45,17 @@ TEST(cat_fs, invalid_file_descriptor)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
 }
 
+TEST(cat_fs, copyfile_rejects_unsupported_flags)
+{
+    const std::string path = get_random_path();
+    const std::string destination = get_random_path();
+    ASSERT_EQ(cat_fs_copyfile(path.c_str(), destination.c_str(), -1), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(errno, EINVAL);
+    ASSERT_FALSE(file_exists(path.c_str()));
+    ASSERT_FALSE(file_exists(destination.c_str()));
+}
+
 TEST(cat_fs, flock_invalid_operation)
 {
     ASSERT_EQ(cat_fs_flock(CAT_OS_INVALID_FD, 0), -1);
