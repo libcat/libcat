@@ -21,6 +21,21 @@
 
 #include "cat_atomic.h"
 
+extern "C" const char *cat_test_atomic_c_operations(cat_timeout_t timeout);
+extern "C" const char *cat_test_atomic_c_publication(cat_timeout_t timeout);
+
+TEST(cat_atomic, c_operations)
+{
+    const char *failure = cat_test_atomic_c_operations(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << failure;
+}
+
+TEST(cat_atomic, c_release_acquire_publication)
+{
+    const char *failure = cat_test_atomic_c_publication(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << failure;
+}
+
 TEST(cat_atomic, base)
 {
 #define CAT_ATOMIC_NUMERIC_TEST_MAP(XX) \

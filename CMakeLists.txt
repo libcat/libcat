@@ -999,6 +999,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_watchdog.cc
         tests/test_cat_process.cc
         tests/test_cat_atomic.cc
+        tests/test_cat_atomic_c.c
         tests/test_cat_http.cc
         tests/test_cat_http_errors.cc
         tests/test_cat_websocket.cc
@@ -1020,7 +1021,10 @@ if (LIBCAT_BUILD_TESTS)
         set_property(TARGET cat_tests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     endif()
     target_compile_definitions(cat_tests PRIVATE ${cat_defines})
-    target_compile_options(cat_tests PRIVATE ${cat_cxxflags})
+    target_compile_options(cat_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:C>:${cat_cflags}>"
+        "$<$<COMPILE_LANGUAGE:CXX>:${cat_cxxflags}>"
+    )
     target_include_directories(cat_tests PRIVATE /tests/test.h ${cat_includes} ${GTEST_INCLUDE_DIRS})
     # NOTE: gtest may needs gtest_main before its linking (on windows), that's strange
     target_link_libraries(cat_tests PRIVATE cat ${CAT_GTEST_MAIN_LIBRARIES} ${CAT_GTEST_LIBRARIES})
