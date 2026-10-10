@@ -646,3 +646,43 @@ TEST(cat_buffer, pair_allocation_failure)
     ASSERT_EQ(first.size, 0);
     ASSERT_EQ(second.value, nullptr);
 }
+
+TEST(cat_buffer, allocator_receives_length_updates)
+{
+    const unsigned int debug_level = CAT_LOG_G(debug_level);
+    DEFER(CAT_LOG_G(debug_level) = debug_level);
+    CAT_LOG_G(debug_level) = 0;
+    const cat_buffer_allocator_t original = cat_buffer_allocator;
+    DEFER(cat_buffer_register_allocator(&original));
+    static char *updated_value;
+    static size_t updated_length, updates;
+    updated_value = nullptr;
+    updated_length = updates = 0;
+    cat_buffer_allocator_t allocator = original;
+    allocator.update_function = [](char *value, size_t length) {
+        updated_value = value;
+        updated_length = length;
+        updates++;
+    };
+    ASSERT_TRUE(cat_buffer_register_allocator(&allocator));
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("abc")));
+    ASSERT_EQ(updates, 1);
+    ASSERT_EQ(updated_value, buffer.value);
+    ASSERT_EQ(updated_length, buffer.length);
+    ASSERT_EQ(updated_length, 3);
+    // Overwriting existing bytes does not change the length reported to the allocator.
+    ASSERT_TRUE(cat_buffer_write(&buffer, 1, CAT_STRL("Z")));
+    ASSERT_EQ(updates, 1);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "aZc");
+    cat_buffer_truncate(&buffer, 1);
+    ASSERT_EQ(updates, 2);
+    ASSERT_EQ(updated_length, 1);
+    ASSERT_EQ(updated_value, buffer.value);
+    cat_buffer_clear(&buffer);
+    ASSERT_EQ(updates, 3);
+    ASSERT_EQ(updated_length, 0);
+    ASSERT_EQ(updated_value, buffer.value);
+}
