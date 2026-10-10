@@ -598,8 +598,19 @@ static cat_always_inline cat_bool_t cat_socket_internal_is_established(cat_socke
 #define CAT_SOCKET_INTERNAL_INET_STREAM_ONLY(_socket_i, _failure) \
     CAT_SOCKET_INTERNAL_WHICH_ONLY(_socket_i, CAT_SOCKET_TYPE_FLAG_STREAM | CAT_SOCKET_TYPE_FLAG_INET, "Socket should be type of inet stream", _failure);
 
+/* TCP and UDP share INET, and TCP and PIPE share STREAM; match the whole protocol type. */
+#define CAT_SOCKET_INTERNAL_TYPE_ONLY(_socket_i, _type, _errstr, _failure) do { \
+    if ((_socket_i->type & (_type)) != (_type)) { \
+        cat_update_last_error(CAT_EMISUSE, _errstr); \
+        _failure; \
+    } \
+} while (0)
+
 #define CAT_SOCKET_INTERNAL_TCP_ONLY(_socket_i, _failure) \
-    CAT_SOCKET_INTERNAL_WHICH_ONLY(_socket_i, CAT_SOCKET_TYPE_TCP, "Socket is not of type TCP", _failure)
+    CAT_SOCKET_INTERNAL_TYPE_ONLY(_socket_i, CAT_SOCKET_TYPE_TCP, "Socket is not of type TCP", _failure)
+
+#define CAT_SOCKET_INTERNAL_UDP_ONLY(_socket_i, _failure) \
+    CAT_SOCKET_INTERNAL_TYPE_ONLY(_socket_i, CAT_SOCKET_TYPE_UDP, "Socket is not of type UDP", _failure)
 
 #define CAT_SOCKET_INTERNAL_WHICH_SIDE_ONLY(_socket_i, _name, _errstr, _failure) do { \
     if (!(_socket_i->flags & CAT_SOCKET_INTERNAL_FLAG_##_name)) { \
@@ -5636,7 +5647,7 @@ CAT_API cat_bool_t cat_socket_get_udp_broadcast(const cat_socket_t *socket)
 CAT_API cat_bool_t cat_socket_set_udp_broadcast(cat_socket_t *socket, cat_bool_t enable)
 {
     CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
-    CAT_SOCKET_INTERNAL_TCP_ONLY(socket_i, return cat_false);
+    CAT_SOCKET_INTERNAL_UDP_ONLY(socket_i, return cat_false);
     int error;
 
     CAT_SOCKET_INTERNAL_SET_FLAG(socket_i, UDP_BROADCAST, enable);

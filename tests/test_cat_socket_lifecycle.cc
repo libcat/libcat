@@ -70,6 +70,50 @@ TEST(cat_socket, rejected_creation_preserves_caller_storage)
     }
 }
 
+TEST(cat_socket, protocol_options_require_matching_socket_type)
+{
+    for (cat_socket_type_t type : {
+        CAT_SOCKET_TYPE_UDP, CAT_SOCKET_TYPE_UDP4, CAT_SOCKET_TYPE_PIPE, CAT_SOCKET_TYPE_IPCC,
+#ifdef CAT_OS_UNIX_LIKE
+        CAT_SOCKET_TYPE_UDG,
+#endif
+    }) {
+        SCOPED_TRACE(type);
+        cat_socket_t socket;
+        ASSERT_EQ(cat_socket_create(&socket, type), &socket);
+        DEFER(cat_socket_close(&socket));
+        const cat_bool_t nodelay = cat_socket_get_tcp_nodelay(&socket);
+        const cat_bool_t keepalive = cat_socket_get_tcp_keepalive(&socket);
+        const unsigned int delay = cat_socket_get_tcp_keepalive_delay(&socket);
+        ASSERT_FALSE(cat_socket_set_tcp_nodelay(&socket, cat_false));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+        ASSERT_FALSE(cat_socket_set_tcp_keepalive(&socket, cat_true, 1));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+        ASSERT_EQ(cat_socket_get_tcp_nodelay(&socket), nodelay);
+        ASSERT_EQ(cat_socket_get_tcp_keepalive(&socket), keepalive);
+        ASSERT_EQ(cat_socket_get_tcp_keepalive_delay(&socket), delay);
+        if (type == CAT_SOCKET_TYPE_UDP || type == CAT_SOCKET_TYPE_UDP4) {
+            ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_true));
+            ASSERT_TRUE(cat_socket_get_udp_broadcast(&socket));
+            ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+            ASSERT_TRUE(cat_socket_set_udp_broadcast(&socket, cat_false));
+            ASSERT_FALSE(cat_socket_get_udp_broadcast(&socket));
+        } else {
+            ASSERT_FALSE(cat_socket_set_udp_broadcast(&socket, cat_true));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+            ASSERT_FALSE(cat_socket_get_udp_broadcast(&socket));
+        }
+        ASSERT_TRUE(cat_socket_is_available(&socket));
+    }
+    cat_socket_t tcp;
+    ASSERT_EQ(cat_socket_create(&tcp, CAT_SOCKET_TYPE_TCP4), &tcp);
+    DEFER(cat_socket_close(&tcp));
+    ASSERT_FALSE(cat_socket_set_udp_broadcast(&tcp, cat_true));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+    ASSERT_FALSE(cat_socket_get_udp_broadcast(&tcp));
+    ASSERT_TRUE(cat_socket_is_available(&tcp));
+}
+
 TEST(cat_socket, open_invalid_source)
 {
     cat_socket_t destination, source;
