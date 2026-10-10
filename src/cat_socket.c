@@ -4722,6 +4722,20 @@ static cat_bool_t cat_socket_internal_recv_handle(cat_socket_internal_t *socket_
 # define CAT_SOCKET_MOCK_SENDFILE 1
 #endif
 
+static cat_always_inline void cat_socket_internal_sendfile_wait_start(cat_socket_internal_t *socket_i)
+{
+    socket_i->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
+    cat_queue_push_back(&socket_i->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
+}
+
+static cat_always_inline void cat_socket_internal_sendfile_wait_end(cat_socket_internal_t *socket_i)
+{
+    cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
+    if (cat_queue_empty(&socket_i->context.io.write.coroutines)) {
+        socket_i->io_flags ^= CAT_SOCKET_IO_FLAG_WRITE;
+    }
+}
+
 #ifdef CAT_SOCKET_NATIVE_SENDFILE
 static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_internal_t *socket_i, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
 {
@@ -4738,18 +4752,22 @@ static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_
     }
     remain = length;
     while (remain > 0) {
+        cat_socket_internal_sendfile_wait_start(socket_i);
         int written = cat_fs_sendfile(
             fd, file, start, CAT_MIN(remain, max_non_lfs)
         );
+        cat_socket_internal_sendfile_wait_end(socket_i);
         CAT_LOG_DEBUG_V2(SOCKET,
             "fs_sendfile(" CAT_SOCKET_FD_FMT ", " CAT_OS_FD_FMT ", %" PRId64 ", %zu) = " CAT_LOG_INT_RET_FMT,
             fd, file, start, CAT_MIN(remain, max_non_lfs), CAT_LOG_INT_RET_C(written));
         if (unlikely(written < 0)) {
             if (cat_get_last_error_code() == CAT_EAGAIN) {
                 cat_ret_t ret;
+                cat_socket_internal_sendfile_wait_start(socket_i);
                 CAT_TIME_WAIT_START() {
                     ret = cat_poll_one(fd, POLLOUT, NULL, timeout);
                 } CAT_TIME_WAIT_END(timeout);
+                cat_socket_internal_sendfile_wait_end(socket_i);
                 if (unlikely(ret != CAT_RET_OK)) {
                     if (ret == CAT_RET_ERROR) {
                         cat_update_last_error_with_previous("Socket sendfile failed when poll writable");
@@ -4797,7 +4815,9 @@ static cat_always_inline ssize_t cat_socket_mock_sendfile(cat_socket_t *socket, 
     }
     remain = length;
 
+    cat_socket_internal_sendfile_wait_start(socket_i);
     off_t position = cat_fs_lseek(file, (off_t) offset, SEEK_SET);
+    cat_socket_internal_sendfile_wait_end(socket_i);
     if (unlikely(position < 0 || position != (off_t) offset)) {
         cat_update_last_error_with_previous("Socket sendfile failed when seek file");
         goto _error;
@@ -4811,7 +4831,9 @@ static cat_always_inline ssize_t cat_socket_mock_sendfile(cat_socket_t *socket, 
     }
 
     while (remain > 0) {
+        cat_socket_internal_sendfile_wait_start(socket_i);
         ssize_t read_n = cat_fs_read(file, buffer, n);
+        cat_socket_internal_sendfile_wait_end(socket_i);
         if (unlikely(read_n < 0)) {
             cat_update_last_error_with_previous("Socket sendfile failed when read file");
             goto _io_error;
@@ -4852,7 +4874,11 @@ static cat_always_inline ssize_t cat_socket_send_file_impl(cat_socket_t *socket,
     cat_file_t file;
     ssize_t written;
 
+    // File-system and poll waits must be canceled before close callbacks can free socket_i.
+    // Register only these waits; the TLS send already registers the same coroutine node.
+    cat_socket_internal_sendfile_wait_start(socket_i);
     file = cat_fs_open(filename, CAT_FS_OPEN_FLAG_RDONLY);
+    cat_socket_internal_sendfile_wait_end(socket_i);
     if (unlikely(file < 0)) {
         cat_update_last_error_with_previous("Socket sendfile failed when open file");
         return -1;
@@ -4886,13 +4912,16 @@ CAT_API ssize_t cat_socket_send_file(cat_socket_t *socket, const char *filename,
 
 CAT_API ssize_t cat_socket_send_file_ex(cat_socket_t *socket, const char *filename, int64_t offset, size_t length, cat_timeout_t timeout)
 {
+#ifdef CAT_ENABLE_DEBUG_LOG
+    cat_socket_id_t id = socket->id;
+#endif
     CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %" PRId64 ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR,
-        socket->id, filename, offset, length, timeout);
+        id, filename, offset, length, timeout);
 
     ssize_t written = cat_socket_send_file_impl(socket, filename, offset, length, timeout);
 
     CAT_LOG_DEBUG(SOCKET, "send_file(" CAT_SOCKET_ID_FMT ", \"%s\", %" PRId64 ", %zu, " CAT_TIMEOUT_FMT ") = " CAT_LOG_SSIZE_RET_FMT,
-        socket->id, filename, offset, length, timeout, CAT_LOG_SSIZE_RET_C(written));
+        id, filename, offset, length, timeout, CAT_LOG_SSIZE_RET_C(written));
 
     return written;
 }

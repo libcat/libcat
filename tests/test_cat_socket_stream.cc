@@ -120,6 +120,52 @@ TEST(cat_socket, failed_second_listener_can_recreate)
 }
 
 #ifdef CAT_OS_UNIX_LIKE
+TEST(cat_socket, close_during_sendfile_open_cancels_transfer)
+{
+    cat_socket_t server, sender, receiver;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+    DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+    ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+    const std::string path = get_random_path();
+    ASSERT_EQ(mkfifo(path.c_str(), S_IRUSR | S_IWUSR), 0);
+    DEFER(unlink(path.c_str()));
+    wait_group wg;
+    ssize_t sent = 0;
+    cat_errno_t error = 0;
+    bool done = false;
+    int peer = -1;
+    DEFER(if (peer < 0) { peer = open(path.c_str(), O_RDWR | O_NONBLOCK); }
+        wg(TEST_IO_TIMEOUT); cat_coroutine_wait_all(); if (peer >= 0) { close(peer); });
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        sent = cat_socket_send_file_ex(&sender, path.c_str(), 0, 1, TEST_IO_TIMEOUT);
+        error = cat_get_last_error_code();
+        done = true;
+    });
+    ASSERT_FALSE(done);
+    ASSERT_TRUE(cat_socket_close(&sender));
+    // Let the previous round's close callbacks release the handle before the open completes.
+    cat_event_round_t closed_at = cat_event_get_round();
+    while (cat_event_get_round() <= closed_at + 1) {
+        ASSERT_TRUE(cat_time_delay(0));
+    }
+    peer = open(path.c_str(), O_RDWR | O_NONBLOCK);
+    ASSERT_GE(peer, 0);
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(done);
+    ASSERT_EQ(sent, -1);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+}
+
 TEST(cat_socket, blocked_stream_write_timeout_and_close)
 {
     for (bool close_while_writing : {false, true}) {
@@ -173,5 +219,54 @@ TEST(cat_socket, blocked_stream_write_timeout_and_close)
         ASSERT_LT(received.size(), data.size());
         ASSERT_EQ(received, data.substr(0, received.size()));
     }
+}
+
+TEST(cat_socket, close_during_sendfile_transfer_releases_allocated_socket)
+{
+    cat_socket_t server, receiver;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    cat_socket_t *sender = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP4);
+    ASSERT_NE(sender, nullptr);
+    bool available = true;
+    DEFER(if (available) { cat_socket_close(sender); });
+    ASSERT_TRUE(cat_socket_connect_to(sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+    ASSERT_GT(cat_socket_set_send_buffer_size(sender, 4096), 0);
+    ASSERT_GT(cat_socket_set_recv_buffer_size(&receiver, 4096), 0);
+    size_t capacity = static_cast<size_t>(cat_socket_get_send_buffer_size(sender)) +
+        static_cast<size_t>(cat_socket_get_recv_buffer_size(&receiver));
+    const std::string data(capacity * 64, 'f');
+    const std::string path = get_random_path();
+    ASSERT_EQ(cat_fs_put_contents(path.c_str(), data.data(), data.size()), static_cast<ssize_t>(data.size()));
+    DEFER(cat_fs_unlink(path.c_str()));
+    wait_group wg;
+    bool done = false;
+    ssize_t sent = 0;
+    cat_errno_t error = 0;
+    DEFER(if (available) { available = false; cat_socket_close(sender); } wg(TEST_IO_TIMEOUT));
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        sent = cat_socket_send_file_ex(sender, path.c_str(), 0, data.size(), TEST_IO_TIMEOUT);
+        error = cat_get_last_error_code();
+        done = true;
+    });
+    char byte;
+    // Real transfer progress distinguishes this close from cancellation while opening the file.
+    ASSERT_EQ(cat_socket_peek_ex(&receiver, &byte, sizeof(byte), TEST_IO_TIMEOUT), sizeof(byte));
+    ASSERT_EQ(byte, 'f');
+    ASSERT_FALSE(done);
+    ASSERT_EQ(cat_socket_get_io_state(sender), CAT_SOCKET_IO_FLAG_WRITE);
+    available = false;
+    ASSERT_TRUE(cat_socket_close(sender));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(done);
+    ASSERT_EQ(sent, -1);
+    ASSERT_EQ(error, CAT_ECANCELED);
 }
 #endif
