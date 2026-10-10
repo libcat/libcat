@@ -149,8 +149,18 @@ TEST(cat_ssl, encrypted_private_key)
     ASSERT_TRUE(cat_ssl_context_set_passphrase(context, CAT_STRL("wrong passphrase")));
     ASSERT_FALSE(cat_ssl_context_set_certificate(context, paths.cert, paths.key));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+    std::string oversized_passphrase(PEM_BUFSIZE * 2, 'x');
+    ASSERT_TRUE(cat_ssl_context_set_passphrase(context, oversized_passphrase.data(), oversized_passphrase.length()));
+    ASSERT_FALSE(cat_ssl_context_set_certificate(context, paths.cert, paths.key));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
     ASSERT_TRUE(cat_ssl_context_set_passphrase(context, CAT_STRL(passphrase)));
     ASSERT_TRUE(cat_ssl_context_set_certificate(context, paths.cert, paths.key));
+    const std::string certificate = file_get_contents(paths.cert);
+    const std::string private_key = file_get_contents(paths.key);
+    ASSERT_FALSE(certificate.empty());
+    ASSERT_FALSE(private_key.empty());
+    ASSERT_TRUE(file_put_contents(paths.cert, certificate + private_key));
+    ASSERT_TRUE(cat_ssl_context_set_certificate(context, paths.cert, nullptr));
 }
 
 TEST(cat_ssl, connection_without_peer)
