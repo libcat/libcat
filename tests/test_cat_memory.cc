@@ -176,3 +176,43 @@ TEST(cat_memory, ntoh64)
     num = cat_ntoh64(1125899906842624);
     ASSERT_EQ(1024, num);
 }
+
+#ifdef CAT_USE_DYNAMIC_ALLOCATOR
+TEST(cat_memory, dynamic_allocator_obeys_oom_policy)
+{
+    const cat_allocator_t original = cat_allocator;
+    const cat_allocator_t failing = {
+        [](size_t) -> void * { errno = ENOMEM; return nullptr; },
+        [](size_t, size_t) -> void * { errno = ENOMEM; return nullptr; },
+        [](void *, size_t) -> void * { errno = ENOMEM; return nullptr; },
+        original.free,
+    };
+#if CAT_ALLOC_ABORT_ON_OOM && GTEST_HAS_DEATH_TEST
+    ASSERT_EXIT({
+        cat_register_allocator(&failing);
+        cat_malloc(CAT_TEST_DEFAULT_MEMORY_SIZE);
+        std::exit(1);
+    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+    ASSERT_EXIT({
+        cat_register_allocator(&failing);
+        cat_calloc(1, CAT_TEST_DEFAULT_MEMORY_SIZE);
+        std::exit(1);
+    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+    ASSERT_EXIT({
+        cat_register_allocator(&failing);
+        cat_realloc(nullptr, CAT_TEST_DEFAULT_MEMORY_SIZE);
+        std::exit(1);
+    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+#elif !CAT_ALLOC_ABORT_ON_OOM
+    ASSERT_TRUE(cat_register_allocator(&failing));
+    void *allocated = cat_malloc(CAT_TEST_DEFAULT_MEMORY_SIZE);
+    void *zeroed = cat_calloc(1, CAT_TEST_DEFAULT_MEMORY_SIZE);
+    void *resized = cat_realloc(nullptr, CAT_TEST_DEFAULT_MEMORY_SIZE);
+    // Restore before GoogleTest can allocate to report a result.
+    ASSERT_TRUE(cat_register_allocator(&original));
+    EXPECT_EQ(allocated, nullptr);
+    EXPECT_EQ(zeroed, nullptr);
+    EXPECT_EQ(resized, nullptr);
+#endif
+}
+#endif
