@@ -29,7 +29,9 @@ TEST(cat_os_wait, fork_restores_child_event_loop)
     ASSERT_GE(pid, 0);
     if (pid == 0) {
         // The public fork wrapper must leave coroutine timers usable in the child.
-        std::exit(cat_time_delay(0) ? 0 : 1);
+        cat_socket_close_all();
+        // Inherited fixture destructors would remove the parent's certificate files.
+        _exit(cat_time_delay(0) ? 0 : 1);
     }
     bool reaped = false;
     DEFER(if (!reaped) { kill(pid, SIGTERM); waitpid(pid, nullptr, 0); });
