@@ -209,3 +209,51 @@ TEST(cat_http_parser, invalid_multipart_metadata_preserves_http_body)
         }
     }
 }
+
+TEST(cat_http_parser, malformed_multipart_body_and_reset)
+{
+    const char *bodies[] = {
+        "--wrong\r\n",
+        "--testX\n",
+        "--test\rX",
+        "--test\r\nInvalid@: value\r\n\r\nabc\r\n--test--\r\n",
+        "--test\r\nHeader: value\rX\r\nabc\r\n--test--\r\n",
+        "--test\r\n\rXabc\r\n--test--\r\n",
+        "--test\r\n\r\nabc\r\n--test-X",
+    };
+    for (const char *body : bodies) {
+        SCOPED_TRACE(body);
+        const std::string request = "POST / HTTP/1.1\r\nContent-Type: multipart/form-data; boundary=test\r\n"
+            "Content-Length: " + std::to_string(strlen(body)) + "\r\n\r\n" + body;
+        for (size_t input_size : {size_t(1), size_t(7), request.size()}) {
+            SCOPED_TRACE(input_size);
+            cat_http_parser_t parser;
+            ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+            cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+            size_t offset = 0, iterations = 0;
+            size_t available = std::min(input_size, request.size());
+            bool rejected = false;
+            while (!cat_http_parser_is_completed(&parser)) {
+                ASSERT_LT(iterations++, request.size() * 10);
+                std::vector<char> input(request.begin() + offset, request.begin() + available);
+                if (!cat_http_parser_execute(&parser, input.empty() ? "" : input.data(), input.size())) {
+                    rejected = true;
+                    break;
+                }
+                size_t parsed = cat_http_parser_get_parsed_length(&parser);
+                ASSERT_LE(parsed, input.size());
+                offset += parsed;
+                available = std::min(request.size(), std::max(available, offset) + input_size);
+            }
+            ASSERT_TRUE(rejected);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+            ASSERT_NE(std::string(cat_get_last_error_message()).find("Failed to parse multipart body"), std::string::npos);
+            // Reset must discard the failed multipart state before parsing the next HTTP message.
+            cat_http_parser_reset(&parser);
+            cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_NONE);
+            ASSERT_TRUE(cat_http_parser_execute(&parser, CAT_STRL("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")));
+            ASSERT_TRUE(cat_http_parser_is_completed(&parser));
+            ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+        }
+    }
+}
