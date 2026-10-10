@@ -418,6 +418,28 @@ TEST(cat_socket, sendfile_partial_timeout_closes_socket)
 #endif
 
 #ifdef CAT_OS_UNIX_LIKE
+TEST(cat_socket, reuseport_capability_and_shared_listener_port)
+{
+    cat_socket_t first;
+    ASSERT_EQ(cat_socket_create(&first, CAT_SOCKET_TYPE_TCP4), &first);
+    DEFER(cat_socket_close(&first));
+    const cat_socket_bind_flags_t flags = CAT_SOCKET_BIND_FLAG_REUSEADDR | CAT_SOCKET_BIND_FLAG_REUSEPORT;
+    ASSERT_TRUE(cat_socket_bind_to_ex(&first, CAT_STRL(TEST_LISTEN_IPV4), 0, flags));
+    ASSERT_TRUE(cat_socket_listen(&first, TEST_SERVER_BACKLOG));
+    if (!cat_socket_is_tcp_reuseport_load_balancing_supported()) {
+        // Unsupported platforms retain the existing accepted bind flag fallback.
+        return;
+    }
+    cat_socket_t second;
+    ASSERT_EQ(cat_socket_create(&second, CAT_SOCKET_TYPE_TCP4), &second);
+    DEFER(cat_socket_close(&second));
+    int port = cat_socket_get_sock_port(&first);
+    ASSERT_GT(port, 0);
+    ASSERT_TRUE(cat_socket_bind_to_ex(&second, CAT_STRL(TEST_LISTEN_IPV4), port, flags));
+    ASSERT_TRUE(cat_socket_listen(&second, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_get_sock_port(&second), port);
+}
+
 TEST(cat_socket, pipe_bind_path_and_flag_errors)
 {
     cat_socket_t socket;
