@@ -266,6 +266,58 @@ TEST(cat_os_wait, concurrent_waiters_match_child_status)
     }
 }
 
+TEST(cat_os_wait, shutdown_discards_unused_child_status)
+{
+    using children_t = std::array<pid_t, 3>;
+    ASSERT_EXIT({
+        int gate[2];
+        if (pipe(gate) != 0) { std::exit(1); }
+        const pid_t held = fork();
+        if (held < 0) { std::exit(1); }
+        if (held == 0) {
+            close(gate[1]);
+            char permit;
+            _exit(read(gate[0], &permit, 1) == 1 ? 0 : 1);
+        }
+        close(gate[0]);
+        bool completed = false;
+        bool success = false;
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            int status = 0;
+            success = cat_os_waitpid_ex(held, &status, 0, TEST_IO_TIMEOUT) == held &&
+                WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            completed = true;
+        });
+        if (completed) { std::exit(1); }
+        children_t children;
+        for (size_t i = 0; i < children.size(); i++) {
+            children[i] = new_child_process(static_cast<int>(17 + i));
+            const cat_msec_t start = cat_time_msec();
+            while (cat_kill(children[i], 0)) {
+                if (cat_time_msec() - start >= TEST_IO_TIMEOUT || cat_time_msleep(1) != 0) { std::exit(1); }
+            }
+            if (cat_get_last_error_code() != CAT_ESRCH) { std::exit(1); }
+        }
+        // Consume one cached result, leaving the other records for aggregate shutdown.
+        int status = 0;
+        if (cat_os_waitpid_ex(children[0], &status, 0, 0) != children[0] ||
+            !WIFEXITED(status) || WEXITSTATUS(status) != 17) { std::exit(1); }
+        if (write(gate[1], "x", 1) != 1) { std::exit(1); }
+        close(gate[1]);
+        if (!wg(TEST_IO_TIMEOUT) || !completed || !success) { std::exit(1); }
+        if (!cat_stop() || !cat_shutdown_all() || !cat_init_all() || !cat_run(CAT_RUN_EASY)) { std::exit(1); }
+        for (size_t i = 1; i < children.size(); i++) {
+            if (cat_os_waitpid_ex(children[i], &status, 0, 0) != -1 ||
+                cat_get_last_error_code() != CAT_ECHILD) { std::exit(1); }
+        }
+        if (!cat_time_delay(0) || !cat_stop() || !cat_shutdown_all()) { std::exit(1); }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+
 TEST(cat_os_wait, wait_after_sigchld)
 {
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
