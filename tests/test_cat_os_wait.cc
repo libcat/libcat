@@ -64,6 +64,20 @@ TEST(cat_os_wait, timeout)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
 
+TEST(cat_os_wait, reject_non_child_pids)
+{
+    for (pid_t pid : {getpid(), getppid()}) {
+        SCOPED_TRACE(pid);
+        ASSERT_GT(pid, 0);
+        int status = 0;
+        errno = 0;
+        ASSERT_EQ(waitpid(pid, &status, WNOHANG), -1);
+        ASSERT_EQ(errno, ECHILD);
+        ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, 0), -1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECHILD);
+    }
+}
+
 TEST(cat_os_wait, wait)
 {
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE

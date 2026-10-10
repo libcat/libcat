@@ -108,7 +108,7 @@ RB_GENERATE_STATIC(cat_os_child_process_stat_tree_s,
                    cat_os_child_process_stat_s, tree_entry,
                    cat_os__child_process_state_compare);
 
-static size_t cat_os_wait_dispatch(void)
+static size_t cat_os_wait_dispatch(cat_pid_t requested_pid, int *requested_error)
 {
     size_t new_count = 0;
 
@@ -118,10 +118,22 @@ static size_t cat_os_wait_dispatch(void)
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
 	    struct rusage rusage;
 		memset(&rusage, 0, sizeof(rusage));
-        pid_t pid = wait4(-1, &status, WNOHANG | WUNTRACED, &rusage);
+        pid_t pid = wait4(requested_pid, &status, WNOHANG | WUNTRACED, &rusage);
 #else
-        pid_t pid = waitpid(-1, &status, WNOHANG | WUNTRACED);
+        pid_t pid = waitpid(requested_pid, &status, WNOHANG | WUNTRACED);
 #endif
+        if (requested_pid > 0) {
+            /* A live PID need not be a child. Validate it before queuing a waiter,
+             * and route any ready status through the same dispatcher as SIGCHLD. */
+            if (pid < 0) {
+                *requested_error = errno;
+                break;
+            }
+            requested_pid = -1;
+            if (pid == 0) {
+                continue;
+            }
+        }
         if (pid <= 0) {
             break;
         }
@@ -205,7 +217,7 @@ static void cat_os_wait_sigchld_handler(uv_signal_t* handle, int signum)
 {
     CAT_ASSERT(signum == CAT_SIGCHLD);
     CAT_LOG_DEBUG(OS_WAIT, "SIGCHLD received");
-    (void) cat_os_wait_dispatch();
+    (void) cat_os_wait_dispatch(-1, NULL);
 }
 
 static cat_always_inline void cat_os_wait_sigchld_watcher_start(void)
@@ -260,6 +272,7 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
         return -1;
     }
 
+    size_t dispatched;
     do {
         cat_os_child_process_stat_t *child_process_state = NULL;
         if (pid < 0) {
@@ -284,13 +297,14 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
             cat_free(child_process_state);
             return pid;
         }
-        if (pid > 0) {
-            if (unlikely(!cat_kill(pid, 0) && cat_get_last_error_code() == CAT_ESRCH)) {
-                cat_update_last_error_with_reason(CAT_ECHILD, "OS %s(pid=%d) failed", cat_os_wait_type_name(type), pid);
-                return -1;
-            }
+        int error = 0;
+        dispatched = cat_os_wait_dispatch(pid > 0 ? pid : -1, &error);
+        if (unlikely(error != 0)) {
+            cat_errno_t code = error == ECHILD ? CAT_ECHILD : cat_translate_sys_error(error);
+            cat_update_last_error_with_reason(code, "OS %s(pid=%d) failed", cat_os_wait_type_name(type), pid);
+            return -1;
         }
-    } while (cat_os_wait_dispatch() > 0);
+    } while (dispatched > 0);
 
     cat_os_wait_task_t wait_task;
     cat_os_waitpid_task_t *waitpid_task;
