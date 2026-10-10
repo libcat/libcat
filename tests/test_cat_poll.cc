@@ -306,6 +306,34 @@ TEST(cat_select, empty)
     ASSERT_EQ(cat_sys_select((cat_os_socket_t) 0, nullptr, nullptr, nullptr, &timeout), 0);
 }
 
+TEST(cat_select, canceled_empty_wait)
+{
+    struct timeval timeout;
+    timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(TEST_IO_TIMEOUT / 1000);
+    timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>((TEST_IO_TIMEOUT % 1000) * 1000);
+    int result = 0;
+    cat_errno_t error = 0;
+    bool done = false;
+    wait_group wg;
+    cat_coroutine_t *waiter = co([&] {
+        wg++;
+        DEFER(wg--);
+        cat_clear_last_error();
+        result = cat_select(0, nullptr, nullptr, nullptr, &timeout);
+        error = cat_get_last_error_code();
+        done = true;
+    });
+    DEFER(if (!done) { cat_coroutine_resume(waiter, nullptr, nullptr); } wg(TEST_IO_TIMEOUT));
+    ASSERT_FALSE(done);
+    ASSERT_TRUE(cat_coroutine_resume(waiter, nullptr, nullptr));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(done);
+    ASSERT_EQ(result, -1);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    timeout = {0, 0};
+    ASSERT_EQ(cat_select(0, nullptr, nullptr, nullptr, &timeout), 0);
+}
+
 TEST(cat_poll, invalid_descriptors)
 {
     cat_pollfd_t descriptors[] = {

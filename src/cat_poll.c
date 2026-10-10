@@ -682,7 +682,12 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
     if (nfds == 0) {
         cat_timeout_t timeout_ms = cat_time_tv2to(timeout);
         if (timeout_ms > 0) {
-            if (cat_time_delay(timeout_ms) != CAT_RET_OK) {
+            cat_ret_t delay_ret = cat_time_delay(timeout_ms);
+            if (delay_ret == CAT_RET_NONE) {
+                cat_update_last_error(CAT_ECANCELED, "Select wait has been canceled");
+                return -1;
+            }
+            if (delay_ret == CAT_RET_ERROR) {
                 cat_update_last_error_with_previous("Select wait failed");
                 return -1;
             }
