@@ -26,6 +26,8 @@ TEST(cat_ssl, context_protocols)
     unsigned long options = SSL_CTX_get_options(context->ctx);
     ASSERT_EQ(options & SSL_OP_NO_TLSv1_2, 0);
     ASSERT_NE(options & SSL_OP_NO_TLSv1, 0);
+    cat_ssl_context_set_protocols(context, CAT_SSL_PROTOCOL_TLSv1);
+    ASSERT_NE(SSL_CTX_get_options(context->ctx) & SSL_OP_NO_TLSv1_2, 0);
     cat_ssl_context_set_protocols(context, CAT_SSL_PROTOCOLS_DEFAULT);
     ASSERT_EQ(SSL_CTX_get_options(context->ctx) & SSL_OP_NO_TLSv1_2, 0);
     cat_ssl_context_set_verify_depth(context, 3);
@@ -46,6 +48,29 @@ TEST(cat_ssl, context_protocols)
     cat_ssl_context_set_security_level(context, 6);
     ASSERT_EQ(SSL_CTX_get_security_level(context->ctx), 5);
 #endif
+}
+
+TEST(cat_ssl, stale_openssl_error_does_not_break_handshake)
+{
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+    cat_ssl_t ssl = {};
+    ASSERT_EQ(cat_ssl_create(&ssl, context), &ssl);
+    DEFER(cat_ssl_close(&ssl));
+    cat_ssl_set_connect_state(&ssl);
+    // A preceding OpenSSL call can leave errors in the same thread's queue.
+    ASSERT_EQ(SSL_CTX_use_certificate_chain_file(context->ctx, publicCAPair->exportPEMs().key), 0);
+    ASSERT_NE(ERR_peek_error(), 0);
+    testing::internal::CaptureStderr();
+    cat_ssl_ret_t result = cat_ssl_handshake(&ssl);
+    const std::string warning = testing::internal::GetCapturedStderr();
+    ASSERT_NE(warning.find("Ignoring stale global SSL error"), std::string::npos);
+    ASSERT_EQ(result, CAT_SSL_RET_WANT_READ);
+    ASSERT_EQ(ERR_peek_error(), 0);
+    ASSERT_FALSE(cat_ssl_is_down(&ssl));
+    char buffer[CAT_SSL_BUFFER_SIZE];
+    ASSERT_GT(cat_ssl_read_encrypted_bytes(&ssl, buffer, sizeof(buffer)), 0);
 }
 
 #ifdef CAT_SSL_HAVE_TLS_ALPN
