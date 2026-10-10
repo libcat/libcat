@@ -20,6 +20,26 @@
 
 #define CAT_TEST_DEFAULT_MEMORY_SIZE    16
 
+TEST(cat_memory, page_alignment_boundaries)
+{
+    size_t page_size = cat_getpagesize();
+    ASSERT_GT(page_size, 0);
+    char *buffer = static_cast<char *>(cat_malloc(page_size * 3));
+    ASSERT_NE(buffer, nullptr);
+    DEFER(cat_free(buffer));
+    uintptr_t aligned = reinterpret_cast<uintptr_t>(cat_getpageafter(buffer));
+    const void *page = reinterpret_cast<const void *>(aligned);
+    ASSERT_EQ(cat_getpageof(page), page);
+    ASSERT_EQ(cat_getpageafter(page), page);
+    for (size_t offset : {size_t(1), page_size - 1, page_size, page_size + 1}) {
+        const void *address = reinterpret_cast<const void *>(aligned + offset);
+        uintptr_t lower = aligned + (offset / page_size) * page_size;
+        uintptr_t upper = lower + (offset % page_size == 0 ? 0 : page_size);
+        ASSERT_EQ(reinterpret_cast<uintptr_t>(cat_getpageof(address)), lower);
+        ASSERT_EQ(reinterpret_cast<uintptr_t>(cat_getpageafter(address)), upper);
+    }
+}
+
 TEST(cat_memory, malloc_function)
 {
     void *ptr = cat_malloc_function(CAT_TEST_DEFAULT_MEMORY_SIZE);
