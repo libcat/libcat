@@ -44,7 +44,11 @@ TEST(cat_memory, unrecoverable_allocators_oom_terminate_process)
 {
     char *original_options = cat_env_get_silent("ASAN_OPTIONS", nullptr);
     DEFER({
-        cat_env_set("ASAN_OPTIONS", original_options);
+        if (original_options == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("ASAN_OPTIONS"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("ASAN_OPTIONS", original_options));
+        }
         cat_free(original_options);
     });
     std::string options = original_options == nullptr ? "" : original_options;
