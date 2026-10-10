@@ -12,7 +12,7 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Check for CRLF endings
         id: checkcrlf
@@ -126,7 +126,7 @@ jobs:
           Write-Host "::endgroup::"
 
       - name: Restore vcpkg cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: restore-cache
         with:
           path: |
@@ -151,7 +151,7 @@ jobs:
           vcpkg install curl[core,non-http,ssl]:x64-windows
 
       - name: Save vcpkg cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         id: save-cache
         with:
           path: |
@@ -169,7 +169,7 @@ jobs:
           key: ${{ matrix.os }}-vcpkg
 
       - name: Checkout libcat sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Prepare coverage dependencies
         if: matrix.build-type == 'Debug'
@@ -304,7 +304,7 @@ jobs:
           fi
 
       - name: Checkout libcat sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           path: libcat
 

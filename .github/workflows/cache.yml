@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       matrix:
-        os: [ "windows-latest", "windows-2019" ]
+        os: [ "windows-latest", "windows-2022" ]
       max-parallel: 2
       fail-fast: false
     env:
@@ -52,7 +52,7 @@ jobs:
           Write-Host "::endgroup::"
 
       - name: Cache vcpkg
-        uses: actions/cache@v2
+        uses: actions/cache@v6
         id: cache-gtest
         with:
           path: |
