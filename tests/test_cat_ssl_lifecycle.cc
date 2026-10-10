@@ -117,6 +117,22 @@ TEST(cat_socket, crypto_peer_fingerprint_verification)
         client_options.ca_file = paths.cert;
         client_options.peer_name = "TestCA";
         client_options.peer_fingerprints = mode == 3 ? &fingerprints[1] : fingerprints;
+        struct handshake_result {
+            unsigned int calls;
+            cat_bool_t success;
+        } client_result = {0, cat_false}, server_result = {0, cat_false};
+        auto after_handshake = [](cat_ssl_t *ssl, cat_bool_t success, void *data) {
+            auto *result = static_cast<handshake_result *>(data);
+            result->calls++;
+            result->success = success;
+            if (success) {
+                EXPECT_TRUE(cat_ssl_is_established(ssl));
+            }
+        };
+        client_options.after_handshake_callback = after_handshake;
+        client_options.after_handshake_callback_data = &client_result;
+        server_options.after_handshake_callback = after_handshake;
+        server_options.after_handshake_callback_data = &server_result;
         cat_bool_t server_ready = cat_false;
         wait_group wg;
         DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
@@ -130,6 +146,10 @@ TEST(cat_socket, crypto_peer_fingerprint_verification)
         cat_errno_t error = cat_get_last_error_code();
         ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
         ASSERT_EQ(ready, mode == 0 || mode == 3);
+        ASSERT_EQ(client_result.calls, 1);
+        ASSERT_EQ(client_result.success, ready);
+        ASSERT_EQ(server_result.calls, 1);
+        ASSERT_EQ(server_result.success, server_ready);
         if (!ready) {
             ASSERT_NE(error, 0);
             ASSERT_FALSE(cat_socket_is_available(&client));
@@ -137,6 +157,10 @@ TEST(cat_socket, crypto_peer_fingerprint_verification)
         }
         ASSERT_TRUE(server_ready);
         ASSERT_TRUE(cat_socket_is_encrypted(&client));
+        ASSERT_FALSE(cat_socket_enable_crypto(&client, &client_options));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EISCONN);
+        ASSERT_EQ(client_result.calls, 1);
+        ASSERT_TRUE(cat_socket_is_established(&client));
         ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("pinned")));
         char buffer[CAT_STRLEN("pinned")];
         ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
