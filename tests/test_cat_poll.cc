@@ -443,7 +443,13 @@ TEST(cat_poll, descriptor_limit_errors_preserve_original_fd)
         if (setrlimit(RLIMIT_NOFILE, &limit) != 0) {
             exit(1);
         }
-        bool valid = cat_poll_one(fd, POLLIN, nullptr, 0) == CAT_RET_ERROR && cat_get_last_error_code() == CAT_EMFILE;
+        cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP4);
+        bool valid = socket == nullptr && cat_get_last_error_code() == CAT_EMFILE;
+        if (socket != nullptr) {
+            cat_socket_close(socket);
+        }
+        valid = valid && cat_socket_get_local_free_port() == -1 && cat_get_last_error_code() == CAT_EMFILE;
+        valid = valid && cat_poll_one(fd, POLLIN, nullptr, 0) == CAT_RET_ERROR && cat_get_last_error_code() == CAT_EMFILE;
         cat_pollfd_t descriptor;
         descriptor.fd = fd;
         descriptor.events = POLLIN;
@@ -454,6 +460,7 @@ TEST(cat_poll, descriptor_limit_errors_preserve_original_fd)
         limit.rlim_cur = original_limit;
         int restored = setrlimit(RLIMIT_NOFILE, &limit);
         valid = valid && restored == 0;
+        valid = valid && cat_coroutine_wait_all();
         exit(valid ? 0 : 1);
     }, ::testing::ExitedWithCode(0), "");
 }
