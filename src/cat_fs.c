@@ -150,6 +150,13 @@ static void cat_fs_callback(uv_fs_t *fs)
         cat_coroutine_t *coroutine = context->coroutine;
         context->coroutine = NULL;
         cat_coroutine_schedule(coroutine, FS, "File-System");
+    } else if (fs->fs_type == UV_FS_OPEN && fs->result >= 0) {
+        // A canceled waiter cannot claim the opened fd. Reuse the request to close
+        // it asynchronously before releasing the context.
+        uv_file fd = (uv_file) fs->result;
+        uv_fs_req_cleanup(fs);
+        (void) uv_fs_close(fs->loop, fs, fd, cat_fs_callback);
+        return;
     }
 
     uv_fs_req_cleanup(&context->fs);

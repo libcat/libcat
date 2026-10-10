@@ -68,6 +68,42 @@ TEST(cat_fs, content_helpers_close_owned_descriptors)
     ASSERT_EQ(length, 0);
     ASSERT_EQ(count_open_descriptors(), before);
 }
+
+TEST(cat_fs, canceled_open_closes_unclaimed_descriptor)
+{
+    const std::string path = get_random_path();
+    DEFER(cat_fs_unlink(path.c_str()));
+    cat_file_t file = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_WRONLY, 0600);
+    ASSERT_GE(file, 0);
+    ASSERT_EQ(cat_fs_close(file), 0);
+    size_t before = count_open_descriptors();
+    wait_group wg;
+    bool waiting = true;
+    cat_file_t opened = CAT_OS_INVALID_FD;
+    cat_errno_t error = 0;
+    cat_coroutine_t *coroutine = co([&] {
+        wg++;
+        DEFER(wg--);
+        opened = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_RDONLY);
+        error = cat_get_last_error_code();
+        waiting = false;
+    });
+    ASSERT_NE(coroutine, nullptr);
+    DEFER(if (waiting) { cat_coroutine_resume(coroutine, nullptr, nullptr); }
+        wg(TEST_IO_TIMEOUT); cat_coroutine_wait_all());
+    // Observe the worker's real open before allowing its completion callback to run.
+    cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+    while (count_open_descriptors() == before && cat_time_msec2() < deadline) {
+        cat_sys_usleep(1);
+    }
+    ASSERT_EQ(count_open_descriptors(), before + 1);
+    ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(opened, CAT_OS_INVALID_FD);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(count_open_descriptors(), before);
+}
 #endif
 
 TEST(cat_fs, content_errors)
