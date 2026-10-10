@@ -650,6 +650,19 @@ TEST(cat_socket, sockaddr_copy_to_length_eq_zero)
     /* from will be free in cat_socket_close callback */
     from = cat_socket_getname_fast(&socket, cat_false);
     ASSERT_EQ(CAT_ENOSPC, cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length));
+    ASSERT_EQ(to.length, from->length);
+    to.length = CAT_SOCKADDR_HEADER_LENGTH;
+    ASSERT_EQ(cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length), CAT_ENOSPC);
+    ASSERT_EQ(to.address.common.sa_family, AF_INET);
+    ASSERT_EQ(to.length, from->length);
+    ASSERT_EQ(cat_sockaddr_copy(&to.address.common, &to.length, &from->address.common, from->length), 0);
+    ASSERT_EQ(memcmp(&to.address, &from->address, from->length), 0);
+    to.length = static_cast<cat_socklen_t>(-1);
+    ASSERT_FALSE(cat_socket_getsockname(&socket, &to.address.common, &to.length));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    to.length = sizeof(to.address);
+    ASSERT_TRUE(cat_socket_getsockname(&socket, &to.address.common, &to.length));
+    ASSERT_EQ(to.length, from->length);
 }
 
 TEST(cat_socket, sockaddr_check_ip4)
