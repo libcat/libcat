@@ -28,6 +28,30 @@ TEST(cat, string)
     cat_free(name);
 }
 
+TEST(cat, platform_helpers_match_system_name)
+{
+    uv_utsname_t system;
+    ASSERT_EQ(uv_os_uname(&system), 0);
+    ASSERT_EQ(cat_os_is_linux(), strcmp(system.sysname, "Linux") == 0);
+    ASSERT_EQ(cat_os_is_windows(), strcmp(system.sysname, "Windows_NT") == 0);
+}
+
+TEST(cat, value_strings)
+{
+    ASSERT_STREQ(cat_bool_str(cat_false), "false");
+    ASSERT_STREQ(cat_bool_str(cat_true), "true");
+    ASSERT_STREQ(cat_ret_str(CAT_RET_ERROR), "ERROR");
+    ASSERT_STREQ(cat_ret_str(CAT_RET_NONE), "NONE");
+    ASSERT_STREQ(cat_ret_str(CAT_RET_OK), "OK");
+}
+
+#if GTEST_HAS_DEATH_TEST
+TEST(cat, unknown_return_value_is_rejected)
+{
+    ASSERT_DEATH(cat_ret_str(static_cast<cat_ret_t>(INT_MAX)), "Unknown return value");
+}
+#endif
+
 TEST(cat_sys, sleep)
 {
     ASSERT_EQ(cat_sys_sleep(0), 0);
