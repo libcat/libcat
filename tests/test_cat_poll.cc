@@ -449,6 +449,9 @@ TEST(cat_poll, canceled_wait_then_descriptor_reuse)
         ASSERT_EQ(descriptors[1].revents, POLLNONE);
         ASSERT_TRUE(cat_socket_send_to(&first, CAT_STRL("first"), CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&first)));
         ASSERT_TRUE(cat_socket_send_to(&second, CAT_STRL("second"), CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&second)));
+        // A completed UDP send does not guarantee both packets are readable in the same event-loop iteration.
+        ASSERT_EQ(cat_poll_one(descriptors[0].fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_EQ(cat_poll_one(descriptors[1].fd, POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
         ASSERT_EQ(cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), TEST_IO_TIMEOUT), 2);
         ASSERT_EQ(descriptors[0].revents, POLLIN);
         ASSERT_EQ(descriptors[1].revents, POLLIN);
