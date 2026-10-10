@@ -147,6 +147,40 @@ TEST(cat_log, filtered_module)
     ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> visible\n");
 }
 
+TEST(cat_log, buffer_growth_failure_and_recovery)
+{
+    static cat_buffer_realloc_function_t original_realloc;
+    cat_buffer_allocator_t allocator = cat_buffer_allocator;
+    original_realloc = allocator.realloc_function;
+    DEFER(cat_buffer_register_allocator(&allocator));
+    cat_log_globals_t globals = CAT_G(log_globals);
+    DEFER(CAT_G(log_globals) = globals);
+    cat_bool_t show_last_error = CAT_G(show_last_error);
+    DEFER(CAT_G(show_last_error) = show_last_error);
+    CAT_G(show_last_error) = cat_false;
+    cat_set_error_output(stderr);
+    cat_buffer_allocator_t failing = allocator;
+    failing.realloc_function = [](char *value, size_t size) -> char * {
+        if (value != nullptr) {
+            errno = ENOMEM;
+            return nullptr;
+        }
+        return original_realloc(value, size);
+    };
+    ASSERT_TRUE(cat_buffer_register_allocator(&failing));
+    const std::string message(cat_getpagesize() * 2, 'x');
+    testing::internal::CaptureStderr();
+    CAT_NOTICE(TEST, "%s", message.c_str());
+    const std::string failure = testing::internal::GetCapturedStderr();
+    ASSERT_NE(failure.find("vprintf() log message failed"), std::string::npos);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_UNCODED);
+    ASSERT_TRUE(cat_buffer_register_allocator(&allocator));
+    testing::internal::CaptureStderr();
+    CAT_NOTICE(TEST, "logging recovered");
+    const std::string recovered = testing::internal::GetCapturedStderr();
+    ASSERT_NE(recovered.find("logging recovered"), std::string::npos);
+}
+
 TEST(cat_log, write_failure_and_libc_fallback)
 {
     // fallback 状态属于进程；在子进程验证写入失败及后续恢复，不影响其它日志用例。
