@@ -87,10 +87,33 @@ TEST(cat_log, timestamps)
             }
         }
     }
+    CAT_LOG_G(timestamps_format) = "";
+    CAT_LOG_G(show_timestamps) = 1;
+    CAT_LOG_G(show_timestamps_as_relative) = cat_false;
+    testing::internal::CaptureStdout();
+    CAT_LOG_INFO(TEST, "timestamp log");
+    const std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_EQ(output, "[] [    MAIN    ] Info: <TEST> timestamp log\n");
 }
 
 TEST(cat_log, runtime_configuration_matches_environment)
 {
+    char *error_output = cat_env_get_silent("CAT_LOG_ERROR_OUTPUT", nullptr);
+    DEFER(cat_free(error_output));
+    if (error_output != nullptr) {
+        if (cat_strcasecmp(error_output, "stdout") == 0) {
+            ASSERT_EQ(CAT_LOG_G(error_output), stdout);
+        } else if (cat_strcasecmp(error_output, "stderr") == 0) {
+            ASSERT_EQ(CAT_LOG_G(error_output), stderr);
+        }
+    }
+    char *modules = cat_env_get_silent("CAT_LOG_MODULE_NAME_FILTER", nullptr);
+    DEFER(cat_free(modules));
+    if (modules != nullptr && modules[0] != '\0') {
+        ASSERT_STREQ(CAT_LOG_G(module_name_filter), modules);
+    } else {
+        ASSERT_EQ(CAT_LOG_G(module_name_filter), nullptr);
+    }
 #ifdef CAT_ENABLE_DEBUG_LOG
     char *output = cat_env_get_silent("CAT_LOG_DEBUG_OUTPUT", nullptr);
     DEFER(cat_free(output));
