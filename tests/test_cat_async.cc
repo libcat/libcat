@@ -113,6 +113,9 @@ TEST(cat_async, cleanup_fast_end)
     ASSERT_TRUE(work(CAT_WORK_KIND_CPU, [async] {
         cat_async_notify(async);
     }, TEST_IO_TIMEOUT));
+    // Let the event loop deliver the notification before exercising fast cleanup.
+    ASSERT_TRUE(cat_time_delay(0));
+    ASSERT_TRUE(async->done);
     ASSERT_TRUE(cat_async_cleanup(async, nullptr));
 }
 
