@@ -19,6 +19,8 @@
 #include "test.h"
 #ifdef CAT_CURL
 
+#include <vector>
+
 static size_t cat_test_curl_write_function(const char *ptr, size_t length, size_t n, cat_buffer_t *buffer)
 {
     cat_buffer_append(buffer, ptr, length * n);
@@ -68,32 +70,87 @@ TEST(cat_curl, concurrency)
 {
     ASSERT_TRUE(cat_coroutine_wait_all()); // call it before timing test
     auto concurrency = ([](uint32_t concurrency) {
-        cat_sync_wait_group_t wg;
-        ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
-        ASSERT_TRUE(cat_sync_wait_group_add(&wg, concurrency));
+        ASSERT_GT(concurrency, 0u);
+        cat_socket_t server;
+        ASSERT_NE(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), nullptr);
+        uint32_t received = 0, completed = 0;
+        std::string server_url;
+        wait_group wg;
+        // Cancel a pending accept before joining coroutines that capture this scope.
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        server_url = std::string("http://") + TEST_LISTEN_IPV4 + ":" + std::to_string(cat_socket_get_port(&server, false));
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            // Socket addresses must stay fixed while libuv owns their handles.
+            std::vector<cat_socket_t> connections(concurrency);
+            size_t created = 0;
+            DEFER(for (size_t n = 0; n < created; n++) {
+                cat_socket_close(&connections[n]);
+            });
+            for (size_t n = 0; n < concurrency; n++) {
+                cat_socket_t *conn = &connections[n];
+                ASSERT_NE(cat_socket_create(conn, CAT_SOCKET_TYPE_TCP), nullptr);
+                created++;
+                ASSERT_TRUE(cat_socket_accept(&server, conn)) << "Received " << received << " of " << concurrency << " requests";
+                std::string request;
+                char buffer[4096];
+                while (request.find("\r\n\r\n") == std::string::npos) {
+                    ssize_t length = cat_socket_recv(conn, buffer, sizeof(buffer));
+                    ASSERT_GT(length, 0) << "Received " << received << " of " << concurrency << " requests";
+                    request.append(buffer, length);
+                }
+                received++;
+            }
+            // Withhold every response until all requests are in flight.
+            // A serialized client cannot reach this point before its timeout.
+            ASSERT_EQ(received, concurrency);
+            ASSERT_EQ(completed, 0u);
+            for (size_t n = 0; n < concurrency; n++) {
+                ASSERT_TRUE(cat_socket_send(&connections[n], CAT_STRL(
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Length: 2\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                    "OK"
+                )));
+            }
+        });
         for (size_t n = 0; n < concurrency; n++) {
-            co([&wg] {
-                std::string response;
-                ASSERT_EQ(cat_test_curl_query(TEST_REMOTE_HTTP_SERVER_HOST, response), CURLE_OK);
-                ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
-                ASSERT_TRUE(cat_sync_wait_group_done(&wg));
+            co([&] {
+                wg++;
+                DEFER(wg--);
+                cat_buffer_t buffer;
+                ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+                DEFER(cat_buffer_close(&buffer));
+                CURL *ch = curl_easy_init();
+                ASSERT_NE(ch, nullptr);
+                DEFER(curl_easy_cleanup(ch));
+                curl_easy_setopt(ch, CURLOPT_URL, server_url.c_str());
+                // The loopback service must not use an environment proxy.
+                curl_easy_setopt(ch, CURLOPT_PROXY, "");
+                curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
+                curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
+                curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
+                ASSERT_EQ(cat_curl_easy_perform(ch), CURLE_OK)
+                    << "Received " << received << ", completed " << completed << " of " << concurrency << " requests";
+                ASSERT_EQ(std::string(buffer.value, buffer.length), "OK");
+                completed++;
             });
         }
-        ASSERT_TRUE(cat_sync_wait_group_wait(&wg, TEST_IO_TIMEOUT));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT))
+            << "Received " << received << ", completed " << completed << " of " << concurrency << " requests";
+        ASSERT_EQ(received, concurrency);
+        ASSERT_EQ(completed, concurrency);
     });
 
     if (!is_valgrind()) {
-        auto s1 = cat_time_msec();
-        concurrency(TEST_MAX_CONCURRENCY / 8);
-        s1 = cat_time_msec() - s1;
-
-        auto s2 = cat_time_msec();
-        concurrency(TEST_MAX_CONCURRENCY / 2);
-        s2 = cat_time_msec() - s2;
-
-        ASSERT_LE(s2 / s1, 3.0);
+        ASSERT_NO_FATAL_FAILURE(concurrency(TEST_MAX_CONCURRENCY / 8));
+        ASSERT_NO_FATAL_FAILURE(concurrency(TEST_MAX_CONCURRENCY / 2));
     } else {
-        concurrency(TEST_MAX_CONCURRENCY);
+        ASSERT_NO_FATAL_FAILURE(concurrency(TEST_MAX_CONCURRENCY));
     }
 }
 
