@@ -1027,7 +1027,7 @@ static cat_always_inline cat_socket_t *cat_socket_create_from_socket_impl(cat_so
 #if CAT_ALLOC_HANDLE_ERRORS
         if (unlikely(socket == NULL)) {
             cat_update_last_error_of_syscall("Malloc for socket failed");
-            goto _malloc_error;
+            return NULL;
         }
 #endif
         flags |= CAT_SOCKET_FLAG_ALLOCATED;
