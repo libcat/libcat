@@ -345,7 +345,15 @@ TEST(cat_ssl, bio_handshake_and_binary_records)
     ASSERT_TRUE(cat_ssl_decrypt(&server, buffer, &length, &eof));
     ASSERT_EQ(length, 0);
     ASSERT_TRUE(eof);
-
+    // A close-notify ends application writes even though the SSL object still exists.
+    char *after_shutdown = nullptr;
+    size_t after_shutdown_length = 0;
+    DEFER(cat_free(after_shutdown));
+    ASSERT_FALSE(cat_ssl_encrypt(&client, vectors, CAT_ARRAY_SIZE(vectors), &after_shutdown, &after_shutdown_length));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+    ASSERT_EQ(after_shutdown, nullptr);
+    ASSERT_EQ(after_shutdown_length, 0);
+    ASSERT_TRUE(cat_ssl_is_down(&client));
 }
 
 TEST(cat_ssl, self_signed_and_expired_peer_certificates)
