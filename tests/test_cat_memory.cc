@@ -20,6 +20,27 @@
 
 #define CAT_TEST_DEFAULT_MEMORY_SIZE    16
 
+#if GTEST_HAS_DEATH_TEST
+[[maybe_unused]] static bool cat_test_is_abort_exit(int status)
+{
+#if defined(GTEST_OS_WINDOWS) || defined(GTEST_OS_FUCHSIA)
+    // These platforms report death-test exit codes rather than POSIX signals.
+    return status != 0;
+#else
+    return testing::KilledBySignal(SIGABRT)(status);
+#endif
+}
+#endif
+
+#if GTEST_HAS_DEATH_TEST && !defined(cat_out_of_memory)
+TEST(cat_memory, out_of_memory_terminates_process)
+{
+    ASSERT_EXIT({
+        cat_out_of_memory();
+    }, cat_test_is_abort_exit, "Out of memory");
+}
+#endif
+
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
 TEST(cat_memory, invalid_allocator_preserves_registered_functions)
 {
@@ -225,17 +246,17 @@ TEST(cat_memory, dynamic_allocator_obeys_oom_policy)
         cat_register_allocator(&failing);
         cat_malloc(CAT_TEST_DEFAULT_MEMORY_SIZE);
         std::exit(1);
-    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+    }, cat_test_is_abort_exit, "Out of memory");
     ASSERT_EXIT({
         cat_register_allocator(&failing);
         cat_calloc(1, CAT_TEST_DEFAULT_MEMORY_SIZE);
         std::exit(1);
-    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+    }, cat_test_is_abort_exit, "Out of memory");
     ASSERT_EXIT({
         cat_register_allocator(&failing);
         cat_realloc(nullptr, CAT_TEST_DEFAULT_MEMORY_SIZE);
         std::exit(1);
-    }, testing::KilledBySignal(SIGABRT), "Out of memory");
+    }, cat_test_is_abort_exit, "Out of memory");
 #elif !CAT_ALLOC_ABORT_ON_OOM
     ASSERT_TRUE(cat_register_allocator(&failing));
     void *allocated = cat_malloc(CAT_TEST_DEFAULT_MEMORY_SIZE);
