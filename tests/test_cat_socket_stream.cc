@@ -16,6 +16,52 @@
 
 #include "test.h"
 
+TEST(cat_socket, partial_stream_read_preserves_received_bytes)
+{
+    for (bool start_read_first : {false, true}) {
+        SCOPED_TRACE(start_read_first);
+        cat_socket_t server, sender, receiver;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+        ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+        DEFER(cat_socket_close(&receiver));
+        ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+        char buffer[8] = {};
+        ASSERT_EQ(cat_socket_recv(&receiver, buffer, 0), -1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ENOBUFS);
+        ASSERT_TRUE(cat_socket_is_established(&receiver));
+        wait_group wg;
+        ssize_t received = -1;
+        cat_errno_t error = 0;
+        auto read = [&] {
+            received = cat_socket_read(&receiver, buffer, sizeof(buffer));
+            error = cat_get_last_error_code();
+        };
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); } wg(TEST_IO_TIMEOUT));
+        if (start_read_first) {
+            co([&] { wg++; DEFER(wg--); read(); });
+            ASSERT_EQ(cat_socket_get_io_state(&receiver), CAT_SOCKET_IO_FLAG_READ);
+        }
+        ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("abc")));
+        ASSERT_TRUE(cat_socket_close(&sender));
+        if (!start_read_first) {
+            ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&receiver), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+            read();
+        }
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        // A failed eight-byte read still returns its three bytes, with the reset recorded separately.
+        ASSERT_EQ(received, 3);
+        ASSERT_EQ(std::string(buffer, received), "abc");
+        ASSERT_EQ(error, CAT_ECONNRESET);
+        ASSERT_EQ(cat_socket_recv(&receiver, buffer, sizeof(buffer)), 0);
+    }
+}
+
 TEST(cat_socket, close_cancels_pending_accept)
 {
     cat_socket_t server, connection;
@@ -43,6 +89,34 @@ TEST(cat_socket, close_cancels_pending_accept)
     ASSERT_FALSE(cat_socket_is_available(&server));
     ASSERT_TRUE(cat_socket_is_available(&connection));
     ASSERT_FALSE(cat_socket_is_established(&connection));
+}
+
+TEST(cat_socket, failed_second_listener_can_recreate)
+{
+    cat_socket_t first, second;
+    ASSERT_EQ(cat_socket_create(&first, CAT_SOCKET_TYPE_TCP4), &first);
+    DEFER(if (cat_socket_is_available(&first)) { cat_socket_close(&first); });
+    const cat_sockaddr_info_t *unbound = cat_socket_getsockname_fast(&first);
+    ASSERT_NE(unbound, nullptr);
+    ASSERT_EQ(cat_socket_get_sock_port(&first), 0);
+    ASSERT_TRUE(cat_socket_bind_to(&first, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    int port = cat_socket_get_sock_port(&first);
+    ASSERT_GT(port, 0);
+    ASSERT_TRUE(cat_socket_listen(&first, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&second, CAT_SOCKET_TYPE_TCP4), &second);
+    DEFER(cat_socket_close(&second));
+    ASSERT_TRUE(cat_socket_bind_to(&second, CAT_STRL(TEST_LISTEN_IPV4), port));
+    ASSERT_FALSE(cat_socket_listen(&second, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EADDRINUSE);
+    ASSERT_TRUE(cat_socket_is_available(&second));
+    // libuv defers the bind error until listen; recreation discards that failed handle.
+    ASSERT_EQ(cat_socket_get_sock_port(&second), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EADDRINUSE);
+    ASSERT_TRUE(cat_socket_close(&first));
+    ASSERT_EQ(cat_socket_recreate(&second, CAT_SOCKET_TYPE_TCP4), &second);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_TRUE(cat_socket_bind_to(&second, CAT_STRL(TEST_LISTEN_IPV4), port));
+    ASSERT_TRUE(cat_socket_listen(&second, TEST_SERVER_BACKLOG));
 }
 
 #ifdef CAT_OS_UNIX_LIKE
