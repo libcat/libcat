@@ -16,6 +16,34 @@
 
 #include "test.h"
 
+TEST(cat_socket, open_native_udp_socket_preserves_datagrams)
+{
+    cat_socket_t receiver, sender;
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDP), &sender);
+    DEFER(cat_socket_close(&sender));
+    cat_os_socket_t fd = socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_NE(fd, CAT_OS_INVALID_SOCKET);
+    bool transferred = false;
+    DEFER(if (!transferred) {
+#ifdef CAT_OS_WIN
+        closesocket(fd);
+#else
+        close(fd);
+#endif
+    });
+    ASSERT_TRUE(cat_socket_open_os_socket(&sender, fd));
+    transferred = true;
+    ASSERT_EQ(cat_socket_get_fd(&sender), fd);
+    ASSERT_FALSE(cat_socket_is_established(&sender));
+    ASSERT_TRUE(cat_socket_send_to(&sender, CAT_STRL("native-udp"), CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&receiver)));
+    char buffer[CAT_STRLEN("native-udp")];
+    ASSERT_EQ(cat_socket_recv(&receiver, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "native-udp");
+}
+
 TEST(cat_socket, datagram_vector_destinations)
 {
     cat_socket_t receiver, sender;
