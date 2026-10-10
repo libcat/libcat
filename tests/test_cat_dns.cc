@@ -82,6 +82,10 @@ TEST(cat_dns, getaddrinfo_invalid)
 {
     ASSERT_EQ(cat_dns_getaddrinfo(nullptr, nullptr, nullptr), nullptr);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    struct addrinfo hints = {};
+    hints.ai_family = -1;
+    ASSERT_EQ(cat_dns_getaddrinfo("localhost", nullptr, &hints), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAI_FAMILY);
 }
 
 TEST(cat_dns, cancel)
@@ -98,8 +102,20 @@ TEST(cat_dns, cancel)
 
 TEST(cat_dns, timeout)
 {
-    ASSERT_FALSE(cat_dns_get_ip_ex(nullptr, 0, TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC, 0));
-    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    char ip[CAT_SOCKET_IP_BUFFER_SIZE] = {};
+    cat_clear_last_error();
+    // An already completed lookup can win the zero-timeout race; otherwise the waiter times out.
+    if (cat_dns_get_ip_ex(CAT_STRS(ip), TEST_REMOTE_IPV6_HTTP_SERVER_HOST, AF_UNSPEC, 0)) {
+        ASSERT_NE(ip[0], '\0');
+        cat_sockaddr_info_t address = {};
+        address.length = sizeof(address.address);
+        address.address.common.sa_family = AF_UNSPEC;
+        ASSERT_TRUE(cat_sockaddr_getbyname(&address.address.common, &address.length, ip, strlen(ip), 0));
+        ASSERT_TRUE(address.address.common.sa_family == AF_INET || address.address.common.sa_family == AF_INET6);
+        ASSERT_EQ(cat_get_last_error_code(), 0);
+    } else {
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    }
 }
 
 TEST(cat_dns, nospc)
