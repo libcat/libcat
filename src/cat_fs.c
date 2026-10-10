@@ -497,7 +497,13 @@ static void cat_fs_read_cb(cat_data_t *ptr)
 
 static cat_always_inline ssize_t cat_fs_read_impl(cat_file_t fd, void *buf, size_t size)
 {
-    cat_fs_read_data_t *data = (cat_fs_read_data_t *) cat_malloc(sizeof(*data));
+    if (unlikely(size > SIZE_MAX - sizeof(cat_fs_read_data_t))) {
+        cat_update_last_error(CAT_EOVERFLOW, "File-System read size overflow");
+        errno = cat_orig_errno(CAT_EOVERFLOW);
+        return -1;
+    }
+    // The worker can outlive a canceled waiter; keep its buffer in the work-owned allocation.
+    cat_fs_read_data_t *data = (cat_fs_read_data_t *) cat_malloc(sizeof(*data) + size);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs read failed");
@@ -506,12 +512,15 @@ static cat_always_inline ssize_t cat_fs_read_impl(cat_file_t fd, void *buf, size
 #endif
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
-    data->buf = buf;
+    data->buf = data + 1;
     data->size = (cat_fs_read_size_t) size;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_read_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;
     }
     cat_fs_work_check_error(&data->ret.error, "read");
+    if (data->ret.ret.num > 0) {
+        memcpy(buf, data->buf, (size_t) data->ret.ret.num);
+    }
     return data->ret.ret.num;
 }
 
@@ -553,7 +562,13 @@ static void cat_fs_write_cb(cat_data_t *ptr)
 
 static cat_always_inline ssize_t cat_fs_write_impl(cat_file_t fd, const void *buf, size_t length)
 {
-    cat_fs_write_data_t *data = (cat_fs_write_data_t *) cat_malloc(sizeof(*data));
+    if (unlikely(length > SIZE_MAX - sizeof(cat_fs_write_data_t))) {
+        cat_update_last_error(CAT_EOVERFLOW, "File-System write size overflow");
+        errno = cat_orig_errno(CAT_EOVERFLOW);
+        return -1;
+    }
+    // Snapshot submitted bytes so cancellation cannot leave the worker using caller-owned memory.
+    cat_fs_write_data_t *data = (cat_fs_write_data_t *) cat_malloc(sizeof(*data) + length);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs write failed");
@@ -562,7 +577,10 @@ static cat_always_inline ssize_t cat_fs_write_impl(cat_file_t fd, const void *bu
 #endif
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
-    data->buf = buf;
+    data->buf = data + 1;
+    if (length > 0) {
+        memcpy(data + 1, buf, length);
+    }
     data->length = (cat_fs_write_size_t) length;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_write_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return -1;

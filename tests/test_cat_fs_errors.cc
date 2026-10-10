@@ -20,6 +20,138 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/resource.h>
+#include <sys/syscall.h>
+
+static bool has_blocked_io(long syscall, int fd)
+{
+    DIR *directory = opendir("/proc/self/task");
+    if (directory == nullptr) {
+        return false;
+    }
+    DEFER(closedir(directory));
+    while (struct dirent *entry = readdir(directory)) {
+        const std::string path = std::string("/proc/self/task/") + entry->d_name + "/syscall";
+        int state = open(path.c_str(), O_RDONLY);
+        if (state < 0) {
+            continue;
+        }
+        char buffer[256];
+        ssize_t length = read(state, buffer, sizeof(buffer) - 1);
+        close(state);
+        if (length <= 0) {
+            continue;
+        }
+        buffer[length] = '\0';
+        long operation;
+        unsigned long long argument;
+        if (sscanf(buffer, "%ld %llx", &operation, &argument) == 2 &&
+            operation == syscall && argument == static_cast<unsigned long long>(fd)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TEST(cat_fs, canceled_read_does_not_modify_caller_buffer)
+{
+    int descriptors[2];
+    ASSERT_EQ(pipe(descriptors), 0);
+    DEFER(close(descriptors[0]));
+    DEFER(if (descriptors[1] >= 0) { close(descriptors[1]); });
+    char buffer = 'a';
+    wait_group wg;
+    bool waiting = true;
+    ssize_t received = 0;
+    cat_errno_t error = 0;
+    cat_coroutine_t *reader = co([&] {
+        wg++;
+        DEFER(wg--);
+        received = cat_fs_read(descriptors[0], &buffer, sizeof(buffer));
+        error = cat_get_last_error_code();
+        waiting = false;
+    });
+    DEFER(if (waiting) { cat_coroutine_resume(reader, nullptr, nullptr); }
+        close(descriptors[1]); descriptors[1] = -1; wg(TEST_IO_TIMEOUT); cat_coroutine_wait_all());
+    // Observe the actual worker syscall instead of assuming that a delay starts the read.
+    cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+    while (!has_blocked_io(SYS_read, descriptors[0]) && cat_time_msec2() < deadline) {
+        cat_sys_usleep(1);
+    }
+    ASSERT_TRUE(has_blocked_io(SYS_read, descriptors[0]));
+    ASSERT_TRUE(cat_coroutine_resume(reader, nullptr, nullptr));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(received, -1);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    buffer = 'b';
+    ASSERT_EQ(write(descriptors[1], "x", 1), 1);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(buffer, 'b');
+    ASSERT_EQ(cat_fs_read(descriptors[0], &buffer, SIZE_MAX), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(errno, EOVERFLOW);
+}
+
+TEST(cat_fs, canceled_write_preserves_submitted_bytes)
+{
+    int descriptors[2];
+    ASSERT_EQ(pipe(descriptors), 0);
+    DEFER(close(descriptors[0]));
+    DEFER(close(descriptors[1]));
+    long atomic_size = fpathconf(descriptors[1], _PC_PIPE_BUF);
+    ASSERT_GT(atomic_size, 0);
+    std::string payload(static_cast<size_t>(atomic_size), 'x');
+    std::string buffer(payload.size(), '\0');
+    size_t filled = 0;
+    wait_group wg;
+    bool waiting = true;
+    ssize_t written = 0;
+    cat_errno_t error = 0;
+    cat_coroutine_t *writer = nullptr;
+    DEFER(if (writer != nullptr && waiting) { cat_coroutine_resume(writer, nullptr, nullptr); }
+        while (filled > 0) {
+            ssize_t n = read(descriptors[0], buffer.data(), CAT_MIN(buffer.size(), filled));
+            if (n <= 0) { break; }
+            filled -= static_cast<size_t>(n);
+        } wg(TEST_IO_TIMEOUT); cat_coroutine_wait_all());
+    int flags = fcntl(descriptors[1], F_GETFL);
+    ASSERT_GE(flags, 0);
+    ASSERT_EQ(fcntl(descriptors[1], F_SETFL, flags | O_NONBLOCK), 0);
+    ssize_t n;
+    while ((n = write(descriptors[1], payload.data(), payload.size())) > 0) {
+        filled += static_cast<size_t>(n);
+    }
+    ASSERT_EQ(errno, EAGAIN);
+    ASSERT_GT(filled, 0);
+    ASSERT_EQ(fcntl(descriptors[1], F_SETFL, flags), 0);
+    writer = co([&] {
+        wg++;
+        DEFER(wg--);
+        written = cat_fs_write(descriptors[1], payload.data(), payload.size());
+        error = cat_get_last_error_code();
+        waiting = false;
+    });
+    cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+    while (!has_blocked_io(SYS_write, descriptors[1]) && cat_time_msec2() < deadline) {
+        cat_sys_usleep(1);
+    }
+    ASSERT_TRUE(has_blocked_io(SYS_write, descriptors[1]));
+    ASSERT_TRUE(cat_coroutine_resume(writer, nullptr, nullptr));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(written, -1);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    payload.assign(payload.size(), 'y');
+    while (filled > 0) {
+        n = read(descriptors[0], buffer.data(), CAT_MIN(buffer.size(), filled));
+        ASSERT_GT(n, 0);
+        filled -= static_cast<size_t>(n);
+    }
+    ASSERT_EQ(read(descriptors[0], buffer.data(), buffer.size()), static_cast<ssize_t>(buffer.size()));
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(buffer, std::string(buffer.size(), 'x'));
+    ASSERT_EQ(cat_fs_write(descriptors[1], payload.data(), SIZE_MAX), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+    ASSERT_EQ(errno, EOVERFLOW);
+}
 
 static size_t count_open_descriptors()
 {
