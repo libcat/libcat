@@ -75,3 +75,72 @@ TEST(cat_coroutine, close_rejects_waiting_and_uninitialized_coroutines)
     ASSERT_FALSE(cat_coroutine_close(&uninitialized));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
 }
+
+TEST(cat_coroutine, deadlock_callback_resumes_waiting_coroutine)
+{
+    static cat_coroutine_t *waiting = nullptr;
+    static unsigned int calls = 0;
+    calls = 0;
+    cat_coroutine_t coroutine;
+    ASSERT_EQ(cat_coroutine_create(&coroutine, [](cat_data_t *) -> cat_data_t * {
+        EXPECT_TRUE(cat_coroutine_yield(nullptr, nullptr));
+        return nullptr;
+    }), &coroutine);
+    waiting = &coroutine;
+    DEFER(waiting = nullptr);
+    DEFER(if (cat_coroutine_is_alive(&coroutine)) {
+        cat_coroutine_resume(&coroutine, nullptr, nullptr);
+    } else if (cat_coroutine_is_available(&coroutine)) {
+        cat_coroutine_close(&coroutine);
+    });
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    auto original = cat_coroutine_set_deadlock_callback([]() {
+        calls++;
+        EXPECT_FALSE(cat_coroutine_is_deadlocked());
+        EXPECT_TRUE(cat_coroutine_resume(waiting, nullptr, nullptr));
+    });
+    DEFER(cat_coroutine_set_deadlock_callback(original));
+    // With no events left, the callback gets one chance to complete the waiting coroutine.
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(calls, 1);
+    ASSERT_TRUE(cat_coroutine_is_over(&coroutine));
+    ASSERT_FALSE(cat_coroutine_is_deadlocked());
+}
+
+TEST(cat_coroutine, scheduler_deadlock_handler_recovers)
+{
+    static cat_coroutine_t *waiting = nullptr;
+    static unsigned int calls = 0;
+    calls = 0;
+    ASSERT_NE(cat_event_scheduler_close(), nullptr);
+    DEFER(cat_event_scheduler_run(nullptr));
+    const cat_coroutine_scheduler_t scheduler = {
+        cat_event_schedule,
+        []() {
+            calls++;
+            EXPECT_TRUE(cat_coroutine_is_deadlocked());
+            cat_coroutine_unlock_deadlock();
+            EXPECT_FALSE(cat_coroutine_is_deadlocked());
+            EXPECT_TRUE(cat_coroutine_resume(waiting, nullptr, nullptr));
+        }
+    };
+    ASSERT_NE(cat_coroutine_scheduler_run(nullptr, &scheduler), nullptr);
+    DEFER(cat_coroutine_scheduler_close());
+    cat_coroutine_t coroutine;
+    ASSERT_EQ(cat_coroutine_create(&coroutine, [](cat_data_t *) -> cat_data_t * {
+        EXPECT_TRUE(cat_coroutine_yield(nullptr, nullptr));
+        return nullptr;
+    }), &coroutine);
+    waiting = &coroutine;
+    DEFER(waiting = nullptr);
+    DEFER(if (cat_coroutine_is_alive(&coroutine)) {
+        cat_coroutine_resume(&coroutine, nullptr, nullptr);
+    } else if (cat_coroutine_is_available(&coroutine)) {
+        cat_coroutine_close(&coroutine);
+    });
+    ASSERT_TRUE(cat_coroutine_resume(&coroutine, nullptr, nullptr));
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EQ(calls, 1);
+    ASSERT_TRUE(cat_coroutine_is_over(&coroutine));
+    ASSERT_FALSE(cat_coroutine_is_deadlocked());
+}
