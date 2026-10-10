@@ -44,6 +44,36 @@ TEST(cat_socket, open_native_udp_socket_preserves_datagrams)
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "native-udp");
 }
 
+TEST(cat_socket, empty_datagram_receive_timeout_preserves_socket)
+{
+    for (cat_socket_type_t type : {
+        CAT_SOCKET_TYPE_UDP4,
+#ifdef CAT_OS_UNIX_LIKE
+        CAT_SOCKET_TYPE_UDG,
+#endif
+    }) {
+        SCOPED_TRACE(type);
+        cat_socket_t receiver;
+        ASSERT_EQ(cat_socket_create(&receiver, type), &receiver);
+        DEFER(cat_socket_close(&receiver));
+        const std::string name = type == CAT_SOCKET_TYPE_UDP4 ? TEST_LISTEN_IPV4 : get_random_path();
+        ASSERT_TRUE(cat_socket_bind_to(&receiver, name.data(), name.size(), 0));
+        char buffer[1] = {'x'};
+        ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), 1), -1);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+        ASSERT_EQ(buffer[0], 'x');
+        ASSERT_TRUE(cat_socket_is_available(&receiver));
+        cat_socket_t sender;
+        ASSERT_EQ(cat_socket_create(&sender, type), &sender);
+        DEFER(cat_socket_close(&sender));
+        ASSERT_TRUE(cat_socket_connect_to(&sender, name.data(), name.size(),
+            type == CAT_SOCKET_TYPE_UDP4 ? cat_socket_get_sock_port(&receiver) : 0));
+        ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("y")));
+        ASSERT_EQ(cat_socket_recv(&receiver, buffer, sizeof(buffer)), sizeof(buffer));
+        ASSERT_EQ(buffer[0], 'y');
+    }
+}
+
 TEST(cat_socket, datagram_vector_destinations)
 {
     cat_socket_t receiver, sender;
