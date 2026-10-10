@@ -18,6 +18,10 @@
 
 #include "test.h"
 
+#ifdef CAT_OS_LINUX
+#include <sys/resource.h>
+#endif
+
 const std::string keyword = "Watchdog";
 
 static void test_sys_nanosleep_nocancel(cat_nsec_t ns_total)
@@ -160,3 +164,43 @@ TEST(cat_watchdog, not_running)
 {
     ASSERT_EQ(cat_watchdog_get_quantum(), -1);
 }
+
+#if defined(CAT_OS_LINUX) && GTEST_HAS_DEATH_TEST
+TEST(cat_watchdog, thread_limit_failure_and_restart)
+{
+    SKIP_IF_(getuid() == 0, "RLIMIT_NPROC does not restrict root");
+    ASSERT_FALSE(cat_watchdog_is_running());
+    ASSERT_EXIT({
+        struct rlimit original;
+        if (getrlimit(RLIMIT_NPROC, &original) != 0) {
+            std::exit(1);
+        }
+        for (bool allocated : {false, true}) {
+            struct rlimit restricted = original;
+            restricted.rlim_cur = 0;
+            if (setrlimit(RLIMIT_NPROC, &restricted) != 0) {
+                std::exit(2);
+            }
+            cat_watchdog_t watchdog;
+            bool started = cat_watchdog_run(allocated ? nullptr : &watchdog, 0, 0, nullptr);
+            cat_errno_t error = cat_get_last_error_code();
+            bool running = cat_watchdog_is_running();
+            // Restore the child's limit before recovery and sanitizer shutdown.
+            if (setrlimit(RLIMIT_NPROC, &original) != 0) {
+                std::exit(3);
+            }
+            if (started) {
+                cat_watchdog_stop();
+            }
+            if (started || running || error != CAT_EAGAIN) {
+                std::exit(4);
+            }
+            if (!cat_watchdog_run(allocated ? nullptr : &watchdog, 0, 0, nullptr) || !cat_watchdog_stop()) {
+                std::exit(5);
+            }
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+    ASSERT_FALSE(cat_watchdog_is_running());
+}
+#endif
