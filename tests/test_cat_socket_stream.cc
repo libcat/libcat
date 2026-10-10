@@ -101,6 +101,11 @@ TEST(cat_socket, partial_stream_read_preserves_received_bytes)
         ASSERT_TRUE(cat_socket_close(&sender));
         if (!start_read_first) {
             ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&receiver), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+            cat_sockaddr_info_t source = {};
+            source.length = sizeof(source.address);
+            ASSERT_EQ(cat_socket_peekfrom(&receiver, buffer, sizeof(buffer), &source.address.common, &source.length), 3);
+            ASSERT_EQ(std::string(buffer, 3), "abc");
+            ASSERT_EQ(source.length, 0);
             read();
         }
         ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
@@ -108,7 +113,10 @@ TEST(cat_socket, partial_stream_read_preserves_received_bytes)
         ASSERT_EQ(received, 3);
         ASSERT_EQ(std::string(buffer, received), "abc");
         ASSERT_EQ(error, CAT_ECONNRESET);
-        ASSERT_EQ(cat_socket_recv(&receiver, buffer, sizeof(buffer)), 0);
+        cat_sockaddr_info_t source = {};
+        source.length = sizeof(source.address);
+        ASSERT_EQ(cat_socket_recvfrom(&receiver, buffer, sizeof(buffer), &source.address.common, &source.length), 0);
+        ASSERT_EQ(source.length, 0);
     }
 }
 
