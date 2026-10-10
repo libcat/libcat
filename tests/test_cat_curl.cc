@@ -641,8 +641,9 @@ TEST(cat_curl, yield_after_socket_removed)
 TEST(cat_curl_multi, cleanup_unfinished_transfer)
 {
     // Finish the next request with a fresh multi after closing an unfinished one.
-    for (bool complete : {false, true}) {
-        SCOPED_TRACE(complete);
+    for (cat_timeout_t wait_timeout : std::array<cat_timeout_t, 3>{TEST_IO_TIMEOUT, -1, 0}) {
+        SCOPED_TRACE(wait_timeout);
+        const bool complete = wait_timeout == 0;
         cat_socket_t server;
         ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP), &server);
         DEFER(cat_socket_close(&server));
@@ -711,7 +712,7 @@ TEST(cat_curl_multi, cleanup_unfinished_transfer)
                 wg++;
                 DEFER(wg--);
                 do {
-                    wait_result = cat_curl_multi_wait(multi, nullptr, 0, TEST_IO_TIMEOUT, nullptr);
+                    wait_result = cat_curl_multi_wait(multi, nullptr, 0, static_cast<int>(wait_timeout), nullptr);
                 } while (wait_result == CURLM_OK);
                 wait_done = true;
             });
