@@ -322,6 +322,11 @@ TEST(cat_error, orig_errno){
         ASSERT_EQ(cat_orig_errno(CAT_##name), name);
     ORIG_ERRNO_MAP(ORIG_ASSERT);
     #undef ORIG_ASSERT
+    #define ORIG_EXT_ASSERT(name, original) \
+        ASSERT_EQ(cat_orig_errno(CAT_##name), original);
+    CAT_ERRNO_EXT_ORIG_MAP(ORIG_EXT_ASSERT);
+    #undef ORIG_EXT_ASSERT
+    ASSERT_LT(cat_orig_errno(CAT_UNKNOWN), 0);
 }
 
 TEST(cat_error, custom_stringify_handlers)
