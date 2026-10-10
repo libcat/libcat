@@ -86,6 +86,19 @@ TEST(cat_error, update_last_error_with_null_format)
     cat_update_last_error(INT_MAX, NULL);
     ASSERT_EQ(cat_get_last_error_code(), INT_MAX);
     ASSERT_STREQ(cat_get_last_error_message(), "Unknown error");
+
+    auto forward = [](cat_errno_t code, const char *format, ...) -> void {
+        va_list args;
+        va_start(args, format);
+        cat_update_last_error_va_list(code, format, args);
+        va_end(args);
+    };
+    forward(CAT_EBADF, nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_STREQ(cat_get_last_error_message(), cat_strerror(CAT_EBADF));
+    forward(CAT_EINVAL, "%s", "formatted error");
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_STREQ(cat_get_last_error_message(), "formatted error");
 }
 
 #ifndef E2BIG
