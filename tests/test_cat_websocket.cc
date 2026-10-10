@@ -156,7 +156,7 @@ TEST(cat_websocket, header_preserves_masking_key)
     const char key[] = {'\x12', '\0', '\x34', '\x56'};
     cat_websocket_header_set_masking_key(&header, key);
 
-    // 长度编码变化时，mask 从短 header 移至扩展长度之后，再移回原位。
+    // Changing length encoding moves the mask past extended lengths and back to the short header.
     for (uint64_t length : {UINT64_C(125), UINT64_C(126), UINT64_C(65536), UINT64_C(0), UINT64_C(65535)}) {
         SCOPED_TRACE(length);
         cat_websocket_header_set_payload_length(&header, length);

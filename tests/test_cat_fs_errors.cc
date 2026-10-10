@@ -487,7 +487,7 @@ TEST(cat_fs, stdio_closed_descriptor_errors)
     bool open = true;
     DEFER(if (open) { cat_fs_fclose(stream); });
     ASSERT_EQ(cat_fs_close(fd), 0);
-    // FILE 对象仍有效，但其系统 fd 已关闭；各包装函数必须报告真实的 EBADF。
+    // The FILE object remains valid after its fd closes; wrappers must report EBADF.
     ASSERT_EQ(cat_fs_fwrite("data", 1, 4, stream), 4);
     ASSERT_EQ(cat_fs_fflush(stream), EOF);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);

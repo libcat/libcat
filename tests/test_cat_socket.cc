@@ -2598,7 +2598,7 @@ TEST(cat_socket, open_socket_preserves_connection)
     ASSERT_TRUE(cat_socket_open_socket(&alias, &client));
     ASSERT_TRUE(cat_socket_close(&client));
 
-    // 关闭其中一个引用不关闭共享连接；最后一个引用仍可读写。
+    // Closing one reference preserves the shared connection for the remaining reference.
     ASSERT_TRUE(cat_socket_is_established(&alias));
     ASSERT_TRUE(cat_socket_send(&alias, CAT_STRL("shared")));
     char buffer[CAT_STRLEN("shared")];

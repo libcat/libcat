@@ -618,7 +618,7 @@ TEST(cat_buffer, realloc_failure_preserves_data)
     failing_allocator.realloc_function = [](char *, size_t) -> char * { return nullptr; };
     ASSERT_TRUE(cat_buffer_register_allocator(&failing_allocator));
 
-    // 扩容失败不能丢弃已经写入的内容，也不能提前更新 size／length。
+    // Failed growth must preserve existing bytes, capacity and length.
     ASSERT_FALSE(cat_buffer_realloc(&buffer, size * 2));
     ASSERT_FALSE(cat_buffer_write(&buffer, size, CAT_STRL("more")));
     ASSERT_FALSE(cat_buffer_append_printf(&buffer, "%032d", 1));
@@ -648,7 +648,7 @@ TEST(cat_buffer, pair_allocation_failure)
     cat_buffer_allocator_t allocator = cat_buffer_allocator;
     DEFER(cat_buffer_register_allocator(&allocator));
     cat_buffer_allocator_t failing_allocator = allocator;
-    // 只让第二个 buffer 的分配失败，验证第一个 buffer 会被释放。
+    // Fail the second allocation and verify that the first buffer is released.
     failing_allocator.alloc_function = [](size_t size) -> char * {
         return size == 16 ? nullptr : static_cast<char *>(cat_malloc(size));
     };

@@ -142,7 +142,7 @@ TEST(cat_pq, query_error_and_recovery)
     DEFER(PQclear(error));
     ASSERT_EQ(PQresultStatus(error), PGRES_FATAL_ERROR);
     ASSERT_STREQ(PQresultErrorField(error, PG_DIAG_SQLSTATE), "42601");
-    // SQL 错误只影响该语句；连接仍可执行下一次合法查询。
+    // A statement error must leave the connection usable for the next valid query.
     PGresult *result = cat_pq_exec(conn, "SELECT 17; SELECT 23;");
     ASSERT_NE(result, nullptr);
     DEFER(PQclear(result));

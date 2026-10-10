@@ -388,7 +388,7 @@ TEST(cat_poll, invalid_descriptors)
         {CAT_OS_INVALID_SOCKET, POLLOUT, POLLNONE},
     };
     ASSERT_EQ(cat_poll(descriptors, CAT_ARRAY_SIZE(descriptors), 0), 2);
-    // libuv 的无效句柄映射依平台不同，必须报告错误，不能当成可读写。
+    // Invalid-handle events vary across libuv platforms; they must report errors, not readiness.
     ASSERT_NE(descriptors[0].revents & (POLLERR | POLLNVAL), 0);
     ASSERT_NE(descriptors[1].revents & (POLLERR | POLLNVAL), 0);
 }

@@ -354,7 +354,7 @@ TEST(cat_error, orig_errno){
 TEST(cat_error, custom_stringify_handlers)
 {
     constexpr cat_errno_t custom_error = INT_MIN;
-    // 处理器由模块持有并在 shutdown 释放；重复运行测试时只注册一次。
+    // The module owns the handler until shutdown; register it once across repeated runs.
     static bool registered = false;
     if (!registered) {
         ASSERT_STREQ(cat_strerror(custom_error), "Unknown error");

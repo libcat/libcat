@@ -245,7 +245,7 @@ TEST(cat_log, buffer_growth_failure_and_recovery)
 
 TEST(cat_log, write_failure_and_libc_fallback)
 {
-    // fallback 状态属于进程；在子进程验证写入失败及后续恢复，不影响其它日志用例。
+    // The fallback is process-wide; isolate output failure and recovery from other log tests.
     ASSERT_EXIT({
         bool valid = false;
         bool pipe_rejected = true;

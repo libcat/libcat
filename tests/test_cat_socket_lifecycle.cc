@@ -37,7 +37,7 @@ TEST(cat_socket, recreate_allocated)
 {
     cat_socket_t *socket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP4);
     ASSERT_NE(socket, nullptr);
-    // 堆分配对象重建时旧对象已释放，后续只能使用返回的新对象。
+    // Recreating a heap socket releases the old object; use only the returned replacement.
     socket = cat_socket_recreate(socket, CAT_SOCKET_TYPE_UDP4);
     ASSERT_NE(socket, nullptr);
     DEFER(cat_socket_close(socket));
@@ -176,7 +176,7 @@ TEST(cat_socket, timeout_options)
     ASSERT_EQ(cat_socket_get_dns_timeout(&socket), 29);
     ASSERT_EQ(cat_socket_get_read_timeout(&socket), 29);
     ASSERT_EQ(cat_socket_get_write_timeout(&socket), 29);
-    // 整体超时配置不改变 accept，监听等待遵守单独的 accept 设置。
+    // The general timeout leaves accept unchanged; listener waits use the accept timeout.
     ASSERT_EQ(cat_socket_get_accept_timeout(&socket), 43);
     ASSERT_TRUE(cat_socket_close(&socket));
     for (const auto &option : options) {

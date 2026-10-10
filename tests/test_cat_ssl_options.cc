@@ -98,7 +98,7 @@ TEST(cat_ssl, alpn_server_protocols)
     cat_update_last_error(CAT_ECANCELED, "Previous unrelated operation failed");
     ASSERT_FALSE(cas_ssl_context_set_alpn_protocols(context, cat_false, too_long.c_str()));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
-    // 无效新配置不能覆盖先前成功设置的协议列表。
+    // An invalid replacement must preserve the previously configured protocol list.
     ASSERT_EQ(context->alpn.length, protocol.length() + 1);
     ASSERT_EQ(std::string(context->alpn.value + 1, protocol.length()), protocol);
     too_long.assign(65535, 'b');
@@ -321,7 +321,7 @@ TEST(cat_ssl, bio_handshake_and_binary_records)
     ASSERT_GT(encrypted_length, input.length());
     ASSERT_TRUE(cat_buffer_append(&server.read_buffer, encrypted, encrypted_length));
     std::string output;
-    // 多条 TLS record 分批解密，数据中的 NUL 不能被当成字符串终止符。
+    // Decrypt multiple TLS records in chunks; embedded NUL bytes remain payload data.
     while (output.length() < input.length()) {
         char buffer[257];
         size_t length = sizeof(buffer);
@@ -457,7 +457,7 @@ TEST(cat_socket, crypto_setup_errors_and_timeout)
         state->after = true;
         state->success = success;
     };
-    // TCP 对端保持连接但不参与 TLS；握手超时应报告失败并关闭不可恢复的连接。
+    // The TCP peer stays open without TLS; handshake timeout must fail and close the connection.
     ASSERT_FALSE(cat_socket_enable_crypto_ex(&client, &options, 1));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
     ASSERT_TRUE(callbacks.before);

@@ -76,7 +76,7 @@ TEST(cat_http_parser, chunked_body_events)
         const char *next = cat_http_parser_get_current_pos(&parser);
         ASSERT_GE(next, cursor);
         ASSERT_LE(next, request + CAT_STRLEN(request));
-        // 同一位置可先报告 chunk 结束，再报告 message 结束；事件变化也代表进展。
+        // Chunk and message completion can share an offset; an event change also means progress.
         ASSERT_TRUE(next > cursor || event != previous || cat_http_parser_is_completed(&parser));
         previous = event;
         cursor = next;
@@ -141,7 +141,7 @@ TEST(cat_http_parser, multipart_content_type_parameters)
                 offset += parsed;
                 available = std::min(request.length(), std::max(available, offset) + input_size);
             }
-            // multipart 完成事件可能先于末尾 CRLF；未消费部分只能是终止换行。
+            // Multipart completion can precede the final CRLF; only that terminator may remain.
             std::string remaining = request.substr(offset);
             ASSERT_TRUE(remaining.empty() || remaining == "\r\n" || remaining == "\n");
             ASSERT_EQ(body, "abc");
