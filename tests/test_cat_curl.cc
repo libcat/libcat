@@ -638,6 +638,34 @@ TEST(cat_curl, yield_after_socket_removed)
     ASSERT_EQ(std::string(buffer.value, buffer.length), "OK");
 }
 
+TEST(cat_curl_multi, optional_outputs_and_extra_descriptors)
+{
+    CURLM *multi = cat_curl_multi_init();
+    ASSERT_NE(multi, nullptr);
+    DEFER(cat_curl_multi_cleanup(multi));
+    ASSERT_EQ(cat_curl_multi_perform(multi, nullptr), CURLM_OK);
+    ASSERT_EQ(cat_curl_multi_wait(multi, nullptr, 0, 0, nullptr), CURLM_OK);
+
+    cat_socket_t socket;
+    ASSERT_EQ(cat_socket_create(&socket, CAT_SOCKET_TYPE_UDP), &socket);
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    curl_waitfd extra = {};
+    extra.fd = cat_socket_get_fd(&socket);
+    ASSERT_NE(extra.fd, CAT_SOCKET_INVALID_FD);
+    extra.events = CURL_WAIT_POLLIN;
+    // Extra descriptors are unsupported; rejection must leave the multi usable.
+    ASSERT_EQ(cat_curl_multi_wait(multi, &extra, 1, 0, nullptr), CURLM_INTERNAL_ERROR);
+    ASSERT_EQ(cat_curl_multi_wait(multi, &extra, 0, 0, nullptr), CURLM_INTERNAL_ERROR);
+    ASSERT_EQ(cat_curl_multi_wait(multi, nullptr, 1, 0, nullptr), CURLM_INTERNAL_ERROR);
+    int running = -1;
+    ASSERT_EQ(cat_curl_multi_perform(multi, &running), CURLM_OK);
+    ASSERT_EQ(running, 0);
+    int numfds = -1;
+    ASSERT_EQ(cat_curl_multi_wait(multi, nullptr, 0, 0, &numfds), CURLM_OK);
+    ASSERT_EQ(numfds, 0);
+}
+
 TEST(cat_curl_multi, cleanup_unfinished_transfer)
 {
     // Finish the next request with a fresh multi after closing an unfinished one.
