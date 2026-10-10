@@ -271,6 +271,12 @@ TEST(cat_log, write_failure_and_libc_fallback)
             if (n != -1 || (errno != EAGAIN && errno != EWOULDBLOCK)) { exit(1); }
             // fwrite can accept buffered bytes while the following flush fails.
             pipe_rejected = !cat_log_fwrite(output, CAT_STRL("full pipe"));
+            clearerr(output);
+            FILE *error_output = cat_get_error_output();
+            cat_set_error_output(output);
+            CAT_NOTICE(TEST, "full pipe logging");
+            pipe_rejected = pipe_rejected && ferror(output) != 0;
+            cat_set_error_output(error_output);
         }
 #endif
         {
