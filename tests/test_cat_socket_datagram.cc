@@ -74,6 +74,42 @@ TEST(cat_socket, empty_datagram_receive_timeout_preserves_socket)
     }
 }
 
+TEST(cat_socket, pending_ipv6_datagram_receive_preserves_source)
+{
+    cat_socket_t receiver, sender;
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP6), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    if (!cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV6), 0)) {
+        if (cat_get_last_error_code() == CAT_EAFNOSUPPORT || cat_get_last_error_code() == CAT_EADDRNOTAVAIL) {
+            GTEST_SKIP() << "IPv6 loopback is unavailable";
+        }
+        FAIL() << cat_get_last_error_message();
+    }
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDP6), &sender);
+    DEFER(cat_socket_close(&sender));
+    ASSERT_TRUE(cat_socket_bind_to(&sender, CAT_STRL(TEST_LISTEN_IPV6), 0));
+    char buffer[3] = {};
+    cat_sockaddr_info_t source = {};
+    source.length = sizeof(source.address);
+    wait_group wg;
+    ssize_t received = -1;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        received = cat_socket_recvfrom_ex(&receiver, buffer, sizeof(buffer), &source.address.common,
+            &source.length, TEST_IO_TIMEOUT);
+    });
+    DEFER(if (cat_socket_get_io_state(&receiver) == CAT_SOCKET_IO_FLAG_READ) { cat_socket_close(&receiver); } wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_socket_get_io_state(&receiver), CAT_SOCKET_IO_FLAG_READ);
+    ASSERT_TRUE(cat_socket_send_to(&sender, CAT_STRL("abc"), CAT_STRL(TEST_LISTEN_IPV6), cat_socket_get_sock_port(&receiver)));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(received, sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "abc");
+    ASSERT_EQ(source.address.common.sa_family, AF_INET6);
+    ASSERT_EQ(source.length, sizeof(cat_sockaddr_in6_t));
+    ASSERT_EQ(cat_sockaddr_get_port(&source.address.common), cat_socket_get_sock_port(&sender));
+}
+
 TEST(cat_socket, datagram_vector_destinations)
 {
     cat_socket_t receiver, sender;
