@@ -181,20 +181,38 @@ TEST(cat_poll, listeners_registered_in_reverse_descriptor_order)
     ASSERT_TRUE(cat_socket_listen(listeners[1], TEST_SERVER_BACKLOG));
     ASSERT_TRUE(cat_socket_listen(listeners[0], TEST_SERVER_BACKLOG));
     for (cat_socket_t *listener : listeners) {
+    for (bool multiple : {false, true}) {
+        SCOPED_TRACE(multiple);
         cat_socket_t client, connection;
         ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
         DEFER(cat_socket_close(&client));
         ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
         DEFER(cat_socket_close(&connection));
-        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(listener)));
         cat_pollfd_t descriptor = {cat_socket_get_fd(listener), POLLIN, POLLNONE};
-        ASSERT_EQ(cat_poll(&descriptor, 1, TEST_IO_TIMEOUT), 1);
-        ASSERT_EQ(descriptor.revents, POLLIN);
+        cat_pollfd_events_t revents = POLLNONE;
+        int ready = 0;
+        bool done = false;
+        wait_group wg;
+        cat_coroutine_t *poller = co([&] {
+            wg++;
+            DEFER(wg--);
+            ready = multiple ? cat_poll(&descriptor, 1, TEST_IO_TIMEOUT)
+                : cat_poll_one(descriptor.fd, POLLIN, &revents, TEST_IO_TIMEOUT);
+            done = true;
+        });
+        DEFER(if (!done) { cat_coroutine_resume(poller, nullptr, nullptr); });
+        ASSERT_FALSE(done);
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(listener)));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(done);
+        ASSERT_EQ(ready, 1);
+        ASSERT_EQ(multiple ? descriptor.revents : revents, POLLIN);
         ASSERT_TRUE(cat_socket_accept(listener, &connection));
         ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("data")));
         char buffer[CAT_STRLEN("data")];
         ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
         ASSERT_EQ(std::string(buffer, sizeof(buffer)), "data");
+    }
     }
 }
 
