@@ -101,6 +101,11 @@ TEST(cat_http_parser, multipart_content_type_parameters)
         "multipart/form-data; boundary=\"te\\st\"",
         "multipart/form-data; boundary=test; note=\"a\\\\b\"",
         "multipart/form-data; note=\"\x80\xff\"; boundary=test",
+        "multipart/form-data \t; charset=utf-8; boundary=test",
+        "multipart/form-data; 1=value; boundary=test",
+        "multipart/form-data; b1=value; boundary=test",
+        "multipart/form-data; boundary1=value; boundary=test",
+        "multipart/form-data; note=\"escaped\\\tvalue\"; boundary=test",
     };
     const std::string content = "--test\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nabc\r\n--test--\r\n";
     for (const char *type : types) {
@@ -177,6 +182,15 @@ TEST(cat_http_parser, invalid_multipart_metadata_preserves_http_body)
         "multipart/form-data; note=\"unterminated; boundary=test",
         "multipart/form-data; note=\"escape\\",
         "multipart/form-data; boundary=" + std::string(71, 'a'),
+        "multipart/@; boundary=test",
+        "multipart/form/data; boundary=test",
+        "multipart/form-data; @=value; boundary=test",
+        "multipart/form-data; name@=value; boundary=test",
+        "multipart/form-data; name=@; boundary=test",
+        "multipart/form-data; note=\"valid\"@; boundary=test",
+        "multipart/form-data; boundary@=test",
+        "multipart/form-data; boundary=\"" + std::string(71, 'a') + "\"",
+        "multipart/form-data; boundary=value; boundary=test",
     };
     for (const std::string &type : types) {
         SCOPED_TRACE(type);
