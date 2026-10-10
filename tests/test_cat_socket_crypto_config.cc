@@ -185,4 +185,57 @@ TEST(cat_socket, large_certificate_handshake_and_transfer)
     ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "large-handshake");
 }
+
+TEST(cat_socket, interrupted_handshake_reports_failure_once)
+{
+    for (bool close_peer : {false, true}) {
+        SCOPED_TRACE(close_peer);
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, cat_true);
+        options.verify_peer = cat_false;
+        options.verify_peer_name = cat_false;
+        unsigned int callbacks = 0;
+        options.after_handshake_callback_data = &callbacks;
+        options.after_handshake_callback = [](cat_ssl_t *ssl, cat_bool_t success, void *data) {
+            ++*static_cast<unsigned int *>(data);
+            EXPECT_FALSE(success);
+            EXPECT_FALSE(cat_ssl_is_established(ssl));
+        };
+        wait_group wg;
+        if (close_peer) {
+            co([&] {
+                wg++;
+                DEFER(wg--);
+                unsigned char header[5];
+                // Drain the ClientHello record so a normal TCP EOF interrupts the handshake.
+                if (cat_socket_read(&connection, reinterpret_cast<char *>(header), sizeof(header)) == sizeof(header)) {
+                    size_t length = (static_cast<size_t>(header[3]) << 8) | header[4];
+                    std::string hello(length, '\0');
+                    EXPECT_EQ(cat_socket_read(&connection, hello.data(), hello.size()), hello.size());
+                } else {
+                    ADD_FAILURE() << cat_get_last_error_message();
+                }
+                cat_socket_close(&connection);
+            });
+        }
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); } wg(TEST_IO_TIMEOUT));
+        ASSERT_FALSE(cat_socket_enable_crypto_ex(&client, &options, close_peer ? TEST_IO_TIMEOUT : 1));
+        cat_errno_t error = cat_get_last_error_code();
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_EQ(error, close_peer ? CAT_ECONNRESET : CAT_ETIMEDOUT);
+        ASSERT_EQ(callbacks, 1);
+        ASSERT_FALSE(cat_socket_is_available(&client));
+    }
+}
 #endif
