@@ -83,6 +83,17 @@ TEST(cat_socket, open_invalid_source)
     ASSERT_NE(cat_get_last_error_code(), 0);
     ASSERT_FALSE(cat_socket_open_os_fd(&destination, CAT_OS_INVALID_FD));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    cat_socket_t ipc;
+    ASSERT_EQ(cat_socket_create(&ipc, CAT_SOCKET_TYPE_IPCC), &ipc);
+    DEFER(cat_socket_close(&ipc));
+    ASSERT_FALSE(cat_socket_open_os_socket(&ipc, CAT_OS_INVALID_SOCKET));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    char buffer[4] = {'k', 'e', 'p', 't'};
+    cat_set_last_error_code(CAT_EBUSY);
+    ASSERT_EQ(cat_socket_try_recv(&ipc, buffer, sizeof(buffer)), CAT_ENOTCONN);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "kept");
+    ASSERT_TRUE(cat_socket_is_available(&ipc));
 }
 
 TEST(cat_socket, timeout_options)

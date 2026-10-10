@@ -2371,6 +2371,11 @@ TEST(cat_socket, send_handle)
             char buffer[1];
             ASSERT_LT(cat_socket_read(socket, CAT_STRS(buffer)), 0);
             ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+            buffer[0] = 'x';
+            cat_set_last_error_code(CAT_EBUSY);
+            ASSERT_EQ(cat_socket_try_recv(socket, CAT_STRS(buffer)), CAT_EMISUSE);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+            ASSERT_EQ(buffer[0], 'x');
         }
 
         ASSERT_TRUE(cat_socket_send_handle(&main_socket, &main_client));
