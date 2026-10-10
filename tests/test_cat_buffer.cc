@@ -626,6 +626,21 @@ TEST(cat_buffer, realloc_failure_preserves_data)
     ASSERT_EQ(buffer.size, size);
     ASSERT_EQ(buffer.length, length);
     ASSERT_EQ(std::string(buffer.value, buffer.length), "content");
+    const std::string padding(buffer.size - buffer.length, 'x');
+    ASSERT_TRUE(cat_buffer_append(&buffer, padding.data(), padding.length()));
+    const std::string full(buffer.value, buffer.length);
+    ASSERT_FALSE(cat_buffer_zero_terminate(&buffer));
+    ASSERT_EQ(buffer.value, value);
+    ASSERT_EQ(buffer.length, size);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), full);
+    failing_allocator.alloc_function = [](size_t) -> char * { return nullptr; };
+    ASSERT_TRUE(cat_buffer_register_allocator(&failing_allocator));
+    cat_buffer_t copy;
+    ASSERT_FALSE(cat_buffer_dup(&buffer, &copy));
+    ASSERT_EQ(copy.value, nullptr);
+    ASSERT_EQ(copy.size, 0);
+    ASSERT_EQ(copy.length, 0);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), full);
 }
 
 TEST(cat_buffer, pair_allocation_failure)
