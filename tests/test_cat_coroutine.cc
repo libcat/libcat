@@ -19,12 +19,26 @@
 
 #include "test.h"
 
-#if defined(CAT_OS_LINUX) && defined(CAT_COROUTINE_USE_USER_STACK) && \
-    !defined(CAT_COROUTINE_USE_ASAN) && GTEST_HAS_DEATH_TEST
+#if defined(CAT_OS_LINUX) && defined(CAT_COROUTINE_USE_USER_STACK) && GTEST_HAS_DEATH_TEST
 #include <sys/resource.h>
 
-TEST(cat_coroutine, stack_mapping_failure_and_recovery)
+TEST(cat_coroutine, stack_allocation_failure_and_recovery)
 {
+#ifdef CAT_COROUTINE_USE_ASAN
+    char *original_options = cat_env_get_silent("ASAN_OPTIONS", nullptr);
+    DEFER({
+        if (original_options == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("ASAN_OPTIONS"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("ASAN_OPTIONS", original_options));
+        }
+        cat_free(original_options);
+    });
+    std::string options = original_options == nullptr ? "" : original_options;
+    // Re-executed children must let recoverable stack allocation failures reach Libcat.
+    options += ":allocator_may_return_null=1";
+    ASSERT_TRUE(cat_env_set("ASAN_OPTIONS", options.c_str()));
+#endif
     ASSERT_EXIT({
         FILE *statm = fopen("/proc/self/statm", "r");
         if (statm == nullptr) {
