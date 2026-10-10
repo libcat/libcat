@@ -20,6 +20,27 @@
 
 #ifdef CAT_OS_WAIT
 
+TEST(cat_os_wait, fork_restores_child_event_loop)
+{
+#ifdef CAT_COROUTINE_USE_THREAD_CONTEXT
+    SKIP_IF_(1, "Unable to fork with thread-context");
+#endif
+    cat_pid_t pid = cat_os_fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        // The public fork wrapper must leave coroutine timers usable in the child.
+        std::exit(cat_time_delay(0) ? 0 : 1);
+    }
+    bool reaped = false;
+    DEFER(if (!reaped) { kill(pid, SIGTERM); waitpid(pid, nullptr, 0); });
+    int status = 0;
+    cat_pid_t result = cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT);
+    reaped = result == pid;
+    ASSERT_EQ(result, pid);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 0);
+}
+
 static pid_t new_child_process(int exit_status = 0)
 {
     pid_t pid = fork();
