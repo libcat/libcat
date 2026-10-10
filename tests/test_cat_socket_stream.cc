@@ -1,0 +1,103 @@
+/*
+  +--------------------------------------------------------------------------+
+  | libcat                                                                   |
+  +--------------------------------------------------------------------------+
+  | Licensed under the Apache License, Version 2.0 (the "License");          |
+  | you may not use this file except in compliance with the License.         |
+  | You may obtain a copy of the License at                                  |
+  | http://www.apache.org/licenses/LICENSE-2.0                               |
+  | Unless required by applicable law or agreed to in writing, software      |
+  | distributed under the License is distributed on an "AS IS" BASIS,        |
+  | WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. |
+  | See the License for the specific language governing permissions and      |
+  | limitations under the License. See accompanying LICENSE file.            |
+  +--------------------------------------------------------------------------+
+ */
+
+#include "test.h"
+
+TEST(cat_socket, close_cancels_pending_accept)
+{
+    cat_socket_t server, connection;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); });
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(cat_socket_close(&connection));
+    wait_group wg;
+    bool accepted = true;
+    cat_errno_t error = 0;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        accepted = cat_socket_accept(&server, &connection);
+        error = cat_get_last_error_code();
+    });
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); } wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_socket_get_io_state(&server), CAT_SOCKET_IO_FLAG_ACCEPT);
+    ASSERT_TRUE(cat_socket_close(&server));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_FALSE(accepted);
+    ASSERT_EQ(error, CAT_ECANCELED);
+    ASSERT_FALSE(cat_socket_is_available(&server));
+    ASSERT_TRUE(cat_socket_is_available(&connection));
+    ASSERT_FALSE(cat_socket_is_established(&connection));
+}
+
+#ifdef CAT_OS_UNIX_LIKE
+TEST(cat_socket, blocked_stream_write_timeout_and_close)
+{
+    for (bool close_while_writing : {false, true}) {
+        SCOPED_TRACE(close_while_writing);
+        cat_socket_t server, sender, receiver;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+        ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+        DEFER(cat_socket_close(&receiver));
+        ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+        ASSERT_GT(cat_socket_set_send_buffer_size(&sender, 4096), 0);
+        ASSERT_GT(cat_socket_set_recv_buffer_size(&receiver, 4096), 0);
+        size_t capacity = static_cast<size_t>(cat_socket_get_send_buffer_size(&sender)) +
+            static_cast<size_t>(cat_socket_get_recv_buffer_size(&receiver));
+        const std::string data(capacity * 64, 'w');
+        wait_group wg;
+        bool sent = true;
+        cat_errno_t error = 0;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            sent = cat_socket_send_ex(&sender, data.data(), data.size(), close_while_writing ? TEST_IO_TIMEOUT : 10);
+            error = cat_get_last_error_code();
+        });
+        // Unblock and join before releasing the buffer captured by the writer.
+        DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); } wg(TEST_IO_TIMEOUT));
+        ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_WRITE);
+        if (close_while_writing) {
+            ASSERT_TRUE(cat_socket_close(&sender));
+        }
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_FALSE(sent);
+        ASSERT_EQ(error, close_while_writing ? CAT_ECANCELED : CAT_ETIMEDOUT);
+        ASSERT_FALSE(cat_socket_is_available(&sender));
+        std::string received;
+        char buffer[4096];
+        while (true) {
+            ssize_t length = cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT);
+            ASSERT_GE(length, 0);
+            if (length == 0) {
+                break;
+            }
+            received.append(buffer, length);
+        }
+        ASSERT_FALSE(received.empty());
+        ASSERT_LT(received.size(), data.size());
+        ASSERT_EQ(received, data.substr(0, received.size()));
+    }
+}
+#endif

@@ -987,6 +987,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_socket.cc
         tests/test_cat_socket_lifecycle.cc
         tests/test_cat_socket_datagram.cc
+        tests/test_cat_socket_stream.cc
         tests/test_cat_dns.cc
         tests/test_cat_work.cc
         tests/test_cat_buffer.cc
