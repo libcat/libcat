@@ -96,6 +96,53 @@ TEST(cat_log, timestamps)
     ASSERT_EQ(output, "[] [    MAIN    ] Info: <TEST> timestamp log\n");
 }
 
+TEST(cat_log, relative_timestamps_cross_second_boundary)
+{
+    cat_log_globals_t globals = CAT_G(log_globals);
+    DEFER(CAT_G(log_globals) = globals);
+    CAT_LOG_G(debug_level) = 0;
+    CAT_LOG_G(show_timestamps) = 3;
+    CAT_LOG_G(show_timestamps_as_relative) = cat_true;
+    constexpr int64_t nanoseconds_per_second = 1000000000;
+    auto difference = [](const struct timespec &to, const struct timespec &from) -> int64_t {
+        return static_cast<int64_t>(to.tv_sec - from.tv_sec) * nanoseconds_per_second + to.tv_nsec - from.tv_nsec;
+    };
+    struct timespec previous_before = {}, previous_after = {}, before = {}, after = {};
+    bool crossed = false;
+    const cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+    testing::internal::CaptureStdout();
+    do {
+        cat_clock_gettime_monotonic(&before);
+        CAT_LOG_INFO(TEST, "relative timestamp log");
+        cat_clock_gettime_monotonic(&after);
+        // These bounds prove that the two recorded timestamps require a nanosecond borrow.
+        if (previous_after.tv_sec != 0 && before.tv_sec > previous_after.tv_sec &&
+            after.tv_sec == before.tv_sec && after.tv_nsec < previous_before.tv_nsec) {
+            crossed = true;
+            break;
+        }
+        previous_before = before;
+        previous_after = after;
+        cat_sys_usleep(1000);
+    } while (cat_time_msec2() < deadline);
+    const std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_TRUE(crossed);
+    std::istringstream lines(output);
+    std::string line, last;
+    while (std::getline(lines, line)) {
+        if (!line.empty()) {
+            last = line;
+        }
+    }
+    long seconds, nanoseconds;
+    ASSERT_EQ(sscanf(last.c_str(), "[%ld.%ld]", &seconds, &nanoseconds), 2);
+    ASSERT_GE(nanoseconds, 0);
+    ASSERT_LT(nanoseconds, nanoseconds_per_second);
+    const int64_t elapsed = static_cast<int64_t>(seconds) * nanoseconds_per_second + nanoseconds;
+    ASSERT_GE(elapsed, difference(before, previous_after));
+    ASSERT_LE(elapsed, difference(after, previous_before));
+}
+
 TEST(cat_log, runtime_configuration_matches_environment)
 {
     char *error_output = cat_env_get_silent("CAT_LOG_ERROR_OUTPUT", nullptr);
