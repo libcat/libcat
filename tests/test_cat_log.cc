@@ -130,7 +130,7 @@ TEST(cat_log, relative_timestamps_cross_second_boundary)
     std::istringstream lines(output);
     std::string line, last;
     while (std::getline(lines, line)) {
-        if (!line.empty()) {
+        if (line.find("relative timestamp log") != std::string::npos) {
             last = line;
         }
     }
