@@ -19,6 +19,7 @@
 #ifdef CAT_OS_LINUX
 #include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -288,6 +289,46 @@ TEST(cat_fs, canceled_open_closes_unclaimed_descriptor)
 }
 
 #if GTEST_HAS_DEATH_TEST
+TEST(cat_fs, shutdown_with_blocked_flock_uses_existing_fail_stop)
+{
+    ASSERT_GT(TEST_IO_TIMEOUT, 0);
+    const std::string path = get_random_path() + "-" + std::to_string(getpid());
+    cat_file_t first = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0600);
+    ASSERT_GE(first, 0);
+    DEFER(cat_fs_close(first));
+    DEFER(if (file_exists(path.c_str())) { cat_fs_unlink(path.c_str()); });
+    cat_file_t second = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_RDWR);
+    ASSERT_GE(second, 0);
+    DEFER(cat_fs_close(second));
+    ASSERT_EQ(cat_fs_unlink(path.c_str()), 0);
+    ASSERT_EXIT({
+        alarm(static_cast<unsigned int>((TEST_IO_TIMEOUT + 999) / 1000));
+        if (cat_fs_flock(first, CAT_FS_FLOCK_FLAG_EXCLUSIVE) != 0) {
+            std::exit(1);
+        }
+        int locked = 0;
+        cat_errno_t error = 0;
+        cat_coroutine_t *waiter = co([&] {
+            locked = cat_fs_flock(second, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
+            error = cat_get_last_error_code();
+        });
+        const cat_nsec_t start = cat_time_nsec();
+        const cat_nsec_t timeout = static_cast<cat_nsec_t>(TEST_IO_TIMEOUT) * 1000 * 1000;
+        while (!has_blocked_io(SYS_flock, second)) {
+            if (cat_time_nsec() - start >= timeout || cat_time_delay(1) != CAT_RET_OK) {
+                std::exit(2);
+            }
+        }
+        if (!cat_coroutine_resume(waiter, nullptr, nullptr) ||
+            locked != -1 || error != CAT_ECANCELED) {
+            std::exit(3);
+        }
+        // Unix's existing blocked-thread shutdown ends this death-test child.
+        cat_runtime_shutdown_all();
+        std::exit(4);
+    }, testing::KilledBySignal(SIGKILL), "");
+}
+
 TEST(cat_fs, canceled_queued_flock_allows_shutdown)
 {
     ASSERT_GT(TEST_IO_TIMEOUT, 0);
