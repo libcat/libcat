@@ -284,3 +284,31 @@ TEST(cat_event, yield_from_defer)
     });
     ASSERT_TRUE(cat_coroutine_wait_all());
 }
+
+TEST(cat_event, handle_diagnostics_output_and_active_filter)
+{
+    uv_timer_t timer;
+    ASSERT_EQ(uv_timer_init(&CAT_EVENT_G(loop), &timer), 0);
+    DEFER(uv_close(reinterpret_cast<uv_handle_t *>(&timer), nullptr); cat_time_delay(0));
+    const std::string address = string_format("%p", static_cast<void *>(&timer));
+    for (cat_os_fd_t output : {CAT_STDOUT_FILENO, CAT_STDERR_FILENO, cat_os_fd_t(-1)}) {
+        SCOPED_TRACE(output);
+        const bool to_stderr = output == CAT_STDERR_FILENO;
+        if (to_stderr) {
+            testing::internal::CaptureStderr();
+        } else {
+            testing::internal::CaptureStdout();
+        }
+        cat_event_print_all_handles(output);
+        const std::string all = to_stderr ? testing::internal::GetCapturedStderr() : testing::internal::GetCapturedStdout();
+        ASSERT_NE(all.find(address), std::string::npos);
+        if (to_stderr) {
+            testing::internal::CaptureStderr();
+        } else {
+            testing::internal::CaptureStdout();
+        }
+        cat_event_print_active_handles(output);
+        const std::string active = to_stderr ? testing::internal::GetCapturedStderr() : testing::internal::GetCapturedStdout();
+        ASSERT_EQ(active.find(address), std::string::npos);
+    }
+}
