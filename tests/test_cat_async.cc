@@ -128,3 +128,32 @@ TEST(cat_async, cleanup_later)
     });
     ASSERT_TRUE(cat_async_cleanup(async, nullptr));
 }
+
+TEST(cat_async, reject_cleanup_while_waiting)
+{
+    cat_async_t *async = cat_async_create(nullptr);
+    ASSERT_NE(async, nullptr);
+    bool notified = false;
+    bool completed = false;
+    wait_group wg;
+    // Release the original waiter even if an assertion returns before notification.
+    DEFER(if (!notified) { cat_async_notify(async); } wg());
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_TRUE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
+        completed = true;
+    });
+    ASSERT_FALSE(completed);
+    ASSERT_FALSE(cat_async_cleanup(async, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_async_close(async, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_async_wait_and_close(async, nullptr, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(completed);
+    ASSERT_EQ(cat_async_notify(async), 0);
+    notified = true;
+    ASSERT_TRUE(wg());
+    ASSERT_TRUE(completed);
+}
