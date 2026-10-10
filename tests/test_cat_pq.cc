@@ -77,7 +77,7 @@ TEST(cat_pq, concurrency)
 {
     SKIP_IF(skip());
 
-    ASSERT_TRUE(cat_coroutine_wait_all()); // call it before timing test
+    ASSERT_TRUE(cat_coroutine_wait_all());
     auto concurrency = ([](uint32_t concurrency) {
         cat_sync_wait_group_t wg;
         ASSERT_NE(cat_sync_wait_group_create(&wg), nullptr);
@@ -97,18 +97,77 @@ TEST(cat_pq, concurrency)
     });
 
     if (!is_valgrind()) {
-        auto s1 = cat_time_msec();
         concurrency(TEST_MAX_CONCURRENCY / 8);
-        s1 = cat_time_msec() - s1;
-
-        auto s2 = cat_time_msec();
         concurrency(TEST_MAX_CONCURRENCY / 2);
-        s2 = cat_time_msec() - s2;
-
-        ASSERT_LE(s2 / s1, 3.0);
     } else {
         concurrency(TEST_MAX_CONCURRENCY);
     }
+}
+
+TEST(cat_pq, queries_wait_concurrently)
+{
+    SKIP_IF(skip());
+    ASSERT_GT(TEST_IO_TIMEOUT, 0);
+    std::array<PGconn *, 2> connections = {};
+    DEFER(for (PGconn *conn : connections) { if (conn != nullptr) { PQfinish(conn); } });
+    const std::string timeout = std::to_string(TEST_IO_TIMEOUT);
+    const char *timeout_values[] = {timeout.c_str()};
+    for (PGconn *&conn : connections) {
+        conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
+        ASSERT_NE(conn, nullptr);
+        ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
+        PGresult *result = cat_pq_exec_params(conn,
+            "SELECT set_config('statement_timeout', $1, false)",
+            1, nullptr, timeout_values, nullptr, nullptr, 0);
+        DEFER(PQclear(result));
+        ASSERT_NE(result, nullptr);
+        ASSERT_EQ(PQresultStatus(result), PGRES_TUPLES_OK);
+    }
+    std::string lock_key;
+    const char *values[] = {nullptr};
+    size_t started = 0, completed = 0;
+    wait_group wg;
+    PGconn *control = cat_pq_connectdb(TEST_PQ_CONNINFO);
+    ASSERT_NE(control, nullptr);
+    // Closing the control session releases its lock before waiting workers are joined.
+    DEFER(PQfinish(control));
+    ASSERT_EQ(PQstatus(control), CONNECTION_OK);
+    PGresult *locked = cat_pq_exec(control,
+        "SELECT pg_backend_pid(), pg_advisory_lock(pg_backend_pid()::bigint)");
+    DEFER(PQclear(locked));
+    ASSERT_NE(locked, nullptr);
+    ASSERT_EQ(PQresultStatus(locked), PGRES_TUPLES_OK);
+    ASSERT_EQ(PQntuples(locked), 1);
+    lock_key = PQgetvalue(locked, 0, 0);
+    values[0] = lock_key.c_str();
+    for (PGconn *conn : connections) {
+        co([&, conn] {
+            wg++;
+            DEFER(wg--);
+            started++;
+            PGresult *result = cat_pq_exec_params(conn,
+                "SELECT pg_advisory_xact_lock($1::bigint), 42",
+                1, nullptr, values, nullptr, nullptr, 0);
+            DEFER(PQclear(result));
+            ASSERT_NE(result, nullptr);
+            ASSERT_EQ(PQresultStatus(result), PGRES_TUPLES_OK);
+            ASSERT_EQ(PQntuples(result), 1);
+            ASSERT_STREQ(PQgetvalue(result, 0, 1), "42");
+            completed++;
+        });
+    }
+    // Both queries must yield while the control session still holds their lock.
+    ASSERT_EQ(started, connections.size());
+    ASSERT_EQ(completed, 0);
+    PGresult *released = cat_pq_exec_params(control,
+        "SELECT pg_advisory_unlock($1::bigint)",
+        1, nullptr, values, nullptr, nullptr, 0);
+    DEFER(PQclear(released));
+    ASSERT_NE(released, nullptr);
+    ASSERT_EQ(PQresultStatus(released), PGRES_TUPLES_OK);
+    ASSERT_STREQ(PQgetvalue(released, 0, 0), "t");
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(completed, connections.size());
 }
 
 TEST(cat_pq, parameterized_query)
