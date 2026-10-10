@@ -2087,7 +2087,8 @@ TEST(cat_socket, query_remote_http_server)
                 CAT_LOG_DEBUG(TEST_SOCKET, "total_bytes: %zu", total_bytes);
             } while (0);
         });
-        {
+        // A complete response can be read inline; only a pending reader locks recv.
+        if (cat_socket_get_io_state(&socket) & CAT_SOCKET_IO_FLAG_READ) {
             /* invalid read */
             char read_buffer[1];
             ASSERT_EQ(cat_socket_recv(&socket, CAT_STRS(read_buffer)), -1);

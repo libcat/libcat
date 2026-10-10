@@ -66,6 +66,47 @@ TEST(cat_socket, close_cancels_localhost_lookup)
     }
 }
 
+TEST(cat_socket, pending_reader_rejects_another_reader)
+{
+    cat_socket_t server, sender, receiver;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+    DEFER(cat_socket_close(&sender));
+    ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+    DEFER(if (cat_socket_is_available(&receiver)) { cat_socket_close(&receiver); });
+    ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+    wait_group wg;
+    char received = '\0';
+    ssize_t result = -1;
+    bool completed = false;
+    DEFER(if (cat_socket_is_available(&receiver)) { cat_socket_close(&receiver); } wg(TEST_IO_TIMEOUT));
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        result = cat_socket_recv(&receiver, &received, 1);
+        completed = true;
+    });
+    ASSERT_FALSE(completed);
+    ASSERT_EQ(cat_socket_get_io_state(&receiver), CAT_SOCKET_IO_FLAG_READ);
+    char other = '\0';
+    ASSERT_EQ(cat_socket_recv(&receiver, &other, 1), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+    ASSERT_FALSE(completed);
+    ASSERT_EQ(cat_socket_get_io_state(&receiver), CAT_SOCKET_IO_FLAG_READ);
+    ASSERT_TRUE(cat_socket_send(&sender, "x", 1));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(completed);
+    ASSERT_EQ(result, 1);
+    ASSERT_EQ(received, 'x');
+    ASSERT_TRUE(cat_socket_send(&sender, "y", 1));
+    ASSERT_EQ(cat_socket_recv(&receiver, &received, 1), 1);
+    ASSERT_EQ(received, 'y');
+}
+
 TEST(cat_socket, partial_stream_read_preserves_received_bytes)
 {
     for (bool start_read_first : {false, true}) {
