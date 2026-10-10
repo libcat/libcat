@@ -161,4 +161,57 @@ TEST(cat_pq, invalid_connection_options)
     ASSERT_LT(PQsocket(conn), 0);
 }
 
+TEST(cat_pq, commands_on_failed_connection)
+{
+    PGconn *conn = cat_pq_connectdb("invalid_connection_option=value");
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_BAD);
+    ASSERT_EQ(cat_pq_prepare(conn, "statement", "SELECT 1", 0, nullptr), nullptr);
+    ASSERT_EQ(cat_pq_exec_prepared(conn, "statement", 0, nullptr, nullptr, nullptr, 0), nullptr);
+    ASSERT_EQ(cat_pq_exec(conn, "SELECT 1"), nullptr);
+    ASSERT_EQ(cat_pq_exec_params(conn, "SELECT 1", 0, nullptr, nullptr, nullptr, nullptr, 0), nullptr);
+    ASSERT_NE(PQerrorMessage(conn)[0], '\0');
+}
+
+TEST(cat_pq, copy_query_returns_in_progress_result)
+{
+    SKIP_IF(skip());
+    PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
+    PGresult *result = cat_pq_exec(conn, "COPY (SELECT 42) TO STDOUT");
+    ASSERT_NE(result, nullptr);
+    DEFER(PQclear(result));
+    ASSERT_EQ(PQresultStatus(result), PGRES_COPY_OUT);
+    // COPY owns the connection until its data and final result have been consumed.
+    char *data = nullptr;
+    int length;
+    while ((length = PQgetCopyData(conn, &data, 1)) == 0) {
+        ASSERT_EQ(cat_poll_one(PQsocket(conn), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_EQ(PQconsumeInput(conn), 1);
+    }
+    ASSERT_GT(length, 0);
+    const std::string copied(data, length);
+    PQfreemem(data);
+    data = nullptr;
+    ASSERT_EQ(copied, "42\n");
+    while ((length = PQgetCopyData(conn, &data, 1)) == 0) {
+        ASSERT_EQ(cat_poll_one(PQsocket(conn), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+        ASSERT_EQ(PQconsumeInput(conn), 1);
+    }
+    ASSERT_EQ(length, -1);
+    PGresult *completed = PQgetResult(conn);
+    ASSERT_NE(completed, nullptr);
+    DEFER(PQclear(completed));
+    ASSERT_EQ(PQresultStatus(completed), PGRES_COMMAND_OK);
+    ASSERT_EQ(PQgetResult(conn), nullptr);
+    PGresult *next = cat_pq_exec(conn, "SELECT 43");
+    ASSERT_NE(next, nullptr);
+    DEFER(PQclear(next));
+    ASSERT_EQ(PQresultStatus(next), PGRES_TUPLES_OK);
+    ASSERT_STREQ(PQgetvalue(next, 0, 0), "43");
+}
+
 #endif
