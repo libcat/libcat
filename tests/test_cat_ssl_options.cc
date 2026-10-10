@@ -529,4 +529,28 @@ TEST(cat_ssl, plaintext_decrypt_error)
     ASSERT_EQ(cat_ssl_get_shutdown(&ssl), CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
 }
 
+TEST(cat_ssl, bio_transport_eof_marks_connection_unrecoverable)
+{
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+    for (bool incoming : {false, true}) {
+        SCOPED_TRACE(incoming);
+        cat_ssl_t ssl = {};
+        ASSERT_EQ(cat_ssl_create(&ssl, context), &ssl);
+        DEFER(cat_ssl_close(&ssl));
+        char buffer[1] = {'x'};
+        if (incoming) {
+            ASSERT_EQ(BIO_shutdown_wr(ssl.nbio), 1);
+            ASSERT_EQ(cat_ssl_write_encrypted_bytes(&ssl, buffer, sizeof(buffer)), CAT_RET_ERROR);
+        } else {
+            ASSERT_EQ(BIO_shutdown_wr(SSL_get_wbio(ssl.connection)), 1);
+            ASSERT_EQ(cat_ssl_read_encrypted_bytes(&ssl, buffer, sizeof(buffer)), CAT_RET_ERROR);
+        }
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+        ASSERT_TRUE(cat_ssl_is_down(&ssl));
+        ASSERT_EQ(cat_ssl_get_shutdown(&ssl), CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
+    }
+}
+
 #endif

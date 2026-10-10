@@ -238,4 +238,61 @@ TEST(cat_socket, interrupted_handshake_reports_failure_once)
         ASSERT_FALSE(cat_socket_is_available(&client));
     }
 }
+
+TEST(cat_socket, invalid_tls_record_closes_established_connection)
+{
+    const auto paths = publicCAPair->exportPEMs();
+    for (bool blocking : {false, true}) {
+        SCOPED_TRACE(blocking);
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t server_options, client_options;
+        cat_socket_crypto_options_init(&server_options, cat_false);
+        server_options.certificate = paths.cert;
+        server_options.certificate_key = paths.key;
+        cat_socket_crypto_options_init(&client_options, cat_true);
+        client_options.ca_file = paths.cert;
+        client_options.peer_name = "TestCA";
+        wait_group wg;
+        cat_bool_t server_ready = cat_false;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            server_ready = cat_socket_enable_crypto(&connection, &server_options);
+            if (!server_ready && cat_socket_is_available(&connection)) {
+                cat_socket_close(&connection);
+            }
+        });
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); }
+            if (cat_socket_is_available(&client)) { cat_socket_close(&client); } wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(cat_socket_enable_crypto(&client, &client_options));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(server_ready);
+        ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("verified")));
+        char buffer[CAT_STRLEN("verified")];
+        ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), "verified");
+        // The peer sends plaintext on the established TLS transport; it must not become application data.
+        ASSERT_EQ(send(cat_socket_get_fd(&client), CAT_STRL("not a TLS record"), 0), CAT_STRLEN("not a TLS record"));
+        if (blocking) {
+            ASSERT_EQ(cat_socket_recv(&connection, buffer, sizeof(buffer)), -1);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+        } else {
+            ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&connection), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+            cat_update_last_error(CAT_ECANCELED, "Previous unrelated operation failed");
+            ASSERT_EQ(cat_socket_try_recv(&connection, buffer, sizeof(buffer)), CAT_ESSL);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+        }
+        ASSERT_FALSE(cat_socket_is_available(&connection));
+    }
+}
 #endif
