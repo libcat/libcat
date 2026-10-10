@@ -115,4 +115,74 @@ TEST(cat_socket, crypto_configuration_errors_preserve_tcp)
         ASSERT_EQ(std::string(buffer, sizeof(buffer)), "plain-after-configuration-error");
     }
 }
+
+TEST(cat_socket, large_certificate_handshake_and_transfer)
+{
+    std::string names = "DNS:localhost";
+    for (unsigned int index = 0; names.size() < CAT_SSL_BUFFER_SIZE * 2; index++) {
+        names += ",DNS:name" + std::to_string(index) + ".example";
+    }
+    X509KeyCertPairConfig config = {
+        {"keyType", "RSA2048"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 365 * 86400},
+        {"subjectAltName", names},
+        {"basicConstraints", "CA:FALSE"},
+    };
+    auto certificate = X509KeyCertPair::create(config);
+    ASSERT_NE(certificate, nullptr);
+    const auto paths = certificate->exportPEMs();
+    cat_socket_t server, client, connection;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+    DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+    cat_socket_crypto_options_t client_options, server_options;
+    cat_socket_crypto_options_init(&server_options, cat_false);
+    server_options.certificate = paths.cert;
+    server_options.certificate_key = paths.key;
+    server_options.protocols = CAT_SSL_PROTOCOL_TLSv1_2;
+    int certificate_size = 0;
+    server_options.before_handshake_callback_data = &certificate_size;
+    server_options.before_handshake_callback = [](cat_ssl_t *ssl, void *data) -> cat_bool_t {
+        X509 *certificate = SSL_get_certificate(ssl->connection);
+        if (certificate == nullptr) {
+            return cat_false;
+        }
+        *static_cast<int *>(data) = i2d_X509(certificate, nullptr);
+        return *static_cast<int *>(data) > 0;
+    };
+    cat_socket_crypto_options_init(&client_options, cat_true);
+    client_options.ca_file = paths.cert;
+    client_options.peer_name = "localhost";
+    client_options.protocols = CAT_SSL_PROTOCOL_TLSv1_2;
+    wait_group wg;
+    cat_bool_t server_ready = cat_false;
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        server_ready = cat_socket_enable_crypto(&connection, &server_options);
+        if (!server_ready && cat_socket_is_available(&connection)) {
+            cat_socket_close(&connection);
+        }
+    });
+    DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); }
+        if (cat_socket_is_available(&client)) { cat_socket_close(&client); } wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_socket_enable_crypto(&client, &client_options));
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(server_ready);
+    ASSERT_GT(certificate_size, CAT_SSL_BUFFER_SIZE);
+    // A certificate larger than the BIO buffers must complete without losing TLS records.
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("large-handshake")));
+    char buffer[CAT_STRLEN("large-handshake")];
+    ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "large-handshake");
+}
 #endif
