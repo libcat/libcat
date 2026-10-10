@@ -466,3 +466,64 @@ TEST(cat_socket, datagram_cancel_receive_then_reuse)
         }
     }
 }
+
+#ifdef CAT_OS_LINUX
+TEST(cat_socket, udp_peer_error_then_reuse)
+{
+    for (const auto &[peek, pending] : std::array<std::pair<bool, bool>, 3>{
+        {{false, false}, {true, false}, {false, true}}}) {
+        SCOPED_TRACE(peek);
+        SCOPED_TRACE(pending);
+        cat_socket_t receiver, sender;
+        ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+        DEFER(if (cat_socket_is_available(&receiver)) { cat_socket_close(&receiver); });
+        ASSERT_TRUE(cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        const int port = cat_socket_get_sock_port(&receiver);
+        ASSERT_GT(port, 0);
+        ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDP4), &sender);
+        DEFER(cat_socket_close(&sender));
+        ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), port));
+        ASSERT_TRUE(cat_socket_close(&receiver));
+        char buffer[8];
+        memset(buffer, 'x', sizeof(buffer));
+        ssize_t result = -2;
+        cat_errno_t error = 0;
+        bool completed = false;
+        wait_group wg;
+        cat_coroutine_t *reader = nullptr;
+        auto read = [&] {
+            result = peek ?
+                cat_socket_peek_ex(&sender, buffer, sizeof(buffer), TEST_IO_TIMEOUT) :
+                cat_socket_recv_ex(&sender, buffer, sizeof(buffer), TEST_IO_TIMEOUT);
+            error = cat_get_last_error_code();
+            completed = true;
+        };
+        DEFER(if (reader != nullptr && !completed) { cat_coroutine_resume(reader, nullptr, nullptr); } wg());
+        if (pending) {
+            reader = co([&] {
+                wg++;
+                DEFER(wg--);
+                read();
+            });
+            ASSERT_FALSE(completed);
+        }
+        // Linux reports the closed local UDP peer to either an inline or pending reader.
+        ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("packet")));
+        if (!pending) {
+            read();
+        }
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(completed);
+        ASSERT_EQ(result, -1);
+        ASSERT_EQ(error, CAT_ECONNREFUSED);
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), std::string(sizeof(buffer), 'x'));
+        ASSERT_TRUE(cat_socket_is_available(&sender));
+        ASSERT_EQ(cat_socket_get_io_state(&sender), CAT_SOCKET_IO_FLAG_NONE);
+        ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+        ASSERT_TRUE(cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV4), port));
+        ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("reuse")));
+        ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT), CAT_STRLEN("reuse"));
+        ASSERT_EQ(std::string(buffer, CAT_STRLEN("reuse")), "reuse");
+    }
+}
+#endif
