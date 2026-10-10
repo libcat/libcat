@@ -39,7 +39,81 @@ TEST(cat_memory, out_of_memory_terminates_process)
         cat_out_of_memory();
     }, cat_test_is_abort_exit, "Out of memory");
 }
+
+TEST(cat_memory, unrecoverable_allocators_oom_terminate_process)
+{
+    char *original_options = cat_env_get_silent("ASAN_OPTIONS", nullptr);
+    DEFER({
+        cat_env_set("ASAN_OPTIONS", original_options);
+        cat_free(original_options);
+    });
+    std::string options = original_options == nullptr ? "" : original_options;
+    // Re-executed death-test children must let allocation failures reach Libcat.
+    options += ":allocator_may_return_null=1";
+    ASSERT_TRUE(cat_env_set("ASAN_OPTIONS", options.c_str()));
+    for (int operation = 0; operation < 6; operation++) {
+        SCOPED_TRACE(operation);
+        ASSERT_EXIT({
+            volatile size_t allocation_size = SIZE_MAX;
+            switch (operation) {
+                case 0:
+                    (void) cat_sys_malloc_unrecoverable(allocation_size);
+                    break;
+                case 1:
+                    (void) cat_sys_calloc_unrecoverable(2, allocation_size);
+                    break;
+                case 2: {
+                    void *memory = cat_sys_malloc_unrecoverable(CAT_TEST_DEFAULT_MEMORY_SIZE);
+                    (void) cat_sys_realloc_unrecoverable(memory, allocation_size);
+                    break;
+                }
+                case 3:
+                    (void) cat_malloc_unrecoverable(allocation_size);
+                    break;
+                case 4:
+                    (void) cat_calloc_unrecoverable(2, allocation_size);
+                    break;
+                case 5: {
+                    void *memory = cat_malloc_unrecoverable(CAT_TEST_DEFAULT_MEMORY_SIZE);
+                    (void) cat_realloc_unrecoverable(memory, allocation_size);
+                    break;
+                }
+            }
+            std::exit(1);
+        }, cat_test_is_abort_exit, "Out of memory");
+    }
+}
 #endif
+
+TEST(cat_memory, unrecoverable_allocators_zero_size)
+{
+    // Zero-sized requests may return null or a freeable pointer without being OOM.
+    cat_sys_free(cat_sys_malloc_unrecoverable(0));
+    cat_sys_free(cat_sys_calloc_unrecoverable(0, 1));
+    cat_sys_free(cat_sys_calloc_unrecoverable(1, 0));
+    cat_sys_free(cat_sys_realloc_unrecoverable(nullptr, 0));
+    cat_free(cat_malloc_unrecoverable(0));
+    cat_free(cat_calloc_unrecoverable(0, 1));
+    cat_free(cat_calloc_unrecoverable(1, 0));
+    cat_free(cat_realloc_unrecoverable(nullptr, 0));
+}
+
+TEST(cat_memory, unrecoverable_allocator_preserves_data)
+{
+    unsigned char *memory = static_cast<unsigned char *>(cat_calloc_unrecoverable(1, CAT_TEST_DEFAULT_MEMORY_SIZE));
+    ASSERT_NE(memory, nullptr);
+    DEFER(cat_free(memory));
+    for (size_t i = 0; i < CAT_TEST_DEFAULT_MEMORY_SIZE; i++) {
+        ASSERT_EQ(memory[i], 0);
+        memory[i] = static_cast<unsigned char>(i + 1);
+    }
+    void *resized = cat_realloc_unrecoverable(memory, CAT_TEST_DEFAULT_MEMORY_SIZE * 2);
+    ASSERT_NE(resized, nullptr);
+    memory = static_cast<unsigned char *>(resized);
+    for (size_t i = 0; i < CAT_TEST_DEFAULT_MEMORY_SIZE; i++) {
+        ASSERT_EQ(memory[i], i + 1);
+    }
+}
 
 #ifdef CAT_USE_DYNAMIC_ALLOCATOR
 TEST(cat_memory, invalid_allocator_preserves_registered_functions)
