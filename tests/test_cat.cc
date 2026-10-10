@@ -51,6 +51,26 @@ TEST(cat_sys, nanosleep_failed)
     ASSERT_EQ(cat_translate_sys_error(cat_sys_errno), CAT_EINVAL);
 }
 
+#if GTEST_HAS_DEATH_TEST
+TEST(cat, aggregate_lifecycle_restart)
+{
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_EXIT({
+        // Exercise the public aggregate lifecycle without replacing the parent test environment.
+        if (!cat_stop() || !cat_shutdown_all()) {
+            std::exit(1);
+        }
+        for (unsigned int repeat = 0; repeat < 2; repeat++) {
+            if (!cat_init_all() || !cat_run(CAT_RUN_EASY) ||
+                !cat_time_delay(0) || !cat_stop() || !cat_shutdown_all()) {
+                std::exit(2);
+            }
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+#endif
+
 TEST(cat, runtime_init_with_error_output_stdout)
 {
     FILE *original_error_output = cat_get_error_output();
