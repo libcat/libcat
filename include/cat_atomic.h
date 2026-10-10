@@ -170,6 +170,21 @@ typedef struct cat_atomic_##name##_s { \
     ) \
 } cat_atomic_##name##_t; \
 \
+CAT_ATOMIC_SYNC_CASE( \
+static cat_always_inline type_name_t cat_atomic_##name##_exchange_sync_impl(cat_atomic_##name##_t *atomic, type_name_t desired) \
+{ \
+    /* A competing writer can change the expected value; retry until this call writes its value. */ \
+    type_name_t expected = desired; \
+    while (1) { \
+        type_name_t actual = __sync_val_compare_and_swap(&atomic->value, expected, desired); \
+        if (actual == expected) { \
+            return actual; \
+        } \
+        expected = actual; \
+    } \
+} \
+) \
+\
 static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
     CAT_ATOMIC_C11_CASE({ \
@@ -201,7 +216,7 @@ static cat_always_inline void cat_atomic_##name##_store(cat_atomic_##name##_t *a
         (void) _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        (void) __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
+        (void) cat_atomic_##name##_exchange_sync_impl(atomic, desired); \
     }) \
     CAT_ATOMIC_NO_CASE({ \
         atomic->value = desired; \
@@ -269,7 +284,7 @@ static cat_always_inline void cat_atomic_##name##_store_explicit(cat_atomic_##na
         } \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        (void) __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
+        (void) cat_atomic_##name##_exchange_sync_impl(atomic, desired); \
     }) \
     CAT_ATOMIC_NO_CASE({ \
         atomic->value = desired; \
@@ -376,7 +391,7 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange(cat_atomic_##n
         return (type_name_t) _InterlockedExchange##interlocked_suffix(&atomic->value, (interlocked_type_t) desired); \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        return __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
+        return cat_atomic_##name##_exchange_sync_impl(atomic, desired); \
     }) \
     CAT_ATOMIC_NO_CASE({ \
         type_name_t ret = atomic->value; \
@@ -454,7 +469,7 @@ static cat_always_inline type_name_t cat_atomic_##name##_exchange_explicit(cat_a
         return ret; \
     }) \
     CAT_ATOMIC_SYNC_CASE({ \
-        return __sync_val_compare_and_swap(&atomic->value, atomic->value, desired); \
+        return cat_atomic_##name##_exchange_sync_impl(atomic, desired); \
     }) \
     CAT_ATOMIC_NO_CASE({ \
         type_name_t ret = atomic->value; \

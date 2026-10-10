@@ -17,6 +17,7 @@
  */
 
 #include "test.h"
+#include <algorithm>
 
 #include "cat_atomic.h"
 
@@ -146,5 +147,67 @@ TEST(cat_atomic, ptr)
         ASSERT_FALSE(atomic_ptr_compare_exchange_function(&atomic, &expected, nullptr));
         ASSERT_EQ(expected, buffer2);
         ASSERT_EQ(cat_atomic_ptr_load(&atomic), buffer2);
+    }
+}
+
+TEST(cat_atomic, concurrent_exchange_preserves_submitted_values)
+{
+    constexpr size_t worker_count = 2;
+    const size_t iterations = TEST_MAX_REQUESTS;
+    ASSERT_GT(iterations, 0);
+    ASSERT_LE(iterations, (UINT32_MAX - 1) / worker_count);
+    cat_atomic_uint32_t atomic;
+    cat_atomic_uint32_init(&atomic, 0);
+    uv_sem_t ready, start;
+    ASSERT_EQ(uv_sem_init(&ready, 0), 0);
+    DEFER(uv_sem_destroy(&ready));
+    ASSERT_EQ(uv_sem_init(&start, 0), 0);
+    DEFER(uv_sem_destroy(&start));
+    std::vector<uint32_t> results(worker_count * iterations);
+    struct context_t {
+        cat_atomic_uint32_t *atomic;
+        uv_sem_t *ready;
+        uv_sem_t *start;
+        uint32_t first;
+        size_t count;
+        uint32_t *results;
+    };
+    std::array<context_t, worker_count> contexts;
+    std::array<uv_thread_t, worker_count> threads;
+    size_t created = 0;
+    DEFER(
+        for (size_t i = 0; i < created; i++) { uv_sem_post(&start); }
+        for (size_t i = 0; i < created; i++) { uv_thread_join(&threads[i]); }
+    );
+    for (size_t i = 0; i < worker_count; i++) {
+        contexts[i] = {&atomic, &ready, &start, static_cast<uint32_t>(i * iterations + 1),
+            iterations, results.data() + i * iterations};
+        ASSERT_EQ(uv_thread_create(&threads[i], [](void *data) -> void {
+            auto *context = static_cast<context_t *>(data);
+            uv_sem_post(context->ready);
+            uv_sem_wait(context->start);
+            for (size_t i = 0; i < context->count; i++) {
+                context->results[i] = cat_atomic_uint32_exchange(context->atomic,
+                    context->first + static_cast<uint32_t>(i));
+            }
+        }, &contexts[i]), 0);
+        created++;
+    }
+    for (size_t i = 0; i < worker_count; i++) {
+        uv_sem_wait(&ready);
+    }
+    for (size_t i = 0; i < worker_count; i++) {
+        uv_sem_post(&start);
+    }
+    while (created > 0) {
+        ASSERT_EQ(uv_thread_join(&threads[created - 1]), 0);
+        created--;
+    }
+    // Unique submissions mean returned values plus the final value must contain 0..N exactly once.
+    // A one-shot CAS that fails to write duplicates an old value and loses its submitted value.
+    results.push_back(cat_atomic_uint32_load(&atomic));
+    std::sort(results.begin(), results.end());
+    for (size_t i = 0; i < results.size(); i++) {
+        ASSERT_EQ(results[i], i) << "value index " << i;
     }
 }
