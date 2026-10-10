@@ -44,6 +44,52 @@ TEST(cat_os_wait, fork_restores_child_event_loop)
     ASSERT_EQ(WEXITSTATUS(status), 0);
 }
 
+#if defined(CAT_OS_LINUX) && GTEST_HAS_DEATH_TEST && !defined(CAT_COROUTINE_USE_THREAD_CONTEXT)
+TEST(cat_os_wait, fork_process_limit_failure_and_recovery)
+{
+    SKIP_IF_(getuid() == 0, "RLIMIT_NPROC does not restrict root");
+    ASSERT_EXIT({
+        struct rlimit original;
+        if (getrlimit(RLIMIT_NPROC, &original) != 0) {
+            std::exit(1);
+        }
+        struct rlimit restricted = original;
+        restricted.rlim_cur = 0;
+        if (setrlimit(RLIMIT_NPROC, &restricted) != 0) {
+            std::exit(2);
+        }
+        cat_pid_t pid = cat_os_fork();
+        if (pid == 0) {
+            _exit(3);
+        }
+        cat_errno_t error = cat_get_last_error_code();
+        // Restore only this test child's limit before testing a successful fork.
+        if (setrlimit(RLIMIT_NPROC, &original) != 0) {
+            std::exit(4);
+        }
+        if (pid != -1 || error != CAT_EAGAIN) {
+            if (pid > 0) {
+                waitpid(pid, nullptr, 0);
+            }
+            std::exit(5);
+        }
+        pid = cat_os_fork();
+        if (pid == 0) {
+            _exit(0);
+        }
+        if (pid < 0) {
+            std::exit(6);
+        }
+        int status = 0;
+        if (cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT) != pid ||
+            !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            std::exit(7);
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+#endif
+
 static pid_t new_child_process(int exit_status = 0)
 {
     pid_t pid = fork();
