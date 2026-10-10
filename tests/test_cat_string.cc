@@ -100,6 +100,29 @@ TEST(cat_string, const_string_borrows_exact_range)
     ASSERT_EQ(view.length, 0);
 }
 
+TEST(cat_string, allocation_rejects_unrepresentable_capacity)
+{
+    cat_string_t string;
+    cat_string_init(&string);
+    DEFER(cat_string_close(&string));
+    ASSERT_FALSE(cat_string_alloc(&string, SIZE_MAX));
+    ASSERT_EQ(string.value, nullptr);
+    ASSERT_EQ(string.length, 0);
+    ASSERT_TRUE(cat_string_alloc(&string, 0));
+    ASSERT_NE(string.value, nullptr);
+    string.value[0] = '\0';
+    ASSERT_EQ(string.length, 0);
+    cat_string_close(&string);
+    ASSERT_TRUE(cat_string_alloc(&string, CAT_TEST_DEFAULT_STRING_LENGTH));
+    ASSERT_NE(string.value, nullptr);
+    string.value[CAT_TEST_DEFAULT_STRING_LENGTH] = '\0';
+    ASSERT_EQ(string.length, 0);
+    char *value = string.value;
+    ASSERT_FALSE(cat_string_alloc(&string, SIZE_MAX));
+    ASSERT_EQ(string.value, value);
+    ASSERT_EQ(string.length, 0);
+}
+
 TEST(cat_string, hexprint)
 {
     char in[] = "hello";
