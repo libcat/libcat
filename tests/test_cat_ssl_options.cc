@@ -64,7 +64,9 @@ TEST(cat_ssl, alpn_server_protocols)
     ASSERT_EQ(static_cast<unsigned char>(context->alpn.value[0]), 255);
     ASSERT_EQ(std::string(context->alpn.value + 1, protocol.length()), protocol);
     std::string too_long(256, 'b');
+    cat_update_last_error(CAT_ECANCELED, "Previous unrelated operation failed");
     ASSERT_FALSE(cas_ssl_context_set_alpn_protocols(context, cat_false, too_long.c_str()));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
     // 无效新配置不能覆盖先前成功设置的协议列表。
     ASSERT_EQ(context->alpn.length, protocol.length() + 1);
     ASSERT_EQ(std::string(context->alpn.value + 1, protocol.length()), protocol);
