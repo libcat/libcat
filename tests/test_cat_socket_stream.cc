@@ -16,6 +16,56 @@
 
 #include "test.h"
 
+TEST(cat_socket, close_cancels_localhost_lookup)
+{
+    enum class action { bind, connect, write };
+    cat_socket_t receiver;
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    int port = cat_socket_get_sock_port(&receiver);
+    ASSERT_GT(port, 0);
+    for (action operation : {action::bind, action::connect, action::write}) {
+        SCOPED_TRACE(static_cast<int>(operation));
+        cat_socket_t socket;
+        cat_socket_type_t type = operation == action::connect ? CAT_SOCKET_TYPE_TCP4 : CAT_SOCKET_TYPE_UDP4;
+        ASSERT_EQ(cat_socket_create(&socket, type), &socket);
+        DEFER(if (cat_socket_is_available(&socket)) { cat_socket_close(&socket); });
+        wait_group wg;
+        bool completed = false;
+        cat_bool_t result = cat_true;
+        cat_errno_t error = 0;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            switch (operation) {
+                case action::bind:
+                    result = cat_socket_bind_to(&socket, CAT_STRL("localhost"), 0);
+                    break;
+                case action::connect:
+                    result = cat_socket_connect_to(&socket, CAT_STRL("localhost"), port);
+                    break;
+                case action::write:
+                    result = cat_socket_send_to(&socket, CAT_STRL("data"), CAT_STRL("localhost"), port);
+                    break;
+            }
+            error = cat_get_last_error_code();
+            completed = true;
+        });
+        DEFER(if (cat_socket_is_available(&socket)) { cat_socket_close(&socket); } wg(TEST_IO_TIMEOUT));
+        ASSERT_FALSE(completed);
+        ASSERT_EQ(cat_socket_get_io_state(&socket), operation == action::bind ? CAT_SOCKET_IO_FLAG_BIND :
+            operation == action::connect ? CAT_SOCKET_IO_FLAG_CONNECT : CAT_SOCKET_IO_FLAG_WRITE);
+        ASSERT_TRUE(cat_socket_close(&socket));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(completed);
+        ASSERT_FALSE(result);
+        ASSERT_EQ(error, CAT_ECANCELED);
+        ASSERT_FALSE(cat_socket_is_available(&socket));
+        ASSERT_TRUE(cat_coroutine_wait_all());
+    }
+}
+
 TEST(cat_socket, partial_stream_read_preserves_received_bytes)
 {
     for (bool start_read_first : {false, true}) {
