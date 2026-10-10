@@ -170,6 +170,16 @@ TEST(cat, process_title)
     if (titled) {
         ASSERT_EQ(custom_title, std::string(process_title));
     }
+
+    char small[1];
+    ASSERT_EQ(cat_get_process_title(small, sizeof(small)), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOBUFS);
+    ASSERT_EQ(cat_get_process_title(nullptr, sizeof(small)), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOBUFS);
+    char *retried = cat_get_process_title(nullptr, 0);
+    ASSERT_NE(retried, nullptr);
+    DEFER(cat_free(retried));
+    ASSERT_STREQ(retried, process_title);
 }
 
 #include <thread>
