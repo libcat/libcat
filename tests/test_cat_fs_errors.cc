@@ -52,12 +52,18 @@ static bool has_blocked_io(long syscall, int fd)
     return false;
 }
 
-TEST(cat_fs, canceled_read_does_not_modify_caller_buffer)
+static void test_canceled_read_buffer(bool stdio)
 {
     int descriptors[2];
     ASSERT_EQ(pipe(descriptors), 0);
-    DEFER(close(descriptors[0]));
+    FILE *stream = nullptr;
+    DEFER(if (stream != nullptr) { fclose(stream); } else { close(descriptors[0]); });
     DEFER(if (descriptors[1] >= 0) { close(descriptors[1]); });
+    if (stdio) {
+        stream = fdopen(descriptors[0], "r");
+        ASSERT_NE(stream, nullptr);
+        ASSERT_EQ(setvbuf(stream, nullptr, _IONBF, 0), 0);
+    }
     char buffer = 'a';
     wait_group wg;
     bool waiting = true;
@@ -66,7 +72,8 @@ TEST(cat_fs, canceled_read_does_not_modify_caller_buffer)
     cat_coroutine_t *reader = co([&] {
         wg++;
         DEFER(wg--);
-        received = cat_fs_read(descriptors[0], &buffer, sizeof(buffer));
+        received = stdio ? static_cast<ssize_t>(cat_fs_fread(&buffer, 1, sizeof(buffer), stream)) :
+            cat_fs_read(descriptors[0], &buffer, sizeof(buffer));
         error = cat_get_last_error_code();
         waiting = false;
     });
@@ -74,29 +81,52 @@ TEST(cat_fs, canceled_read_does_not_modify_caller_buffer)
         close(descriptors[1]); descriptors[1] = -1; wg(TEST_IO_TIMEOUT); cat_coroutine_wait_all());
     // Observe the actual worker syscall instead of assuming that a delay starts the read.
     cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
-    while (!has_blocked_io(SYS_read, descriptors[0]) && cat_time_msec2() < deadline) {
+    auto blocked = [&] {
+        return has_blocked_io(SYS_read, descriptors[0]) || (stdio && has_blocked_io(SYS_readv, descriptors[0]));
+    };
+    while (!blocked() && cat_time_msec2() < deadline) {
         cat_sys_usleep(1);
     }
-    ASSERT_TRUE(has_blocked_io(SYS_read, descriptors[0]));
+    ASSERT_TRUE(blocked());
     ASSERT_TRUE(cat_coroutine_resume(reader, nullptr, nullptr));
     ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
-    ASSERT_EQ(received, -1);
+    ASSERT_EQ(received, stdio ? 0 : -1);
     ASSERT_EQ(error, CAT_ECANCELED);
     buffer = 'b';
     ASSERT_EQ(write(descriptors[1], "x", 1), 1);
     ASSERT_TRUE(cat_coroutine_wait_all());
     ASSERT_EQ(buffer, 'b');
-    ASSERT_EQ(cat_fs_read(descriptors[0], &buffer, SIZE_MAX), -1);
+    if (stdio) {
+        ASSERT_EQ(cat_fs_fread(&buffer, SIZE_MAX, 1, stream), 0);
+    } else {
+        ASSERT_EQ(cat_fs_read(descriptors[0], &buffer, SIZE_MAX), -1);
+    }
     ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
     ASSERT_EQ(errno, EOVERFLOW);
 }
 
-TEST(cat_fs, canceled_write_preserves_submitted_bytes)
+TEST(cat_fs, canceled_read_does_not_modify_caller_buffer)
+{
+    ASSERT_NO_FATAL_FAILURE(test_canceled_read_buffer(false));
+}
+
+TEST(cat_fs, canceled_fread_does_not_modify_caller_buffer)
+{
+    ASSERT_NO_FATAL_FAILURE(test_canceled_read_buffer(true));
+}
+
+static void test_canceled_write_buffer(bool stdio)
 {
     int descriptors[2];
     ASSERT_EQ(pipe(descriptors), 0);
     DEFER(close(descriptors[0]));
-    DEFER(close(descriptors[1]));
+    FILE *stream = nullptr;
+    DEFER(if (stream != nullptr) { fclose(stream); } else { close(descriptors[1]); });
+    if (stdio) {
+        stream = fdopen(descriptors[1], "w");
+        ASSERT_NE(stream, nullptr);
+        ASSERT_EQ(setvbuf(stream, nullptr, _IONBF, 0), 0);
+    }
     long atomic_size = fpathconf(descriptors[1], _PC_PIPE_BUF);
     ASSERT_GT(atomic_size, 0);
     std::string payload(static_cast<size_t>(atomic_size), 'x');
@@ -126,18 +156,22 @@ TEST(cat_fs, canceled_write_preserves_submitted_bytes)
     writer = co([&] {
         wg++;
         DEFER(wg--);
-        written = cat_fs_write(descriptors[1], payload.data(), payload.size());
+        written = stdio ? static_cast<ssize_t>(cat_fs_fwrite(payload.data(), 1, payload.size(), stream)) :
+            cat_fs_write(descriptors[1], payload.data(), payload.size());
         error = cat_get_last_error_code();
         waiting = false;
     });
     cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
-    while (!has_blocked_io(SYS_write, descriptors[1]) && cat_time_msec2() < deadline) {
+    auto blocked = [&] {
+        return has_blocked_io(SYS_write, descriptors[1]) || (stdio && has_blocked_io(SYS_writev, descriptors[1]));
+    };
+    while (!blocked() && cat_time_msec2() < deadline) {
         cat_sys_usleep(1);
     }
-    ASSERT_TRUE(has_blocked_io(SYS_write, descriptors[1]));
+    ASSERT_TRUE(blocked());
     ASSERT_TRUE(cat_coroutine_resume(writer, nullptr, nullptr));
     ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
-    ASSERT_EQ(written, -1);
+    ASSERT_EQ(written, stdio ? 0 : -1);
     ASSERT_EQ(error, CAT_ECANCELED);
     payload.assign(payload.size(), 'y');
     while (filled > 0) {
@@ -148,9 +182,23 @@ TEST(cat_fs, canceled_write_preserves_submitted_bytes)
     ASSERT_EQ(read(descriptors[0], buffer.data(), buffer.size()), static_cast<ssize_t>(buffer.size()));
     ASSERT_TRUE(cat_coroutine_wait_all());
     ASSERT_EQ(buffer, std::string(buffer.size(), 'x'));
-    ASSERT_EQ(cat_fs_write(descriptors[1], payload.data(), SIZE_MAX), -1);
+    if (stdio) {
+        ASSERT_EQ(cat_fs_fwrite(payload.data(), SIZE_MAX, 1, stream), 0);
+    } else {
+        ASSERT_EQ(cat_fs_write(descriptors[1], payload.data(), SIZE_MAX), -1);
+    }
     ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
     ASSERT_EQ(errno, EOVERFLOW);
+}
+
+TEST(cat_fs, canceled_write_preserves_submitted_bytes)
+{
+    ASSERT_NO_FATAL_FAILURE(test_canceled_write_buffer(false));
+}
+
+TEST(cat_fs, canceled_fwrite_preserves_submitted_bytes)
+{
+    ASSERT_NO_FATAL_FAILURE(test_canceled_write_buffer(true));
 }
 
 static size_t count_open_descriptors()
@@ -375,6 +423,31 @@ TEST(cat_fs, stdio_seek_and_write_state)
     ASSERT_EQ(ferror(stream), 0);
     ASSERT_EQ(cat_get_last_error_code(), 0);
     ASSERT_EQ(cat_fs_ftell(stream), 4);
+}
+
+TEST(cat_fs, stdio_partial_items_preserve_received_bytes)
+{
+    const std::string path = get_random_path();
+    ASSERT_EQ(cat_fs_put_contents(path.c_str(), CAT_STRL("abc")), 3);
+    DEFER(cat_fs_unlink(path.c_str()));
+    FILE *stream = fopen(path.c_str(), "r");
+    ASSERT_NE(stream, nullptr);
+    DEFER(cat_fs_fclose(stream));
+    for (size_t item_size : {size_t(2), size_t(4)}) {
+        SCOPED_TRACE(item_size);
+        ASSERT_EQ(cat_fs_fseek(stream, 0, SEEK_SET), 0);
+        char buffer[4] = {'x', 'x', 'x', 'x'};
+        cat_clear_last_error();
+        ASSERT_EQ(cat_fs_fread(buffer, item_size, sizeof(buffer) / item_size, stream), 3 / item_size);
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), "abcx");
+        ASSERT_NE(feof(stream), 0);
+        ASSERT_EQ(ferror(stream), 0);
+        ASSERT_EQ(cat_get_last_error_code(), 0);
+    }
+    cat_clear_last_error();
+    ASSERT_EQ(cat_fs_fwrite("", 0, 1, stream), 0);
+    ASSERT_EQ(cat_fs_fwrite("", 1, 0, stream), 0);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
 }
 
 TEST(cat_fs, stdio_read_error_then_write_reuse)

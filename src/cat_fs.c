@@ -1427,7 +1427,17 @@ static void cat_fs_fread_cb(cat_data_t *ptr)
 
 static cat_always_inline size_t cat_fs_fread_impl(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-    cat_fs_fread_data_t *data = (cat_fs_fread_data_t *) cat_malloc(sizeof(*data));
+    if (size == 0 || nmemb == 0) {
+        return 0;
+    }
+    if (unlikely(size > (SIZE_MAX - sizeof(cat_fs_fread_data_t)) / nmemb)) {
+        cat_update_last_error(CAT_EOVERFLOW, "File-System fread size overflow");
+        errno = cat_orig_errno(CAT_EOVERFLOW);
+        return 0;
+    }
+    size_t length = size * nmemb;
+    /* A canceled waiter may release its buffer while the worker is still reading. */
+    cat_fs_fread_data_t *data = (cat_fs_fread_data_t *) cat_malloc(sizeof(*data) + length);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs fread failed");
@@ -1435,15 +1445,19 @@ static cat_always_inline size_t cat_fs_fread_impl(void *ptr, size_t size, size_t
     }
 #endif
     memset(&data->ret, 0, sizeof(data->ret));
-    data->ptr = ptr;
-    data->size = size;
-    data->nmemb = nmemb;
+    data->ptr = data + 1;
+    /* Count bytes internally so a short final item is copied even when it is not returned as a complete item. */
+    data->size = 1;
+    data->nmemb = length;
     data->stream = stream;
     if (!cat_work(CAT_WORK_KIND_FAST_IO, cat_fs_fread_cb, cat_free_function, data, CAT_TIMEOUT_FOREVER)) {
         return 0;
     }
     cat_fs_work_check_error(&data->ret.error, "fread");
-    return (size_t) data->ret.ret.num;
+    if (data->ret.ret.num > 0) {
+        memcpy(ptr, data->ptr, (size_t) data->ret.ret.num);
+    }
+    return (size_t) data->ret.ret.num / size;
 }
 
 CAT_API size_t cat_fs_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
@@ -1491,7 +1505,16 @@ static void cat_fs_fwrite_cb(cat_data_t *ptr)
 
 static cat_always_inline size_t cat_fs_fwrite_impl(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-    cat_fs_fwrite_data_t *data = (cat_fs_fwrite_data_t *) cat_malloc(sizeof(*data));
+    if (size == 0 || nmemb == 0) {
+        return 0;
+    }
+    if (unlikely(size > (SIZE_MAX - sizeof(cat_fs_fwrite_data_t)) / nmemb)) {
+        cat_update_last_error(CAT_EOVERFLOW, "File-System fwrite size overflow");
+        errno = cat_orig_errno(CAT_EOVERFLOW);
+        return 0;
+    }
+    size_t length = size * nmemb;
+    cat_fs_fwrite_data_t *data = (cat_fs_fwrite_data_t *) cat_malloc(sizeof(*data) + length);
 #if CAT_ALLOC_HANDLE_ERRORS
     if (data == NULL) {
         cat_update_last_error_of_syscall("Malloc for fs fwrite failed");
@@ -1499,7 +1522,9 @@ static cat_always_inline size_t cat_fs_fwrite_impl(const void *ptr, size_t size,
     }
 #endif
     memset(&data->ret, 0, sizeof(data->ret));
-    data->ptr = ptr;
+    data->ptr = data + 1;
+    /* The submitted bytes remain stable after cancellation allows the caller to reuse its buffer. */
+    memcpy(data + 1, ptr, length);
     data->size = size;
     data->nmemb = nmemb;
     data->stream = stream;
