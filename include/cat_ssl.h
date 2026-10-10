@@ -137,6 +137,7 @@ typedef enum cat_ssl_flag_e {
     CAT_SSL_FLAG_HANDSHAKE_BUFFER_SET  = 1 << 5,
     CAT_SSL_FLAG_ALLOW_RENEGOTIATION   = 1 << 6,
     CAT_SSL_FLAG_RENEGOTIATION_CALLBACK = 1 << 7,
+    CAT_SSL_FLAG_RENEGOTIATION_PAUSED  = 1 << 8,
     CAT_SSL_FLAG_UNRECOVERABLE_ERROR   = 1 << 31,
 } cat_ssl_flag_t;
 
@@ -261,6 +262,10 @@ CAT_API void cat_ssl_context_set_no_ticket(cat_ssl_context_t *context);
 CAT_API void cat_ssl_context_set_no_compression(cat_ssl_context_t *context);
 CAT_API void cat_ssl_configure_renegotiation(cat_ssl_t *ssl, cat_bool_t enable,
     cat_ssl_renegotiation_callback_t callback, void *data);
+/* A notification callback can pause and return true to defer its decision.
+ * Socket I/O returns EAGAIN; resume through the owned socket after it returns. */
+CAT_API cat_bool_t cat_ssl_pause_renegotiation(cat_ssl_t *ssl);
+CAT_API cat_bool_t cat_ssl_resume_renegotiation(cat_ssl_t *ssl, cat_bool_t allow);
 #ifdef CAT_SSL_HAVE_SECURITY_LEVEL
 CAT_API void cat_ssl_context_set_security_level(cat_ssl_context_t *context, int level);
 #endif

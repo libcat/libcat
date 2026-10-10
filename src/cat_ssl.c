@@ -956,6 +956,29 @@ CAT_API void cat_ssl_configure_renegotiation(cat_ssl_t *ssl, cat_bool_t enable,
     }
 }
 
+CAT_API cat_bool_t cat_ssl_pause_renegotiation(cat_ssl_t *ssl)
+{
+    if (!(ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_CALLBACK)) {
+        cat_update_last_error(CAT_EINVAL, "TLS renegotiation can only be paused by its notification callback");
+        return cat_false;
+    }
+    ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION_PAUSED;
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_ssl_resume_renegotiation(cat_ssl_t *ssl, cat_bool_t allow)
+{
+    if (!(ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_PAUSED)) {
+        cat_update_last_error(CAT_EINVAL, "TLS renegotiation is not paused");
+        return cat_false;
+    }
+    ssl->flags &= ~CAT_SSL_FLAG_RENEGOTIATION_PAUSED;
+    if (!allow) {
+        cat_ssl_set_shutdown(ssl, CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
+    }
+    return cat_true;
+}
+
 static cat_bool_t cat_ssl_notify_renegotiation(cat_ssl_t *ssl)
 {
     /* User callbacks may yield. Never invoke them with OpenSSL on the stack. */
@@ -971,8 +994,12 @@ static cat_bool_t cat_ssl_notify_renegotiation(cat_ssl_t *ssl)
                 cat_coroutine_switch_allow();
             }
             if (!ret) {
+                ssl->flags &= ~CAT_SSL_FLAG_RENEGOTIATION_PAUSED;
                 cat_ssl_set_shutdown(ssl, CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
                 return cat_false;
+            }
+            if (ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_PAUSED) {
+                return cat_true;
             }
         }
     }
@@ -1271,7 +1298,7 @@ CAT_API cat_bool_t cat_ssl_encrypt(
     char **encrypted_data, size_t *encrypted_length
 )
 {
-    if (unlikely(ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_CALLBACK)) {
+    if (unlikely(ssl->flags & (CAT_SSL_FLAG_RENEGOTIATION_CALLBACK | CAT_SSL_FLAG_RENEGOTIATION_PAUSED))) {
         cat_update_last_error(CAT_ELOCKED, "TLS I/O is not allowed inside a renegotiation callback");
         return cat_false;
     }
@@ -1315,6 +1342,10 @@ CAT_API cat_bool_t cat_ssl_encrypt(
             if ((error == SSL_ERROR_NONE || error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) &&
                 !cat_ssl_notify_renegotiation(ssl)) {
                 cat_update_last_error(CAT_ECONNRESET, "TLS renegotiation rejected by the application");
+                goto error_free;
+            }
+            if (ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_PAUSED) {
+                cat_update_last_error(CAT_EAGAIN, "TLS renegotiation awaits an application decision");
                 goto error_free;
             }
             switch (error) {
@@ -1397,7 +1428,7 @@ error_free:
 
 CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length, cat_bool_t *eof)
 {
-    if (unlikely(ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_CALLBACK)) {
+    if (unlikely(ssl->flags & (CAT_SSL_FLAG_RENEGOTIATION_CALLBACK | CAT_SSL_FLAG_RENEGOTIATION_PAUSED))) {
         cat_update_last_error(CAT_ELOCKED, "TLS I/O is not allowed inside a renegotiation callback");
         return cat_false;
     }
@@ -1444,6 +1475,18 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
             *eof = cat_true;
             nread = 0;
             ret = cat_true;
+            break;
+        }
+        if (ssl->flags & CAT_SSL_FLAG_RENEGOTIATION_PAUSED) {
+            /* Preserve plaintext received before the handshake request. The
+             * socket returns it without flushing any undecided handshake reply. */
+            if (n > 0) {
+                nread += n;
+            }
+            ret = nread > 0;
+            if (!ret) {
+                cat_update_last_error(CAT_EAGAIN, "TLS renegotiation awaits an application decision");
+            }
             break;
         }
 
