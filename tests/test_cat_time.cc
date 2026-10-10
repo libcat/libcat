@@ -27,8 +27,13 @@ TEST(cat_time, nsec)
 
 TEST(cat_time, msec)
 {
-    cat_nsec_t s = cat_time_msec();
-    ASSERT_EQ(cat_sys_usleep(3000), 0);
+    cat_msec_t s = cat_time_msec();
+    const cat_nsec_t start = cat_time_nsec();
+    const cat_nsec_t timeout = static_cast<cat_nsec_t>(TEST_IO_TIMEOUT) * 1000 * 1000;
+    // The fast clock may not tick during one native wait; bound observed progress with the precise monotonic clock.
+    do {
+        ASSERT_EQ(cat_sys_usleep(3000), 0);
+    } while (cat_time_msec() - s <= 1 && cat_time_nsec() - start < timeout);
     ASSERT_GT(cat_time_msec() - s, 1);
 }
 
