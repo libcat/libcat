@@ -151,6 +151,49 @@ TEST(cat_pq, query_error_and_recovery)
     ASSERT_STREQ(PQgetvalue(result, 0, 0), "23");
 }
 
+TEST(cat_pq, canceled_query_can_be_drained)
+{
+    SKIP_IF(skip());
+    PGconn *conn = cat_pq_connectdb(TEST_PQ_CONNINFO);
+    ASSERT_NE(conn, nullptr);
+    DEFER(PQfinish(conn));
+    ASSERT_EQ(PQstatus(conn), CONNECTION_OK);
+    bool completed = false;
+    wait_group wg;
+    cat_coroutine_t *coroutine = co([&] {
+        wg++;
+        DEFER(wg--);
+        PGresult *result = cat_pq_exec(conn, "SELECT 42");
+        DEFER(PQclear(result));
+        ASSERT_EQ(result, nullptr);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+        completed = true;
+    });
+    ASSERT_FALSE(completed);
+    ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
+    ASSERT_TRUE(wg());
+    ASSERT_TRUE(completed);
+    // Canceling the local wait does not cancel a query already sent to PostgreSQL.
+    for (;;) {
+        while (PQisBusy(conn)) {
+            ASSERT_EQ(cat_poll_one(PQsocket(conn), POLLIN, nullptr, TEST_IO_TIMEOUT), CAT_RET_OK);
+            ASSERT_EQ(PQconsumeInput(conn), 1);
+        }
+        PGresult *result = PQgetResult(conn);
+        if (result == nullptr) {
+            break;
+        }
+        const ExecStatusType status = PQresultStatus(result);
+        PQclear(result);
+        ASSERT_EQ(status, PGRES_TUPLES_OK);
+    }
+    PGresult *next = cat_pq_exec(conn, "SELECT 43");
+    ASSERT_NE(next, nullptr);
+    DEFER(PQclear(next));
+    ASSERT_EQ(PQresultStatus(next), PGRES_TUPLES_OK);
+    ASSERT_STREQ(PQgetvalue(next, 0, 0), "43");
+}
+
 TEST(cat_pq, invalid_connection_options)
 {
     SKIP_IF(skip());
