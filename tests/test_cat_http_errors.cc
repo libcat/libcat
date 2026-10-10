@@ -184,6 +184,49 @@ TEST(cat_http_parser, metadata_and_incomplete_message)
     ASSERT_NE(cat_get_last_error_code(), 0);
 }
 
+TEST(cat_http_parser, quoted_multipart_boundaries_preserve_spaces)
+{
+    const struct {
+        const char *parameter;
+        const char *boundary;
+    } cases[] = {
+        {"\" 1\"", " 1"},
+        {"\"test \\1\"", "test 1"},
+        {"\"test \\t\"", "test t"},
+    };
+    for (const auto &entry : cases) {
+        SCOPED_TRACE(entry.parameter);
+        const std::string content = "--" + std::string(entry.boundary) + "\r\n\r\nabc\r\n--" + entry.boundary + "--\r\n";
+        const std::string request = "POST / HTTP/1.1\r\nContent-Type: multipart/form-data; boundary=" +
+            std::string(entry.parameter) + "\r\nContent-Length: " + std::to_string(content.size()) + "\r\n\r\n" + content;
+        for (size_t input_size : {size_t(1), size_t(7), request.size()}) {
+            SCOPED_TRACE(input_size);
+            cat_http_parser_t parser;
+            ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+            cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_MULTIPART_BODY);
+            size_t offset = 0, iterations = 0;
+            size_t available = std::min(input_size, request.size());
+            std::string body;
+            while (!cat_http_parser_is_completed(&parser)) {
+                ASSERT_LT(iterations++, request.size() * 10);
+                const size_t length = available - offset;
+                const std::string input = request.substr(offset, length);
+                ASSERT_TRUE(cat_http_parser_execute(&parser, input.data(), input.size()));
+                if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_MULTIPART_BODY) {
+                    ASSERT_TRUE(cat_http_parser_is_multipart(&parser));
+                    ASSERT_EQ(std::string(parser.multipart.multipart_boundary, parser.multipart.boundary_length), "--" + std::string(entry.boundary));
+                    body.append(cat_http_parser_get_data(&parser), cat_http_parser_get_data_length(&parser));
+                }
+                const size_t parsed = cat_http_parser_get_parsed_length(&parser);
+                ASSERT_LE(parsed, length);
+                offset += parsed;
+                available = std::min(request.size(), std::max(available, offset) + input_size);
+            }
+            ASSERT_EQ(body, "abc");
+        }
+    }
+}
+
 TEST(cat_http_parser, invalid_multipart_metadata_preserves_http_body)
 {
     const std::vector<std::string> types = {
