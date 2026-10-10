@@ -334,6 +334,27 @@ TEST(cat_fs, content_errors)
     std::string child = missing + TEST_PATH_SEP "content";
     ASSERT_EQ(cat_fs_put_contents(child.c_str(), CAT_STRL("data")), -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+
+    ASSERT_EQ(cat_fs_mkdir(missing.c_str(), 0700), 0);
+    DEFER(cat_fs_rmdir(missing.c_str()));
+#ifndef CAT_OS_WIN
+    // Opening a directory succeeds on Unix, but reading it as file content fails.
+    length = 17;
+    ASSERT_EQ(cat_fs_get_contents(missing.c_str(), &length), nullptr);
+    ASSERT_EQ(length, 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EISDIR);
+    ASSERT_EQ(cat_fs_put_contents(missing.c_str(), CAT_STRL("data")), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EISDIR);
+#endif
+    const std::string data("a\0b", 3);
+    ASSERT_EQ(cat_fs_put_contents(child.c_str(), data.data(), data.size()), static_cast<ssize_t>(data.size()));
+    DEFER(cat_fs_unlink(child.c_str()));
+    char *content = cat_fs_get_contents(child.c_str(), &length);
+    ASSERT_NE(content, nullptr);
+    DEFER(cat_free(content));
+    ASSERT_EQ(length, data.size());
+    ASSERT_EQ(std::string(content, length), data);
+    ASSERT_EQ(content[length], '\0');
 }
 
 TEST(cat_fs, invalid_file_descriptor)
