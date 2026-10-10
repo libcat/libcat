@@ -189,7 +189,7 @@ static cat_bool_t cat_log_fwrite_use_libc_impl = cat_false;
 static cat_bool_t cat_log_fwrite_libc_impl(FILE *file, const char *str, size_t length)
 {
     size_t n = fwrite(str, 1, length, file);
-    if (unlikely(n != length)) {
+    if (unlikely(n != length || fflush(file) != 0)) {
         char *s;
         fprintf(CAT_LOG_G(error_output),
             "libcat error: write(fd: %d, length: %d) for log message failed (error:%d:%s)\n",
@@ -201,7 +201,6 @@ static cat_bool_t cat_log_fwrite_libc_impl(FILE *file, const char *str, size_t l
         cat_free(s);
         return cat_false;
     }
-    fflush(file);
     return cat_true;
 }
 

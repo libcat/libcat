@@ -248,6 +248,31 @@ TEST(cat_log, write_failure_and_libc_fallback)
     // fallback 状态属于进程；在子进程验证写入失败及后续恢复，不影响其它日志用例。
     ASSERT_EXIT({
         bool valid = false;
+        bool pipe_rejected = true;
+#ifdef CAT_OS_UNIX_LIKE
+        {
+            int fds[2];
+            if (pipe(fds) != 0) { exit(1); }
+            DEFER(close(fds[0]));
+            FILE *output = fdopen(fds[1], "w");
+            if (output == nullptr) { close(fds[1]); exit(1); }
+            DEFER(fclose(output));
+            const int flags = fcntl(fds[1], F_GETFL);
+            if (flags < 0 || fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) != 0) { exit(1); }
+            char bytes[4096] = {};
+            ssize_t n;
+            do {
+                n = write(fds[1], bytes, sizeof(bytes));
+            } while (n > 0 || (n < 0 && errno == EINTR));
+            if (n != -1 || (errno != EAGAIN && errno != EWOULDBLOCK)) { exit(1); }
+            do {
+                n = write(fds[1], bytes, 1);
+            } while (n > 0 || (n < 0 && errno == EINTR));
+            if (n != -1 || (errno != EAGAIN && errno != EWOULDBLOCK)) { exit(1); }
+            // fwrite can accept buffered bytes while the following flush fails.
+            pipe_rejected = !cat_log_fwrite(output, CAT_STRL("full pipe"));
+        }
+#endif
         {
             std::string path = get_random_path();
             FILE *created = fopen(path.c_str(), "w");
@@ -270,7 +295,7 @@ TEST(cat_log, write_failure_and_libc_fallback)
             bool written = cat_log_fwrite(writable, CAT_STRL("fallback works"));
             rewind(writable);
             char buffer[CAT_STRLEN("fallback works")];
-            valid = rejected && written && fread(buffer, 1, sizeof(buffer), writable) == sizeof(buffer) &&
+            valid = pipe_rejected && rejected && written && fread(buffer, 1, sizeof(buffer), writable) == sizeof(buffer) &&
                 memcmp(buffer, CAT_STRL("fallback works")) == 0;
             fclose(writable);
             unlink(path.c_str());
