@@ -44,6 +44,29 @@ TEST(cat_socket, open_native_udp_socket_preserves_datagrams)
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "native-udp");
 }
 
+TEST(cat_socket, lazy_udp_errors_preserve_socket)
+{
+    cat_socket_t sender, receiver;
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDP), &sender);
+    DEFER(cat_socket_close(&sender));
+    char buffer[3] = {'x', 'x', 'x'};
+    cat_set_last_error_code(CAT_EBUSY);
+    ASSERT_EQ(cat_socket_try_recv(&sender, buffer, sizeof(buffer)), CAT_EBADF);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "xxx");
+    ASSERT_FALSE(cat_socket_connect_to(&sender, CAT_STRL(""), 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_TRUE(cat_socket_is_available(&sender));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDP4), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_bind_to(&receiver, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL("localhost"), cat_socket_get_sock_port(&receiver)));
+    ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("abc")));
+    ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "abc");
+}
+
 TEST(cat_socket, empty_datagram_receive_timeout_preserves_socket)
 {
     for (cat_socket_type_t type : {
