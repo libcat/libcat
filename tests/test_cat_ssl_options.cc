@@ -15,8 +15,28 @@
  */
 
 #include "test.h"
+#include <clocale>
+#include <cwchar>
 
 #ifdef CAT_SSL
+
+TEST(cat_ssl, error_formatting_failure_and_recovery)
+{
+    const char *locale = std::setlocale(LC_CTYPE, nullptr);
+    ASSERT_NE(locale, nullptr);
+    const std::string original_locale = locale;
+    DEFER(std::setlocale(LC_CTYPE, original_locale.c_str()));
+    ASSERT_NE(std::setlocale(LC_CTYPE, "C"), nullptr);
+    ERR_clear_error();
+    cat_update_last_error(CAT_EBADF, "previous error");
+    const wint_t character = static_cast<wint_t>(L'\u0100');
+    cat_ssl_update_last_error(CAT_ESSL, "%lc", character);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_STREQ(cat_get_last_error_message(), "previous error");
+    cat_ssl_update_last_error(CAT_ESSL, "recovered %d", 42);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESSL);
+    ASSERT_STREQ(cat_get_last_error_message(), "recovered 42");
+}
 
 TEST(cat_ssl, context_protocols)
 {

@@ -64,6 +64,17 @@ TEST(cat_error, formatting_failure_preserves_previous_error)
     ASSERT_STREQ(cat_get_last_error_message(), "recovered 42");
 }
 
+TEST(cat_error, ignore_updates_after_runtime_shutdown)
+{
+    FILE *output = cat_get_error_output();
+    cat_update_last_error(CAT_EBADF, "previous error");
+    ASSERT_TRUE(cat_runtime_shutdown());
+    DEFER(cat_runtime_init(); cat_set_error_output(output));
+    cat_update_last_error(CAT_EINVAL, "ignored %d", 42);
+    ASSERT_EQ(cat_get_last_error_code(), 0);
+    ASSERT_STREQ(cat_get_last_error_message(), "");
+}
+
 TEST(cat_error, update_last_error_with_null_format)
 {
     cat_update_last_error(CAT_UNKNOWN, NULL);
