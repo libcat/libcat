@@ -164,6 +164,40 @@ TEST(cat_poll, server)
     ASSERT_EQ(descriptor.revents, POLLNONE);
 }
 
+TEST(cat_poll, listeners_registered_in_reverse_descriptor_order)
+{
+    cat_socket_t first, second;
+    ASSERT_EQ(cat_socket_create(&first, CAT_SOCKET_TYPE_TCP4), &first);
+    DEFER(cat_socket_close(&first));
+    ASSERT_EQ(cat_socket_create(&second, CAT_SOCKET_TYPE_TCP4), &second);
+    DEFER(cat_socket_close(&second));
+    ASSERT_TRUE(cat_socket_bind_to(&first, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_bind_to(&second, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    std::array<cat_socket_t *, 2> listeners = {&first, &second};
+    if (cat_socket_get_fd(listeners[0]) > cat_socket_get_fd(listeners[1])) {
+        std::swap(listeners[0], listeners[1]);
+    }
+    ASSERT_LT(cat_socket_get_fd(listeners[0]), cat_socket_get_fd(listeners[1]));
+    ASSERT_TRUE(cat_socket_listen(listeners[1], TEST_SERVER_BACKLOG));
+    ASSERT_TRUE(cat_socket_listen(listeners[0], TEST_SERVER_BACKLOG));
+    for (cat_socket_t *listener : listeners) {
+        cat_socket_t client, connection;
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(cat_socket_close(&client));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(cat_socket_close(&connection));
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(listener)));
+        cat_pollfd_t descriptor = {cat_socket_get_fd(listener), POLLIN, POLLNONE};
+        ASSERT_EQ(cat_poll(&descriptor, 1, TEST_IO_TIMEOUT), 1);
+        ASSERT_EQ(descriptor.revents, POLLIN);
+        ASSERT_TRUE(cat_socket_accept(listener, &connection));
+        ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("data")));
+        char buffer[CAT_STRLEN("data")];
+        ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+        ASSERT_EQ(std::string(buffer, sizeof(buffer)), "data");
+    }
+}
+
 TEST(cat_poll, duplicate)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
