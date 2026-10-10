@@ -312,6 +312,12 @@ TEST(cat_error, update_last_error_with_null_format)
     E(EILSEQ, 84)
 
 TEST(cat_error, orig_errno){
+#ifdef EOVERFLOW
+    ASSERT_EQ(cat_orig_errno(CAT_EOVERFLOW), EOVERFLOW);
+#ifndef CAT_OS_WIN
+    ASSERT_EQ(cat_translate_sys_error(EOVERFLOW), CAT_EOVERFLOW);
+#endif
+#endif
     #define ORIG_ASSERT(name, _) \
         ASSERT_EQ(cat_orig_errno(CAT_##name), name);
     ORIG_ERRNO_MAP(ORIG_ASSERT);

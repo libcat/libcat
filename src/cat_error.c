@@ -482,6 +482,11 @@ void cat_error_module_shutdown(void)
 /* return original posix errno from uv errno */
 CAT_API int cat_orig_errno(cat_errno_t error)
 {
+#ifdef EOVERFLOW
+    if (error == CAT_EOVERFLOW) {
+        return EOVERFLOW;
+    }
+#endif
 #define CAT_ERROR_GEN(name) \
     if (error == UV_ ## name) { \
         return name; \
