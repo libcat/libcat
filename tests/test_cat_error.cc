@@ -17,6 +17,8 @@
  */
 
 #include "test.h"
+#include <clocale>
+#include <cwchar>
 
 TEST(cat_error, strerror)
 {
@@ -40,6 +42,26 @@ TEST(cat_error, update_last_error)
     cat_update_last_error(CAT_EBADF, nullptr);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     ASSERT_STREQ(cat_get_last_error_message(), cat_strerror(CAT_EBADF));
+}
+
+TEST(cat_error, formatting_failure_preserves_previous_error)
+{
+    const char *locale = std::setlocale(LC_CTYPE, nullptr);
+    ASSERT_NE(locale, nullptr);
+    const std::string original_locale = locale;
+    DEFER(std::setlocale(LC_CTYPE, original_locale.c_str()));
+    ASSERT_NE(std::setlocale(LC_CTYPE, "C"), nullptr);
+    cat_update_last_error(CAT_EBADF, "original error");
+    const wint_t character = static_cast<wint_t>(L'\u0100');
+    testing::internal::CaptureStderr();
+    cat_update_last_error(CAT_EINVAL, "%lc", character);
+    const std::string output = testing::internal::GetCapturedStderr();
+    ASSERT_NE(output.find("sprintf() last error message failed"), std::string::npos);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_STREQ(cat_get_last_error_message(), "original error");
+    cat_update_last_error(CAT_EINVAL, "recovered %d", 42);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_STREQ(cat_get_last_error_message(), "recovered 42");
 }
 
 TEST(cat_error, update_last_error_with_null_format)
