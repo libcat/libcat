@@ -716,6 +716,10 @@ TEST(cat_curl_multi, cleanup_unfinished_transfer)
                 wait_done = true;
             });
             ASSERT_FALSE(wait_done);
+            int ready = -1;
+            ASSERT_EQ(cat_curl_multi_wait(multi, nullptr, 0, 0, &ready), CURLM_INTERNAL_ERROR);
+            ASSERT_EQ(ready, 0);
+            ASSERT_FALSE(wait_done);
         }
         // Exercise cleanup without remove_handle, after the request reached the peer.
         ASSERT_EQ(cat_curl_multi_cleanup(multi), CURLM_OK);
