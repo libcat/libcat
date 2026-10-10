@@ -149,6 +149,19 @@ TEST(cat_poll, server)
     ASSERT_TRUE(cat_socket_connect_to(&client, TEST_LISTEN_IPV4, CAT_STRLEN(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
     ASSERT_EQ(cat_time_usleep(10 * 1000), 0);
     ASSERT_EQ(cat_poll_one(cat_socket_get_fd(&server), POLLIN, nullptr, 1), CAT_RET_OK);
+    cat_pollfd_t descriptor = {cat_socket_get_fd(&server), POLLIN, POLLNONE};
+    ASSERT_EQ(cat_poll(&descriptor, 1, 0), 1);
+    ASSERT_EQ(descriptor.revents, POLLIN);
+    cat_socket_t connection;
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(cat_socket_close(&connection));
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("data")));
+    char buffer[CAT_STRLEN("data")];
+    ASSERT_EQ(cat_socket_read(&connection, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "data");
+    ASSERT_EQ(cat_poll(&descriptor, 1, 0), 0);
+    ASSERT_EQ(descriptor.revents, POLLNONE);
 }
 
 TEST(cat_poll, duplicate)
