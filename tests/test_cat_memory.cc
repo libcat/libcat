@@ -20,6 +20,39 @@
 
 #define CAT_TEST_DEFAULT_MEMORY_SIZE    16
 
+#ifdef CAT_USE_DYNAMIC_ALLOCATOR
+TEST(cat_memory, invalid_allocator_preserves_registered_functions)
+{
+    const cat_allocator_t original = cat_allocator;
+    DEFER(cat_register_allocator(&original));
+    for (unsigned int missing = 0; missing < 4; missing++) {
+        SCOPED_TRACE(missing);
+        cat_allocator_t invalid = original;
+        switch (missing) {
+            case 0: invalid.malloc = nullptr; break;
+            case 1: invalid.calloc = nullptr; break;
+            case 2: invalid.realloc = nullptr; break;
+            case 3: invalid.free = nullptr; break;
+        }
+        cat_bool_t registered = cat_register_allocator(&invalid);
+        cat_errno_t error = cat_get_last_error_code();
+        cat_allocator_t retained = cat_allocator;
+        // Restore before assertions: even reporting a failure may allocate memory.
+        ASSERT_TRUE(cat_register_allocator(&original));
+        EXPECT_FALSE(registered);
+        EXPECT_EQ(error, CAT_EINVAL);
+        EXPECT_EQ(retained.malloc, original.malloc);
+        EXPECT_EQ(retained.calloc, original.calloc);
+        EXPECT_EQ(retained.realloc, original.realloc);
+        EXPECT_EQ(retained.free, original.free);
+    }
+    ASSERT_TRUE(cat_register_allocator(nullptr));
+    void *memory = cat_malloc(CAT_TEST_DEFAULT_MEMORY_SIZE);
+    ASSERT_NE(memory, nullptr);
+    cat_free(memory);
+}
+#endif
+
 TEST(cat_memory, page_alignment_boundaries)
 {
     size_t page_size = cat_getpagesize();
