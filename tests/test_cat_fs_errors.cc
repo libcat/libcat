@@ -16,6 +16,60 @@
 
 #include "test.h"
 
+#ifdef CAT_OS_LINUX
+#include <dirent.h>
+#include <fcntl.h>
+
+static size_t count_open_descriptors()
+{
+    DIR *directory = opendir("/proc/self/fd");
+    EXPECT_NE(directory, nullptr);
+    if (directory == nullptr) {
+        return SIZE_MAX;
+    }
+    DEFER(closedir(directory));
+    size_t count = 0;
+    while (struct dirent *entry = readdir(directory)) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+TEST(cat_fs, content_helpers_close_owned_descriptors)
+{
+    const std::string path = get_random_path();
+    DEFER(cat_fs_unlink(path.c_str()));
+    cat_file_t file = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_WRONLY, 0600);
+    ASSERT_GE(file, 0);
+    ASSERT_EQ(cat_fs_close(file), 0);
+    size_t before = count_open_descriptors();
+    for (unsigned int repeat = 0; repeat < 16; repeat++) {
+        ASSERT_EQ(cat_fs_put_contents(path.c_str(), CAT_STRL("file helper data")), CAT_STRLEN("file helper data"));
+        size_t length = 0;
+        char *content = cat_fs_get_contents(path.c_str(), &length);
+        ASSERT_NE(content, nullptr);
+        DEFER(cat_free(content));
+        ASSERT_EQ(std::string(content, length), "file helper data");
+    }
+    ASSERT_EQ(count_open_descriptors(), before);
+
+    const std::string fifo = get_random_path();
+    ASSERT_EQ(mkfifo(fifo.c_str(), S_IRUSR | S_IWUSR), 0);
+    DEFER(unlink(fifo.c_str()));
+    int peer = open(fifo.c_str(), O_RDWR);
+    ASSERT_GE(peer, 0);
+    DEFER(close(peer));
+    before = count_open_descriptors();
+    size_t length = 1;
+    ASSERT_EQ(cat_fs_get_contents(fifo.c_str(), &length), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESPIPE);
+    ASSERT_EQ(length, 0);
+    ASSERT_EQ(count_open_descriptors(), before);
+}
+#endif
+
 TEST(cat_fs, content_errors)
 {
     std::string missing = get_random_path();

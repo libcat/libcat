@@ -2798,18 +2798,22 @@ CAT_API char *cat_fs_get_contents(const char *filename, size_t *length)
     if (fd == CAT_OS_INVALID_FD) {
         return NULL;
     }
+    char *buffer = NULL;
     off_t offset = cat_fs_lseek(fd, 0, SEEK_END);
     if (offset < 0) {
-        return NULL;
+        goto _error;
     }
     size_t size = (size_t) offset;
-    char *buffer = (char *) cat_malloc(size + 1);
+    buffer = (char *) cat_malloc(size + 1);
     if (buffer == NULL) {
         cat_update_last_error_of_syscall("Malloc for file content failed");
-        return NULL;
+        goto _error;
     }
     ssize_t nread = cat_fs_pread(fd, buffer, size, 0);
     if (nread < 0) {
+        goto _error;
+    }
+    if (cat_fs_close(fd) != 0) {
         cat_free(buffer);
         return NULL;
     }
@@ -2819,6 +2823,11 @@ CAT_API char *cat_fs_get_contents(const char *filename, size_t *length)
     }
 
     return buffer;
+
+    _error:
+    cat_free(buffer);
+    cat_fs_close(fd);
+    return NULL;
 }
 
 CAT_API ssize_t cat_fs_put_contents(const char *filename, const char *content, size_t length)
@@ -2829,5 +2838,9 @@ CAT_API ssize_t cat_fs_put_contents(const char *filename, const char *content, s
         return -1;
     }
 
-    return cat_fs_pwrite(fd, content, length, 0);
+    ssize_t written = cat_fs_pwrite(fd, content, length, 0);
+    if (cat_fs_close(fd) != 0) {
+        return -1;
+    }
+    return written;
 }
