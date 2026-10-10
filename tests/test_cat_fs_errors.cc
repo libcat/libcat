@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 
 static bool has_blocked_io(long syscall, int fd)
 {
@@ -287,6 +288,82 @@ TEST(cat_fs, canceled_open_closes_unclaimed_descriptor)
 }
 
 #if GTEST_HAS_DEATH_TEST
+TEST(cat_fs, canceled_queued_flock_allows_shutdown)
+{
+    ASSERT_GT(TEST_IO_TIMEOUT, 0);
+    const std::string path = get_random_path() + "-" + std::to_string(getpid());
+    cat_file_t file = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0600);
+    ASSERT_GE(file, 0);
+    DEFER(cat_fs_close(file));
+    ASSERT_EQ(cat_fs_unlink(path.c_str()), 0);
+    char *original_pool_size = cat_env_get_silent("CAT_TPS", nullptr);
+    DEFER({
+        if (original_pool_size == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("CAT_TPS"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("CAT_TPS", original_pool_size));
+        }
+        cat_free(original_pool_size);
+    });
+    // Libcat's pool-size setting takes precedence over UV_THREADPOOL_SIZE.
+    ASSERT_TRUE(cat_env_set("CAT_TPS", "1"));
+    for (bool reject_new_thread : {false, true}) {
+        if (reject_new_thread && getuid() == 0) {
+            continue;
+        }
+        SCOPED_TRACE(reject_new_thread);
+        ASSERT_EXIT({
+            alarm(static_cast<unsigned int>((TEST_IO_TIMEOUT + 999) / 1000));
+            uv_sem_t ready;
+            uv_sem_t release;
+            if (uv_sem_init(&ready, 0) != 0 || uv_sem_init(&release, 0) != 0) {
+                std::exit(1);
+            }
+            bool worker_done = false;
+            co([&] {
+                worker_done = work(CAT_WORK_KIND_FAST_IO, [&] {
+                    uv_sem_post(&ready);
+                    uv_sem_wait(&release);
+                }, TEST_IO_TIMEOUT);
+            });
+            uv_sem_wait(&ready);
+            struct rlimit original_limit;
+            if (reject_new_thread) {
+                if (getrlimit(RLIMIT_NPROC, &original_limit) != 0) {
+                    std::exit(4);
+                }
+                struct rlimit restricted = original_limit;
+                restricted.rlim_cur = 0;
+                if (setrlimit(RLIMIT_NPROC, &restricted) != 0) {
+                    std::exit(5);
+                }
+            }
+            int locked = 0;
+            cat_errno_t error = 0;
+            cat_coroutine_t *waiter = co([&] {
+                locked = cat_fs_flock(file, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
+                error = cat_get_last_error_code();
+            });
+            bool resumed = cat_coroutine_resume(waiter, nullptr, nullptr);
+            uv_sem_post(&release);
+            bool joined = cat_coroutine_wait_all();
+            uv_sem_destroy(&release);
+            uv_sem_destroy(&ready);
+            if (!resumed || !joined || !worker_done || locked != -1 || error != CAT_ECANCELED) {
+                std::exit(2);
+            }
+            if ((!reject_new_thread && cat_fs_close(file) != 0) || !cat_stop() || !cat_shutdown_all()) {
+                std::exit(3);
+            }
+            if (reject_new_thread && setrlimit(RLIMIT_NPROC, &original_limit) != 0) {
+                std::exit(6);
+            }
+            alarm(0);
+            std::exit(0);
+        }, testing::ExitedWithCode(0), "");
+    }
+}
+
 TEST(cat_fs, flock_thread_limit_failure_and_recovery)
 {
     SKIP_IF_(getuid() == 0, "RLIMIT_NPROC does not restrict root");
