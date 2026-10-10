@@ -1097,7 +1097,14 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
 
 #ifdef __linux__
     r = uv__fs_try_copy_file_range(in_fd, &off, out_fd, len);
+#ifdef HAVE_LIBCAT
+    /* copy_file_range rejects socket targets with EINVAL. Try sendfile before
+     * entering emulation, whose blocking poll cannot use Libcat's IO timeout.
+     */
+    try_sendfile = (r == -1 && (errno == ENOSYS || errno == EINVAL));
+#else
     try_sendfile = (r == -1 && errno == ENOSYS);
+#endif
 #endif
 
     if (try_sendfile)

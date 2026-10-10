@@ -352,6 +352,48 @@ TEST(cat_socket, closed_socket_io_and_options)
 }
 
 #ifdef CAT_OS_UNIX_LIKE
+TEST(cat_socket, sendfile_partial_timeout_closes_socket)
+{
+    cat_socket_t server, sender, receiver;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+    DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+    ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+    ASSERT_GT(cat_socket_set_send_buffer_size(&sender, 4096), 0);
+    ASSERT_GT(cat_socket_set_recv_buffer_size(&receiver, 4096), 0);
+    size_t buffer_capacity = static_cast<size_t>(cat_socket_get_send_buffer_size(&sender)) +
+        static_cast<size_t>(cat_socket_get_recv_buffer_size(&receiver));
+    const std::string data(buffer_capacity * 64, 's');
+    const std::string path = get_random_path();
+    ASSERT_EQ(cat_fs_put_contents(path.c_str(), data.data(), data.size()), static_cast<ssize_t>(data.size()));
+    DEFER(cat_fs_unlink(path.c_str()));
+    // A peer that does not read forces partial transfer followed by a writable wait.
+    ASSERT_EQ(cat_socket_send_file_ex(&sender, path.c_str(), 0, data.size(), 10), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_FALSE(cat_socket_is_available(&sender));
+    std::string received;
+    char buffer[4096];
+    while (true) {
+        ssize_t length = cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT);
+        ASSERT_GE(length, 0);
+        if (length == 0) {
+            break;
+        }
+        received.append(buffer, length);
+    }
+    ASSERT_FALSE(received.empty());
+    ASSERT_LT(received.size(), data.size());
+    ASSERT_EQ(received, data.substr(0, received.size()));
+}
+#endif
+
+#ifdef CAT_OS_UNIX_LIKE
 TEST(cat_socket, pipe_bind_path_and_flag_errors)
 {
     cat_socket_t socket;
