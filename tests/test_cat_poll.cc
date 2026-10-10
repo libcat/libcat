@@ -22,6 +22,69 @@
 #include <sys/resource.h>
 #endif
 
+#ifdef CAT_OS_LINUX
+TEST(cat_poll, tcp_priority_events_and_select_exceptfds)
+{
+    cat_socket_t server, sender, receiver;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_TCP4), &sender);
+    DEFER(cat_socket_close(&sender));
+    ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_TCP), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_accept(&server, &receiver));
+    int fd = cat_socket_get_fd(&receiver);
+    ASSERT_GE(fd, 0);
+    ASSERT_LT(fd, FD_SETSIZE);
+    ASSERT_EQ(send(cat_socket_get_fd(&sender), "!", 1, MSG_OOB), 1);
+    cat_pollfd_events_t events = 0;
+    ASSERT_EQ(cat_poll_one(fd, POLLPRI, &events, TEST_IO_TIMEOUT), CAT_RET_OK);
+    ASSERT_NE(events & POLLPRI, 0);
+    cat_pollfd_t descriptor = {fd, POLLPRI, 0};
+    ASSERT_EQ(cat_poll(&descriptor, 1, TEST_IO_TIMEOUT), 1);
+    ASSERT_NE(descriptor.revents & POLLPRI, 0);
+    fd_set exceptfds;
+    FD_ZERO(&exceptfds);
+    FD_SET(fd, &exceptfds);
+    struct timeval timeout = {1, 0};
+    ASSERT_EQ(cat_select(fd + 1, nullptr, nullptr, &exceptfds, &timeout), 1);
+    ASSERT_TRUE(FD_ISSET(fd, &exceptfds));
+    ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("normal")));
+    ASSERT_EQ(cat_poll_one(fd, POLLIN, &events, TEST_IO_TIMEOUT), CAT_RET_OK);
+    fd_set readfds, writefds;
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+    FD_ZERO(&exceptfds);
+    FD_SET(fd, &readfds);
+    FD_SET(fd, &writefds);
+    FD_SET(fd, &exceptfds);
+    // select counts ready bits across all three sets, even for one descriptor.
+    ASSERT_EQ(cat_select(fd + 1, &readfds, &writefds, &exceptfds, &timeout), 3);
+    ASSERT_TRUE(FD_ISSET(fd, &readfds));
+    ASSERT_TRUE(FD_ISSET(fd, &writefds));
+    ASSERT_TRUE(FD_ISSET(fd, &exceptfds));
+    char byte = 0;
+    ASSERT_EQ(recv(fd, &byte, 1, MSG_OOB), 1);
+    ASSERT_EQ(byte, '!');
+    ASSERT_EQ(cat_poll_one(fd, POLLPRI, &events, 0), CAT_RET_NONE);
+    ASSERT_EQ(events, 0);
+    char buffer[CAT_STRLEN("normal")];
+    ASSERT_EQ(cat_socket_read(&receiver, buffer, sizeof(buffer)), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "normal");
+    int closed_fd = dup(fd);
+    ASSERT_GE(closed_fd, 0);
+    ASSERT_LT(closed_fd, FD_SETSIZE);
+    ASSERT_EQ(close(closed_fd), 0);
+    FD_ZERO(&readfds);
+    FD_SET(closed_fd, &readfds);
+    ASSERT_EQ(cat_select(closed_fd + 1, &readfds, nullptr, nullptr, &timeout), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+}
+#endif
+
 extern cat_coroutine_t *echo_tcp_server;
 extern char echo_tcp_server_ip[CAT_SOCKET_IPV6_BUFFER_SIZE];
 extern size_t echo_tcp_server_ip_length;
@@ -205,6 +268,17 @@ TEST(cat_select, base)
     ASSERT_TRUE(cat_socket_send(&socket, CAT_STRL("Hello libcat")));
     ASSERT_TRUE(select_is_readable(cat_select, fd));
     ASSERT_TRUE(select_is_readable(cat_sys_select, fd));
+    fd_set readfds, writefds;
+    for (test_select_function_t select_function : {cat_sys_select, cat_select}) {
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        FD_SET(fd, &readfds);
+        FD_SET(fd, &writefds);
+        struct timeval timeout = {1, 0};
+        ASSERT_EQ(select_function(fd + 1, &readfds, &writefds, nullptr, &timeout), 2);
+        ASSERT_TRUE(FD_ISSET(fd, &readfds));
+        ASSERT_TRUE(FD_ISSET(fd, &writefds));
+    }
     char buffer[CAT_STRLEN("Hello libcat")];
     ASSERT_EQ(cat_socket_read(&socket, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_TRUE(select_is_writable(cat_select, fd));

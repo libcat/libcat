@@ -29,6 +29,7 @@
 #endif
 
 #ifdef CAT_OS_UNIX_LIKE
+#include <fcntl.h>
 /* for uv__fd_exists */
 #  ifdef CAT_IDE_HELPER
 #    include "unix/internal.h"
@@ -708,6 +709,9 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
         if (SAFE_FD_ISSET((cat_os_socket_t) fd, writefds)) {
             events |= POLLOUT;
         }
+        if (SAFE_FD_ISSET((cat_os_socket_t) fd, exceptfds)) {
+            events |= POLLPRI;
+        }
         if (events == POLLNONE) {
             continue;
         }
@@ -729,18 +733,33 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
     SAFE_FD_ZERO(readfds);
     SAFE_FD_ZERO(writefds);
     SAFE_FD_ZERO(exceptfds);
+    ret = 0;
     for (ifds = 0; ifds < nfds; ifds++) {
         pfd = &pfds[ifds];
-        if (pfd->revents & (POLLIN | POLLHUP | POLLPRI)) {
-            SAFE_FD_SET(pfd->fd, readfds);
+        cat_bool_t invalid = (pfd->revents & POLLNVAL) != 0;
+#ifndef CAT_OS_WIN
+        // Unix poll reports a closed descriptor as POLLERR; select must return EBADF.
+        if ((pfd->revents & POLLERR) && fcntl(pfd->fd, F_GETFD) == -1 && errno == EBADF) {
+            invalid = cat_true;
         }
-        if (pfd->revents & POLLOUT) {
+#endif
+        if (invalid) {
+            cat_update_last_error(CAT_EBADF, "Select file descriptor is invalid");
+            ret = -1;
+            goto _out;
+        }
+        if ((pfd->events & POLLIN) && (pfd->revents & (POLLIN | POLLHUP | POLLERR))) {
+            SAFE_FD_SET(pfd->fd, readfds);
+            ret++;
+        }
+        if ((pfd->events & POLLOUT) && (pfd->revents & (POLLOUT | POLLERR))) {
             SAFE_FD_SET(pfd->fd, writefds);
+            ret++;
         }
         // ignore errors when event is already processed at IN and OUT handler.
-        if ((pfd->revents & ~(POLLIN | POLLOUT)) != 0 &&
-            !(pfd->revents & (POLLIN | POLLOUT))) {
+        if ((pfd->events & POLLPRI) && (pfd->revents & POLLPRI)) {
             SAFE_FD_SET(pfd->fd, exceptfds);
+            ret++;
         }
     }
 
