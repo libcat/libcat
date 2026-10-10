@@ -133,6 +133,10 @@ TEST(cat_http_parser, multipart_content_type_parameters)
                 }
                 size_t parsed = cat_http_parser_get_parsed_length(&parser);
                 ASSERT_LE(parsed, size);
+                if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_MULTIPART_BODY) {
+                    ASSERT_EQ(cat_http_parser_get_current_pos(&parser), input.data() + parsed);
+                    ASSERT_EQ(cat_http_parser_get_current_offset(&parser, input.data()), parsed);
+                }
                 offset += parsed;
                 available = std::min(request.length(), std::max(available, offset) + input_size);
             }
@@ -153,6 +157,15 @@ TEST(cat_http_parser, metadata_and_incomplete_message)
     ASSERT_STREQ(cat_http_parser_get_previous_event_name(&parser), "NONE");
     ASSERT_STREQ(cat_http_parser_get_protocol_version(&parser), "UNKNOWN");
     ASSERT_EQ(cat_http_parser_get_current_offset(&parser, ""), 0);
+    for (const auto &[version, expected] : std::array<std::pair<const char *, const char *>, 3>{
+        {{"1.0", "1.0"}, {"1.1", "1.1"}, {"2.0", "2"}}}) {
+        SCOPED_TRACE(version);
+        cat_http_parser_reset(&parser);
+        const std::string request = "GET / HTTP/" + std::string(version) + "\r\n\r\n";
+        ASSERT_TRUE(cat_http_parser_execute(&parser, request.data(), request.size()));
+        ASSERT_STREQ(cat_http_parser_get_protocol_version(&parser), expected);
+    }
+    cat_http_parser_reset(&parser);
     ASSERT_TRUE(cat_http_parser_execute(&parser, CAT_STRL("GET / HTTP/1.0\r\n\r\n")));
     ASSERT_EQ(cat_http_parser_get_major_version(&parser), 1);
     ASSERT_EQ(cat_http_parser_get_minor_version(&parser), 0);
@@ -270,4 +283,22 @@ TEST(cat_http_parser, malformed_multipart_body_and_reset)
             ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
         }
     }
+}
+
+TEST(cat_http_parser, multipart_response_without_content_length_and_reset)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_MULTIPART_BODY);
+    const char response[] = "HTTP/1.1 206 Partial Content\r\n"
+        "Content-Type: multipart/byteranges; boundary=test\r\n\r\n"
+        "--test\r\nContent-Range: bytes 0-2/3\r\n\r\nabc\r\n--test--\r\n";
+    ASSERT_FALSE(cat_http_parser_execute(&parser, CAT_STRL(response)));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
+    ASSERT_NE(std::string(cat_get_last_error_message()).find("multipart/byterange"), std::string::npos);
+    cat_http_parser_reset(&parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_NONE);
+    ASSERT_TRUE(cat_http_parser_execute(&parser, CAT_STRL("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc")));
+    ASSERT_TRUE(cat_http_parser_is_completed(&parser));
+    ASSERT_EQ(cat_http_parser_get_status_code(&parser), 200);
 }
