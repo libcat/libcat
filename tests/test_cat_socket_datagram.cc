@@ -16,6 +16,10 @@
 
 #include "test.h"
 
+#if defined(CAT_OS_LINUX) && GTEST_HAS_DEATH_TEST
+#include <sys/resource.h>
+#endif
+
 TEST(cat_socket, open_native_udp_socket_preserves_datagrams)
 {
     cat_socket_t receiver, sender;
@@ -308,6 +312,86 @@ TEST(cat_socket, udg_queued_writes_preserve_order_and_cancel)
         ASSERT_EQ(cat_socket_try_recv(&receiver, buffer.data(), buffer.length()), CAT_EAGAIN);
     }
 }
+
+#if GTEST_HAS_DEATH_TEST
+TEST(cat_socket, udg_descriptor_limit_failure_and_recovery)
+{
+    // Re-exec can repeat the time-seeded random path; keep parent and child endpoints distinct.
+    const std::string path = get_random_path() + "-" + std::to_string(getpid());
+    cat_socket_t receiver, sender;
+    ASSERT_EQ(cat_socket_create(&receiver, CAT_SOCKET_TYPE_UDG), &receiver);
+    DEFER(cat_socket_close(&receiver));
+    ASSERT_TRUE(cat_socket_bind_to(&receiver, path.data(), path.length(), 0));
+    DEFER(cat_fs_unlink(path.c_str()));
+    ASSERT_EQ(cat_socket_create(&sender, CAT_SOCKET_TYPE_UDG), &sender);
+    DEFER(if (cat_socket_is_available(&sender)) { cat_socket_close(&sender); });
+    ASSERT_TRUE(cat_socket_connect_to(&sender, path.data(), path.length(), 0));
+    ASSERT_TRUE(cat_socket_set_write_timeout(&sender, TEST_IO_TIMEOUT));
+
+    std::string packet(1024, 'f');
+    int capacity = cat_socket_get_send_buffer_size(&sender);
+    ASSERT_GT(capacity, 0);
+    size_t limit = static_cast<size_t>(capacity) / packet.length() + 1;
+    size_t filled = 0;
+    ssize_t n = 0;
+    while (filled < limit) {
+        n = cat_socket_try_send(&sender, packet.data(), packet.length());
+        if (n == CAT_EAGAIN) {
+            break;
+        }
+        ASSERT_EQ(n, static_cast<ssize_t>(packet.length()));
+        filled++;
+    }
+    ASSERT_EQ(n, CAT_EAGAIN);
+    ASSERT_GT(filled, 0);
+
+    // Restrict only the isolated child's descriptors, then restore them before recovery.
+    ASSERT_EXIT({
+        struct rlimit original;
+        if (getrlimit(RLIMIT_NOFILE, &original) != 0) {
+            std::exit(1);
+        }
+        struct rlimit restricted = original;
+        restricted.rlim_cur = 0;
+        if (setrlimit(RLIMIT_NOFILE, &restricted) != 0) {
+            std::exit(2);
+        }
+        bool sent = cat_socket_send_ex(&sender, CAT_STRL("pending"), TEST_IO_TIMEOUT);
+        cat_errno_t error = cat_get_last_error_code();
+        if (setrlimit(RLIMIT_NOFILE, &original) != 0) {
+            std::exit(3);
+        }
+        if (sent || error != CAT_EMFILE || cat_socket_get_io_state(&sender) != CAT_SOCKET_IO_FLAG_NONE) {
+            std::exit(4);
+        }
+        std::string buffer(packet.size(), '\0');
+        for (size_t i = 0; i < filled; i++) {
+            if (cat_socket_recv_ex(&receiver, buffer.data(), buffer.size(), TEST_IO_TIMEOUT) !=
+                static_cast<ssize_t>(packet.size()) || buffer != packet) {
+                std::exit(5);
+            }
+        }
+        if (setrlimit(RLIMIT_NOFILE, &restricted) != 0) {
+            std::exit(6);
+        }
+        ssize_t received = cat_socket_recv_ex(&receiver, buffer.data(), buffer.size(), TEST_IO_TIMEOUT);
+        error = cat_get_last_error_code();
+        if (setrlimit(RLIMIT_NOFILE, &original) != 0) {
+            std::exit(7);
+        }
+        if (received != -1 || error != CAT_EMFILE || buffer != packet ||
+            cat_socket_get_io_state(&receiver) != CAT_SOCKET_IO_FLAG_NONE) {
+            std::exit(8);
+        }
+        if (!cat_socket_send_ex(&sender, CAT_STRL("reuse"), TEST_IO_TIMEOUT) ||
+            cat_socket_recv_ex(&receiver, buffer.data(), buffer.size(), TEST_IO_TIMEOUT) != CAT_STRLEN("reuse") ||
+            buffer.compare(0, CAT_STRLEN("reuse"), "reuse") != 0) {
+            std::exit(9);
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+#endif
 #endif
 
 TEST(cat_socket, datagram_try_recv_address)
