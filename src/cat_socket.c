@@ -4428,7 +4428,12 @@ static ssize_t cat_socket_internal_peekfrom(
     cat_timeout_t timeout
 )
 {
-    CAT_SOCKET_INTERNAL_FD_GETTER(socket_i, fd, return cat_false);
+    CAT_SOCKET_INTERNAL_FD_GETTER(socket_i, fd, {
+        if (address_length != NULL) {
+            *address_length = 0;
+        }
+        return -1;
+    });
     ssize_t nread;
 
     if (!(socket_i->type & CAT_SOCKET_TYPE_FLAG_DGRAM)) {
@@ -4481,14 +4486,14 @@ static ssize_t cat_socket_internal_peekfrom(
 
 static ssize_t cat_socket_peekfrom_impl(const cat_socket_t *socket, char *buffer, size_t size, cat_sockaddr_t *address, cat_socklen_t *address_length, cat_timeout_t timeout)
 {
-    CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
+    CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return -1);
 
     return cat_socket_internal_peekfrom(socket_i, buffer, size, address, address_length, timeout);
 }
 
 static ssize_t cat_socket_peek_from_impl(const cat_socket_t *socket, char *buffer, size_t size, char *name, size_t *name_length, int *port, cat_timeout_t timeout)
 {
-    CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return cat_false);
+    CAT_SOCKET_INTERNAL_GETTER(socket, socket_i, return -1);
     CAT_SOCKET_READ_ADDRESS_CONTEXT(address, name, name_length, port);
     ssize_t nread;
 

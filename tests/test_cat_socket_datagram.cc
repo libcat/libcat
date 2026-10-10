@@ -54,6 +54,16 @@ TEST(cat_socket, lazy_udp_errors_preserve_socket)
     ASSERT_EQ(cat_socket_try_recv(&sender, buffer, sizeof(buffer)), CAT_EBADF);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "xxx");
+    ASSERT_EQ(cat_socket_peek(&sender, buffer, sizeof(buffer)), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "xxx");
+    char name[CAT_SOCKET_IPV4_BUFFER_SIZE] = "unchanged";
+    size_t name_length = sizeof(name);
+    int port = 1;
+    ASSERT_EQ(cat_socket_peek_from(&sender, buffer, sizeof(buffer), name, &name_length, &port), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(name_length, 0);
+    ASSERT_EQ(port, 0);
     ASSERT_FALSE(cat_socket_connect_to(&sender, CAT_STRL(""), 0));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
     ASSERT_TRUE(cat_socket_is_available(&sender));
@@ -63,6 +73,11 @@ TEST(cat_socket, lazy_udp_errors_preserve_socket)
     ASSERT_TRUE(cat_socket_bind_to(&sender, CAT_STRL(TEST_LISTEN_IPV4), 0));
     ASSERT_TRUE(cat_socket_connect_to(&sender, CAT_STRL("localhost"), cat_socket_get_sock_port(&receiver)));
     ASSERT_TRUE(cat_socket_send(&sender, CAT_STRL("abc")));
+    name_length = sizeof(name);
+    ASSERT_EQ(cat_socket_peek_from_ex(&receiver, buffer, sizeof(buffer), name, &name_length, &port, TEST_IO_TIMEOUT), sizeof(buffer));
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "abc");
+    ASSERT_EQ(std::string(name, name_length), TEST_LISTEN_IPV4);
+    ASSERT_EQ(port, cat_socket_get_sock_port(&sender));
     ASSERT_EQ(cat_socket_recv_ex(&receiver, buffer, sizeof(buffer), TEST_IO_TIMEOUT), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "abc");
 }

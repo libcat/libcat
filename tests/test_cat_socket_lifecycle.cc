@@ -336,6 +336,13 @@ TEST(cat_socket, closed_socket_io_and_options)
         ASSERT_EQ(cat_get_last_error_code(), operation.last_error);
         ASSERT_STREQ(buffer, "content");
     }
+    ASSERT_EQ(cat_socket_peek(&socket, buffer, sizeof(buffer)), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(cat_socket_peekfrom(&socket, buffer, sizeof(buffer), nullptr, nullptr), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(cat_socket_peek_from(&socket, buffer, sizeof(buffer), nullptr, nullptr, nullptr), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_STREQ(buffer, "content");
     const struct {
         int (*get)(const cat_socket_t *);
         int (*set)(cat_socket_t *, int);
