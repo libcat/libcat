@@ -686,6 +686,8 @@ TEST(cat_curl_multi, cleanup_unfinished_transfer)
         ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT), CURLE_OK);
         ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function), CURLE_OK);
         ASSERT_EQ(curl_easy_setopt(easy, CURLOPT_WRITEDATA, &response), CURLE_OK);
+        bool wait_done = complete;
+        CURLMcode wait_result = CURLM_OK;
         CURLM *multi = cat_curl_multi_init();
         ASSERT_NE(multi, nullptr);
         DEFER(if (multi != nullptr) { cat_curl_multi_cleanup(multi); });
@@ -705,10 +707,23 @@ TEST(cat_curl_multi, cleanup_unfinished_transfer)
         } else {
             ASSERT_EQ(running, 1);
             ASSERT_EQ(response.length, 0);
+            co([&] {
+                wg++;
+                DEFER(wg--);
+                do {
+                    wait_result = cat_curl_multi_wait(multi, nullptr, 0, TEST_IO_TIMEOUT, nullptr);
+                } while (wait_result == CURLM_OK);
+                wait_done = true;
+            });
+            ASSERT_FALSE(wait_done);
         }
         // Exercise cleanup without remove_handle, after the request reached the peer.
         ASSERT_EQ(cat_curl_multi_cleanup(multi), CURLM_OK);
         multi = nullptr;
+        ASSERT_TRUE(wait_done);
+        if (!complete) {
+            ASSERT_EQ(wait_result, CURLM_INTERNAL_ERROR);
+        }
         curl_easy_cleanup(easy);
         easy = nullptr;
         wg();
