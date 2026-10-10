@@ -20,6 +20,22 @@
 #include "test.h"
 
 #define CAT_TEST_DEFAULT_BUFFER_SIZE         16
+
+TEST(cat_buffer, dump_content_and_capacity)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    DEFER(cat_buffer_close(&buffer));
+    ASSERT_TRUE(cat_buffer_append(&buffer, CAT_STRL("abc")));
+    testing::internal::CaptureStdout();
+    cat_buffer_dump(&buffer);
+    const std::string output = testing::internal::GetCapturedStdout();
+    ASSERT_NE(output.find("string(3) \"abc\""), std::string::npos);
+    ASSERT_NE(output.find("size_t(3)"), std::string::npos);
+    ASSERT_NE(output.find(string_format("size_t(%zu)", buffer.size)), std::string::npos);
+    ASSERT_EQ(buffer.length, 3);
+    ASSERT_EQ(std::string(buffer.value, buffer.length), "abc");
+}
 #define CAT_TEST_MEMORY_DEFAULT_ALIGNED_SIZE (CAT_MEMORY_DEFAULT_ALIGNED_SIZE / 2)
 
 bool operator==(const cat_buffer_allocator_t& lhs, const cat_buffer_allocator_t& rhs)

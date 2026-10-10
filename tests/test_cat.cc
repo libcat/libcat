@@ -100,6 +100,28 @@ TEST(cat, runtime_init_with_error_output_stderr)
 }
 
 #ifdef CAT_ENABLE_DEBUG_LOG
+TEST(cat, debug_output_redirect)
+{
+    FILE *output = tmpfile();
+    ASSERT_NE(output, nullptr);
+    DEFER(fclose(output));
+    cat_log_globals_t original = CAT_G(log_globals);
+    DEFER(CAT_G(log_globals) = original);
+    cat_set_debug_output(output);
+    ASSERT_EQ(cat_get_debug_output(), output);
+    CAT_LOG_G(types) |= CAT_LOG_TYPE_DEBUG;
+    CAT_LOG_G(debug_level) = 1;
+    CAT_LOG_DEBUG(TEST, "redirected debug output");
+    ASSERT_EQ(fflush(output), 0);
+    rewind(output);
+    char buffer[TEST_BUFFER_SIZE_STD];
+    size_t length = fread(buffer, 1, sizeof(buffer), output);
+    ASSERT_GT(length, 0);
+    ASSERT_NE(std::string(buffer, length).find("redirected debug output"), std::string::npos);
+    cat_set_debug_output(original.debug_output);
+    ASSERT_EQ(cat_get_debug_output(), original.debug_output);
+}
+
 TEST(cat, enable_debug_mode)
 {
     cat_log_types_t log_types = CAT_LOG_G(types);
