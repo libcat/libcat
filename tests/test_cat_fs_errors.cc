@@ -19,6 +19,7 @@
 #ifdef CAT_OS_LINUX
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/resource.h>
 
 static size_t count_open_descriptors()
 {
@@ -104,6 +105,42 @@ TEST(cat_fs, canceled_open_closes_unclaimed_descriptor)
     ASSERT_TRUE(cat_coroutine_wait_all());
     ASSERT_EQ(count_open_descriptors(), before);
 }
+
+#if GTEST_HAS_DEATH_TEST
+TEST(cat_fs, flock_thread_limit_failure_and_recovery)
+{
+    SKIP_IF_(getuid() == 0, "RLIMIT_NPROC does not restrict root");
+    const std::string path = get_random_path();
+    cat_file_t file = cat_fs_open(path.c_str(), CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_RDWR, 0600);
+    ASSERT_GE(file, 0);
+    DEFER(cat_fs_close(file); cat_fs_unlink(path.c_str()));
+    ASSERT_TRUE(work(CAT_WORK_KIND_FAST_IO, [] {}, TEST_IO_TIMEOUT));
+    ASSERT_EXIT({
+        struct rlimit original;
+        if (getrlimit(RLIMIT_NPROC, &original) != 0) {
+            std::exit(1);
+        }
+        struct rlimit restricted = original;
+        restricted.rlim_cur = 0;
+        if (setrlimit(RLIMIT_NPROC, &restricted) != 0) {
+            std::exit(2);
+        }
+        int locked = cat_fs_flock(file, CAT_FS_FLOCK_FLAG_EXCLUSIVE);
+        cat_errno_t error = cat_get_last_error_code();
+        if (setrlimit(RLIMIT_NPROC, &original) != 0) {
+            std::exit(3);
+        }
+        if (locked != -1 || error != CAT_EAGAIN || !cat_coroutine_wait_all()) {
+            std::exit(4);
+        }
+        if (cat_fs_flock(file, CAT_FS_FLOCK_FLAG_EXCLUSIVE) != 0 ||
+            cat_fs_flock(file, CAT_FS_FLOCK_FLAG_UNLOCK) != 0) {
+            std::exit(5);
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+#endif
 #endif
 
 TEST(cat_fs, content_errors)
