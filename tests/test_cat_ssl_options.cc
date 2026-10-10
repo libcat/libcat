@@ -30,6 +30,12 @@ TEST(cat_ssl, context_protocols)
     ASSERT_NE(SSL_CTX_get_options(context->ctx) & SSL_OP_NO_TLSv1_2, 0);
     cat_ssl_context_set_protocols(context, CAT_SSL_PROTOCOLS_DEFAULT);
     ASSERT_EQ(SSL_CTX_get_options(context->ctx) & SSL_OP_NO_TLSv1_2, 0);
+#ifdef CAT_ENABLE_DEBUG_LOG
+    char *protocols = cat_ssl_protocols_str(0);
+    ASSERT_NE(protocols, nullptr);
+    DEFER(cat_buffer_str_free(protocols));
+    ASSERT_STREQ(protocols, "NONE");
+#endif
     cat_ssl_context_set_verify_depth(context, 3);
     ASSERT_EQ(SSL_CTX_get_verify_depth(context->ctx), 3);
     cat_ssl_context_set_no_ticket(context);
@@ -190,6 +196,52 @@ static void transfer_handshake_bytes(cat_ssl_t *from, cat_ssl_t *to)
         ASSERT_EQ(cat_ssl_write_encrypted_bytes(to, buffer, length), length);
     }
 }
+
+#ifdef CAT_SSL_HAVE_TLS_ALPN
+TEST(cat_ssl, alpn_without_common_protocol_preserves_tls)
+{
+    cat_ssl_context_t *server_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+    ASSERT_NE(server_context, nullptr);
+    DEFER(cat_ssl_context_close(server_context));
+    cat_ssl_context_t *client_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+    ASSERT_NE(client_context, nullptr);
+    DEFER(cat_ssl_context_close(client_context));
+    const auto paths = publicCAPair->exportPEMs();
+    ASSERT_TRUE(cat_ssl_context_set_certificate(server_context, paths.cert, paths.key));
+    cat_ssl_context_disable_verify_peer(client_context);
+    ASSERT_TRUE(cas_ssl_context_set_alpn_protocols(server_context, cat_false, "h2"));
+    ASSERT_TRUE(cas_ssl_context_set_alpn_protocols(client_context, cat_true, "http/1.1"));
+    cat_ssl_t server = {}, client = {};
+    ASSERT_EQ(cat_ssl_create(&server, server_context), &server);
+    DEFER(cat_ssl_close(&server));
+    ASSERT_EQ(cat_ssl_create(&client, client_context), &client);
+    DEFER(cat_ssl_close(&client));
+    cat_ssl_set_accept_state(&server);
+    cat_ssl_set_connect_state(&client);
+    bool complete = false;
+    for (size_t attempt = 0; attempt < 32; attempt++) {
+        cat_ssl_ret_t client_result = cat_ssl_handshake(&client);
+        ASSERT_NE(client_result, CAT_SSL_RET_ERROR);
+        ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&client, &server));
+        cat_ssl_ret_t server_result = cat_ssl_handshake(&server);
+        ASSERT_NE(server_result, CAT_SSL_RET_ERROR);
+        ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&server, &client));
+        if (client_result == CAT_SSL_RET_OK && server_result == CAT_SSL_RET_OK) {
+            complete = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(complete);
+    for (cat_ssl_t *ssl : {&client, &server}) {
+        const unsigned char *selected = nullptr;
+        unsigned int length = 0;
+        SSL_get0_alpn_selected(ssl->connection, &selected, &length);
+        ASSERT_EQ(length, 0);
+        ASSERT_TRUE(cat_ssl_is_established(ssl));
+        ASSERT_FALSE(cat_ssl_is_down(ssl));
+    }
+}
+#endif
 
 TEST(cat_ssl, bio_handshake_and_binary_records)
 {
