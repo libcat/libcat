@@ -449,6 +449,8 @@ TEST(cat_poll, descriptor_limit_errors_preserve_original_fd)
             cat_socket_close(socket);
         }
         valid = valid && cat_socket_get_local_free_port() == -1 && cat_get_last_error_code() == CAT_EMFILE;
+        cat_os_fd_t pipe_fds[2];
+        valid = valid && !cat_pipe(pipe_fds, CAT_PIPE_FLAG_NONE, CAT_PIPE_FLAG_NONE) && cat_get_last_error_code() == CAT_EMFILE;
         valid = valid && cat_poll_one(fd, POLLIN, nullptr, 0) == CAT_RET_ERROR && cat_get_last_error_code() == CAT_EMFILE;
         cat_pollfd_t descriptor;
         descriptor.fd = fd;
