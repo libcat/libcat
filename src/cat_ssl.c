@@ -833,6 +833,8 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
     ssl->renegotiation_callback = NULL;
     ssl->renegotiation_callback_data = NULL;
     ssl->pending_renegotiations = 0;
+    ssl->owned_data = NULL;
+    ssl->owned_data_free = NULL;
 
     return ssl;
 
@@ -865,6 +867,9 @@ CAT_API void cat_ssl_close(cat_ssl_t *ssl)
     cat_ssl_context_close_data(ssl->context);
     /* implicitly frees internal_bio */
     SSL_free(ssl->connection);
+    if (ssl->owned_data_free != NULL) {
+        ssl->owned_data_free(ssl->owned_data);
+    }
     X509_free(ssl->failed_peer_certificate);
     /* free peer name */
     if (ssl->expected_peer_name != NULL) {
@@ -963,6 +968,21 @@ CAT_API cat_bool_t cat_ssl_pause_renegotiation(cat_ssl_t *ssl)
         return cat_false;
     }
     ssl->flags |= CAT_SSL_FLAG_RENEGOTIATION_PAUSED;
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_ssl_set_owned_data(cat_ssl_t *ssl, void *data, cat_ssl_owned_data_free_t free_function)
+{
+    if (ssl->owned_data != NULL || ssl->owned_data_free != NULL) {
+        cat_update_last_error(CAT_EALREADY, "TLS connection metadata already has an owner");
+        return cat_false;
+    }
+    if (free_function == NULL) {
+        cat_update_last_error(CAT_EINVAL, "TLS connection metadata requires a cleanup function");
+        return cat_false;
+    }
+    ssl->owned_data = data;
+    ssl->owned_data_free = free_function;
     return cat_true;
 }
 
