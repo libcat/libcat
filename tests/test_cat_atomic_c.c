@@ -143,3 +143,38 @@ const char *cat_test_atomic_c_publication(cat_timeout_t timeout)
 }
 
 #undef CAT_TEST_ATOMIC_CHECK
+
+int cat_test_atomic_c_validates_orders(void)
+{
+#if defined(CAT_HAVE_C11_ATOMIC) || defined(CAT_HAVE_GNUC_ATOMIC)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+int cat_test_atomic_c_rejects_exchange_consume(void)
+{
+#ifdef CAT_HAVE_C11_ATOMIC
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+void cat_test_atomic_c_invalid_order(int operation, cat_atomic_memory_order_t order)
+{
+    cat_atomic_uint32_t atomic;
+    cat_atomic_uint32_init(&atomic, 1);
+    switch (operation) {
+        case 0:
+            cat_atomic_uint32_store_explicit(&atomic, 2, order);
+            break;
+        case 1:
+            (void) cat_atomic_uint32_load_explicit(&atomic, order);
+            break;
+        case 2:
+            (void) cat_atomic_uint32_exchange_explicit(&atomic, 2, order);
+            break;
+    }
+}

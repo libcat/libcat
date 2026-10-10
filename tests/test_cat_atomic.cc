@@ -23,6 +23,9 @@
 
 extern "C" const char *cat_test_atomic_c_operations(cat_timeout_t timeout);
 extern "C" const char *cat_test_atomic_c_publication(cat_timeout_t timeout);
+extern "C" int cat_test_atomic_c_validates_orders(void);
+extern "C" int cat_test_atomic_c_rejects_exchange_consume(void);
+extern "C" void cat_test_atomic_c_invalid_order(int operation, cat_atomic_memory_order_t order);
 
 TEST(cat_atomic, c_operations)
 {
@@ -35,6 +38,36 @@ TEST(cat_atomic, c_release_acquire_publication)
     const char *failure = cat_test_atomic_c_publication(TEST_IO_TIMEOUT);
     ASSERT_EQ(failure, nullptr) << failure;
 }
+
+#if GTEST_HAS_DEATH_TEST
+TEST(cat_atomic, c_invalid_memory_orders)
+{
+    SKIP_IF_(cat_test_atomic_c_validates_orders() == 0, "This atomic backend accepts stronger memory orders");
+    const struct {
+        int operation;
+        cat_atomic_memory_order_t order;
+        const char *message;
+    } cases[] = {
+        {0, CAT_ATOMIC_MEMORY_ORDER_ACQUIRE, "Invalid memory order for store operation"},
+        {0, CAT_ATOMIC_MEMORY_ORDER_CONSUME, "Invalid memory order for store operation"},
+        {0, CAT_ATOMIC_MEMORY_ORDER_ACQ_REL, "Invalid memory order for store operation"},
+        {1, CAT_ATOMIC_MEMORY_ORDER_RELEASE, "Invalid memory order for load operation"},
+        {1, CAT_ATOMIC_MEMORY_ORDER_ACQ_REL, "Invalid memory order for load operation"},
+        {0, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
+        {1, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
+        {2, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
+    };
+    for (const auto &entry : cases) {
+        SCOPED_TRACE(entry.operation);
+        SCOPED_TRACE(static_cast<int>(entry.order));
+        ASSERT_DEATH(cat_test_atomic_c_invalid_order(entry.operation, entry.order), entry.message);
+    }
+    if (cat_test_atomic_c_rejects_exchange_consume()) {
+        ASSERT_DEATH(cat_test_atomic_c_invalid_order(2, CAT_ATOMIC_MEMORY_ORDER_CONSUME),
+            "Invalid memory order for exchange operation");
+    }
+}
+#endif
 
 TEST(cat_atomic, base)
 {
