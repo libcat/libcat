@@ -19,6 +19,56 @@
 
 #include "test.h"
 
+#if defined(CAT_OS_LINUX) && defined(CAT_COROUTINE_USE_USER_STACK) && \
+    !defined(CAT_COROUTINE_USE_ASAN) && GTEST_HAS_DEATH_TEST
+#include <sys/resource.h>
+
+TEST(cat_coroutine, stack_mapping_failure_and_recovery)
+{
+    ASSERT_EXIT({
+        FILE *statm = fopen("/proc/self/statm", "r");
+        if (statm == nullptr) {
+            std::exit(1);
+        }
+        size_t pages = 0;
+        int scanned = fscanf(statm, "%zu", &pages);
+        fclose(statm);
+        if (scanned != 1 || pages == 0) {
+            std::exit(2);
+        }
+        struct rlimit original;
+        if (getrlimit(RLIMIT_AS, &original) != 0) {
+            std::exit(3);
+        }
+        struct rlimit restricted = original;
+        // Preserve existing mappings and room for diagnostics, but deny a new maximum-size stack.
+        rlim_t used = static_cast<rlim_t>(pages) * cat_getpagesize();
+        restricted.rlim_cur = std::min(original.rlim_cur, used + CAT_COROUTINE_MAX_STACK_SIZE / 2);
+        if (setrlimit(RLIMIT_AS, &restricted) != 0) {
+            std::exit(4);
+        }
+        auto function = [](cat_data_t *) -> cat_data_t * { return nullptr; };
+        cat_coroutine_t supplied;
+        cat_coroutine_t *allocated = cat_coroutine_create_ex(nullptr, function, CAT_COROUTINE_MAX_STACK_SIZE);
+        cat_errno_t allocated_error = cat_get_last_error_code();
+        cat_coroutine_t *provided = cat_coroutine_create_ex(&supplied, function, CAT_COROUTINE_MAX_STACK_SIZE);
+        cat_errno_t provided_error = cat_get_last_error_code();
+        if (setrlimit(RLIMIT_AS, &original) != 0) {
+            std::exit(5);
+        }
+        if (allocated != nullptr || provided != nullptr ||
+            allocated_error != CAT_ENOMEM || provided_error != CAT_ENOMEM) {
+            std::exit(6);
+        }
+        cat_coroutine_t *recovered = cat_coroutine_create_ex(nullptr, function, CAT_COROUTINE_MAX_STACK_SIZE);
+        if (recovered == nullptr || !cat_coroutine_close(recovered)) {
+            std::exit(7);
+        }
+        std::exit(0);
+    }, testing::ExitedWithCode(0), "");
+}
+#endif
+
 #if 0
 TEST(cat_coroutine, stackoverflow)
 {
