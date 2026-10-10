@@ -2032,9 +2032,12 @@ static cat_bool_t cat_socket_connect_to_impl(cat_socket_t *socket, const char *n
             CAT_ASSERT(af == AF_UNSPEC);
             // af changed and socket has not been initialized yet, recreate socket_i
             cat_socket_type_t type = socket_i->type; // TODO: Implement socket_dup()
+            /* Preserve ownership of the socket while recreating its transport. */
+            cat_socket_flags_t inherited_flags = socket->flags & CAT_SOCKET_FLAG_ALLOCATED;
             // FIXME: multi bound sockets, make them all available
             cat_socket_internal_close(socket_i, NULL, cat_true);
             ret = cat_socket_create(socket, type) != NULL;
+            socket->flags |= inherited_flags;
             if (!ret) {
                 cat_update_last_error_with_previous("Socket connect recreate failed");
                 break;

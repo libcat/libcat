@@ -46,6 +46,55 @@ TEST(cat_socket, recreate_allocated)
     ASSERT_GT(cat_socket_get_sock_port(socket), 0);
 }
 
+TEST(cat_socket, address_family_retry_preserves_heap_ownership)
+{
+    struct addrinfo hints = {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo *addresses = cat_dns_getaddrinfo("localhost", nullptr, &hints);
+    ASSERT_NE(addresses, nullptr);
+    DEFER(cat_dns_freeaddrinfo(addresses));
+    bool have_ipv4 = false, have_ipv6 = false;
+    for (const struct addrinfo *address = addresses; address != nullptr; address = address->ai_next) {
+        have_ipv4 |= address->ai_family == AF_INET;
+        have_ipv6 |= address->ai_family == AF_INET6;
+    }
+    SKIP_IF_(!have_ipv4 || !have_ipv6, "Localhost must resolve to both address families");
+    bool ipv4_first = addresses->ai_family == AF_INET;
+    cat_socket_type_t first_type = ipv4_first ? CAT_SOCKET_TYPE_TCP4 : CAT_SOCKET_TYPE_TCP6;
+    cat_socket_type_t second_type = ipv4_first ? CAT_SOCKET_TYPE_TCP6 : CAT_SOCKET_TYPE_TCP4;
+    const char *first_host = ipv4_first ? TEST_LISTEN_IPV4 : TEST_LISTEN_IPV6;
+    const char *second_host = ipv4_first ? TEST_LISTEN_IPV6 : TEST_LISTEN_IPV4;
+    cat_socket_bind_flags_t first_flags = ipv4_first ? CAT_SOCKET_BIND_FLAG_NONE : CAT_SOCKET_BIND_FLAG_IPV6ONLY;
+    cat_socket_bind_flags_t second_flags = ipv4_first ? CAT_SOCKET_BIND_FLAG_IPV6ONLY : CAT_SOCKET_BIND_FLAG_NONE;
+    cat_socket_t refused;
+    ASSERT_EQ(cat_socket_create(&refused, first_type), &refused);
+    DEFER(cat_socket_close(&refused));
+    ASSERT_TRUE(cat_socket_bind_to_ex(&refused, first_host, strlen(first_host), 0, first_flags));
+    int port = cat_socket_get_sock_port(&refused);
+    ASSERT_GT(port, 0);
+    // Reserve the first address without listening; the other family accepts the retry.
+    cat_socket_t listener;
+    ASSERT_EQ(cat_socket_create(&listener, second_type), &listener);
+    DEFER(cat_socket_close(&listener));
+    ASSERT_TRUE(cat_socket_bind_to_ex(&listener, second_host, strlen(second_host), port, second_flags));
+    ASSERT_TRUE(cat_socket_listen(&listener, 1));
+    cat_socket_t *client = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(client, nullptr);
+    DEFER(cat_socket_close(client));
+    ASSERT_TRUE(cat_socket_connect_to(client, CAT_STRL("localhost"), port));
+    ASSERT_EQ(cat_socket_get_af(client), ipv4_first ? AF_INET6 : AF_INET);
+    cat_socket_t peer;
+    ASSERT_EQ(cat_socket_create(&peer, CAT_SOCKET_TYPE_TCP), &peer);
+    DEFER(cat_socket_close(&peer));
+    ASSERT_TRUE(cat_socket_accept(&listener, &peer));
+    ASSERT_TRUE(cat_socket_send(client, "x", 1));
+    char received = '\0';
+    ASSERT_EQ(cat_socket_recv(&peer, &received, 1), 1);
+    ASSERT_EQ(received, 'x');
+    ASSERT_TRUE(client->flags & CAT_SOCKET_FLAG_ALLOCATED);
+}
+
 TEST(cat_socket, rejected_creation_preserves_caller_storage)
 {
     const cat_socket_type_t types[] = {
