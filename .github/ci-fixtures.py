@@ -77,10 +77,10 @@ def main(directory: Path) -> None:
     for server in (http, https):
         threading.Thread(target=server.serve_forever, daemon=True).start()
     environment = {
-        "TEST_REMOTE_HTTP_SERVER_HOST": "localhost",
+        "TEST_REMOTE_HTTP_SERVER_HOST": http.server_name,
         "TEST_REMOTE_HTTP_SERVER_PORT": str(http.server_port),
         "TEST_REMOTE_HTTP_SERVER_KEYWORD": "libcat",
-        "TEST_REMOTE_HTTPS_SERVER_HOST": "localhost",
+        "TEST_REMOTE_HTTPS_SERVER_HOST": https.server_name,
         "TEST_REMOTE_HTTPS_SERVER_PORT": str(https.server_port),
         "TEST_REMOTE_HTTPS_SERVER_KEYWORD": "libcat",
         "LIBCAT_TEST_CERT_FILE": str(certificate.resolve()),

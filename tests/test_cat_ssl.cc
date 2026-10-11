@@ -46,6 +46,7 @@ TEST(cat_ssl, remote_https_server)
     cat_socket_crypto_options_init(&options, cat_true);
     // Windows uses its certificate store unless a CA file is supplied explicitly.
     options.ca_file = getenv("LIBCAT_TEST_CERT_FILE");
+    options.peer_name = TEST_REMOTE_HTTPS_SERVER_HOST;
     ASSERT_TRUE(cat_socket_enable_crypto(socket, &options))
         << cat_get_last_error_code() << ": " << cat_get_last_error_message();
 

@@ -1954,6 +1954,7 @@ TEST(cat_socket, send_file_to_remote_ssl_server)
     cat_socket_crypto_options_t options;
     cat_socket_crypto_options_init(&options, cat_true);
     options.ca_file = getenv("LIBCAT_TEST_CERT_FILE");
+    options.peer_name = TEST_REMOTE_HTTPS_SERVER_HOST;
     ASSERT_TRUE(cat_socket_enable_crypto(client, &options))
         << cat_get_last_error_code() << ": " << cat_get_last_error_message();
 
