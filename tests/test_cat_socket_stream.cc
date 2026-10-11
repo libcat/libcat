@@ -243,8 +243,13 @@ TEST(cat_socket, failed_second_listener_can_recreate)
     ASSERT_EQ(cat_socket_create(&first, CAT_SOCKET_TYPE_TCP4), &first);
     DEFER(if (cat_socket_is_available(&first)) { cat_socket_close(&first); });
     const cat_sockaddr_info_t *unbound = cat_socket_getsockname_fast(&first);
+#ifdef CAT_OS_WIN
+    ASSERT_EQ(unbound, nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+#else
     ASSERT_NE(unbound, nullptr);
     ASSERT_EQ(cat_socket_get_sock_port(&first), 0);
+#endif
     ASSERT_TRUE(cat_socket_bind_to(&first, CAT_STRL(TEST_LISTEN_IPV4), 0));
     int port = cat_socket_get_sock_port(&first);
     ASSERT_GT(port, 0);
