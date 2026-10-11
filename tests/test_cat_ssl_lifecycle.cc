@@ -254,14 +254,20 @@ TEST(cat_socket, crypto_try_send_handles_queued_completion_and_close)
             ASSERT_FALSE(reader_done);
         }
         ASSERT_GT(cat_socket_set_send_buffer_size(&client, TEST_BUFFER_SIZE_STD), 0);
+        ASSERT_GT(cat_socket_set_recv_buffer_size(&connection, TEST_BUFFER_SIZE_STD), 0);
         int send_size = cat_socket_get_send_buffer_size(&client);
         int recv_size = cat_socket_get_recv_buffer_size(&connection);
         ASSERT_GT(send_size, 0);
         ASSERT_GT(recv_size, 0);
         // Exceed both kernel buffers without yielding; the peer has not read yet.
-        std::string payload = get_random_bytes(2 * (static_cast<size_t>(send_size) + recv_size));
-        ASSERT_EQ(cat_socket_try_send(&client, payload.data(), payload.length()), payload.length());
-        ASSERT_GT(client.internal->ssl->write_buffer.length, 0);
+        const std::string chunk = get_random_bytes(2 * (static_cast<size_t>(send_size) + recv_size));
+        std::string payload;
+        const cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+        do {
+            ASSERT_LT(cat_time_msec2(), deadline);
+            ASSERT_EQ(cat_socket_try_send(&client, chunk.data(), chunk.length()), chunk.length());
+            payload += chunk;
+        } while (client.internal->ssl->write_buffer.length == 0);
         cat_set_last_error_code(CAT_EBUSY);
         ASSERT_EQ(cat_socket_try_send(&client, CAT_STRL("next")), CAT_EAGAIN);
         ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
