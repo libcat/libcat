@@ -942,6 +942,52 @@ TEST(cat_http_parser, multipart_after_common)
 
 }
 
+TEST(cat_http_parser, multipart_content_length_preserves_the_next_message)
+{
+    const std::string body = "--boundary\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--boundary--\r\nepilogue";
+    const std::string first = "POST /upload HTTP/1.1\r\nContent-Type: multipart/form-data; boundary=boundary\r\nContent-Length: " +
+        std::to_string(body.size()) + "\r\n\r\n" + body;
+    const std::string wire = first + "GET /next HTTP/1.1\r\nHost: example.test\r\n\r\n";
+
+    for (size_t split = 1; split <= first.size(); split++) {
+        cat_http_parser_t parser;
+        cat_http_parser_create(&parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        size_t offset = 0;
+        size_t available = split;
+        std::string value;
+        size_t steps = 0;
+        while (!cat_http_parser_is_completed(&parser)) {
+            ASSERT_LT(steps++, wire.size() * 4);
+            ASSERT_TRUE(cat_http_parser_execute(&parser, wire.data() + offset, available - offset));
+            offset += cat_http_parser_get_parsed_length(&parser);
+            ASSERT_LE(offset, first.size());
+            if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_MULTIPART_BODY) {
+                value.append(cat_http_parser_get_data(&parser), cat_http_parser_get_data_length(&parser));
+            }
+            if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_NONE) {
+                ASSERT_LT(available, wire.size());
+                available = wire.size();
+            }
+        }
+        ASSERT_EQ(offset, first.size());
+        ASSERT_EQ(value, "value");
+        cat_http_parser_reset(&parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        std::string uri;
+        while (!cat_http_parser_is_completed(&parser)) {
+            ASSERT_LT(steps++, wire.size() * 4);
+            ASSERT_TRUE(cat_http_parser_execute(&parser, wire.data() + offset, wire.size() - offset));
+            offset += cat_http_parser_get_parsed_length(&parser);
+            if (cat_http_parser_get_event(&parser) == CAT_HTTP_PARSER_EVENT_URL) {
+                uri.append(cat_http_parser_get_data(&parser), cat_http_parser_get_data_length(&parser));
+            }
+        }
+        ASSERT_EQ(uri, "/next");
+        ASSERT_EQ(offset, wire.size());
+    }
+}
+
 /*
 * multipart tests with only data callbacks
 */
