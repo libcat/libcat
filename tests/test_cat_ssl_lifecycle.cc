@@ -17,6 +17,40 @@
 #include "test.h"
 
 #ifdef CAT_SSL
+TEST(cat_ssl, owned_metadata_is_released_once_on_close)
+{
+    struct owned_data {
+        unsigned int *cleanup_count;
+    };
+    unsigned int cleaned = 0;
+    const auto cleanup = [](void *data) {
+        owned_data *owned = static_cast<owned_data *>(data);
+        (*owned->cleanup_count)++;
+        delete owned;
+    };
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+    for (bool allocated : {false, true}) {
+        cat_ssl_t storage;
+        cat_ssl_t *ssl = cat_ssl_create(allocated ? nullptr : &storage, context);
+        ASSERT_NE(ssl, nullptr);
+        DEFER(cat_ssl_close(ssl));
+        auto data = std::make_unique<owned_data>();
+        data->cleanup_count = &cleaned;
+        ASSERT_FALSE(cat_ssl_set_owned_data(ssl, data.get(), nullptr));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        ASSERT_TRUE(cat_ssl_set_owned_data(ssl, data.get(), cleanup));
+        data.release();
+        auto duplicate = std::make_unique<owned_data>();
+        duplicate->cleanup_count = &cleaned;
+        ASSERT_FALSE(cat_ssl_set_owned_data(ssl, duplicate.get(), cleanup));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EALREADY);
+        ASSERT_EQ(cleaned, allocated ? 1U : 0U);
+    }
+    ASSERT_EQ(cleaned, 2);
+}
+
 TEST(cat_ssl, allocated_connection_close_preserves_context)
 {
     cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
