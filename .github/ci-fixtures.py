@@ -10,6 +10,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from typing import cast
 
 
@@ -40,6 +41,11 @@ class Server(ThreadingHTTPServer):
     def __init__(self, context: ssl.SSLContext | None = None) -> None:
         self.context = context
         super().__init__(("127.0.0.1", 0), Handler)
+
+    def server_bind(self) -> None:
+        # A numeric loopback identity needs no potentially blocking reverse DNS.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address
 
     def get_request(self) -> tuple[socket.socket, tuple[str, int]]:
         connection, address = super().get_request()
