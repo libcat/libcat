@@ -1969,10 +1969,14 @@ TEST(cat_socket, send_file_to_remote_ssl_server)
     ASSERT_TRUE(file_put_contents(random_filename.c_str(), request, strlen(request)));
     DEFER(remove_file(random_filename.c_str()));
     ASSERT_TRUE(cat_socket_send_file(client, random_filename.c_str(), 0, 0));
-    nread = cat_socket_recv(client, CAT_STRS(buffer));
-    ASSERT_GT(nread, 0);
-    CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
-    ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
+    std::string response;
+    do {
+        nread = cat_socket_recv(client, CAT_STRS(buffer));
+        ASSERT_GE(nread, 0);
+        response.append(buffer, static_cast<size_t>(nread));
+        CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
+    } while (nread != 0 && response.find(TEST_REMOTE_HTTPS_SERVER_KEYWORD) == std::string::npos);
+    ASSERT_NE(response.find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
 }
 #endif
 

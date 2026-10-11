@@ -57,10 +57,14 @@ TEST(cat_ssl, remote_https_server)
     ASSERT_NE(request, nullptr);
     DEFER(cat_free(request));
     ASSERT_TRUE(cat_socket_send(socket, request, strlen(request)));
-    nread = cat_socket_recv(socket, CAT_STRS(buffer));
-    ASSERT_GT(nread, 0);
-    CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
-    ASSERT_NE(std::string(buffer, nread).find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
+    std::string response;
+    do {
+        nread = cat_socket_recv(socket, CAT_STRS(buffer));
+        ASSERT_GE(nread, 0);
+        response.append(buffer, static_cast<size_t>(nread));
+        CAT_LOG_DEBUG(TEST_SOCKET, "Data[%zd]: %.*s", nread, (int) nread, buffer);
+    } while (nread != 0 && response.find(TEST_REMOTE_HTTPS_SERVER_KEYWORD) == std::string::npos);
+    ASSERT_NE(response.find(TEST_REMOTE_HTTPS_SERVER_KEYWORD), std::string::npos);
 }
 
 typedef struct test_load_cert_s {
