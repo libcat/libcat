@@ -113,6 +113,9 @@ TEST(cat_socket, rejected_creation_preserves_caller_storage)
         cat_socket_init(&socket);
         ASSERT_EQ(cat_socket_create(&socket, type), nullptr);
         ASSERT_NE(cat_get_last_error_code(), 0);
+        if (type == CAT_SOCKET_TYPE_TTY) {
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+        }
         ASSERT_FALSE(cat_socket_is_available(&socket));
         ASSERT_EQ(cat_socket_create(nullptr, type), nullptr);
         ASSERT_NE(cat_get_last_error_code(), 0);

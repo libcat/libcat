@@ -942,6 +942,10 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
         } else {
             os_fd = CAT_OS_INVALID_FD;
         }
+        if (unlikely(os_fd == CAT_OS_INVALID_FD)) {
+            error = UV_EBADF;
+            goto _init_error;
+        }
         error = uv_tty_init(&CAT_EVENT_G(loop), &socket_i->u.tty, os_fd, 0);
     }
     if (unlikely(error != 0)) {

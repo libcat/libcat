@@ -2507,7 +2507,8 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
     DWORD le;
     HANDLE hFile;
     OVERLAPPED overlapped = { 0 };
-    if (INVALID_HANDLE_VALUE == (hFile = uv_get_osfhandle(fd))) {
+    /* Negative descriptors trigger CRT assertions before handle lookup can fail. */
+    if (fd < 0 || INVALID_HANDLE_VALUE == (hFile = uv_get_osfhandle(fd))) {
         // bad fd, return error
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EBADF;
