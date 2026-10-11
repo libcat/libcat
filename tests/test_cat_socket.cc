@@ -1951,7 +1951,10 @@ TEST(cat_socket, send_file_to_remote_ssl_server)
     DEFER(cat_socket_close(client));
 
     ASSERT_TRUE(cat_socket_connect_to(client, TEST_REMOTE_HTTPS_SERVER));
-    ASSERT_TRUE(cat_socket_enable_crypto(client, nullptr))
+    cat_socket_crypto_options_t options;
+    cat_socket_crypto_options_init(&options, cat_true);
+    options.ca_file = getenv("LIBCAT_TEST_CERT_FILE");
+    ASSERT_TRUE(cat_socket_enable_crypto(client, &options))
         << cat_get_last_error_code() << ": " << cat_get_last_error_message();
 
     char *request = cat_sprintf(

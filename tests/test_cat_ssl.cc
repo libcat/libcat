@@ -42,7 +42,11 @@ TEST(cat_ssl, remote_https_server)
     DEFER(cat_socket_close(socket));
 
     ASSERT_TRUE(cat_socket_connect_to(socket, TEST_REMOTE_HTTPS_SERVER));
-    ASSERT_TRUE(cat_socket_enable_crypto(socket, nullptr))
+    cat_socket_crypto_options_t options;
+    cat_socket_crypto_options_init(&options, cat_true);
+    // Windows uses its certificate store unless a CA file is supplied explicitly.
+    options.ca_file = getenv("LIBCAT_TEST_CERT_FILE");
+    ASSERT_TRUE(cat_socket_enable_crypto(socket, &options))
         << cat_get_last_error_code() << ": " << cat_get_last_error_message();
 
     char *request = cat_sprintf(
