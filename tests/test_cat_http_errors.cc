@@ -331,6 +331,43 @@ TEST(cat_http_parser, malformed_multipart_body_and_reset)
     }
 }
 
+TEST(cat_http_parser, incomplete_multipart_body_and_epilogue_at_eof)
+{
+    const std::string part_header = "--test\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\n";
+    const std::string body = part_header + "abc\r\n--test--\r\nepilogue";
+    const std::string header = "POST / HTTP/1.1\r\nContent-Type: multipart/form-data; boundary=test\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n";
+    // EOF can interrupt either a part body or the declared epilogue after the final boundary.
+    for (size_t received : {part_header.size() + 1, body.size() - 2}) {
+        SCOPED_TRACE(received);
+        const std::string request = header + body.substr(0, received);
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        size_t offset = 0, iterations = 0;
+        do {
+            ASSERT_LT(iterations++, request.size() * 4);
+            ASSERT_TRUE(cat_http_parser_execute(&parser, request.data() + offset, request.size() - offset));
+            size_t parsed = cat_http_parser_get_parsed_length(&parser);
+            ASSERT_LE(parsed, request.size() - offset);
+            offset += parsed;
+            ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+        } while (offset < request.size() || cat_http_parser_get_event(&parser) != CAT_HTTP_PARSER_EVENT_NONE);
+        ASSERT_EQ(offset, request.size());
+        ASSERT_FALSE(cat_http_parser_finish(&parser));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+        ASSERT_NE(std::string(cat_get_last_error_message()).find("Incomplete multipart body"), std::string::npos);
+
+        // Reset releases the incomplete framing state before another message is parsed.
+        cat_http_parser_reset(&parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_NONE);
+        ASSERT_TRUE(cat_http_parser_execute(&parser, CAT_STRL("GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n")));
+        ASSERT_TRUE(cat_http_parser_is_completed(&parser));
+        ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+        ASSERT_TRUE(cat_http_parser_finish(&parser));
+    }
+}
+
 TEST(cat_http_parser, multipart_response_without_content_length_and_reset)
 {
     cat_http_parser_t parser;
