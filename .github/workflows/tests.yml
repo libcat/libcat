@@ -292,9 +292,6 @@ jobs:
             sudo apt-get update
             sudo apt-get install -yyq libgtest-dev libcurl4-openssl-dev libpq-dev
           else
-            brew install googletest ||
-            brew install googletest ||
-            brew install googletest
             brew install pkg-config
             brew install openssl@3
             brew install curl
@@ -305,6 +302,28 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: libcat
+
+      - name: Checkout GoogleTest sources
+        if: runner.os == 'macOS'
+        uses: actions/checkout@v7
+        with:
+          repository: google/googletest
+          ref: v1.18.0
+          path: googletest
+
+      - name: Build GoogleTest with AddressSanitizer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # libc++ container annotations must agree with the instrumented tests.
+          cmake -S googletest -B googletest/build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+            -DBUILD_GMOCK=OFF \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/googletest"
+          cmake --build googletest/build -j
+          cmake --install googletest/build
 
       - name: Start service containers
         shell: bash
@@ -323,7 +342,7 @@ jobs:
             curl_prefix=$(brew --prefix curl)
             libpq_prefix=$(brew --prefix libpq)
             export OPENSSL_ROOT_DIR="$openssl_prefix"
-            export CMAKE_PREFIX_PATH="$openssl_prefix:$curl_prefix:$libpq_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+            export CMAKE_PREFIX_PATH="$RUNNER_TEMP/googletest:$openssl_prefix:$curl_prefix:$libpq_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
             export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig:$curl_prefix/lib/pkgconfig:$libpq_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
             cmake_options+=(-DLIBCAT_ENABLE_OPENSSL=ON -DLIBCAT_ENABLE_CURL=ON)
           fi
