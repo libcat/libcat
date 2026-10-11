@@ -82,6 +82,9 @@ jobs:
     name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
     runs-on: ${{matrix.os}}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         os: [ "windows-latest", "windows-2025" ]
@@ -196,25 +199,6 @@ jobs:
           # install OpenCppCoverage
           Write-Host "Installing OpenCppCoverage"
           & .\OpenCppCoverage.exe /SP- /NORESTART /VERYSILENT /DIR=C:\OpenCppCoverage
-          # get latest codecov uploader download path
-          Write-Host "Fetching latest codecov uploader download path"
-          $info = Invoke-WebRequest `
-            -UseBasicParsing `
-            -Headers $headers `
-            -Uri https://api.github.com/repos/codecov/codecov-exe/releases/latest `
-              | ConvertFrom-Json
-          foreach ($x in $info.assets) {
-            if($x.name.EndsWith('win7-x64.zip')) {
-              Write-Host "Downloading latest codecov uploader"
-              $uri = $x.browser_download_url
-              Invoke-WebRequest -Uri $uri -OutFile codecov.zip -Headers $headers -UseBasicParsing
-              break
-            }
-          }
-          # unzip it
-          Write-Host "Extracting codecov uploader"
-          New-Item C:\Codecov -ItemType Container | Out-Null
-          Expand-Archive .\codecov.zip -DestinationPath C:\Codecov
 
       - name: Build and test libcat
         shell: cmd
@@ -257,7 +241,6 @@ jobs:
             --excluded_line_regex "\s*\{\s*" ^
             --modules build\Debug\cat_tests.exe -- ^
             build\Debug\cat_tests.exe --gtest_color=yes || goto error ) ELSE (build\Release\cat_tests.exe --gtest_color=yes || goto error)
-          ${{ matrix.build-type == 'Debug' && 'C:\Codecov\codecov -f coverage.xml' || '' }}
           ECHO ASan log:
           TYPE asan.log* || REM
           ECHO ::endgroup::
@@ -270,10 +253,30 @@ jobs:
           ECHO ::error::Test failed
           EXIT /b %test_exit_code%
 
+      - name: Upload coverage report
+        if: matrix.build-type == 'Debug'
+        uses: codecov/codecov-action@v7
+        with:
+          files: coverage.xml
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: true
+
+      - name: Save coverage report
+        if: matrix.build-type == 'Debug'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.build-type }}
+          path: coverage.xml
+          if-no-files-found: error
+
   unix-tests:
     name: Test on ${{matrix.os}}
     runs-on: ${{matrix.os}}
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
@@ -361,10 +364,14 @@ jobs:
           cmake --build . -j --target cat_tests || exit 1
           echo "::endgroup::"
           echo "::group::Test libcat"
+          exit_status=0
           ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
+          if [ "$exit_status" -eq 0 ]; then
+            CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
+          fi
           echo "ASan log:"
           cat asan.log* || :
-          if [ $exit_status -ne 0 ]; then
+          if [ "$exit_status" -ne 0 ]; then
             echo "::error::Test failed"
             exit $exit_status
           else
@@ -397,7 +404,20 @@ jobs:
               "${{github.workspace}}/libcat/src/*" \
             "${lcov_ignore_errors[@]}" \
             --output-file coverage.info &&
-          lcov --list coverage.info &&
-          curl -s https://codecov.io/bash -o codecov.sh &&
-          chmod +x codecov.sh &&
-          ./codecov.sh -f coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v7
+        with:
+          working-directory: libcat
+          files: coverage.info
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: true
+
+      - name: Save coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.os }}
+          path: libcat/coverage.info
+          if-no-files-found: error
