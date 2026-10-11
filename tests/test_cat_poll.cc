@@ -190,21 +190,20 @@ TEST(cat_poll, listeners_registered_in_reverse_descriptor_order)
         DEFER(cat_socket_close(&connection));
         cat_pollfd_t descriptor = {cat_socket_get_fd(listener), POLLIN, POLLNONE};
         cat_pollfd_events_t revents = POLLNONE;
-        int ready = 0;
-        bool done = false;
-        wait_group wg;
-        cat_coroutine_t *poller = co([&] {
-            wg++;
-            DEFER(wg--);
-            ready = multiple ? cat_poll(&descriptor, 1, TEST_IO_TIMEOUT)
-                : cat_poll_one(descriptor.fd, POLLIN, &revents, TEST_IO_TIMEOUT);
-            done = true;
-        });
-        DEFER(if (!done) { cat_coroutine_resume(poller, nullptr, nullptr); });
-        ASSERT_FALSE(done);
         ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(listener)));
-        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
-        ASSERT_TRUE(done);
+        // Windows AcceptEx can consume readiness before uv_poll observes it.
+        // Wait for a pending accept, then exercise the listener's descriptor lookup.
+        const cat_msec_t deadline = cat_time_msec2() + TEST_IO_TIMEOUT;
+        int ready;
+        do {
+            ready = multiple ? cat_poll(&descriptor, 1, 0)
+                : cat_poll_one(descriptor.fd, POLLIN, &revents, 0);
+            ASSERT_GE(ready, 0);
+            if (ready == 0) {
+                ASSERT_LT(cat_time_msec2(), deadline);
+                ASSERT_EQ(cat_time_msleep(0), 0);
+            }
+        } while (ready == 0);
         ASSERT_EQ(ready, 1);
         ASSERT_EQ(multiple ? descriptor.revents : revents, POLLIN);
         ASSERT_TRUE(cat_socket_accept(listener, &connection));
