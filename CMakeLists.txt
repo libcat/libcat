@@ -982,6 +982,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_poll.cc
         tests/test_cat_time.cc
         tests/test_cat_channel.cc
+        tests/test_cat_channel_select_cleanup.cc
         tests/test_cat_sync.cc
         tests/test_cat_socket.cc
         tests/test_cat_dns.cc
