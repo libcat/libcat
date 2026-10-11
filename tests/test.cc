@@ -19,6 +19,9 @@
  */
 
 #include "test.h"
+#if defined(CAT_OS_WIN) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 
 #ifdef CAT_OS_UNIX_LIKE
 #include <sys/types.h>
@@ -357,6 +360,13 @@ public:
 
 int main(int argc, char *argv[])
 {
+#if defined(CAT_OS_WIN) && defined(_DEBUG)
+    // CRT diagnostics must remain visible without waiting for an interactive dialog in CI.
+    for (int report_type : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
+        _CrtSetReportMode(report_type, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(report_type, _CRTDBG_FILE_STDERR);
+    }
+#endif
     /* it may take ownership of the memory that argv points to */
     argv = cat_setup_args(argc, argv);
 
