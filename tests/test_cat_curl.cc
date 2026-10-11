@@ -399,6 +399,7 @@ TEST(cat_curl_multi, sleep_without_wait)
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
+    char error[CURL_ERROR_SIZE] = {};
 
     cat_buffer_t buffer;
     ASSERT_TRUE(cat_buffer_create(&buffer, 0));
@@ -407,6 +408,7 @@ TEST(cat_curl_multi, sleep_without_wait)
     ch = curl_easy_init();
     ASSERT_NE(ch, nullptr);
     DEFER(curl_easy_cleanup(ch));
+    curl_easy_setopt(ch, CURLOPT_ERRORBUFFER, error);
     curl_easy_setopt(ch, CURLOPT_URL, cat_test_curl_remote_url().c_str());
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
@@ -429,7 +431,7 @@ TEST(cat_curl_multi, sleep_without_wait)
     CURLMsg *message = curl_multi_info_read(mh, &remaining);
     ASSERT_NE(message, nullptr);
     ASSERT_EQ(message->msg, CURLMSG_DONE);
-    ASSERT_EQ(message->data.result, CURLE_OK) << curl_easy_strerror(message->data.result);
+    ASSERT_EQ(message->data.result, CURLE_OK) << error;
 
     ASSERT_NE(
         std::string(buffer.value, buffer.length).find(TEST_REMOTE_HTTP_SERVER_KEYWORD),
