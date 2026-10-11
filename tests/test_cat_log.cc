@@ -100,7 +100,9 @@ TEST(cat_log, relative_timestamps_cross_second_boundary)
 {
     cat_log_globals_t globals = CAT_G(log_globals);
     DEFER(CAT_G(log_globals) = globals);
+#ifdef CAT_ENABLE_DEBUG_LOG
     CAT_LOG_G(debug_level) = 0;
+#endif
     CAT_LOG_G(show_timestamps) = 3;
     CAT_LOG_G(show_timestamps_as_relative) = cat_true;
     constexpr int64_t nanoseconds_per_second = 1000000000;

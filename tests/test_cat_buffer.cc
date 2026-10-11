@@ -732,9 +732,11 @@ TEST(cat_buffer, pair_allocation_failure)
 
 TEST(cat_buffer, allocator_receives_length_updates)
 {
+#ifdef CAT_ENABLE_DEBUG_LOG
     const unsigned int debug_level = CAT_LOG_G(debug_level);
     DEFER(CAT_LOG_G(debug_level) = debug_level);
     CAT_LOG_G(debug_level) = 0;
+#endif
     const cat_buffer_allocator_t original = cat_buffer_allocator;
     DEFER(cat_buffer_register_allocator(&original));
     static char *updated_value;
