@@ -445,4 +445,82 @@ TEST(cat_socket, renegotiation_decisions_preserve_connection_lifetime)
         ASSERT_EQ(peer_completed, action == decision::pause_accept);
     }
 }
+
+TEST(cat_ssl, peer_certificate_identity_rules)
+{
+    const struct {
+        const char *alternative_names;
+        const char *peer_name;
+        cat_bool_t matches;
+    } cases[] = {
+        {"DNS:localhost.", "localhost", cat_true},
+        {"DNS:localhost.", "other.example", cat_false},
+        {"URI:https://service.example", "localhost", cat_false},
+        {"otherName:1.3.6.1.5.5.7.8.7;IA5:_http.localhost", "localhost", cat_false},
+        {"otherName:1.2.3.4;UTF8:unrelated", "localhost", cat_true},
+        {"DNS:127.0.0.1", "127.0.0.1", cat_false},
+        {"IP:127.0.0.1", "127.0.0.1", cat_true},
+        {"DNS:*.example.com", "www.example.com", cat_true},
+        {"DNS:*.example.com", "deep.www.example.com", cat_false},
+        // Preserve OpenSSL's rejection of wildcard patterns with a final empty label.
+        {"DNS:*.example.com.", "www.example.com", cat_false},
+        {"DNS:*.example.com.", "deep.www.example.com", cat_false},
+        {"DNS:other.example", "localhost", cat_false},
+    };
+    for (const auto &test_case : cases) {
+        SCOPED_TRACE(test_case.alternative_names);
+        SCOPED_TRACE(test_case.peer_name);
+        X509KeyCertPairConfig config = {
+            {"keyType", "RSA2048"},
+            {"CN", "localhost"},
+            {"notBeforeOffsetSeconds", 0},
+            {"notAfterOffsetSeconds", 86400},
+            {"subjectAltName", std::string(test_case.alternative_names)},
+        };
+        auto certificate = X509KeyCertPair::create(config);
+        ASSERT_NE(certificate, nullptr);
+        const auto paths = certificate->exportPEMs();
+        cat_ssl_context_t *peer_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(peer_context, nullptr);
+        DEFER(cat_ssl_context_close(peer_context));
+        // Obtain the real peer certificate, then test identities independently of chain trust.
+        cat_ssl_context_disable_verify_peer(peer_context);
+        cat_ssl_t peer = {};
+        ASSERT_EQ(cat_ssl_create(&peer, peer_context), &peer);
+        DEFER(cat_ssl_close(&peer));
+        cat_ssl_set_connect_state(&peer);
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, cat_false);
+        options.protocols = CAT_SSL_PROTOCOL_TLSv1_2;
+        options.certificate = paths.cert;
+        options.certificate_key = paths.key;
+        wait_group wg;
+        cat_bool_t peer_ready = cat_false;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            peer_ready = drive_tls_peer_handshake(&peer, &client);
+            if (!peer_ready && cat_socket_is_available(&client)) {
+                cat_socket_close(&client);
+            }
+        });
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); }
+            if (cat_socket_is_available(&client)) { cat_socket_close(&client); } wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(cat_socket_enable_crypto(&connection, &options));
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(peer_ready);
+        ASSERT_EQ(cat_ssl_check_host(&peer, test_case.peer_name, strlen(test_case.peer_name)), test_case.matches);
+    }
+}
 #endif
