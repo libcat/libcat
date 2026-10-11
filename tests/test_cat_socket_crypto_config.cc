@@ -295,4 +295,154 @@ TEST(cat_socket, invalid_tls_record_closes_established_connection)
         ASSERT_FALSE(cat_socket_is_available(&connection));
     }
 }
+
+static cat_bool_t drive_tls_peer_handshake(cat_ssl_t *ssl, cat_socket_t *transport)
+{
+    // Drive the peer's initial and subsequent handshakes over a real TCP stream.
+    char buffer[CAT_SSL_BUFFER_SIZE];
+    for (size_t attempt = 0; attempt < 32; attempt++) {
+        int result = SSL_do_handshake(ssl->connection);
+        int error = result == 1 ? SSL_ERROR_NONE : SSL_get_error(ssl->connection, result);
+        if (error != SSL_ERROR_NONE && error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            return cat_false;
+        }
+        int length;
+        while ((length = cat_ssl_read_encrypted_bytes(ssl, buffer, sizeof(buffer))) > 0) {
+            if (!cat_socket_send(transport, buffer, static_cast<size_t>(length))) {
+                return cat_false;
+            }
+        }
+        if (length < 0) {
+            return cat_false;
+        }
+        if (result == 1 && !SSL_renegotiate_pending(ssl->connection)) {
+            return cat_true;
+        }
+        if (error == SSL_ERROR_WANT_READ) {
+            ssize_t received = cat_socket_recv(transport, buffer, sizeof(buffer));
+            if (received <= 0 || cat_ssl_write_encrypted_bytes(ssl, buffer, static_cast<size_t>(received)) != received) {
+                return cat_false;
+            }
+        }
+    }
+    return cat_false;
+}
+
+TEST(cat_socket, renegotiation_decisions_preserve_connection_lifetime)
+{
+    enum class decision { reject, pause_reject, pause_accept };
+    const auto paths = publicCAPair->exportPEMs();
+    for (decision action : {decision::reject, decision::pause_reject, decision::pause_accept}) {
+        SCOPED_TRACE(static_cast<int>(action));
+        struct notification {
+            cat_socket_t *socket = nullptr;
+            decision action;
+            unsigned int calls = 0;
+            cat_bool_t paused = cat_false;
+            cat_bool_t close_denied = cat_false;
+            cat_bool_t switch_denied = cat_false;
+        } state;
+        state.action = action;
+        cat_ssl_context_t *peer_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(peer_context, nullptr);
+        DEFER(cat_ssl_context_close(peer_context));
+        cat_ssl_context_disable_verify_peer(peer_context);
+        cat_ssl_t peer = {};
+        ASSERT_EQ(cat_ssl_create(&peer, peer_context), &peer);
+        DEFER(cat_ssl_close(&peer));
+        cat_ssl_set_connect_state(&peer);
+        cat_ssl_configure_renegotiation(&peer, cat_true, nullptr, nullptr);
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+        ASSERT_FALSE(cat_socket_resume_renegotiation(&connection, cat_true));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        state.socket = &connection;
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, cat_false);
+        options.protocols = CAT_SSL_PROTOCOL_TLSv1_2;
+        options.certificate = paths.cert;
+        options.certificate_key = paths.key;
+        options.allow_renegotiation = cat_true;
+        options.renegotiation_callback_data = &state;
+        options.renegotiation_callback = [](cat_ssl_t *ssl, void *data) -> cat_bool_t {
+            notification *state = static_cast<notification *>(data);
+            state->calls++;
+            state->switch_denied = cat_coroutine_switch_denied();
+            state->close_denied = !cat_socket_close(state->socket) && cat_get_last_error_code() == CAT_ELOCKED;
+            if (state->action == decision::reject) {
+                return cat_false;
+            }
+            state->paused = cat_ssl_pause_renegotiation(ssl);
+            return state->paused;
+        };
+        wait_group wg;
+        cat_bool_t peer_ready = cat_false, peer_completed = cat_false;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            peer_ready = drive_tls_peer_handshake(&peer, &client);
+            if (!peer_ready && cat_socket_is_available(&client)) {
+                cat_socket_close(&client);
+            }
+        });
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); }
+            if (cat_socket_is_available(&client)) { cat_socket_close(&client); } wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(cat_socket_enable_crypto(&connection, &options)) << cat_get_last_error_message();
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_TRUE(peer_ready);
+        ASSERT_EQ(SSL_renegotiate(peer.connection), 1);
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            peer_completed = drive_tls_peer_handshake(&peer, &client);
+            if (peer_completed) {
+                char plaintext[] = "ok";
+                cat_io_vector_t vector;
+                vector.base = plaintext;
+                vector.length = sizeof(plaintext) - 1;
+                char *encrypted = nullptr;
+                size_t length = 0;
+                DEFER(cat_free(encrypted));
+                peer_completed = cat_ssl_encrypt(&peer, &vector, 1, &encrypted, &length) &&
+                    cat_socket_send(&client, encrypted, length);
+            }
+        });
+        const cat_bool_t switch_denied = cat_coroutine_switch_denied();
+        char buffer[16];
+        ssize_t received = cat_socket_recv(&connection, buffer, sizeof(buffer));
+        ASSERT_EQ(state.calls, 1);
+        ASSERT_TRUE(state.close_denied);
+        ASSERT_TRUE(state.switch_denied);
+        ASSERT_EQ(cat_coroutine_switch_denied(), switch_denied);
+        if (action == decision::reject) {
+            ASSERT_EQ(received, 0);
+        } else {
+            ASSERT_EQ(received, -1);
+            ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+            ASSERT_TRUE(state.paused);
+            ASSERT_TRUE(cat_socket_is_available(&connection));
+            ASSERT_FALSE(cat_socket_send(&connection, CAT_STRL("pending")));
+            ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+            ASSERT_TRUE(cat_socket_resume_renegotiation(&connection, action == decision::pause_accept));
+            if (action == decision::pause_accept) {
+                ASSERT_EQ(cat_socket_read(&connection, buffer, 2), 2);
+                ASSERT_EQ(std::string(buffer, 2), "ok");
+            }
+        }
+        if (cat_socket_is_available(&connection)) {
+            ASSERT_TRUE(cat_socket_close(&connection));
+        }
+        ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+        ASSERT_EQ(peer_completed, action == decision::pause_accept);
+    }
+}
 #endif
