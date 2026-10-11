@@ -367,7 +367,8 @@ jobs:
           exit_status=0
           ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
           if [ "$exit_status" -eq 0 ]; then
-            CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
+            CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
+            tail -n 40 test-debug.log
           fi
           echo "ASan log:"
           cat asan.log* || :
@@ -422,3 +423,12 @@ jobs:
           name: coverage-${{ matrix.os }}
           path: libcat/coverage.info
           if-no-files-found: error
+
+      - name: Save debug test logs
+        if: always() && hashFiles('libcat/build/test-debug.log') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-logs-${{ matrix.os }}
+          path: |
+            libcat/build/test-debug.log
+            libcat/build/asan.log*
