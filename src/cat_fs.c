@@ -2849,6 +2849,14 @@ CAT_API char *cat_fs_get_contents(const char *filename, size_t *length)
         return NULL;
     }
     char *buffer = NULL;
+    cat_stat_t statbuf;
+    if (cat_fs_fstat(fd, &statbuf) != 0) {
+        goto _error;
+    }
+    if ((statbuf.st_mode & S_IFMT) == S_IFDIR) {
+        cat_update_last_error(CAT_EISDIR, "Cannot read directory as file content");
+        goto _error;
+    }
     off_t offset = cat_fs_lseek(fd, 0, SEEK_END);
     if (offset < 0) {
         goto _error;
