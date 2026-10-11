@@ -69,7 +69,7 @@ TEST(cat_socket, address_family_retry_preserves_heap_ownership)
     cat_socket_bind_flags_t second_flags = ipv4_first ? CAT_SOCKET_BIND_FLAG_IPV6ONLY : CAT_SOCKET_BIND_FLAG_NONE;
     cat_socket_t refused;
     ASSERT_EQ(cat_socket_create(&refused, first_type), &refused);
-    DEFER(cat_socket_close(&refused));
+    DEFER(if (cat_socket_is_available(&refused)) { cat_socket_close(&refused); });
     ASSERT_TRUE(cat_socket_bind_to_ex(&refused, first_host, strlen(first_host), 0, first_flags));
     int port = cat_socket_get_sock_port(&refused);
     ASSERT_GT(port, 0);
@@ -79,6 +79,8 @@ TEST(cat_socket, address_family_retry_preserves_heap_ownership)
     DEFER(cat_socket_close(&listener));
     ASSERT_TRUE(cat_socket_bind_to_ex(&listener, second_host, strlen(second_host), port, second_flags));
     ASSERT_TRUE(cat_socket_listen(&listener, 1));
+    // A bound but unlistened socket can time out instead of refusing connections on macOS.
+    ASSERT_TRUE(cat_socket_close(&refused));
     cat_socket_t *client = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
     ASSERT_NE(client, nullptr);
     DEFER(cat_socket_close(client));
