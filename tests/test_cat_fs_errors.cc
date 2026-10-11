@@ -634,9 +634,15 @@ TEST(cat_fs, stdio_closed_descriptor_errors)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     clearerr(stream);
     char buffer[8];
+    // Some C libraries report only ferror(), which Libcat translates to EIO.
+    errno = 0;
+    ASSERT_EQ(fread(buffer, 1, sizeof(buffer), stream), 0);
+    const int read_error = errno != 0 ? errno : EIO;
+    ASSERT_NE(ferror(stream), 0);
+    clearerr(stream);
     ASSERT_EQ(cat_fs_fread(buffer, 1, sizeof(buffer), stream), 0);
     ASSERT_NE(ferror(stream), 0);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
+    ASSERT_EQ(cat_get_last_error_code(), cat_translate_sys_error(read_error));
     int result = cat_fs_fclose(stream);
     open = false;
     ASSERT_EQ(result, EOF);
