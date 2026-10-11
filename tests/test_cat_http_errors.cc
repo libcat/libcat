@@ -119,7 +119,7 @@ TEST(cat_http_parser, multipart_content_type_parameters)
             ASSERT_EQ(cat_http_parser_create(&parser), &parser);
             cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
             size_t offset = 0, iterations = 0;
-            size_t available = std::min(input_size, request.length());
+            size_t available = (std::min)(input_size, request.length());
             std::string body;
             while (!cat_http_parser_is_completed(&parser)) {
                 ASSERT_LT(iterations++, request.length() * 10);
@@ -139,7 +139,7 @@ TEST(cat_http_parser, multipart_content_type_parameters)
                     ASSERT_EQ(cat_http_parser_get_current_offset(&parser, input.data()), parsed);
                 }
                 offset += parsed;
-                available = std::min(request.length(), std::max(available, offset) + input_size);
+                available = (std::min)(request.length(), (std::max)(available, offset) + input_size);
             }
             // Multipart completion can precede the final CRLF; only that terminator may remain.
             std::string remaining = request.substr(offset);
@@ -205,7 +205,7 @@ TEST(cat_http_parser, quoted_multipart_boundaries_preserve_spaces)
             ASSERT_EQ(cat_http_parser_create(&parser), &parser);
             cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_MULTIPART_BODY);
             size_t offset = 0, iterations = 0;
-            size_t available = std::min(input_size, request.size());
+            size_t available = (std::min)(input_size, request.size());
             std::string body;
             while (!cat_http_parser_is_completed(&parser)) {
                 ASSERT_LT(iterations++, request.size() * 10);
@@ -220,7 +220,7 @@ TEST(cat_http_parser, quoted_multipart_boundaries_preserve_spaces)
                 const size_t parsed = cat_http_parser_get_parsed_length(&parser);
                 ASSERT_LE(parsed, length);
                 offset += parsed;
-                available = std::min(request.size(), std::max(available, offset) + input_size);
+                available = (std::min)(request.size(), (std::max)(available, offset) + input_size);
             }
             ASSERT_EQ(body, "abc");
         }
@@ -261,7 +261,7 @@ TEST(cat_http_parser, invalid_multipart_metadata_preserves_http_body)
             ASSERT_EQ(cat_http_parser_create(&parser), &parser);
             cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
             size_t offset = 0, iterations = 0;
-            size_t available = std::min(input_size, request.size());
+            size_t available = (std::min)(input_size, request.size());
             std::string body;
             while (!cat_http_parser_is_completed(&parser)) {
                 ASSERT_LT(iterations++, request.size() * 10);
@@ -273,7 +273,7 @@ TEST(cat_http_parser, invalid_multipart_metadata_preserves_http_body)
                 size_t parsed = cat_http_parser_get_parsed_length(&parser);
                 ASSERT_LE(parsed, input.size());
                 offset += parsed;
-                available = std::min(request.size(), std::max(available, offset) + input_size);
+                available = (std::min)(request.size(), (std::max)(available, offset) + input_size);
             }
             // An invalid media type disables multipart decoding, not HTTP message parsing.
             ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
@@ -304,7 +304,7 @@ TEST(cat_http_parser, malformed_multipart_body_and_reset)
             ASSERT_EQ(cat_http_parser_create(&parser), &parser);
             cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
             size_t offset = 0, iterations = 0;
-            size_t available = std::min(input_size, request.size());
+            size_t available = (std::min)(input_size, request.size());
             bool rejected = false;
             while (!cat_http_parser_is_completed(&parser)) {
                 ASSERT_LT(iterations++, request.size() * 10);
@@ -316,7 +316,7 @@ TEST(cat_http_parser, malformed_multipart_body_and_reset)
                 size_t parsed = cat_http_parser_get_parsed_length(&parser);
                 ASSERT_LE(parsed, input.size());
                 offset += parsed;
-                available = std::min(request.size(), std::max(available, offset) + input_size);
+                available = (std::min)(request.size(), (std::max)(available, offset) + input_size);
             }
             ASSERT_TRUE(rejected);
             ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
