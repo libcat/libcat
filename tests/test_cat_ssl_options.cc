@@ -505,6 +505,42 @@ TEST(cat_ssl, create_buffer_allocation_failure)
     ASSERT_FALSE(cat_ssl_is_established(&ssl));
 }
 
+TEST(cat_ssl, renegotiation_configuration_preserves_verification)
+{
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+    cat_ssl_t ssl;
+    ASSERT_EQ(cat_ssl_create(&ssl, context), &ssl);
+    DEFER(cat_ssl_close(&ssl));
+    unsigned int notifications = 0;
+    cat_ssl_renegotiation_callback_t callback = [](cat_ssl_t *, void *data) -> cat_bool_t {
+        (*static_cast<unsigned int *>(data))++;
+        return cat_true;
+    };
+    SSL_set_verify(ssl.connection, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE, nullptr);
+    SSL_set_read_ahead(ssl.connection, 1);
+    for (unsigned int repeat = 0; repeat < 2; repeat++) {
+        cat_ssl_configure_renegotiation(&ssl, cat_true, callback, &notifications);
+        ASSERT_EQ(SSL_get_verify_mode(ssl.connection), SSL_VERIFY_PEER);
+        ASSERT_EQ(SSL_get_read_ahead(ssl.connection), 0);
+        ASSERT_TRUE(ssl.flags & CAT_SSL_FLAG_ALLOW_RENEGOTIATION);
+#ifdef SSL_OP_NO_RENEGOTIATION
+        ASSERT_EQ(SSL_get_options(ssl.connection) & SSL_OP_NO_RENEGOTIATION, 0);
+#endif
+        ASSERT_FALSE(cat_ssl_pause_renegotiation(&ssl));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        ASSERT_FALSE(cat_ssl_resume_renegotiation(&ssl, cat_true));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        cat_ssl_configure_renegotiation(&ssl, cat_false, nullptr, nullptr);
+        ASSERT_FALSE(ssl.flags & CAT_SSL_FLAG_ALLOW_RENEGOTIATION);
+#ifdef SSL_OP_NO_RENEGOTIATION
+        ASSERT_NE(SSL_get_options(ssl.connection) & SSL_OP_NO_RENEGOTIATION, 0);
+#endif
+    }
+    ASSERT_EQ(notifications, 0);
+}
+
 TEST(cat_ssl, state_changes_and_plaintext_handshake_error)
 {
     cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
