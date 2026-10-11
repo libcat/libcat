@@ -172,6 +172,28 @@ jobs:
       - name: Checkout libcat sources
         uses: actions/checkout@v7
 
+      - name: Set up Python for network fixtures
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Start local HTTP and HTTPS fixtures
+        shell: bash
+        run: |
+          fixture_dir="$RUNNER_TEMP/libcat-fixtures"
+          python -m venv "$fixture_dir/.venv"
+          source "$fixture_dir/.venv/Scripts/activate"
+          python .github/ci-fixtures.py "$fixture_dir" > "$fixture_dir/server.log" 2>&1 < /dev/null &
+          fixture_pid=$!
+          deadline=$((SECONDS + 30))
+          until [ -s "$fixture_dir/ready.json" ]; do
+            if ! kill -0 "$fixture_pid" 2>/dev/null || [ "$SECONDS" -ge "$deadline" ]; then
+              cat "$fixture_dir/server.log"
+              exit 1
+            fi
+            sleep 0.1
+          done
+
       - name: Prepare coverage dependencies
         if: matrix.build-type == 'Debug'
         shell: powershell
@@ -229,6 +251,7 @@ jobs:
           REM note: 颜色是不可能有颜色的，只能等gtest做这个功能或者githubactions支持那两个WIN32API
           REM note: ^ yet impossible to add color, we can only wait for github actions support SetConsoleAttribute or gtest support unix color on windows
           SET ASAN_OPTIONS=log_path=asan.log
+          SET SSL_CERT_FILE=%LIBCAT_TEST_CERT_FILE%
           IF "Debug" == "${{ matrix.build-type }}" ( "C:\OpenCppCoverage\OpenCppCoverage.exe" ^
             --export_type cobertura:coverage.xml ^
             --sources include ^
@@ -306,6 +329,29 @@ jobs:
         with:
           path: libcat
 
+      - name: Set up Python for network fixtures
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Start local HTTP and HTTPS fixtures
+        shell: bash
+        working-directory: libcat
+        run: |
+          fixture_dir="$RUNNER_TEMP/libcat-fixtures"
+          python -m venv "$fixture_dir/.venv"
+          source "$fixture_dir/.venv/bin/activate"
+          python .github/ci-fixtures.py "$fixture_dir" > "$fixture_dir/server.log" 2>&1 < /dev/null &
+          fixture_pid=$!
+          deadline=$((SECONDS + 30))
+          until [ -s "$fixture_dir/ready.json" ]; do
+            if ! kill -0 "$fixture_pid" 2>/dev/null || [ "$SECONDS" -ge "$deadline" ]; then
+              cat "$fixture_dir/server.log"
+              exit 1
+            fi
+            sleep 0.1
+          done
+
       - name: Checkout GoogleTest sources
         if: runner.os == 'macOS'
         uses: actions/checkout@v7
@@ -365,9 +411,9 @@ jobs:
           echo "::endgroup::"
           echo "::group::Test libcat"
           exit_status=0
-          ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
+          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
           if [ "$exit_status" -eq 0 ]; then
-            CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
+            SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
             tail -n 40 test-debug.log
           fi
           echo "ASan log:"
