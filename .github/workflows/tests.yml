@@ -263,7 +263,7 @@ jobs:
           fail_ci_if_error: true
 
       - name: Save coverage report
-        if: matrix.build-type == 'Debug'
+        if: always() && matrix.build-type == 'Debug' && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-${{ matrix.build-type }}
@@ -416,6 +416,7 @@ jobs:
           fail_ci_if_error: true
 
       - name: Save coverage report
+        if: always() && hashFiles('libcat/coverage.info') != ''
         uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}
