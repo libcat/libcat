@@ -31,13 +31,11 @@ TEST(cat_socket, open_native_udp_socket_preserves_datagrams)
     cat_os_socket_t fd = socket(AF_INET, SOCK_DGRAM, 0);
     ASSERT_NE(fd, CAT_OS_INVALID_SOCKET);
     bool transferred = false;
-    DEFER(if (!transferred) {
 #ifdef CAT_OS_WIN
-        closesocket(fd);
+    DEFER(if (!transferred) { closesocket(fd); });
 #else
-        close(fd);
+    DEFER(if (!transferred) { close(fd); });
 #endif
-    });
     ASSERT_TRUE(cat_socket_open_os_socket(&sender, fd));
     transferred = true;
     ASSERT_EQ(cat_socket_get_fd(&sender), fd);

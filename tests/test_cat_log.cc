@@ -246,7 +246,7 @@ TEST(cat_log, buffer_growth_failure_and_recovery)
 TEST(cat_log, write_failure_and_libc_fallback)
 {
     // The fallback is process-wide; isolate output failure and recovery from other log tests.
-    ASSERT_EXIT({
+    const auto check_write_failure = []() {
         bool valid = false;
         bool pipe_rejected = true;
 #ifdef CAT_OS_UNIX_LIKE
@@ -307,5 +307,6 @@ TEST(cat_log, write_failure_and_libc_fallback)
             unlink(path.c_str());
         }
         exit(valid ? 0 : 1);
-    }, testing::ExitedWithCode(0), "un-outputted log message");
+    };
+    ASSERT_EXIT(check_write_failure(), testing::ExitedWithCode(0), "un-outputted log message");
 }
