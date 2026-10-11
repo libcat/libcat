@@ -273,6 +273,113 @@ TEST(cat_ssl, alpn_without_common_protocol_preserves_tls)
 }
 #endif
 
+TEST(cat_ssl, renegotiation_notification_can_pause_and_decide)
+{
+    for (cat_bool_t allow : {cat_false, cat_true}) {
+        SCOPED_TRACE(allow);
+        cat_ssl_context_t *server_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(server_context, nullptr);
+        DEFER(cat_ssl_context_close(server_context));
+        cat_ssl_context_t *client_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
+        ASSERT_NE(client_context, nullptr);
+        DEFER(cat_ssl_context_close(client_context));
+        const auto paths = publicCAPair->exportPEMs();
+        ASSERT_TRUE(cat_ssl_context_set_certificate(server_context, paths.cert, paths.key));
+        cat_ssl_context_disable_verify_peer(client_context);
+        cat_ssl_t server, client;
+        ASSERT_EQ(cat_ssl_create(&server, server_context), &server);
+        DEFER(cat_ssl_close(&server));
+        ASSERT_EQ(cat_ssl_create(&client, client_context), &client);
+        DEFER(cat_ssl_close(&client));
+        cat_ssl_set_accept_state(&server);
+        cat_ssl_set_connect_state(&client);
+        bool complete = false;
+        for (size_t attempt = 0; attempt < 32; attempt++) {
+            cat_ssl_ret_t client_result = cat_ssl_handshake(&client);
+            ASSERT_NE(client_result, CAT_SSL_RET_ERROR);
+            ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&client, &server));
+            cat_ssl_ret_t server_result = cat_ssl_handshake(&server);
+            ASSERT_NE(server_result, CAT_SSL_RET_ERROR);
+            ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&server, &client));
+            if (client_result == CAT_SSL_RET_OK && server_result == CAT_SSL_RET_OK) {
+                complete = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(complete);
+        struct notification {
+            unsigned int calls = 0;
+            bool paused = false;
+            bool switch_denied = false;
+        } state;
+        cat_ssl_configure_renegotiation(&server, cat_true,
+            [](cat_ssl_t *ssl, void *data) -> cat_bool_t {
+                notification *state = static_cast<notification *>(data);
+                state->calls++;
+                state->switch_denied = cat_coroutine_switch_denied();
+                state->paused = cat_ssl_pause_renegotiation(ssl);
+                return cat_true;
+            }, &state);
+        cat_ssl_configure_renegotiation(&client, cat_true, nullptr, nullptr);
+        const cat_bool_t switch_denied = cat_coroutine_switch_denied();
+        ASSERT_EQ(SSL_renegotiate(client.connection), 1);
+        // The Libcat helper completes only the initial handshake; drive the peer's new request directly.
+        int result = SSL_do_handshake(client.connection);
+        ASSERT_EQ(SSL_get_error(client.connection, result), SSL_ERROR_WANT_READ);
+        ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&client, &server));
+        char buffer[16];
+        size_t length = sizeof(buffer);
+        cat_bool_t eof = cat_false;
+        ASSERT_FALSE(cat_ssl_decrypt(&server, buffer, &length, &eof));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EAGAIN);
+        ASSERT_EQ(state.calls, 1);
+        ASSERT_TRUE(state.paused);
+        ASSERT_TRUE(state.switch_denied);
+        ASSERT_EQ(cat_coroutine_switch_denied(), switch_denied);
+        length = sizeof(buffer);
+        ASSERT_FALSE(cat_ssl_decrypt(&server, buffer, &length, &eof));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ELOCKED);
+        ASSERT_TRUE(cat_ssl_resume_renegotiation(&server, allow));
+        if (!allow) {
+            ASSERT_EQ(cat_ssl_get_shutdown(&server), CAT_SSL_SENT_SHUTDOWN | CAT_SSL_RECEIVED_SHUTDOWN);
+        } else {
+            bool resumed = false;
+            for (size_t attempt = 0; attempt < 32; attempt++) {
+                ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&server, &client));
+                result = SSL_do_handshake(client.connection);
+                if (result != 1) {
+                    ASSERT_EQ(SSL_get_error(client.connection, result), SSL_ERROR_WANT_READ);
+                }
+                ASSERT_NO_FATAL_FAILURE(transfer_handshake_bytes(&client, &server));
+                length = sizeof(buffer);
+                ASSERT_TRUE(cat_ssl_decrypt(&server, buffer, &length, &eof));
+                ASSERT_FALSE(eof);
+                if (!SSL_renegotiate_pending(client.connection) && !SSL_renegotiate_pending(server.connection)) {
+                    resumed = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(resumed);
+            char *encrypted = nullptr;
+            size_t encrypted_length = 0;
+            char plaintext[] = "ok";
+            cat_io_vector_t input;
+            input.base = plaintext;
+            input.length = sizeof(plaintext) - 1;
+            ASSERT_TRUE(cat_ssl_encrypt(&client, &input, 1, &encrypted, &encrypted_length));
+            DEFER(cat_free(encrypted));
+            ASSERT_EQ(cat_ssl_write_encrypted_bytes(&server, encrypted, encrypted_length), encrypted_length);
+            length = sizeof(buffer);
+            ASSERT_TRUE(cat_ssl_decrypt(&server, buffer, &length, &eof));
+            ASSERT_EQ(length, 2);
+            ASSERT_EQ(std::string(buffer, length), "ok");
+            ASSERT_EQ(state.calls, 1);
+        }
+        ASSERT_FALSE(cat_ssl_resume_renegotiation(&server, cat_true));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    }
+}
+
 TEST(cat_ssl, bio_handshake_and_binary_records)
 {
     cat_ssl_context_t *server_context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOL_TLSv1_2);
