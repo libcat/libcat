@@ -339,6 +339,9 @@ jobs:
         working-directory: libcat
         run: |
           fixture_dir="$RUNNER_TEMP/libcat-fixtures"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export PATH="$(brew --prefix openssl@3)/bin:$PATH"
+          fi
           python -m venv "$fixture_dir/.venv"
           source "$fixture_dir/.venv/bin/activate"
           python .github/ci-fixtures.py "$fixture_dir" > "$fixture_dir/server.log" 2>&1 < /dev/null &
@@ -347,6 +350,7 @@ jobs:
           until [ -s "$fixture_dir/ready.json" ]; do
             if ! kill -0 "$fixture_pid" 2>/dev/null || [ "$SECONDS" -ge "$deadline" ]; then
               cat "$fixture_dir/server.log"
+              cat "$fixture_dir/certificate.log" || :
               exit 1
             fi
             sleep 0.1

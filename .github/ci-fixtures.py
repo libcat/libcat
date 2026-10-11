@@ -51,6 +51,7 @@ class Server(ThreadingHTTPServer):
 
 
 def main(directory: Path) -> None:
+    print("Generating the job-local TLS certificate", flush=True)
     directory.mkdir(parents=True, exist_ok=True)
     certificate = directory / "cert.pem"
     key = directory / "key.pem"
@@ -64,6 +65,7 @@ def main(directory: Path) -> None:
     key.chmod(0o600)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(certificate, key)
+    print("Starting HTTP and HTTPS listeners", flush=True)
     http = Server()
     https = Server(context)
     for server in (http, https):
@@ -82,6 +84,7 @@ def main(directory: Path) -> None:
             for name, value in environment.items():
                 output.write(f"{name}={value}\n")
     (directory / "ready.json").write_text(json.dumps(environment), encoding="utf-8")
+    print("HTTP and HTTPS fixtures are ready", flush=True)
     threading.Event().wait()
 
 
