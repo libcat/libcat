@@ -642,7 +642,7 @@ TEST(cat_fs, stdio_closed_descriptor_errors)
     clearerr(stream);
     ASSERT_EQ(cat_fs_fread(buffer, 1, sizeof(buffer), stream), 0);
     ASSERT_NE(ferror(stream), 0);
-    ASSERT_EQ(cat_get_last_error_code(), cat_translate_sys_error(read_error));
+    ASSERT_EQ(cat_orig_errno(cat_get_last_error_code()), read_error);
     int result = cat_fs_fclose(stream);
     open = false;
     ASSERT_EQ(result, EOF);
