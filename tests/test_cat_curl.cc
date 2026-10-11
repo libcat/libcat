@@ -425,6 +425,12 @@ TEST(cat_curl_multi, sleep_without_wait)
         ASSERT_EQ(cat_curl_multi_perform(mh, &still_running), CURLM_OK);
     } while (still_running);
 
+    int remaining;
+    CURLMsg *message = curl_multi_info_read(mh, &remaining);
+    ASSERT_NE(message, nullptr);
+    ASSERT_EQ(message->msg, CURLMSG_DONE);
+    ASSERT_EQ(message->data.result, CURLE_OK) << curl_easy_strerror(message->data.result);
+
     ASSERT_NE(
         std::string(buffer.value, buffer.length).find(TEST_REMOTE_HTTP_SERVER_KEYWORD),
         std::string::npos
