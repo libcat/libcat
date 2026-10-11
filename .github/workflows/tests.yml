@@ -416,10 +416,8 @@ jobs:
           echo "::group::Test libcat"
           exit_status=0
           SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
-          if [ "$exit_status" -eq 0 ]; then
-            SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
-            tail -n 40 test-debug.log
-          fi
+          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
+          tail -n 40 test-debug.log
           echo "ASan log:"
           cat asan.log* || :
           if [ "$exit_status" -ne 0 ]; then
@@ -428,6 +426,19 @@ jobs:
           else
             echo "::endgroup::"
           fi
+
+      - name: Test terminal and log environment configurations
+        working-directory: libcat/build
+        shell: bash
+        run: |
+          python -c 'import os, pty, sys; sys.exit(os.waitstatus_to_exitcode(pty.spawn(["./cat_tests", "--gtest_filter=cat_socket.tty_*:cat_socket.dump_all_and_close_all"])))'
+          for format in time unix datetime; do
+            CAT_DEBUG=1 CAT_LOG_DEBUG_OUTPUT=stderr CAT_LOG_TIMESTAMPS_FORMAT="$format" \
+              CAT_LOG_SHOW_TIMESTAMPS=3 CAT_LOG_SHOW_SOURCE_POSITION=true CAT_LOG_MODULE_NAME_FILTER=TEST \
+              ./cat_tests --gtest_filter=cat_log.runtime_configuration_matches_environment
+          done
+          CAT_LOG_DEBUG_OUTPUT=stdout CAT_LOG_SHOW_TIMESTAMPS_AS_RELATIVE=true \
+            ./cat_tests --gtest_filter=cat_log.runtime_configuration_matches_environment
 
       - name: Coverage tests
         working-directory: libcat
