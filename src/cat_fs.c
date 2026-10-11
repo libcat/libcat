@@ -1414,11 +1414,12 @@ static void cat_fs_fread_cb(cat_data_t *ptr)
 {
     cat_fs_fread_data_t *data = (cat_fs_fread_data_t *) ptr;
     errno = 0;
-    data->ret.ret.num = fread(data->ptr, data->size, data->nmemb, data->stream);
+    size_t nread = fread(data->ptr, data->size, data->nmemb, data->stream);
+    data->ret.ret.num = nread;
     if (0 != errno) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
-    } else if (data->size != 0 && data->ret.ret.num < data->nmemb && ferror(data->stream)) {
+    } else if (data->size != 0 && nread < data->nmemb && ferror(data->stream)) {
         // Some C libraries set only the stream error indicator on failure.
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EIO;
@@ -1493,11 +1494,12 @@ static void cat_fs_fwrite_cb(cat_data_t *ptr)
 {
     cat_fs_fwrite_data_t *data = (cat_fs_fwrite_data_t *) ptr;
     errno = 0;
-    data->ret.ret.num = fwrite(data->ptr, data->size, data->nmemb, data->stream);
+    size_t written = fwrite(data->ptr, data->size, data->nmemb, data->stream);
+    data->ret.ret.num = written;
     if (0 != errno) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = errno;
-    } else if (data->size != 0 && data->ret.ret.num < data->nmemb && ferror(data->stream)) {
+    } else if (data->size != 0 && written < data->nmemb && ferror(data->stream)) {
         data->ret.error.type = CAT_FS_ERROR_ERRNO;
         data->ret.error.val.error = EIO;
     }
