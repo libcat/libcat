@@ -29,8 +29,8 @@ TEST(cat_ssl, error_formatting_failure_and_recovery)
     ASSERT_NE(std::setlocale(LC_CTYPE, "C"), nullptr);
     ERR_clear_error();
     cat_update_last_error(CAT_EBADF, "previous error");
-    const wint_t character = static_cast<wint_t>(L'\u0100');
-    cat_ssl_update_last_error(CAT_ESSL, "%lc", character);
+    const wchar_t text[] = L"\u0100";
+    cat_ssl_update_last_error(CAT_ESSL, "%ls", text);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
     ASSERT_STREQ(cat_get_last_error_message(), "previous error");
     cat_ssl_update_last_error(CAT_ESSL, "recovered %d", 42);

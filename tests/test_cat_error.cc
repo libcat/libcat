@@ -52,9 +52,9 @@ TEST(cat_error, formatting_failure_preserves_previous_error)
     DEFER(std::setlocale(LC_CTYPE, original_locale.c_str()));
     ASSERT_NE(std::setlocale(LC_CTYPE, "C"), nullptr);
     cat_update_last_error(CAT_EBADF, "original error");
-    const wint_t character = static_cast<wint_t>(L'\u0100');
+    const wchar_t text[] = L"\u0100";
     testing::internal::CaptureStderr();
-    cat_update_last_error(CAT_EINVAL, "%lc", character);
+    cat_update_last_error(CAT_EINVAL, "%ls", text);
     const std::string output = testing::internal::GetCapturedStderr();
     ASSERT_NE(output.find("sprintf() last error message failed"), std::string::npos);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EBADF);
