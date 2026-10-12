@@ -20,12 +20,38 @@
 
 /* the cat_log_standard function is called by default. */
 
+/* The thread-safe build adds the current thread id to every line, see cat_log_standard(). */
+static std::string cat_test_log_thread_tag(void)
+{
+#ifdef CAT_THREAD_SAFE
+# ifdef CAT_OS_WIN
+    return "T" + std::to_string(GetCurrentThreadId()) + " ";
+# else
+    return "T" + std::to_string((unsigned) pthread_self()) + " ";
+# endif
+#else
+    return "";
+#endif
+}
+
+/* Death tests run in a separate process, so the thread id can not be predicted.
+ * Match any id instead. */
+static std::string cat_test_log_thread_tag_regex(void)
+{
+#ifdef CAT_THREAD_SAFE
+    /* gtest only supports a simple regex subset, so no character classes here. */
+    return "T.+ ";
+#else
+    return "";
+#endif
+}
+
 TEST(cat_log, info)
 {
     testing::internal::CaptureStdout();
     CAT_LOG_INFO(TEST, "info log");
     std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> info log\n");
+    ASSERT_EQ(output, "[    MAIN    ] " + cat_test_log_thread_tag() + "Info: <TEST> info log\n");
 }
 
 TEST(cat_log, notice)
@@ -33,7 +59,7 @@ TEST(cat_log, notice)
     testing::internal::CaptureStderr();
     CAT_NOTICE(TEST, "notice log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "[    MAIN    ] Notice: <TEST> notice log\n");
+    ASSERT_EQ(output, "[    MAIN    ] " + cat_test_log_thread_tag() + "Notice: <TEST> notice log\n");
 }
 
 TEST(cat_log, warn)
@@ -41,21 +67,21 @@ TEST(cat_log, warn)
     testing::internal::CaptureStderr();
     CAT_WARN(TEST, "warn log");
     std::string output = testing::internal::GetCapturedStderr();
-    ASSERT_EQ(output, "[    MAIN    ] Warning: <TEST> warn log\n");
+    ASSERT_EQ(output, "[    MAIN    ] " + cat_test_log_thread_tag() + "Warning: <TEST> warn log\n");
 }
 
 TEST(cat_log, error)
 {
     ASSERT_DEATH_IF_SUPPORTED({
         CAT_ERROR(TEST, "error log");
-    }, "\\[    MAIN    \\] Error: <TEST> error log\n");
+    }, "\\[    MAIN    \\] " + cat_test_log_thread_tag_regex() + "Error: <TEST> error log\n");
 }
 
 TEST(cat_log, core_error)
 {
     ASSERT_DEATH_IF_SUPPORTED({
         CAT_CORE_ERROR(TEST, "core error log");
-    }, "\\[    MAIN    \\] Core Error: <TEST> core error log\n");
+    }, "\\[    MAIN    \\] " + cat_test_log_thread_tag_regex() + "Core Error: <TEST> core error log\n");
 }
 
 TEST(cat_log, buffer_quote)
