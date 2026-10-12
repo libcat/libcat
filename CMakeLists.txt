@@ -77,6 +77,7 @@ set(cat_sources
     src/cat_error.c
     src/cat_log.c
     src/cat_env.c
+    src/cat_tsrm.c
     # [public]
     src/cat.c
     src/cat_api.c
