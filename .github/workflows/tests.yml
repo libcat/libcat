@@ -79,7 +79,7 @@ jobs:
 
 
   win-tests:
-    name: Test on ${{matrix.os}} build-type ${{matrix.build-type}}
+    name: Test on ${{matrix.os}} build-type ${{matrix.build-type}} thread-safe=${{matrix.thread-safe}}
     runs-on: ${{matrix.os}}
     timeout-minutes: 60
     permissions:
@@ -89,6 +89,7 @@ jobs:
       matrix:
         os: [ "windows-latest", "windows-2025" ]
         build-type: [ "Debug", "Release" ]
+        thread-safe: [ "OFF", "THREAD_KEY", "THREAD_LOCAL" ]
         # build-type: [ "Debug" ]
       max-parallel: 4
       fail-fast: false
@@ -237,11 +238,14 @@ jobs:
           MKDIR build || goto error
           ECHO ::endgroup::
           ECHO ::group::Make cmake cache
+          SET THREAD_SAFE_OPT=
+          IF NOT "${{ matrix.thread-safe }}"=="OFF" SET THREAD_SAFE_OPT=-DLIBCAT_USE_${{ matrix.thread-safe }}=ON
           cmake . -B build ^
             -DLIBCAT_ENABLE_ASAN=ON ^
             -DLIBCAT_ENABLE_DEBUG_LOG=OFF ^
             -DCMAKE_C_FLAGS="/WX" ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} ^
+            %THREAD_SAFE_OPT% ^
             -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake || goto error
           ECHO ::endgroup::
           ECHO ::group::Build libcat
@@ -289,12 +293,12 @@ jobs:
         if: always() && matrix.build-type == 'Debug' && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-${{ matrix.os }}-${{ matrix.build-type }}
+          name: coverage-${{ matrix.os }}-${{ matrix.build-type }}-${{ matrix.thread-safe }}
           path: coverage.xml
           if-no-files-found: error
 
   unix-tests:
-    name: Test on ${{matrix.os}}
+    name: Test on ${{matrix.os}} thread-safe=${{matrix.thread-safe}}
     runs-on: ${{matrix.os}}
     timeout-minutes: 30
     permissions:
@@ -304,6 +308,7 @@ jobs:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
         os: [ "ubuntu-latest", "ubuntu-22.04", "macos-latest" ]
+        thread-safe: [ "OFF", "THREAD_KEY", "THREAD_LOCAL" ]
         # os: [ "ubuntu-latest"]
         # os: [ "macos-latest"]
       max-parallel: 2
@@ -399,6 +404,9 @@ jobs:
             export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig:$curl_prefix/lib/pkgconfig:$libpq_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
             cmake_options+=(-DLIBCAT_ENABLE_OPENSSL=ON -DLIBCAT_ENABLE_CURL=ON)
           fi
+          if [ "${{ matrix.thread-safe }}" != "OFF" ]; then
+            cmake_options+=(-DLIBCAT_USE_${{ matrix.thread-safe }}=ON)
+          fi
           ${{ runner.os == 'Linux' && 'export TEST_CAT_POSTGRESQL="true"' || '' }}
           echo "::group::Create build dir"
           mkdir -p build && cd build || exit 1
@@ -481,7 +489,7 @@ jobs:
         if: always() && hashFiles('libcat/coverage.info') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-${{ matrix.os }}
+          name: coverage-${{ matrix.os }}-${{ matrix.thread-safe }}
           path: libcat/coverage.info
           if-no-files-found: error
 
@@ -489,7 +497,7 @@ jobs:
         if: always() && hashFiles('libcat/build/test-debug.log') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: test-logs-${{ matrix.os }}
+          name: test-logs-${{ matrix.os }}-${{ matrix.thread-safe }}
           path: |
             libcat/build/test-debug.log
             libcat/build/asan.log*
