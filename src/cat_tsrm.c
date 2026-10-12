@@ -40,6 +40,12 @@ CAT_API void cat_globals_module_shutdown(void)
 
 CAT_API void cat_globals_runtime_init(void)
 {
+    /* Keep the block that this thread already owns.
+     * The module accessors are no-ops on the non-thread-safe build, so a runtime
+     * re-init must not throw away the state that the other modules set up. */
+    if (uv_key_get(&cat_globals_key) != NULL) {
+        return;
+    }
     void *globals = cat_sys_calloc_unrecoverable(1, cat_globals_size);
     uv_key_set(&cat_globals_key, globals);
 }
@@ -47,6 +53,7 @@ CAT_API void cat_globals_runtime_init(void)
 CAT_API void cat_globals_runtime_close(void)
 {
     cat_sys_free(uv_key_get(&cat_globals_key));
+    uv_key_set(&cat_globals_key, NULL);
 }
 
 CAT_API void cat_globals_register(size_t size, size_t *offset)
