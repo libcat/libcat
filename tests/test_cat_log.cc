@@ -27,7 +27,8 @@ static std::string cat_test_log_thread_tag(void)
 # ifdef CAT_OS_WIN
     return "T" + std::to_string(GetCurrentThreadId()) + " ";
 # else
-    return "T" + std::to_string((unsigned) pthread_self()) + " ";
+    /* must match the cast in cat_log_standard() */
+    return "T" + std::to_string((unsigned) (uintptr_t) pthread_self()) + " ";
 # endif
 #else
     return "";

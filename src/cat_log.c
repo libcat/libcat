@@ -306,7 +306,8 @@ CAT_API void cat_log_va_list_standard(CAT_LOG_VA_LIST_PARAMETERS)
 # ifdef CAT_OS_WIN
             GetCurrentThreadId()
 # else
-            (unsigned) pthread_self()
+            /* pthread_t is a pointer on Darwin, the double cast keeps the value */
+            (unsigned) (uintptr_t) pthread_self()
 # endif
         );
         (void) cat_buffer_append_str(&buffer, " ");
