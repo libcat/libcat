@@ -918,6 +918,14 @@ if(NOT MSVC)
             -g
             --coverage
         )
+        # gcov counters use plain increments by default, so threads running the
+        # same code lose updates and the profile becomes inconsistent, which makes
+        # gcov/geninfo produce impossible (negative) counts. ask for atomic updates
+        # when the compiler supports them
+        check_c_compiler_flag(-fprofile-update=prefer-atomic HAVE_PROFILE_UPDATE_PREFER_ATOMIC)
+        if(HAVE_PROFILE_UPDATE_PREFER_ATOMIC)
+            target_compile_options(coverage_config INTERFACE -fprofile-update=prefer-atomic)
+        endif()
         if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
             target_link_options(coverage_config INTERFACE --coverage)
         else()
