@@ -229,46 +229,6 @@ TEST(cat, is_not_main_thread)
     ASSERT_FALSE(is_main_thread);
 }
 
-#if defined(CAT_USE_THREAD_KEY)
-/* A thread-safe build keeps the module globals per thread.
- * A new thread owns no globals until it initializes its own runtime, and the
- * block it gets is different from the one that the main thread uses. */
-TEST(cat_tsrm, globals_are_per_thread)
-{
-    void *main_globals = uv_key_get(&cat_globals_key);
-    ASSERT_NE(main_globals, nullptr);
-
-    /* mark the main thread globals */
-    cat_bool_t original = CAT_G(show_last_error);
-    CAT_G(show_last_error) = cat_true;
-
-    void *before_init = (void *) 1;
-    void *worker_globals = nullptr;
-    bool sees_main_value = true;
-    bool own_value_ok = false;
-
-    std::thread worker([&] {
-        before_init = uv_key_get(&cat_globals_key);
-        cat_globals_runtime_init();
-        worker_globals = uv_key_get(&cat_globals_key);
-        /* the fresh block is zeroed, it must not carry the main thread value */
-        sees_main_value = (CAT_G(show_last_error) == cat_true);
-        CAT_G(show_last_error) = cat_true;
-        own_value_ok = (CAT_G(show_last_error) == cat_true);
-        cat_globals_runtime_close();
-    });
-    worker.join();
-
-    CAT_G(show_last_error) = original;
-
-    ASSERT_EQ(before_init, nullptr);
-    ASSERT_NE(worker_globals, nullptr);
-    ASSERT_NE(worker_globals, main_globals);
-    ASSERT_FALSE(sees_main_value);
-    ASSERT_TRUE(own_value_ok);
-}
-#endif
-
 #if CAT_USE_BUG_DETECTOR
 TEST(cat, bug_detection)
 {

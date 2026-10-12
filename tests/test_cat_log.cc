@@ -107,7 +107,7 @@ TEST(cat_log, timestamps)
             CAT_LOG_INFO(TEST, "timestamp log");
             std::string output = testing::internal::GetCapturedStdout();
             ASSERT_EQ(output.front(), '[');
-            ASSERT_NE(output.find("] [    MAIN    ] Info: <TEST> timestamp log\n"), std::string::npos);
+            ASSERT_NE(output.find("] [    MAIN    ] " + cat_test_log_thread_tag() + "Info: <TEST> timestamp log\n"), std::string::npos);
             if (!relative) {
                 ASSERT_EQ(output.find("[stamp"), 0);
             }
@@ -119,7 +119,7 @@ TEST(cat_log, timestamps)
     testing::internal::CaptureStdout();
     CAT_LOG_INFO(TEST, "timestamp log");
     const std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_EQ(output.find("[] [    MAIN    ] Info: <TEST> timestamp log\n"), 0);
+    ASSERT_EQ(output.find("[] [    MAIN    ] " + cat_test_log_thread_tag() + "Info: <TEST> timestamp log\n"), 0);
 }
 
 TEST(cat_log, relative_timestamps_cross_second_boundary)
@@ -234,7 +234,7 @@ TEST(cat_log, filtered_module)
     CAT_LOG_INFO(IGNORED, "hidden");
     CAT_LOG_INFO(TEST, "visible");
     std::string output = testing::internal::GetCapturedStdout();
-    ASSERT_EQ(output, "[    MAIN    ] Info: <TEST> visible\n");
+    ASSERT_EQ(output, "[    MAIN    ] " + cat_test_log_thread_tag() + "Info: <TEST> visible\n");
 }
 
 TEST(cat_log, buffer_growth_failure_and_recovery)
