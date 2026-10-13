@@ -221,8 +221,6 @@ TEST(cat_buffer, create)
 TEST(cat_buffer, create_double)
 {
     cat_buffer_t buffer = { };
-    char *ptr1;
-    char *ptr2;
 
     ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
     ASSERT_EQ(0, buffer.length);
@@ -230,11 +228,12 @@ TEST(cat_buffer, create_double)
     ASSERT_NE(nullptr, buffer.value);
     cat_buffer_close(&buffer);
 
-    ptr1 = buffer.value;
-    /* create a new buffer::value */
+    /* the allocator may hand out the address of the buffer that was just closed, so the
+     * state of the new buffer is what this case checks */
     ASSERT_TRUE(cat_buffer_create(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
-    ptr2 = buffer.value;
-    ASSERT_NE(ptr1, ptr2);
+    ASSERT_NE(nullptr, buffer.value);
+    ASSERT_EQ(0, buffer.length);
+    ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE, buffer.size);
     cat_buffer_close(&buffer);
 }
 
@@ -255,21 +254,31 @@ TEST(cat_buffer, realloc_same_size)
     ASSERT_EQ(ptr1, ptr2);
 }
 
-TEST(cat_buffer, realloc_not_same_size)
+TEST(cat_buffer, realloc_to_larger_size_keeps_data)
 {
+    const char first[CAT_TEST_DEFAULT_BUFFER_SIZE + 1] = "0123456789abcdef";
+    const char second[CAT_TEST_DEFAULT_BUFFER_SIZE + 1] = "ghijklmnopqrstu";
     cat_buffer_t buffer = { };
-    char *ptr1;
-    char *ptr2;
 
     ASSERT_TRUE(cat_buffer_alloc(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE));
     DEFER(cat_buffer_close(&buffer));
-    ptr1 = buffer.value;
+    ASSERT_TRUE(cat_buffer_write(&buffer, 0, first, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE, buffer.length);
+
     ASSERT_TRUE(cat_buffer_realloc(&buffer, CAT_TEST_DEFAULT_BUFFER_SIZE * 2));
-    ptr2 = buffer.value;
-    ASSERT_EQ(0, buffer.length);
+    ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE, buffer.length);
     ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE * 2, buffer.size);
     ASSERT_NE(nullptr, buffer.value);
-    ASSERT_NE(ptr1, ptr2);
+
+    /* realloc may retain the original address, so the size change is what this case
+     * checks: the data has to survive it and the new capacity has to be writable */
+    ASSERT_EQ(std::string(buffer.value, CAT_TEST_DEFAULT_BUFFER_SIZE), std::string(first));
+
+    ASSERT_TRUE(cat_buffer_write(&buffer, buffer.length, second, CAT_TEST_DEFAULT_BUFFER_SIZE));
+    ASSERT_EQ(CAT_TEST_DEFAULT_BUFFER_SIZE * 2, buffer.length);
+    ASSERT_EQ(std::string(buffer.value, CAT_TEST_DEFAULT_BUFFER_SIZE), std::string(first));
+    ASSERT_EQ(std::string(buffer.value + CAT_TEST_DEFAULT_BUFFER_SIZE, CAT_TEST_DEFAULT_BUFFER_SIZE),
+        std::string(second, CAT_TEST_DEFAULT_BUFFER_SIZE));
 }
 
 TEST(cat_buffer, realloc_zero_size)
