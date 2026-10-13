@@ -47,6 +47,50 @@ TEST(cat_process, echo)
     ASSERT_NE(output.find("Hello libcat"), std::string::npos);
 }
 
+/* uv_spawn() removes the handle from the loop queue when it fails, so a failed
+ * cat_process_run() must not close that handle: closing it makes the loop remove the node
+ * a second time and leaves the queue pointing at freed memory, which the next socket that
+ * is created and closed walks into */
+
+TEST(cat_process, spawn_failure_leaves_the_loop_queue_intact)
+{
+    for (cat_socket_type_t type : {
+        CAT_SOCKET_TYPE_UDP,
+        CAT_SOCKET_TYPE_UDP4,
+        CAT_SOCKET_TYPE_TCP,
+        CAT_SOCKET_TYPE_TCP4,
+        CAT_SOCKET_TYPE_PIPE,
+    }) {
+        SCOPED_TRACE(type);
+
+        /* the socket stays alive while the process fails, because its close releases the
+         * memory that a corrupted loop handle queue keeps pointing at */
+        cat_socket_t *socket = cat_socket_create(nullptr, type);
+        ASSERT_NE(socket, nullptr);
+
+        cat_process_options_t options = { nullptr };
+        const char *args[] = { "/asdfghjkl", NULL };
+        options.file = args[0];
+        options.args = args;
+        options.stdio_count = 1;
+        cat_process_stdio_container_t stdio[1] = { { 0 } };
+        stdio[0].flags = CAT_PROCESS_STDIO_FLAG_INHERIT_FD;
+        stdio[0].data.fd = CAT_OS_INVALID_FD;
+        options.stdio = stdio;
+
+        ASSERT_EQ(cat_process_run(&options), nullptr);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+        ASSERT_TRUE(cat_time_delay(0));
+        ASSERT_TRUE(cat_socket_close(socket));
+
+        /* a second round proves the queue stayed usable for the handles after it */
+        cat_socket_t *again = cat_socket_create(nullptr, type);
+        ASSERT_NE(again, nullptr);
+        ASSERT_TRUE(cat_time_delay(0));
+        ASSERT_TRUE(cat_socket_close(again));
+    }
+}
+
 TEST(cat_process, invalid_stream)
 {
     cat_process_options_t options = { nullptr };

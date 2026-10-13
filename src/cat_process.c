@@ -138,7 +138,10 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Process run failed");
         if (process != NULL) {
-            cat_process_close(process);
+            /* uv_spawn() removes the handle from the loop queue when it fails, so the
+             * handle cannot be closed: uv__finish_close() would remove it a second time
+             * and leave the loop handle queue holding freed memory */
+            cat_free(process);
         }
         return NULL;
     }
