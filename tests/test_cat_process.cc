@@ -91,6 +91,52 @@ TEST(cat_process, spawn_failure_leaves_the_loop_queue_intact)
     }
 }
 
+/* A stdio stream that the process owns must not stay registered in the loop when the
+ * spawn fails: the stream outlives the freed cat_process_t and the loop walks it during
+ * shutdown, and the failed spawn also leaves the process handle in the queue unless the
+ * exec failure removes it */
+
+TEST(cat_process, failed_spawn_leaves_no_stdio_stream_behind)
+{
+    for (auto stdio_flags : {
+        (cat_process_stdio_flags_t) (CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | CAT_PROCESS_STDIO_FLAG_READABLE_PIPE),
+        (cat_process_stdio_flags_t) (CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | CAT_PROCESS_STDIO_FLAG_WRITABLE_PIPE),
+        (cat_process_stdio_flags_t) CAT_PROCESS_STDIO_FLAG_INHERIT_STREAM,
+    }) {
+        SCOPED_TRACE(stdio_flags);
+
+        cat_socket_t *stream = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE);
+        ASSERT_NE(stream, nullptr);
+
+        cat_process_options_t options = { nullptr };
+        const char *args[] = { "/asdfghjkl", NULL };
+        options.file = args[0];
+        options.args = args;
+        options.stdio_count = 1;
+        cat_process_stdio_container_t stdio[1] = { { 0 } };
+        stdio[0].flags = stdio_flags;
+        stdio[0].data.stream = stream;
+        options.stdio = stdio;
+
+        ASSERT_EQ(cat_process_run(&options), nullptr);
+        /* a stream that is not a stream is rejected before spawn, and the spawn itself
+         * fails on the missing executable */
+        ASSERT_EQ(cat_get_last_error_code(),
+            stdio_flags == CAT_PROCESS_STDIO_FLAG_INHERIT_STREAM ? CAT_EINVAL : CAT_ENOENT);
+        ASSERT_TRUE(cat_time_delay(0));
+
+        /* the stream is still owned by the caller and must still be usable */
+        ASSERT_TRUE(cat_socket_is_available(stream));
+        ASSERT_TRUE(cat_socket_close(stream));
+
+        /* a handle created after the failure proves the queue is still intact */
+        cat_socket_t *again = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE);
+        ASSERT_NE(again, nullptr);
+        ASSERT_TRUE(cat_time_delay(0));
+        ASSERT_TRUE(cat_socket_close(again));
+    }
+}
+
 TEST(cat_process, invalid_stream)
 {
     cat_process_options_t options = { nullptr };
