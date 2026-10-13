@@ -2626,6 +2626,56 @@ TEST(cat_socket, udp_retransmits_when_a_reply_is_lost)
     test_udp_echo_server_stop(&server);
 }
 
+/* A read that gives up because its timeout elapsed must not come back before that time.
+ * Coming back later is allowed, since a busy scheduler pushes the wakeup out. The timer
+ * has a millisecond clock granularity, so the check allows that much of jitter, which is
+ * far below the early return this is meant to catch */
+#define TEST_TIMEOUT_GRANULARITY_US 1000
+
+TEST(cat_socket, read_timeout_does_not_return_early)
+{
+    for (cat_timeout_t timeout : { (cat_timeout_t) 50, (cat_timeout_t) 200 }) {
+        SCOPED_TRACE(timeout);
+
+        /* a connected datagram socket whose peer never answers */
+        cat_socket_t datagram;
+        ASSERT_EQ(cat_socket_create(&datagram, CAT_SOCKET_TYPE_UDP4), &datagram);
+        DEFER(cat_socket_close(&datagram));
+        ASSERT_TRUE(cat_socket_connect_to(&datagram, CAT_STRL(TEST_LISTEN_IPV4), 9 /* discard */));
+        char datagram_buffer[16];
+        cat_msec_t begin = cat_time_nsec();
+        ssize_t read_n = cat_socket_read_ex(&datagram, datagram_buffer, sizeof(datagram_buffer), timeout);
+        cat_msec_t elapsed_us = (cat_time_nsec() - begin) / 1000;
+        ASSERT_LT(read_n, 0);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+        EXPECT_GE(elapsed_us + TEST_TIMEOUT_GRANULARITY_US, (cat_msec_t) timeout * 1000)
+            << "returned after " << elapsed_us << "us, before the " << timeout << "ms it was given";
+
+        /* a stream socket whose peer stays silent */
+        cat_socket_t listener;
+        ASSERT_EQ(cat_socket_create(&listener, CAT_SOCKET_TYPE_TCP4), &listener);
+        DEFER(cat_socket_close(&listener));
+        ASSERT_TRUE(cat_socket_bind_to(&listener, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&listener, TEST_SERVER_BACKLOG));
+        cat_socket_t stream;
+        ASSERT_EQ(cat_socket_create(&stream, CAT_SOCKET_TYPE_TCP), &stream);
+        DEFER(cat_socket_close(&stream));
+        ASSERT_TRUE(cat_socket_connect_to(&stream, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&listener)));
+        cat_socket_t accepted;
+        ASSERT_EQ(cat_socket_create(&accepted, CAT_SOCKET_TYPE_TCP), &accepted);
+        DEFER(cat_socket_close(&accepted));
+        ASSERT_TRUE(cat_socket_accept(&listener, &accepted));
+        char stream_buffer[16];
+        begin = cat_time_nsec();
+        read_n = cat_socket_read_ex(&stream, stream_buffer, sizeof(stream_buffer), timeout);
+        elapsed_us = (cat_time_nsec() - begin) / 1000;
+        ASSERT_LT(read_n, 0);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+        EXPECT_GE(elapsed_us + TEST_TIMEOUT_GRANULARITY_US, (cat_msec_t) timeout * 1000)
+            << "returned after " << elapsed_us << "us, before the " << timeout << "ms it was given";
+    }
+}
+
 TEST(cat_socket, open_os_socket)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
