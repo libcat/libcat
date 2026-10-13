@@ -23,8 +23,10 @@ extern "C"
 {
 #ifdef CAT_IDE_HELPER
 #include "uv-common.h"
+#include "unix/internal.h"
 #else
 #include "../deps/libuv/src/uv-common.h"
+#include "../deps/libuv/src/unix/internal.h"
 #endif
 
 #include "llhttp.h"
@@ -1086,6 +1088,35 @@ TEST(cat_socket, buffer_size)
 #define TEST_EFDCLOSED CAT_ENOTSOCK
 #endif
 
+
+/* uv__cloexec() is the fallback that libuv uses when it cannot create a descriptor with
+ * SOCK_CLOEXEC or O_CLOEXEC in one call, and it must both set and clear FD_CLOEXEC */
+
+TEST(cat_socket, cloexec_sets_and_clears_close_on_exec)
+{
+    cat_os_fd_t fds[2];
+    ASSERT_TRUE(cat_pipe(fds, CAT_PIPE_FLAG_NONBLOCK, CAT_PIPE_FLAG_NONBLOCK));
+    DEFER(cat_fs_close(fds[0]));
+    DEFER(cat_fs_close(fds[1]));
+
+    const int before = fcntl(fds[0], F_GETFD);
+    ASSERT_NE(before, -1);
+
+    /* set */
+    ASSERT_EQ(uv__cloexec(fds[0], 1), 0);
+    ASSERT_NE(fcntl(fds[0], F_GETFD) & FD_CLOEXEC, 0);
+
+    /* clear */
+    ASSERT_EQ(uv__cloexec(fds[0], 0), 0);
+    ASSERT_EQ(fcntl(fds[0], F_GETFD) & FD_CLOEXEC, 0);
+
+    /* the other end is untouched */
+    ASSERT_EQ(fcntl(fds[1], F_GETFD) & FD_CLOEXEC, before & FD_CLOEXEC);
+
+    /* a descriptor that is already closed reports the failure */
+    ASSERT_EQ(cat_fs_close(fds[1]), 0);
+    ASSERT_EQ(uv__cloexec(fds[1], 1), CAT_EBADF);
+}
 
 TEST(cat_socket, set_tcp_nodelay)
 {
