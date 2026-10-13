@@ -43,6 +43,27 @@ TEST(cat_async, notify_later)
     ASSERT_TRUE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
 }
 
+TEST(cat_async, many_notifies_are_serialized_across_threads)
+{
+    /* uv_async_send coalesces notifications, so the wait can be resolved by any
+     * of them. The point here is that concurrent senders still leave the busy
+     * counter consistent: the wait must finish instead of hanging or spinning
+     * forever, and the handle must stay usable up to the close */
+    cat_async_t *async = cat_async_create(nullptr);
+    ASSERT_NE(async, nullptr);
+
+    const size_t repeat = 64;
+    for (size_t n = 0; n < repeat; n++) {
+        co([async] {
+            ASSERT_TRUE(work(CAT_WORK_KIND_CPU, [async] {
+                ASSERT_EQ(cat_async_notify(async), 0);
+            }, TEST_IO_TIMEOUT));
+        });
+    }
+
+    ASSERT_TRUE(cat_async_wait_and_close(async, nullptr, TEST_IO_TIMEOUT));
+}
+
 TEST(cat_async, notify_timeout)
 {
     uv_sem_t sem;

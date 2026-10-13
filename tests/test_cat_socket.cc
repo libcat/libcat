@@ -1846,6 +1846,51 @@ TEST(cat_socket, send_file)
     }
 }
 
+TEST(cat_socket, send_file_sizes_around_the_libuv_limit)
+{
+    /* uv_fs_sendfile rejects any length above UV__IO_MAX_BYTES, which is 4095
+     * below 2 GiB. These sizes cannot reach that cap, but they pin the chunking
+     * that CAT_MIN(remain, max_non_lfs) picks for a whole file and for a last
+     * partial chunk. The server is local so that the case does not depend on the
+     * shared echo server */
+    const size_t sizes[] = { 1, 4095, 4096, 65535, 65536, 65537 };
+
+    for (size_t size : sizes) {
+        cat_socket_t server;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+
+        std::string payload = get_random_bytes(size);
+        std::string received(size, '\0');
+        std::string filename = testing::CONFIG_TMP_PATH + "/libcat-test-" + get_random_bytes(32);
+        ASSERT_TRUE(file_put_contents(filename.c_str(), payload.c_str(), payload.length()));
+        DEFER(remove_file(filename.c_str()));
+
+        cat_socket_t server_connection;
+        ASSERT_EQ(cat_socket_create(&server_connection, CAT_SOCKET_TYPE_TCP), &server_connection);
+        DEFER(cat_socket_close(&server_connection));
+
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            ASSERT_TRUE(cat_socket_accept(&server, &server_connection));
+            ASSERT_EQ(cat_socket_read(&server_connection, received.data(), received.size()), (ssize_t) received.size());
+        });
+
+        cat_socket_t client;
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP), &client);
+        DEFER(cat_socket_close(&client));
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+
+        EXPECT_EQ(cat_socket_send_file(&client, filename.c_str(), 0, 0), (ssize_t) size);
+        ASSERT_TRUE(wg());
+        ASSERT_EQ(received, payload);
+    }
+}
+
 TEST(cat_socket, send_big_file)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
