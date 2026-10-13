@@ -654,6 +654,7 @@ static cat_always_inline cat_socket_fd_t cat_socket_internal_get_fd_fast(const c
 static cat_always_inline void cat_socket_internal_close(cat_socket_internal_t *socket_i, cat_socket_t *socket, cat_bool_t unrecoverable_error);
 
 static CAT_COLD void cat_socket_internal_unrecoverable_io_error(cat_socket_internal_t *socket_i);
+static void cat_socket_close_callback(uv_handle_t *handle);
 #ifdef CAT_SSL
 static cat_always_inline void cat_socket_internal_ssl_recoverability_check(cat_socket_internal_t *socket_i);
 static cat_bool_t cat_socket_internal_write_raw(
@@ -836,6 +837,9 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     cat_sa_family_t af = AF_UNSPEC;
     size_t socket_i_size;
     int error = CAT_EINVAL;
+    /* an uv handle registers itself with the loop, so a creation that fails after that
+     * must close it instead of only freeing the memory */
+    cat_bool_t handle_inited = cat_false;
 
     if (socket == NULL) {
         socket = (cat_socket_t *) cat_malloc(sizeof(*socket));
@@ -882,6 +886,16 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     /* Notice: dump callback may access this even if creation failed,
      * so we must init it here. */
     cat_queue_init(&socket_i->sockets);
+    /* the close callback frees these, and it also runs for a creation that fails after
+     * the handle was registered */
+    socket_i->cache.write_request = NULL;
+    socket_i->cache.ipcc_handle_info = NULL;
+    socket_i->cache.sockname = NULL;
+    socket_i->cache.peername = NULL;
+#ifdef CAT_SSL
+    socket_i->ssl = NULL;
+    socket_i->ssl_peer_name = NULL;
+#endif
 
     /* solve type and get af
      *  Notice: we should create socket without IPV* flag (AF_UNSPEC)
@@ -951,6 +965,7 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     if (unlikely(error != 0)) {
         goto _init_error;
     }
+    handle_inited = cat_true;
 
     /* init properties of socket */
     socket->id = ++CAT_SOCKET_G(last_id);
@@ -967,20 +982,12 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     cat_queue_init(&socket_i->context.io.write.coroutines);
     /* part of cache */
     socket_i->cache.fd = CAT_SOCKET_INVALID_FD;
-    socket_i->cache.write_request = NULL;
-    socket_i->cache.ipcc_handle_info = NULL;
-    socket_i->cache.sockname = NULL;
-    socket_i->cache.peername = NULL;
     socket_i->cache.recv_buffer_size = -1;
     socket_i->cache.send_buffer_size = -1;
     /* options */
     socket_i->option_flags = CAT_SOCKET_OPTION_FLAG_NONE;
     socket_i->options.timeout = cat_socket_default_timeout_options;
     socket_i->options.tcp_keepalive_delay = 0;
-#ifdef CAT_SSL
-    socket_i->ssl = NULL;
-    socket_i->ssl_peer_name = NULL;
-#endif
 
     if (af != AF_UNSPEC) {
         cat_socket_internal_on_open(socket_i, af);
@@ -994,6 +1001,11 @@ static cat_always_inline cat_socket_t *cat_socket_create_impl(cat_socket_t *sock
     return socket;
 
     _init_error:
+    if (handle_inited) {
+        /* a handle that stays registered keeps a node of the loop handle queue pointing
+         * at this memory after it is freed */
+        uv_close(&socket_i->u.handle, cat_socket_close_callback);
+    }
     cat_free(socket_i);
     _type_error:
     cat_update_last_error_with_reason(error, "Socket crate with type %s failed", cat_socket_type_get_name(type));
