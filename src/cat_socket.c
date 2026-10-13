@@ -4773,8 +4773,12 @@ static cat_always_inline void cat_socket_internal_sendfile_wait_end(cat_socket_i
 #ifdef CAT_SOCKET_NATIVE_SENDFILE
 static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_internal_t *socket_i, cat_file_t file, int64_t offset, size_t length, cat_timeout_t timeout)
 {
-    /** @see: https://github.com/torvalds/linux/blob/38f8ccde04a3fa317b51b05e63c3cb57e1641931/include/linux/fs.h#L996 */
-    const size_t max_non_lfs = ((1UL << 31) - 1);
+    /*
+     * Linux have a limit to INT32_MAX - 1:
+     * @see: https://github.com/torvalds/linux/blob/38f8ccde04a3fa317b51b05e63c3cb57e1641931/include/linux/fs.h#L996
+     * meanwhile, uv_fs_sendfile rejects any length above UV__IO_MAX_BYTES (0x7ffff000)
+     */
+    const size_t max_non_lfs = UV__IO_MAX_BYTES;
     cat_socket_fd_t fd = cat_socket_internal_get_fd_fast(socket_i);
     int64_t start = offset;
     size_t remain;
