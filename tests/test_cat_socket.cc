@@ -2496,6 +2496,136 @@ TEST(cat_socket, send_handle)
     }
 }
 
+/* A datagram socket loses messages, so a batch of replies cannot be checked the way a
+ * stream is. The reader asks for another copy of a message when its reply has not
+ * arrived, which is what a TCP stack does with its retransmission timer. Messages stay
+ * below one IP fragment, and the echo server drops chosen arrivals so that loss is
+ * forced instead of depending on buffer pressure */
+
+#define TEST_UDP_RETRANSMIT_REQUESTS    16
+#define TEST_UDP_RETRANSMIT_MESSAGE_MAX 512
+#define TEST_UDP_RETRANSMIT_ATTEMPTS    8
+/* milliseconds, as everywhere in libcat */
+#define TEST_UDP_RETRANSMIT_TIMEOUT     50
+
+typedef struct test_udp_echo_server_s {
+    cat_socket_t socket;
+    wait_group wg;
+    bool stop;
+    size_t *drop_at;
+    size_t drop_count;
+} test_udp_echo_server_t;
+
+static int test_udp_echo_server_start(test_udp_echo_server_t *server, size_t *drop_at, size_t drop_count)
+{
+    memset(server, 0, sizeof(*server));
+    server->drop_at = drop_at;
+    server->drop_count = drop_count;
+    if (cat_socket_create(&server->socket, CAT_SOCKET_TYPE_UDP4) != &server->socket) {
+        return -1;
+    }
+    if (!cat_socket_bind_to(&server->socket, CAT_STRL(TEST_LISTEN_IPV4), 0)) {
+        cat_socket_close(&server->socket);
+        return -1;
+    }
+    const int port = cat_socket_get_sock_port(&server->socket);
+    if (port <= 0) {
+        cat_socket_close(&server->socket);
+        return -1;
+    }
+    co([server] {
+        server->wg++;
+        DEFER(server->wg--);
+        size_t arrived = 0;
+        while (!server->stop) {
+            char buffer[TEST_UDP_RETRANSMIT_MESSAGE_MAX];
+            cat_sockaddr_union_t address;
+            cat_socklen_t address_length = sizeof(address);
+            ssize_t read_n = cat_socket_recvfrom(&server->socket, buffer, sizeof(buffer), &address.common, &address_length);
+            if (read_n <= 0) {
+                break;
+            }
+            arrived++;
+            bool drop = false;
+            for (size_t n = 0; n < server->drop_count; n++) {
+                if (server->drop_at[n] == arrived) {
+                    drop = true;
+                    /* drop it once, so that the retransmission gets through */
+                    server->drop_at[n] = 0;
+                    break;
+                }
+            }
+            if (drop) {
+                continue;
+            }
+            if (!cat_socket_sendto(&server->socket, buffer, read_n, &address.common, address_length)) {
+                break;
+            }
+        }
+    });
+    return port;
+}
+
+static void test_udp_echo_server_stop(test_udp_echo_server_t *server)
+{
+    server->stop = true;
+    ASSERT_TRUE(cat_socket_close(&server->socket));
+    ASSERT_TRUE(server->wg());
+}
+
+/* Sends one message, then reads its reply, and asks for another copy of it whenever the
+ * reply does not arrive in time. Returns the number of retransmissions */
+static size_t test_udp_send_and_retransmit(cat_socket_t *client)
+{
+    size_t retransmitted = 0;
+    for (size_t n = 0; n < TEST_UDP_RETRANSMIT_REQUESTS; n++) {
+        std::string message = get_random_bytes(1 + n % TEST_UDP_RETRANSMIT_MESSAGE_MAX);
+        EXPECT_TRUE(cat_socket_send(client, message.data(), message.size()));
+        size_t attempts = 0;
+        bool matched = false;
+        while (attempts < TEST_UDP_RETRANSMIT_ATTEMPTS) {
+            std::string received(message.size(), '\0');
+            ssize_t read_n = cat_socket_read_ex(client, received.data(), received.size(), TEST_UDP_RETRANSMIT_TIMEOUT);
+            if (read_n >= 0 && received == message) {
+                matched = true;
+                break;
+            }
+            if (read_n < 0) {
+                EXPECT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT) << "message " << n;
+                attempts++;
+                if (attempts >= TEST_UDP_RETRANSMIT_ATTEMPTS) {
+                    break;
+                }
+                EXPECT_TRUE(cat_socket_send(client, message.data(), message.size()));
+                retransmitted++;
+            }
+        }
+        if (!matched) {
+            ADD_FAILURE() << "message " << n << " never arrived after " << attempts << " attempts";
+            break;
+        }
+    }
+    return retransmitted;
+}
+
+TEST(cat_socket, udp_retransmits_when_a_reply_is_lost)
+{
+    /* the echo server drops these arrivals once each, so exactly these messages have to
+     * be sent again before the reader can finish */
+    size_t drop_at[] = { 2, 5, 9 };
+    test_udp_echo_server_t server;
+    const int port = test_udp_echo_server_start(&server, drop_at, CAT_ARRAY_SIZE(drop_at));
+    ASSERT_GT(port, 0);
+
+    cat_socket_t client;
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_UDP), &client);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), port));
+
+    EXPECT_GE(test_udp_send_and_retransmit(&client), CAT_ARRAY_SIZE(drop_at));
+    test_udp_echo_server_stop(&server);
+}
+
 TEST(cat_socket, open_os_socket)
 {
     TEST_REQUIRE(echo_tcp_server != nullptr, cat_socket, echo_tcp_server);
