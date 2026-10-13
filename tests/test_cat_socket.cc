@@ -1411,6 +1411,10 @@ static const std::vector<test_cat_socket_io_functions_t> test_cat_socket_io_func
 #define TEST_IO_FUNCTIONS_END() \
     }
 
+/* a datagram reply that did not arrive is asked for again instead of failing the case */
+#define TEST_DGRAM_RETRANSMIT_ATTEMPTS  8
+#define TEST_DGRAM_REPLY_TIMEOUT        50 /* milliseconds, as everywhere in libcat */
+
 typedef void (*echo_stream_client_test_prepare_function_t)(cat_socket_t *socket, test_cat_socket_io_functions_t io_functions);
 
 static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_client_test_prepare_function_t prepare_function, const std::vector<test_cat_socket_io_functions_t> io_functions_list)
@@ -1489,6 +1493,10 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
     }
 
     /* pipeline */
+    /* a datagram socket loses messages, so its replies are read with a timeout and a
+     * retransmission request instead of a plain read, and its messages stay below one IP
+     * fragment so that loss is a lost datagram and not a partly delivered message */
+    const bool is_datagram = (cat_socket_get_type(echo_client) & CAT_SOCKET_TYPE_FLAG_DGRAM) != 0;
     char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
     size_t read_buffer_count = 0;
     ASSERT_NE(read_buffers, nullptr);
@@ -1514,30 +1522,62 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
         write_buffer_count++;
         cat_snrand(write_buffers[n], TEST_BUFFER_SIZE_STD);
     }
-    /* send requests */
-    bool done = false;
-    wait_group wg;
-    co([&] {
-        wg++;
-        DEFER(wg--);
-        for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
+    /* requests and responses */
+    if (is_datagram) {
+        /* a datagram socket loses messages, so a batch of replies cannot be checked the
+         * way a stream is. Send one message at a time and ask for another copy of it when
+         * its reply has not arrived, the way a TCP stack does with its retransmission
+         * timer. Reading and writing from one coroutine keeps the two sides from waiting
+         * on each other when a datagram is lost */
+        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+            read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+            ASSERT_NE(read_buffers[n], nullptr);
+            read_buffer_count++;
             ASSERT_TRUE(io_functions.send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+            size_t attempts = 0;
+            bool matched = false;
+            while (attempts < TEST_DGRAM_RETRANSMIT_ATTEMPTS) {
+                attempts++;
+                ret = cat_socket_read_ex(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD, TEST_DGRAM_REPLY_TIMEOUT);
+                if (ret >= 0 && ret == TEST_BUFFER_SIZE_STD &&
+                    memcmp(read_buffers[n], write_buffers[n], TEST_BUFFER_SIZE_STD) == 0) {
+                    matched = true;
+                    break;
+                }
+                if (ret < 0) {
+                    /* only a read that found nothing is worth another copy of the message */
+                    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT) << "message " << n;
+                    if (attempts < TEST_DGRAM_RETRANSMIT_ATTEMPTS) {
+                        ASSERT_TRUE(io_functions.send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+                    }
+                }
+            }
+            ASSERT_TRUE(matched) << "message " << n << " never arrived after " << attempts << " attempts";
         }
-        done = true;
-    });
-    /* recv responses */
-    for (n = 0; n < TEST_MAX_REQUESTS; n++) {
-        read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
-        ASSERT_NE(read_buffers[n], nullptr);
-        read_buffer_count++;
-        ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
-        ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
-        read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-        write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
-        ASSERT_STREQ(read_buffers[n], write_buffers[n]);
+    } else {
+        bool done = false;
+        wait_group wg;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            for (size_t n = 0; n < TEST_MAX_REQUESTS; n++) {
+                ASSERT_TRUE(io_functions.send(echo_client, write_buffers[n], TEST_BUFFER_SIZE_STD));
+            }
+            done = true;
+        });
+        for (n = 0; n < TEST_MAX_REQUESTS; n++) {
+            read_buffers[n] = (char *) cat_malloc(TEST_BUFFER_SIZE_STD);
+            ASSERT_NE(read_buffers[n], nullptr);
+            read_buffer_count++;
+            ret = io_functions.read(echo_client, read_buffers[n], TEST_BUFFER_SIZE_STD);
+            ASSERT_EQ(ret, TEST_BUFFER_SIZE_STD);
+            read_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+            write_buffers[n][TEST_BUFFER_SIZE_STD - 1] = '\0';
+            ASSERT_STREQ(read_buffers[n], write_buffers[n]);
+        }
+        wg();
+        ASSERT_TRUE(done);
     }
-    wg();
-    ASSERT_TRUE(done);
     TEST_IO_FUNCTIONS_END();
 }
 
