@@ -238,3 +238,27 @@ TEST(cat_time, blocking)
     ASSERT_TRUE(cat_time_delay(0));
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
 }
+
+/* A wait must come back after the timeout it was given. The bounds are wide because a
+ * scheduler can delay the wakeup, but they still catch a wait that returns an order of
+ * magnitude early, which is what a timer armed from a stale loop time does */
+
+#define TEST_DELAY_TOLERANCE 50 /* percent */
+
+TEST(cat_time, delay_respects_the_requested_timeout)
+{
+    /* deltas stay below the cached loop time resolution, so a wait that returns at once
+     * is visible here and not rounded away */
+    for (cat_timeout_t timeout : { (cat_timeout_t) 10, (cat_timeout_t) 50, (cat_timeout_t) 200 }) {
+        SCOPED_TRACE(timeout);
+        co([timeout] {
+            cat_msec_t begin = cat_time_nsec();
+            ASSERT_EQ(cat_time_delay(timeout), CAT_RET_OK);
+            cat_msec_t elapsed = (cat_time_nsec() - begin) / 1000000;
+            const cat_msec_t slack = timeout * TEST_DELAY_TOLERANCE / 100;
+            EXPECT_GE(elapsed, timeout - slack) << "returned before the timeout";
+            EXPECT_LE(elapsed, timeout + slack) << "returned later than the timeout";
+        });
+        ASSERT_TRUE(cat_coroutine_wait_all());
+    }
+}

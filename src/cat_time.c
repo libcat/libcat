@@ -139,6 +139,10 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
 #endif
 
     (void) uv_timer_init(&CAT_EVENT_G(loop), &timer->timer);
+    /* uv_timer_start computes the deadline from loop->time, which the scheduler only
+     * refreshes while it runs. Without this, the first timer armed after the loop went
+     * idle gets a stale base and fires immediately */
+    uv_update_time(&CAT_EVENT_G(loop));
     (void) uv_timer_start(&timer->timer, cat_timer_callback, msec, 0);
 
     timer->coroutine = CAT_COROUTINE_G(current);
