@@ -312,3 +312,42 @@ TEST(cat_event, handle_diagnostics_output_and_active_filter)
         ASSERT_EQ(active.find(address), std::string::npos);
     }
 }
+
+static void test_cat_event_nested_timer_cb(uv_timer_t *handle)
+{
+    *static_cast<bool *>(handle->data) = true;
+}
+
+static void test_cat_event_outer_timer_cb(uv_timer_t *handle)
+{
+    uv_timer_t *nested = static_cast<uv_timer_t *>(handle->data);
+    ASSERT_EQ(uv_timer_start(nested, test_cat_event_nested_timer_cb, 0, 0), 0);
+    /* the nested timer was started in this round, so it must not have fired yet */
+    *static_cast<bool *>(handle->loop->data) = *static_cast<bool *>(nested->data);
+}
+
+TEST(cat_event, timer_started_in_callback_waits_for_next_round)
+{
+    /* A timer keeps the round it was started in, and uv__run_timers skips it while
+     * its round is the loop round. So a zero timeout timer started from another
+     * timer callback cannot fire in the same round. This is the contract that pairs
+     * with uv_crun incrementing the loop round */
+    uv_timer_t outer;
+    uv_timer_t nested;
+    ASSERT_EQ(uv_timer_init(&CAT_EVENT_G(loop), &outer), 0);
+    DEFER(uv_close(reinterpret_cast<uv_handle_t *>(&outer), nullptr); cat_time_delay(0));
+    ASSERT_EQ(uv_timer_init(&CAT_EVENT_G(loop), &nested), 0);
+    DEFER(uv_close(reinterpret_cast<uv_handle_t *>(&nested), nullptr); cat_time_delay(0));
+
+    bool nested_fired = false;
+    bool nested_fired_in_same_round = false;
+
+    outer.data = &nested;
+    nested.data = &nested_fired;
+    CAT_EVENT_G(loop).data = &nested_fired_in_same_round;
+
+    ASSERT_EQ(uv_timer_start(&outer, test_cat_event_outer_timer_cb, 0, 0), 0);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+    ASSERT_FALSE(nested_fired_in_same_round);
+    ASSERT_TRUE(nested_fired);
+}
