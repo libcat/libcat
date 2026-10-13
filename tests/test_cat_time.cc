@@ -241,20 +241,24 @@ TEST(cat_time, blocking)
 
 /* A delay must not come back before the time it was asked to wait. Coming back later is
  * allowed, because a busy scheduler or the clock resolution can push the wakeup out, but
- * an early return breaks anything that relies on the delay having elapsed */
+ * an early return breaks anything that relies on the delay having elapsed.
+ *
+ * The timer has a millisecond resolution, so a delay may legitimately come back that much
+ * early. Compare in microseconds, because a millisecond comparison would round the one
+ * millisecond of allowed granularity away and report a compliant delay as early */
+
+#define TEST_DELAY_GRANULARITY_US 1000
 
 TEST(cat_time, delay_does_not_return_early)
 {
-    /* the deltas stay small enough that a delay which returns at once is visible here and
-     * not rounded away by the millisecond clock */
     for (cat_timeout_t timeout : { (cat_timeout_t) 10, (cat_timeout_t) 50, (cat_timeout_t) 200 }) {
         SCOPED_TRACE(timeout);
         co([timeout] {
             cat_msec_t begin = cat_time_nsec();
             ASSERT_EQ(cat_time_delay(timeout), CAT_RET_OK);
-            cat_msec_t elapsed = (cat_time_nsec() - begin) / 1000000;
-            EXPECT_GE(elapsed, (cat_msec_t) timeout)
-                << "returned after " << elapsed << "ms, before the " << timeout << "ms it was given";
+            cat_msec_t elapsed_us = (cat_time_nsec() - begin) / 1000;
+            EXPECT_GE(elapsed_us + TEST_DELAY_GRANULARITY_US, (cat_msec_t) timeout * 1000)
+                << "returned after " << elapsed_us << "us, before the " << timeout << "ms it was given";
         });
         ASSERT_TRUE(cat_coroutine_wait_all());
     }
