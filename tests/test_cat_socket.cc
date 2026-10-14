@@ -22,11 +22,15 @@
 extern "C"
 {
 #ifdef CAT_IDE_HELPER
-#include "uv-common.h"
-#include "unix/internal.h"
+# include "uv-common.h"
+# ifdef CAT_OS_UNIX_LIKE
+#  include "unix/internal.h"
+# endif
 #else
-#include "../deps/libuv/src/uv-common.h"
-#include "../deps/libuv/src/unix/internal.h"
+# include "../deps/libuv/src/uv-common.h"
+# ifdef CAT_OS_UNIX_LIKE
+#  include "../deps/libuv/src/unix/internal.h"
+# endif
 #endif
 
 #include "llhttp.h"
@@ -1089,6 +1093,8 @@ TEST(cat_socket, buffer_size)
 #endif
 
 
+#ifdef CAT_OS_UNIX_LIKE
+
 /* uv__cloexec() is the fallback that libuv uses when it cannot create a descriptor with
  * SOCK_CLOEXEC or O_CLOEXEC in one call, and it must both set and clear FD_CLOEXEC */
 
@@ -1117,6 +1123,8 @@ TEST(cat_socket, cloexec_sets_and_clears_close_on_exec)
     ASSERT_EQ(cat_fs_close(fds[1]), 0);
     ASSERT_EQ(uv__cloexec(fds[1], 1), CAT_EBADF);
 }
+
+#endif /* CAT_OS_UNIX_LIKE */
 
 TEST(cat_socket, set_tcp_nodelay)
 {
