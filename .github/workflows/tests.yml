@@ -91,9 +91,9 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        os: [ "windows-latest", "windows-2025" ]
-        build-type: [ "Debug", "Release" ]
         thread-safe: [ "OFF", "THREAD_KEY", "THREAD_LOCAL" ]
+        build-type: [ "Debug", "Release" ]
+        os: [ "windows-latest", "windows-2025" ]
         # build-type: [ "Debug" ]
       max-parallel: 4
       fail-fast: false
@@ -311,11 +311,11 @@ jobs:
     strategy:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
-        os: [ "ubuntu-latest", "ubuntu-22.04", "macos-latest" ]
         thread-safe: [ "OFF", "THREAD_KEY", "THREAD_LOCAL" ]
+        os: [ "ubuntu-latest", "macos-latest", "ubuntu-24.04" ]
         # os: [ "ubuntu-latest"]
         # os: [ "macos-latest"]
-      max-parallel: 2
+      max-parallel: 3
       fail-fast: false
     steps:
       - name: Install dependencies
