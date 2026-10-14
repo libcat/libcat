@@ -73,6 +73,7 @@ static CURLcode cat_test_curl_query(const char *url, std::string &response, cat_
 
 TEST(cat_curl, base)
 {
+    SKIP_IF_OFFLINE();
     std::string response;
     ASSERT_EQ(cat_test_curl_query(cat_test_curl_remote_url().c_str(), response), CURLE_OK);
     ASSERT_NE(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
@@ -168,6 +169,7 @@ TEST(cat_curl, concurrency)
 
 TEST(cat_curl, cancel)
 {
+    SKIP_IF_OFFLINE();
     wait_group wg;
     cat_coroutine_t *coroutine = co([&wg] {
         wg++;
@@ -181,6 +183,7 @@ TEST(cat_curl, cancel)
 
 TEST(cat_curl, timeout)
 {
+    SKIP_IF_OFFLINE();
     std::string response;
     ASSERT_EQ(cat_test_curl_query(cat_test_curl_remote_url().c_str(), response, 1), CURLE_OPERATION_TIMEDOUT);
     ASSERT_EQ(response.find(TEST_REMOTE_HTTP_SERVER_KEYWORD), std::string::npos);
@@ -188,6 +191,7 @@ TEST(cat_curl, timeout)
 
 TEST(cat_curl, busy)
 {
+    SKIP_IF_OFFLINE();
     wait_group wg;
     CURL *ch;
     co([&] {
@@ -202,6 +206,7 @@ TEST(cat_curl, busy)
 
 TEST(cat_curl_multi, base)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -249,6 +254,7 @@ TEST(cat_curl_multi, base)
 
 TEST(cat_curl_multi, multi)
 {
+    SKIP_IF_OFFLINE();
     CURL *chs[8];
     CURLM *mh;
     int still_running = 0;
@@ -324,6 +330,7 @@ TEST(cat_curl_multi, multi)
 
 TEST(cat_curl_multi, just_only_perform)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -358,6 +365,7 @@ TEST(cat_curl_multi, just_only_perform)
 
 TEST(cat_curl_multi, bad_usage_of_composer)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -400,6 +408,7 @@ TEST(cat_curl_multi, bad_usage_of_composer)
 
 TEST(cat_curl_multi, sleep_without_wait)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -446,6 +455,7 @@ TEST(cat_curl_multi, sleep_without_wait)
 
 TEST(cat_curl_multi, no_wait_sleep_1)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -475,6 +485,7 @@ TEST(cat_curl_multi, no_wait_sleep_1)
 
 TEST(cat_curl_multi, no_wait_sleep_0)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
@@ -504,6 +515,7 @@ TEST(cat_curl_multi, no_wait_sleep_0)
 
 TEST(cat_curl_multi, sleep_without_wait_in_coro)
 {
+    SKIP_IF_OFFLINE();
     CURL *ch;
     CURLM *mh;
     int still_running = 0;
