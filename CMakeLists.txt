@@ -452,7 +452,8 @@ if (1)
            ws2_32
            dbghelp
            ole32
-           shell32)
+           shell32
+           synchronization)
       list(APPEND uv_sources
            ${uv_dir}/src/win/async.c
            ${uv_dir}/src/win/core.c
