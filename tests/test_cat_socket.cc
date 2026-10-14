@@ -1527,7 +1527,8 @@ static void echo_stream_client_tests(cat_socket_t *echo_client, echo_stream_clie
     /* a datagram socket loses messages, so its replies are read with a timeout and a
      * retransmission request instead of a plain read, and its messages stay below one IP
      * fragment so that loss is a lost datagram and not a partly delivered message */
-    const bool is_datagram = (cat_socket_get_type(echo_client) & CAT_SOCKET_TYPE_FLAG_DGRAM) != 0;
+    const bool is_datagram = (cat_socket_get_type(echo_client)
+        & static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_FLAG_DGRAM)) != 0;
     char **read_buffers = (char **) cat_malloc(TEST_MAX_REQUESTS * sizeof(*read_buffers));
     size_t read_buffer_count = 0;
     ASSERT_NE(read_buffers, nullptr);
@@ -2589,7 +2590,7 @@ typedef struct test_udp_echo_server_s {
 
 static int test_udp_echo_server_start(test_udp_echo_server_t *server, size_t *drop_at, size_t drop_count)
 {
-    memset(server, 0, sizeof(*server));
+    *server = test_udp_echo_server_t{ };
     server->drop_at = drop_at;
     server->drop_count = drop_count;
     if (cat_socket_create(&server->socket, CAT_SOCKET_TYPE_UDP4) != &server->socket) {

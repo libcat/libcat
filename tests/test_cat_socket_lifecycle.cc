@@ -104,7 +104,8 @@ TEST(cat_socket, rejected_creation_preserves_caller_storage)
         CAT_SOCKET_TYPE_TTY,
         static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_FLAG_LOCAL),
 #ifdef CAT_OS_UNIX_LIKE
-        static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_UDG | CAT_SOCKET_TYPE_FLAG_IPC),
+        static_cast<cat_socket_type_t>(static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_UDG)
+            | static_cast<cat_socket_type_t>(CAT_SOCKET_TYPE_FLAG_IPC)),
 #endif
     };
     for (cat_socket_type_t type : types) {
