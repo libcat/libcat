@@ -646,13 +646,25 @@ TEST(cat_coroutine, set_mesc_time_function)
 {
     cat_coroutine_msec_time_function_t original_function =
         cat_coroutine_set_msec_time_function(cat_time_msec2);
-    cat_msec_t msec = cat_time_msec2();
+    cat_msec_t before = cat_time_msec2();
     cat_coroutine_t *coroutine = cat_coroutine_run(nullptr, [](cat_data_t *data) -> cat_data_t * {
         cat_coroutine_yield(nullptr, nullptr);
         return nullptr;
     }, nullptr);
-    cat_msec_t diff = coroutine->start_time > msec ? coroutine->start_time - msec : msec - coroutine->start_time;
-    ASSERT_LT(diff, 10);
+    cat_msec_t after = cat_time_msec2();
+    /* The start time is read from the clock installed above while the coroutine
+     * first runs, so it must fall in the window the call spanned. On Windows the
+     * wall clock only advances on the system timer tick (15.625 ms by default),
+     * so a start time one tick outside the window is still correct. The default
+     * clock is hrtime based, a different time base orders of magnitude away, so
+     * an unreplaced clock still fails the bounds */
+#ifdef CAT_OS_WIN
+    cat_msec_t tolerance = 16;
+#else
+    cat_msec_t tolerance = 1;
+#endif
+    ASSERT_GE(coroutine->start_time + tolerance, before);
+    ASSERT_LE(coroutine->start_time, after + tolerance);
     ASSERT_EQ((void *) cat_coroutine_set_msec_time_function(original_function), (void *) cat_time_msec2);
     ASSERT_TRUE(cat_coroutine_resume(coroutine, nullptr, nullptr));
 }
