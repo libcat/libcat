@@ -921,12 +921,14 @@ int uv_spawn(uv_loop_t* loop,
   attr_list_initialized = 0;
 
   if (options->flags & (UV_PROCESS_SETGID | UV_PROCESS_SETUID)) {
-    return UV_ENOTSUP;
+    err = UV_ENOTSUP;
+    goto done;
   }
 
   if (options->file == NULL ||
       options->args == NULL) {
-    return UV_EINVAL;
+    err = UV_EINVAL;
+    goto done;
   }
 
   assert(options->file != NULL);
@@ -941,26 +943,26 @@ int uv_spawn(uv_loop_t* loop,
 
   err = uv__utf8_to_utf16_alloc(options->file, &application);
   if (err)
-    goto done_uv;
+    goto done;
 
   err = make_program_args(
       options->args,
       options->flags & UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS,
       &arguments);
   if (err)
-    goto done_uv;
+    goto done;
 
   if (options->env) {
      err = make_program_env(options->env, &env);
      if (err)
-       goto done_uv;
+       goto done;
   }
 
   if (options->cwd) {
     /* Explicit cwd */
     err = uv__utf8_to_utf16_alloc(options->cwd, &cwd);
     if (err)
-      goto done_uv;
+      goto done;
 
     cwd_len = wcslen(cwd);
   } else {
@@ -1210,6 +1212,10 @@ int uv_spawn(uv_loop_t* loop,
 
   /* Cleanup, whether we succeeded or failed. */
  done:
+  /* The spawn failed, so the handle must not stay in the loop handle queue: the
+   * caller is expected to free it, and a handle that is still queued would be
+   * removed a second time when it is closed */
+  uv__queue_remove(&process->handle_queue);
   err = uv_translate_sys_error(err);
 
  done_uv:
