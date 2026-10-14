@@ -23,9 +23,16 @@
 
 extern "C" const char *cat_test_atomic_c_operations(cat_timeout_t timeout);
 extern "C" const char *cat_test_atomic_c_publication(cat_timeout_t timeout);
+extern "C" const char *cat_test_atomic_bare_pthread(cat_timeout_t timeout);
+extern "C" const char *cat_test_atomic_bare_uv(cat_timeout_t timeout);
+#ifdef CAT_OS_WIN
+extern "C" const char *cat_test_atomic_bare_win32(cat_timeout_t timeout);
+#endif
 extern "C" int cat_test_atomic_c_validates_orders(void);
 extern "C" int cat_test_atomic_c_rejects_exchange_consume(void);
 extern "C" void cat_test_atomic_c_invalid_order(int operation, cat_atomic_memory_order_t order);
+extern "C" void cat_test_atomic_c_invalid_order_at(int operation, cat_atomic_memory_order_t success,
+    cat_atomic_memory_order_t failure);
 
 TEST(cat_atomic, c_operations)
 {
@@ -39,7 +46,85 @@ TEST(cat_atomic, c_release_acquire_publication)
     ASSERT_EQ(failure, nullptr) << failure;
 }
 
+#ifdef CAT_OS_UNIX_LIKE
+TEST(cat_atomic, bare_pthread)
+{
+    const char *failure = cat_test_atomic_bare_pthread(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << (failure == nullptr ? "" : failure);
+}
+#endif
+
+#if 0 /* Mach threads
+       * The provider installs a program counter and a stack into the machine
+       * state, and on macOS 15 with the Command Line Tools SDK that thread
+       * faults before it reaches its entry point even though thread_create,
+       * thread_set_state and thread_resume all report success. A standalone
+       * program with the same three calls does run. The likely cause is pointer
+       * authentication on arm64e, which that SDK does not expose, so the entry
+       * cannot be signed here. Enabling this needs the full Xcode toolchain.
+       */
+TEST(cat_atomic, bare_mach)
+{
+    const char *failure = cat_test_atomic_bare_mach(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << (failure == nullptr ? "" : failure);
+}
+#endif /* Mach threads */
+
+#ifdef CAT_OS_WIN
+TEST(cat_atomic, bare_win32)
+{
+    const char *failure = cat_test_atomic_bare_win32(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << (failure == nullptr ? "" : failure);
+}
+#endif
+
+TEST(cat_atomic, bare_uv)
+{
+    const char *failure = cat_test_atomic_bare_uv(TEST_IO_TIMEOUT);
+    ASSERT_EQ(failure, nullptr) << (failure == nullptr ? "" : failure);
+}
+
 #if GTEST_HAS_DEATH_TEST
+TEST(cat_atomic, invalid_memory_orders_at)
+{
+    SKIP_IF_(cat_test_atomic_c_validates_orders() == 0, "This atomic backend accepts stronger memory orders");
+    const struct {
+        int operation;
+        cat_atomic_memory_order_t success;
+        cat_atomic_memory_order_t failure;
+        const char *message;
+    } cases[] = {
+        /* an order the operation does not accept */
+        {0, CAT_ATOMIC_MEMORY_ORDER_ACQUIRE, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for store operation"},
+        {1, CAT_ATOMIC_MEMORY_ORDER_RELEASE, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for load operation"},
+        {2, CAT_ATOMIC_MEMORY_ORDER_CONSUME, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for exchange operation"},
+        {3, CAT_ATOMIC_MEMORY_ORDER_CONSUME, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for fetch_add operation"},
+        {4, CAT_ATOMIC_MEMORY_ORDER_CONSUME, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for fetch_sub operation"},
+        {7, CAT_ATOMIC_MEMORY_ORDER_RELAXED, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for fence operation"},
+        /* a failure order that is stronger than the success order */
+        {5, CAT_ATOMIC_MEMORY_ORDER_ACQUIRE, CAT_ATOMIC_MEMORY_ORDER_SEQ_CST,
+         "Invalid failure memory order for compare_exchange operation"},
+        {6, CAT_ATOMIC_MEMORY_ORDER_RELAXED, CAT_ATOMIC_MEMORY_ORDER_ACQUIRE,
+         "Invalid failure memory order for compare_exchange operation"},
+        /* consume is not a valid failure order when the success order is consume */
+        {5, CAT_ATOMIC_MEMORY_ORDER_CONSUME, CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for compare_exchange operation"},
+        /* an order value that is not an order at all */
+        {2, static_cast<cat_atomic_memory_order_t>(INT_MAX), CAT_ATOMIC_MEMORY_ORDER_RELAXED,
+         "Invalid memory order for exchange operation"},
+    };
+    for (const auto &entry : cases) {
+        ASSERT_DEATH(cat_test_atomic_c_invalid_order_at(
+            entry.operation, entry.success, entry.failure), entry.message);
+    }
+}
+
 TEST(cat_atomic, c_invalid_memory_orders)
 {
     SKIP_IF_(cat_test_atomic_c_validates_orders() == 0, "This atomic backend accepts stronger memory orders");
