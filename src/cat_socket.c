@@ -2938,6 +2938,13 @@ static cat_always_inline cat_bool_t cat_socket_internal_support_inline_read(cons
            !(socket_i->u.handle.type == UV_NAMED_PIPE && socket_i->u.pipe.ipc);
 }
 
+static cat_always_inline void cat_socket_clamp_address_length(cat_socklen_t *address_length, cat_socklen_t capacity)
+{
+    if (*address_length > capacity) {
+        *address_length = capacity;
+    }
+}
+
 static ssize_t cat_socket_internal_read_raw(
     cat_socket_internal_t *socket_i,
     char *buffer, size_t size,
@@ -2968,6 +2975,9 @@ static ssize_t cat_socket_internal_read_raw(
     }
 
 #ifdef CAT_OS_UNIX_LIKE /* Do not inline read on WIN, proactor way is faster */
+    /* the kernel may report an address longer than the buffer that was offered, in which
+     * case the reported length can not be handed back to the caller */
+    const cat_socklen_t address_capacity = address_length != NULL ? *address_length : 0;
     /* Notice: when IO is low/slow, this is de-optimization,
      * because recv usually returns EAGAIN error,
      * and there is an additional system call overhead */
@@ -2983,6 +2993,9 @@ static ssize_t cat_socket_internal_read_raw(
                     error = recv(fd, buffer + nread, size - nread, 0);
                 } else {
                     error = recvfrom(fd, buffer, size, 0, address, address_length);
+                }
+                if (error >= 0 && is_dgram && address_length != NULL) {
+                    cat_socket_clamp_address_length(address_length, address_capacity);
                 }
                 if (error < 0) {
                     if (likely(cat_sys_errno == EAGAIN)) {
@@ -3108,6 +3121,7 @@ static ssize_t cat_socket_internal_try_recv_raw(
 {
     cat_socket_fd_t fd;
     ssize_t nread;
+    const cat_socklen_t address_capacity = address_length != NULL ? *address_length : 0;
 
     if (unlikely(!cat_socket_internal_support_inline_read(socket_i))) {
         return CAT_EMISUSE;
@@ -3122,6 +3136,9 @@ static ssize_t cat_socket_internal_try_recv_raw(
             fd, buffer, (cat_socket_recv_length_t) size, 0,
             address, address_length
         );
+        if (nread >= 0 && address_length != NULL) {
+            cat_socket_clamp_address_length(address_length, address_capacity);
+        }
         if (nread < 0) {
 #ifdef CAT_OS_UNIX_LIKE
             if (unlikely(cat_sys_errno == EINTR)) {

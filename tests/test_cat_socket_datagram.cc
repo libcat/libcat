@@ -609,3 +609,46 @@ TEST(cat_socket, udp_peer_error_then_reuse)
     }
 }
 #endif
+
+
+#ifdef CAT_OS_UNIX_LIKE
+
+/* The address that recvfrom reports is handed back to sendto, so it has to fit the
+ * address structure the caller passed. The kernel may report a length larger than the
+ * structure, and using that length reads past the caller buffer */
+
+TEST(cat_socket, udg_received_address_fits_the_buffer)
+{
+    std::string server_path = get_random_path();
+    std::string client_path = get_random_path();
+    cat_socket_t server, client;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_UDG), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, server_path.data(), server_path.length(), 0));
+    DEFER(cat_fs_unlink(server_path.c_str()));
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_UDG), &client);
+    DEFER(cat_socket_close(&client));
+    ASSERT_TRUE(cat_socket_bind_to(&client, client_path.data(), client_path.length(), 0));
+    DEFER(cat_fs_unlink(client_path.c_str()));
+    ASSERT_TRUE(cat_socket_connect_to(&client, server_path.data(), server_path.length(), 0));
+
+    ASSERT_TRUE(cat_socket_send(&client, CAT_STRL("hello")));
+
+    cat_sockaddr_union_t address;
+    cat_socklen_t address_length = sizeof(address);
+    char buffer[64];
+    ssize_t read_n = cat_socket_recvfrom(&server, CAT_STRS(buffer), &address.common, &address_length);
+    ASSERT_EQ(read_n, (ssize_t) CAT_STRLEN("hello"));
+
+    /* the reported length must stay inside what the caller offered, otherwise the address
+     * cannot be used to reply */
+    ASSERT_LE(address_length, (cat_socklen_t) sizeof(address));
+
+    /* reply to the reported address, which is the path that reads past the buffer when the
+     * length is wrong */
+    ASSERT_TRUE(cat_socket_sendto(&server, CAT_STRL("reply"), &address.common, address_length));
+    ASSERT_EQ(cat_socket_read(&client, CAT_STRS(buffer)), (ssize_t) CAT_STRLEN("reply"));
+    ASSERT_EQ(std::string(buffer, CAT_STRLEN("reply")), "reply");
+}
+
+#endif /* CAT_OS_UNIX_LIKE */
