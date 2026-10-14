@@ -54,11 +54,31 @@ static void cat_process_exit_callback(uv_process_t* uprocess, int64_t exit_statu
 
 static int cat_process_check_stdio(uv_stdio_container_t *stdio)
 {
+    if (stdio->flags & CAT_PROCESS_STDIO_FLAG_INHERIT_FD) {
+        /* libuv only rejects an invalid fd on the Unix-like platforms, the Windows
+         * backend silently replaces it with a null handle when fd <= 2, so the check
+         * belongs here to keep the error the same everywhere */
+        if (unlikely(stdio->data.fd == CAT_OS_INVALID_FD)) {
+            return CAT_EINVAL;
+        }
+    }
+
     if (stdio->flags & (CAT_PROCESS_STDIO_FLAG_INHERIT_STREAM | CAT_PROCESS_STDIO_FLAG_CREATE_PIPE)) {
         cat_socket_t *stream = (cat_socket_t *) stdio->data.stream;
-        cat_socket_internal_t *istream = stream->internal;
+        cat_socket_internal_t *istream = NULL;
+        if (likely(stream != NULL)) {
+            istream = stream->internal;
+        }
         if (unlikely(istream == NULL || !(istream->type & CAT_SOCKET_TYPE_FLAG_STREAM))) {
             return CAT_EINVAL;
+        }
+        if (stdio->flags & CAT_PROCESS_STDIO_FLAG_INHERIT_STREAM) {
+            /* a stream that has no handle yet cannot be inherited, the Unix-like
+             * platforms fail the spawn while the Windows backend reports a
+             * different error before it starts the process */
+            if (unlikely(!cat_socket_is_open(stream))) {
+                return CAT_EINVAL;
+            }
         }
         stdio->data.stream = &stream->internal->u.stream;
     }
