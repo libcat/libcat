@@ -6,6 +6,10 @@ on: [push, pull_request]
 env:
   CAT_SHOW_LAST_ERROR: 1
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cs-check:
     name: Coding style check
