@@ -215,6 +215,7 @@ TEST(cat_curl_multi, base)
     ASSERT_NE(ch, nullptr);
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, cat_test_curl_remote_url().c_str());
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
@@ -276,6 +277,7 @@ TEST(cat_curl_multi, multi)
             chs[j * 4 + i] = curl_easy_init();
             ASSERT_NE(chs[j * 4 + i], nullptr);
             curl_easy_setopt(chs[j * 4 + i], CURLOPT_URL, test_cases[i].url);
+            curl_easy_setopt(chs[j * 4 + i], CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
             curl_easy_setopt(chs[j * 4 + i], CURLOPT_FOLLOWLOCATION, 1);
             curl_easy_setopt(chs[j * 4 + i], CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
             curl_easy_setopt(chs[j * 4 + i], CURLOPT_WRITEDATA, &buffers[j * 4 + i]);
@@ -334,6 +336,7 @@ TEST(cat_curl_multi, just_only_perform)
     ASSERT_NE(ch, nullptr);
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, cat_test_curl_remote_url().c_str());
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
@@ -367,6 +370,7 @@ TEST(cat_curl_multi, bad_usage_of_composer)
     ASSERT_NE(ch, nullptr);
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, cat_test_curl_remote_url().c_str());
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
@@ -410,6 +414,7 @@ TEST(cat_curl_multi, sleep_without_wait)
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_ERRORBUFFER, error);
     curl_easy_setopt(ch, CURLOPT_URL, cat_test_curl_remote_url().c_str());
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, cat_test_curl_write_function);
     curl_easy_setopt(ch, CURLOPT_WRITEDATA, &buffer);
@@ -839,6 +844,7 @@ TEST(cat_curl_multi, expect_100_continue)
     ASSERT_NE(ch, nullptr);
     DEFER(curl_easy_cleanup(ch));
     curl_easy_setopt(ch, CURLOPT_URL, server_url.c_str());
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, TEST_IO_TIMEOUT);
     curl_easy_setopt(ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(ch, CURLOPT_EXPECT_100_TIMEOUT_MS, 1);
     curl_easy_setopt(ch, CURLOPT_POSTFIELDS, body);
