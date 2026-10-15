@@ -138,9 +138,10 @@ TEST(cat_atomic, c_invalid_memory_orders)
         {0, CAT_ATOMIC_MEMORY_ORDER_ACQ_REL, "Invalid memory order for store operation"},
         {1, CAT_ATOMIC_MEMORY_ORDER_RELEASE, "Invalid memory order for load operation"},
         {1, CAT_ATOMIC_MEMORY_ORDER_ACQ_REL, "Invalid memory order for load operation"},
-        {0, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
-        {1, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
-        {2, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Unknown memory order"},
+        /* a value that is no order at all fails the same check */
+        {0, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Invalid memory order for store operation"},
+        {1, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Invalid memory order for load operation"},
+        {2, static_cast<cat_atomic_memory_order_t>(INT_MAX), "Invalid memory order for exchange operation"},
     };
     for (const auto &entry : cases) {
         SCOPED_TRACE(entry.operation);
