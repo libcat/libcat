@@ -195,7 +195,7 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
 
 CAT_API cat_bool_t cat_runtime_close(void)
 {
-    CAT_GLOBALS_RUNTIME_CLOSE();
+    CAT_GLOBALS_RUNTIME_SHUTDOWN();
 
     return cat_true;
 }

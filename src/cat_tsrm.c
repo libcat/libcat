@@ -18,10 +18,34 @@
 
 #include "cat.h"
 
-#ifdef CAT_USE_THREAD_KEY
+#if defined(CAT_USE_THREAD_LOCAL)
+
+static _CAT_THREAD_LOCAL cat_bool_t cat_globals_initialized = cat_false;
+
+CAT_API cat_bool_t cat_globals_is_initialized(void)
+{
+    return cat_globals_initialized;
+}
+
+CAT_API void cat_globals_runtime_init(void)
+{
+    cat_globals_initialized = cat_true;
+}
+
+CAT_API void cat_globals_runtime_shutdown(void)
+{
+    cat_globals_initialized = cat_false;
+}
+
+#elif defined(CAT_USE_THREAD_KEY)
 
 CAT_API uv_key_t cat_globals_key;
 CAT_API size_t cat_globals_size;
+
+CAT_API cat_bool_t cat_globals_key_available(void)
+{
+    return uv_key_get(&cat_globals_key) != NULL ? cat_true : cat_false;
+}
 
 CAT_API void cat_globals_module_init(void)
 {
@@ -50,7 +74,7 @@ CAT_API void cat_globals_runtime_init(void)
     uv_key_set(&cat_globals_key, globals);
 }
 
-CAT_API void cat_globals_runtime_close(void)
+CAT_API void cat_globals_runtime_shutdown(void)
 {
     cat_sys_free(uv_key_get(&cat_globals_key));
     uv_key_set(&cat_globals_key, NULL);

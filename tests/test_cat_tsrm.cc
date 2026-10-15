@@ -49,7 +49,7 @@ TEST(cat_tsrm, globals_are_per_thread)
         sees_main_value = (CAT_G(show_last_error) == cat_true);
         CAT_G(show_last_error) = cat_true;
         own_value_ok = (CAT_G(show_last_error) == cat_true);
-        cat_globals_runtime_close();
+        cat_globals_runtime_shutdown();
     });
     worker.join();
 

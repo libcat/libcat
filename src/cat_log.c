@@ -245,6 +245,13 @@ CAT_API void cat_log_va_list_standard(CAT_LOG_VA_LIST_PARAMETERS)
     const char *type_name;
     FILE *output;
 
+    /* the settings of the log live in the thread local block, so a thread that
+     * never took a runtime has no settings to read and nothing to write with;
+     * the function is null before the module takes its own step */
+    if (unlikely(cat_log_function == NULL || !cat_globals_available())) {
+        return;
+    }
+
     if (unlikely(type & CAT_LOG_TYPES_ABNORMAL)) {
         va_list _args;
         va_copy(_args, args);
