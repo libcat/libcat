@@ -90,7 +90,7 @@ const char *cat_test_atomic_c_operations(cat_timeout_t timeout)
     } \
 } while (0)
 
-#define CAT_TEST_ATOMIC_NUMERIC(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) do { \
+#define CAT_TEST_ATOMIC_NUMERIC(name, type_name_t, bare_t) do { \
     CAT_TEST_ATOMIC_COMMON(name, type_name_t, (type_name_t) 1, (type_name_t) 2); \
     cat_atomic_##name##_t atomic; \
     cat_atomic_##name##_init(&atomic, 2); \

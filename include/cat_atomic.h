@@ -52,81 +52,19 @@ extern "C" {
 
 
 #define CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_MAP(XX) \
-        XX(bool, cat_bool_t, 8,       char,    int8) \
-        XX(ptr,  cat_ptr_t,  Pointer, PVOID,   uintptr) \
-        XX(uintptr, uintptr_t, Pointer, PVOID, uintptr) \
+        XX(bool, cat_bool_t, int8) \
+        XX(ptr,  cat_ptr_t, uintptr) \
+        XX(uintptr, uintptr_t, uintptr) \
 
 #define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_MAP(XX) \
-        XX(int8,   int8_t,   8,  char,    int8) \
-        XX(uint8,  uint8_t,  8,  char,    int8) \
-        XX(int16,  int16_t,  16, short,   int16) \
-        XX(uint16, uint16_t, 16, short,   int16) \
-        XX(int32,  int32_t,  32, long,    int32) \
-        XX(uint32, uint32_t, 32, long,    int32) \
-        XX(int64,  int64_t,  64, __int64, int64) \
-        XX(uint64, uint64_t, 64, __int64, int64) \
-
-# if defined(CAT_HAVE_GNUC_ATOMIC)
-# define __atomic_compare_exchange_strong(atomic, expected, desired) \
-         __atomic_compare_exchange_n(atomic, expected, desired, 0 /* not weak */, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-# define __atomic_compare_exchange_weak(atomic, expected, desired) \
-         __atomic_compare_exchange_n(atomic, expected, desired, 1 /* weak */, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-# elif defined(CAT_HAVE_INTERLOCK_ATOMIC)
-/* alias */
-# define _InterlockedOr32                          _InterlockedOr
-# define _InterlockedExchange32                    _InterlockedExchange
-# define _InterlockedExchangeAdd32                 _InterlockedExchangeAdd
-# define _InterlockedCompareExchange32             _InterlockedCompareExchange
-# define _InterlockedLoad8(value)                  _InterlockedOr8(value, 0)
-# define _InterlockedLoad16(value)                 _InterlockedOr16(value, 0)
-# define _InterlockedLoad32(value)                 _InterlockedOr(value, 0)
-# define _InterlockedLoad64(value)                 _InterlockedOr64(value, 0)
-# define _InterlockedLoadPointer(value)            _InterlockedCompareExchangePointer(value, NULL, NULL)
-# define _InterlockedExchangeSub8(value, operand)  _InterlockedExchangeAdd8(value, -operand)
-# define _InterlockedExchangeSub16(value, operand) _InterlockedExchangeAdd16(value, -operand)
-# define _InterlockedExchangeSub32(value, operand) _InterlockedExchangeAdd32(value, -operand)
-# define _InterlockedExchangeSub64(value, operand) _InterlockedExchangeAdd64(value, -operand)
-/* not exist at any platform */
-# define _InterlockedExchange32_acq                _InterlockedExchange
-# define _InterlockedExchange32_rel                _InterlockedExchange
-# define _InterlockedExchange32_nf                 _InterlockedExchange
-# define _InterlockedLoad8_acq(value)              _InterlockedOr8_acq(value, 0)
-# define _InterlockedLoad16_acq(value)             _InterlockedOr16_acq(value, 0)
-# define _InterlockedLoad32_acq(value)             _InterlockedOr_acq(value, 0)
-# define _InterlockedLoad64_acq(value)             _InterlockedOr64_acq(value, 0)
-# define _InterlockedLoad8_nf(value)               _InterlockedOr8_nf(value, 0)
-# define _InterlockedLoad16_nf(value)              _InterlockedOr16_nf(value, 0)
-# define _InterlockedLoad32_nf(value)              _InterlockedOr_nf(value, 0)
-# define _InterlockedLoad64_nf(value)              _InterlockedOr64_nf(value, 0)
-# define _InterlockedLoadPointer_acq               _InterlockedLoadPointer
-# define _InterlockedLoadPointer_nf                _InterlockedLoadPointer
-# ifdef _M_X64
-/* not exist at x86 */
-#  define _InterlockedExchange8_acq _InterlockedExchange8
-#  define _InterlockedExchange8_rel _InterlockedExchange8
-#  define _InterlockedExchange8_nf _InterlockedExchange8
-#  define _InterlockedExchange16_acq _InterlockedExchange16
-#  define _InterlockedExchange16_rel _InterlockedExchange16
-#  define _InterlockedExchange16_nf _InterlockedExchange16
-#  define _InterlockedExchange_acq _InterlockedExchange
-#  define _InterlockedExchange_rel _InterlockedExchange
-#  define _InterlockedExchange_nf _InterlockedExchange
-#  define _InterlockedExchange64_acq _InterlockedExchange64
-#  define _InterlockedExchange64_rel _InterlockedExchange64
-#  define _InterlockedExchange64_nf _InterlockedExchange64
-#  define _InterlockedOr8_acq _InterlockedOr8
-#  define _InterlockedOr8_nf _InterlockedOr8
-#  define _InterlockedOr16_acq _InterlockedOr16
-#  define _InterlockedOr16_nf _InterlockedOr16
-#  define _InterlockedOr_acq _InterlockedOr
-#  define _InterlockedOr_nf _InterlockedOr
-#  define _InterlockedOr64_acq _InterlockedOr64
-#  define _InterlockedOr64_nf _InterlockedOr64
-#  define _InterlockedExchangePointer_acq _InterlockedExchangePointer
-#  define _InterlockedExchangePointer_nf _InterlockedExchangePointer
-#  define _InterlockedExchangePointer_rel _InterlockedExchangePointer
-# endif
-#endif
+        XX(int8,   int8_t,   int8) \
+        XX(uint8,  uint8_t,  int8) \
+        XX(int16,  int16_t,  int16) \
+        XX(uint16, uint16_t, int16) \
+        XX(int32,  int32_t,  int32) \
+        XX(uint32, uint32_t, int32) \
+        XX(int64,  int64_t,  int64) \
+        XX(uint64, uint64_t, int64) \
 
 /*
  * The memory orders, which both layers below take as arguments.
@@ -665,14 +603,14 @@ static cat_always_inline void cat_atomic_fence_explicit(cat_atomic_memory_order_
 #define CAT_ATOMIC_BARE_PAYLOAD_int64     int64_t
 #define CAT_ATOMIC_BARE_PAYLOAD_uintptr   uintptr_t
 
-#define CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) \
+#define CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, bare_t) \
 typedef struct cat_atomic_##name##_s { \
     type_name_t value; \
 } cat_atomic_##name##_t; \
 \
 static cat_always_inline void cat_atomic_##name##_init(cat_atomic_##name##_t *atomic, type_name_t desired) \
 { \
-    atomic->value = (type_name_t) (CAT_ATOMIC_BARE_PAYLOAD_ ## bare_t) desired; \
+    atomic->value = (type_name_t) desired; \
 } \
 static cat_always_inline type_name_t cat_atomic_##name##_load(const cat_atomic_##name##_t *atomic) \
 { \
@@ -729,7 +667,7 @@ static cat_always_inline cat_bool_t cat_atomic_##name##_compare_exchange_weak_ex
         (void *) &atomic->value, (CAT_ATOMIC_BARE_PAYLOAD_ ## bare_t *) expected, (CAT_ATOMIC_BARE_PAYLOAD_ ## bare_t) desired, success_order, failure_order); \
 }
 
-#define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) \
+#define CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, bare_t) \
 static cat_always_inline type_name_t cat_atomic_##name##_fetch_add(cat_atomic_##name##_t *atomic, type_name_t operand) \
 { \
     return (type_name_t) cat_atomic_##bare_t##_fetch_add_at( \
@@ -753,9 +691,9 @@ static cat_always_inline type_name_t cat_atomic_##name##_fetch_sub_explicit( \
         (void *) &atomic->value, (CAT_ATOMIC_BARE_PAYLOAD_ ## bare_t) operand, order); \
 }
 
-#define CAT_ATOMIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) \
-        CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) \
-        CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, interlocked_suffix, interlocked_type_t, bare_t) \
+#define CAT_ATOMIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, bare_t) \
+        CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN(name, type_name_t, bare_t) \
+        CAT_ATOMIC_NUMERIC_OPERATION_FUNCTIONS_GEN(name, type_name_t, bare_t) \
 
 
 CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_MAP(CAT_ATOMIC_COMMON_OPERATION_FUNCTIONS_GEN)
