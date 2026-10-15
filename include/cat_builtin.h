@@ -70,11 +70,18 @@
 # define CAT_STATIC_ASSERT(expression) int static_assert_failed[1 - 2 * !(expression)]
 #endif
 
-#if !defined(CAT_OS_WIN) && !defined(CAT_IDE_HELPER)
-# define CAT_NEVER_HERE(reason) CAT_ASSERT(0 && reason)
-#else
-# define CAT_NEVER_HERE(reason) abort()
-#endif
+/* low level on purpose: a fatal error can arrive before the log system works */
+#define CAT_FATAL(format, ...) do { \
+    fprintf(stderr, format, ##__VA_ARGS__); \
+    fflush(stderr); \
+    abort(); \
+} while (0)
+
+/* the same, prefixed with the call site */
+#define CAT_FATAL_HERE(format, ...) CAT_FATAL(__FILE__ ":%d: " format "\n", __LINE__, ##__VA_ARGS__)
+
+/* a point the code must not reach */
+#define CAT_NEVER_HERE(reason) CAT_FATAL_HERE("%s", reason)
 
 /* pseudo fallthrough keyword; */
 #if defined(__GNUC__) && __GNUC__ >= 7
