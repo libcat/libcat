@@ -19,6 +19,9 @@
  */
 
 #include "test.h"
+
+#include "cat_thread.h"
+
 #if defined(CAT_OS_WIN) && defined(_DEBUG)
 #include <crtdbg.h>
 #endif
@@ -217,6 +220,12 @@ namespace testing
 class BootstrapEnvironment : public testing::Environment
 {
 public:
+#ifdef CAT_THREAD_SAFE
+    /* the storage of the harness main thread, which the thread module keeps a
+     * pointer to for the whole run */
+    static cat_thread_t main_thread_instance;
+#endif
+
     virtual void SetUp()
     {
         ASSERT_TRUE(cat_module_init_all());
@@ -225,6 +234,11 @@ public:
         ASSERT_TRUE(cat_curl_module_init());
 #endif
         ASSERT_TRUE(cat_runtime_init_all());
+#ifdef CAT_THREAD_SAFE
+        /* the harness is the host, so it tells the library which thread is the
+         * main thread; without this no main thread exists */
+        ASSERT_TRUE(cat_thread_register_main(&main_thread_instance));
+#endif
 #ifdef CAT_CURL
         ASSERT_TRUE(cat_curl_runtime_init());
 #endif
@@ -357,6 +371,10 @@ public:
         ASSERT_TRUE(cat_module_shutdown_all());
     }
 };
+
+#ifdef CAT_THREAD_SAFE
+cat_thread_t BootstrapEnvironment::main_thread_instance;
+#endif
 
 int main(int argc, char *argv[])
 {
