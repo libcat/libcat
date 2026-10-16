@@ -203,6 +203,9 @@ CAT_API cat_bool_t cat_runtime_shutdown(void)
 
 CAT_API cat_bool_t cat_runtime_close(void)
 {
+    /* the error message lives in the block that is about to go away, so it
+     * must be released first or it leaks with the block */
+    cat_clear_last_error();
     CAT_GLOBALS_RUNTIME_SHUTDOWN();
 
     return cat_true;
