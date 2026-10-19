@@ -161,25 +161,34 @@ namespace testing
         struct work_context_s {
             std::function<void(void)> function;
             uv_sem_t *sem;
-        } context;
+        };
+        /* The worker may start after this function returned, for example when
+         * the work times out, so the context can not live on the stack. */
+        struct work_context_s *context = new (std::nothrow) struct work_context_s;
         uv_sem_t sem;
         int error;
         bool ret = true, wait = true, done = false;
+        if (context == nullptr) {
+            cat_update_last_error(CAT_ENOMEM, "Alloc for the work context failed");
+            return false;
+        }
         error = uv_sem_init(&sem, 0);
         if (error != 0) {
+            delete context;
             cat_update_last_error_with_reason(error, "Sem init failed");
             return false;
         }
-        context.function = function;
-        context.sem = &sem;
+        context->function = function;
+        context->sem = &sem;
         cat_coroutine_t *waiter = cat_coroutine_get_current();
         cat_coroutine_t *worker = co([&] {
             ret = cat_work(kind, [](cat_data_t *data) {
                 struct work_context_s *context = (struct work_context_s *) data;
                 std::function<void(void)> function = context->function; // must copy it
                 uv_sem_post(context->sem); // notify
+                delete context; // the worker owns it now
                 function();
-            }, nullptr, &context, timeout);
+            }, nullptr, context, timeout);
             done = true;
             if (wait) {
                 cat_coroutine_resume(waiter, nullptr, nullptr);
