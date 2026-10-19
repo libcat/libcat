@@ -24,6 +24,7 @@ extern "C" {
 
 #include "cat.h"
 #include "cat_atomic.h"
+#include "cat_thread_sync.h"
 
 /*
  * The thread model needs a per-thread place to keep the object of the running
@@ -39,18 +40,33 @@ typedef struct cat_thread_s cat_thread_t;
 
 /*
  * The registry alone needs the identity, the parent link, the state and the
- * name. Creation adds the routine, its data and the return value, and join adds
- * the rest.
+ * name. Creation adds the routine and its data, and join adds the rest.
  *
  * Fields are grouped by size, so the compiler adds little padding.
  */
+/*
+ * What a thread runs. It has no return value. A thread that reports a result uses
+ * the cross-thread facilities, like any other caller.
+ */
+typedef void (*cat_thread_routine_t)(cat_data_t *data);
+
+typedef struct cat_thread_options_s {
+    /* the name given to the thread, or NULL to leave it alone */
+    const char *name;
+    /* the stack size of the coroutines of this thread, 0 for the default */
+    size_t stack_size;
+} cat_thread_options_t;
+
 struct cat_thread_s {
     /* 8 byte */
     cat_thread_id_t id;
-    cat_data_t *return_value;
     cat_thread_t *parent;
+    cat_thread_routine_t routine;
+    cat_data_t *data;
+    /* a thread that exits wakes whoever joins it */
+    cat_thread_wait_t join;
     /* 4 byte */
-    uint32_t state;
+    cat_atomic_uint32_t state;
     /* at most CAT_THREAD_NAME_MAX bytes plus the terminator, kept last */
     char name[CAT_THREAD_NAME_MAX + 1];
 };
@@ -60,13 +76,18 @@ struct cat_thread_s {
 #define CAT_THREAD_STATE_EXITED      (1 << 2)
 /* the object of a thread that libcat did not create */
 #define CAT_THREAD_STATE_EXTERNAL    (1 << 3)
+/* the thread finishes on its own and can not be joined */
+#define CAT_THREAD_STATE_DETACHED    (1 << 4)
 
 CAT_API cat_bool_t cat_thread_module_init(void);
 CAT_API cat_bool_t cat_thread_module_shutdown(void);
 CAT_API cat_bool_t cat_thread_runtime_init(void);
 CAT_API cat_bool_t cat_thread_runtime_shutdown(void);
 
+/* Optional. A thread that runs cat_run becomes the root of its own runtime when
+ * no earlier call registered it. */
 CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread);
+CAT_API cat_bool_t cat_thread_ensure_root(void); CAT_INTERNAL
 CAT_API cat_bool_t cat_thread_register_external(cat_thread_t *thread);
 CAT_API cat_bool_t cat_thread_register(cat_thread_t *thread); CAT_INTERNAL
 
@@ -79,8 +100,37 @@ CAT_API cat_thread_id_t cat_thread_get_id(const cat_thread_t *thread);
 CAT_API cat_thread_id_t cat_thread_get_current_id(void);
 CAT_API uint32_t        cat_thread_get_count(void);
 CAT_API uint32_t        cat_thread_get_external_count(void);
-CAT_API void           *cat_thread_get_return_value(const cat_thread_t *thread);
 CAT_API cat_bool_t      cat_thread_set_name(const char *name);
+
+/*
+ * Start a thread that runs routine.
+ *
+ * The object belongs to the caller and must stay alive until the thread is
+ * joined or detached. The call returns before the routine runs, so a caller
+ * that needs to know it started synchronizes with it.
+ *
+ * The thread takes a runtime of its own, so routine may use the facilities of
+ * this library.
+ */
+CAT_API cat_bool_t cat_thread_create(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data);
+CAT_API cat_bool_t cat_thread_create_ex(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data,
+                                        const cat_thread_options_t *options);
+
+/*
+ * Wait for a thread to exit without blocking the thread that waits: the caller
+ * gives its thread back to the event loop, and every other coroutine of it keeps
+ * running.
+ *
+ * cat_false on a timeout (CAT_ETIMEDOUT), on a thread that is not joinable
+ * (CAT_EMISUSE), and when a thread tries to join itself (CAT_EMISUSE).
+ */
+CAT_API cat_bool_t cat_thread_join(cat_thread_t *thread, cat_timeout_t timeout);
+
+/*
+ * Let a thread finish on its own. The object must outlive the thread, and the
+ * thread can not be joined afterwards (CAT_EMISUSE).
+ */
+CAT_API cat_bool_t cat_thread_detach(cat_thread_t *thread);
 
 /*
  * Only the object of the running thread is thread local. The root and the two
@@ -88,6 +138,10 @@ CAT_API cat_bool_t      cat_thread_set_name(const char *name);
  */
 CAT_GLOBALS_STRUCT_BEGIN(cat_thread) {
     cat_thread_t *current;
+    /* the root of this thread's runtime, which is the caller's object when it
+     * supplied one and the storage below when it did not */
+    cat_thread_t *root;
+    cat_thread_t root_storage;
 } CAT_GLOBALS_STRUCT_END(cat_thread);
 
 extern CAT_API CAT_GLOBALS_DECLARE(cat_thread);

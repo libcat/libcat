@@ -414,4 +414,524 @@ TEST(cat_thread, a_user_thread_follows_the_documented_teardown)
     ASSERT_TRUE(ok);
 }
 
+
+/* ==========================================================================
+ * P6 threads: real usage first.
+ * ========================================================================== */
+
+/* The shape a program writes: start a thread, let it work, join it. */
+TEST(cat_thread, a_worker_runs_and_is_joined)
+{
+    struct work_s {
+        cat_thread_t thread;
+        int value;
+    } work = {};
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        self->value = 42;
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    ASSERT_EQ(work.value, 42);
+}
+
+/* A thread that has something to report hands it over through a semaphore,
+ * which is what the library offers instead of a return value. */
+TEST(cat_thread, a_worker_hands_the_result_back_through_a_semaphore)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+        int value;
+        int received;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        self->value = 7;
+        cat_sem_post(&self->done);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+
+    /* the main thread waits for the result instead of joining */
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    work.received = work.value;
+
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    ASSERT_EQ(work.received, 7);
+
+    cat_sem_destroy(&work.done);
+}
+
+/* Several workers, each one joined. */
+TEST(cat_thread, several_workers_are_all_joined)
+{
+    struct work_s {
+        cat_thread_t thread;
+        int index;
+        int *counter;
+    } work[3] = {};
+
+    int counter = 0;
+
+    for (int index = 0; index < 3; index++) {
+        work[index].index = index;
+        work[index].counter = &counter;
+    }
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (*self->counter)++;
+    };
+
+    for (int index = 0; index < 3; index++) {
+        ASSERT_TRUE(cat_thread_create(&work[index].thread, routine, &work[index]));
+    }
+    for (int index = 0; index < 3; index++) {
+        ASSERT_TRUE(cat_thread_join(&work[index].thread, TEST_IO_TIMEOUT));
+    }
+
+    ASSERT_EQ(counter, 3);
+}
+
+/* A worker uses the thread facilities of the library, which is the reason it
+ * takes a runtime of its own. */
+TEST(cat_thread, a_worker_uses_a_shared_mutex)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_mutex_t guard;
+        int *counter;
+    } work = {};
+
+    int counter = 0;
+
+    work.counter = &counter;
+    ASSERT_TRUE(cat_mutex_init(&work.guard));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        for (int step = 0; step < 50; step++) {
+            if (cat_mutex_lock(&self->guard, TEST_IO_TIMEOUT)) {
+                (*self->counter)++;
+                cat_mutex_unlock(&self->guard);
+            }
+        }
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_EQ(counter, 50);
+
+    cat_mutex_destroy(&work.guard);
+}
+
+/* ==========================================================================
+ * P6 threads: broad smoke.
+ * ========================================================================== */
+
+/* create takes the parent from the caller and the name from the options. */
+TEST(cat_thread, create_records_the_parent_and_the_name)
+{
+    struct work_s {
+        cat_thread_t thread;
+    } work = {};
+
+    auto routine = [](cat_data_t *data) {
+        (void) data;
+    };
+
+    cat_thread_options_t options = {
+        .name = "worker",
+        .stack_size = 0,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work.thread, routine, &work, &options));
+
+    ASSERT_EQ(cat_thread_get_parent(&work.thread), cat_thread_get_current());
+    ASSERT_STREQ(work.thread.name, "worker");
+    ASSERT_TRUE(cat_thread_is_running(&work.thread));
+
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+}
+
+/* Every state a thread goes through is visible. */
+TEST(cat_thread, the_state_follows_the_lifecycle)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t started;
+        cat_sem_t release;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.started, 0));
+    ASSERT_TRUE(cat_sem_init(&work.release, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        cat_sem_post(&self->started);
+        (void) cat_sem_acquire(&self->release, TEST_IO_TIMEOUT);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+
+    /* the routine runs only after create returns, so this proves it started */
+    ASSERT_TRUE(cat_sem_acquire(&work.started, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thread_is_running(&work.thread));
+
+    cat_sem_post(&work.release);
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    cat_sem_destroy(&work.release);
+    cat_sem_destroy(&work.started);
+}
+
+/* Create and join go together, repeatedly. */
+TEST(cat_thread, create_and_join_repeat_cleanly)
+{
+    struct work_s {
+        cat_thread_t thread;
+        int *counter;
+    } work = {};
+
+    int counter = 0;
+
+    work.counter = &counter;
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (*self->counter)++;
+    };
+
+    for (int round = 0; round < 10; round++) {
+        ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+        ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    }
+
+    ASSERT_EQ(counter, 10);
+}
+
+/* Joining gives the thread back to the loop instead of blocking it, so another
+ * coroutine of the same thread keeps running during the join. */
+TEST(cat_thread, a_join_does_not_block_the_thread)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t release;
+        bool side_ran;
+        bool joined;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.release, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_sem_acquire(&self->release, TEST_IO_TIMEOUT);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+
+    /* a coroutine that would never run if the join blocked the thread */
+    co([&] {
+        work.side_ran = true;
+        cat_sem_post(&work.release);
+    });
+
+    work.joined = cat_thread_join(&work.thread, TEST_IO_TIMEOUT);
+
+    ASSERT_TRUE(work.joined);
+    ASSERT_TRUE(work.side_ran);
+
+    cat_sem_destroy(&work.release);
+}
+
+/*
+ * The object of a detached thread outlives the case that started it, because the
+ * thread keeps using it until it is done, so the storage below is static.
+ */
+struct detached_s {
+    cat_thread_t thread;
+    cat_sem_t created;
+    cat_sem_t done;
+};
+
+/*
+ * Every case that detaches needs its own storage: a detached thread keeps using
+ * its object after it was started, and no join tells the next case that the
+ * thread is really gone. Sharing one object between two cases is a race, which
+ * the thread sanitizer reports.
+ */
+static detached_s &detached_finishes_case(void)
+{
+    static detached_s work;
+
+    return work;
+}
+
+static detached_s &detached_join_case(void)
+{
+    static detached_s work;
+
+    return work;
+}
+
+/* Wait until the detached thread is really gone, because nothing joins it. */
+static void wait_until_the_detached_thread_ends(cat_thread_t *thread)
+{
+    for (int round = 0; round < 2000 && cat_thread_is_running(thread); round++) {
+        (void) cat_time_delay(1);
+    }
+}
+
+/* A detached thread finishes on its own. */
+TEST(cat_thread, a_detached_thread_finishes_alone)
+{
+    detached_s &work = detached_finishes_case();
+
+    ASSERT_TRUE(cat_sem_init(&work.created, 0));
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct detached_s *self = (struct detached_s *) data;
+
+        cat_sem_post(&self->created);
+        cat_sem_post(&self->done);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+    ASSERT_TRUE(cat_thread_detach(&work.thread));
+
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    wait_until_the_detached_thread_ends(&work.thread);
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+
+    cat_sem_destroy(&work.done);
+    cat_sem_destroy(&work.created);
+}
+
+/* The two arguments that cannot be missing are refused. */
+TEST(cat_thread, create_refuses_missing_arguments)
+{
+    cat_thread_t thread = {};
+
+    ASSERT_FALSE(cat_thread_create(&thread, nullptr, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_FALSE(cat_thread_create(nullptr, [](cat_data_t *) {}, nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
+/* ==========================================================================
+ * P6 threads: corners.
+ * ========================================================================== */
+
+/* A worker starts a worker of its own. */
+TEST(cat_thread, a_worker_can_create_another_worker)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_thread_t inner;
+        int *counter;
+    } work = {};
+
+    int counter = 0;
+
+    work.counter = &counter;
+
+    auto outer = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        auto inner = [](cat_data_t *inner_data) {
+            struct work_s *inner_self = (struct work_s *) inner_data;
+
+            (*inner_self->counter)++;
+        };
+
+        if (cat_thread_create(&self->inner, inner, self)) {
+            (void) cat_thread_join(&self->inner, TEST_IO_TIMEOUT);
+        }
+        (*self->counter)++;
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, outer, &work));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_EQ(counter, 2);
+}
+
+/* A thread that joins itself would wait for ever, so it is refused. */
+TEST(cat_thread, joining_yourself_is_refused)
+{
+    cat_thread_t *self = cat_thread_get_current();
+
+    ASSERT_FALSE(cat_thread_join(self, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+}
+
+/* The second join of the same thread is refused, because the first one already
+ * took the exit. */
+TEST(cat_thread, joining_twice_is_refused)
+{
+    struct work_s {
+        cat_thread_t thread;
+    } work = {};
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, [](cat_data_t *) {}, &work));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_FALSE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+}
+
+/* A join that runs out of time reports it, and the thread can still be joined
+ * afterwards. */
+TEST(cat_thread, a_join_times_out_and_can_be_repeated)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t release;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.release, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_sem_acquire(&self->release, TEST_IO_TIMEOUT);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+
+    ASSERT_FALSE(cat_thread_join(&work.thread, 20));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+
+    cat_sem_post(&work.release);
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    cat_sem_destroy(&work.release);
+}
+
+/* A detached thread cannot be joined. */
+TEST(cat_thread, joining_a_detached_thread_is_refused)
+{
+    detached_s &work = detached_join_case();
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct detached_s *self = (struct detached_s *) data;
+
+        cat_sem_post(&self->done);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+    ASSERT_TRUE(cat_thread_detach(&work.thread));
+
+    ASSERT_FALSE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    wait_until_the_detached_thread_ends(&work.thread);
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+
+    cat_sem_destroy(&work.done);
+}
+
+/* Many threads at once, each with a coroutine of its own. */
+TEST(cat_thread, many_threads_run_at_once)
+{
+    struct work_s {
+        cat_thread_t thread;
+        int *counter;
+    } work[8] = {};
+
+    int counter = 0;
+
+    for (int index = 0; index < 8; index++) {
+        work[index].counter = &counter;
+    }
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (*self->counter)++;
+    };
+
+    for (int index = 0; index < 8; index++) {
+        ASSERT_TRUE(cat_thread_create(&work[index].thread, routine, &work[index]));
+    }
+    for (int index = 0; index < 8; index++) {
+        ASSERT_TRUE(cat_thread_join(&work[index].thread, TEST_IO_TIMEOUT));
+    }
+
+    ASSERT_EQ(counter, 8);
+}
+
+
+/* ==========================================================================
+ * P6 threads: a thread that declares nothing.
+ *
+ * The root of a runtime is the thread that runs first, so a thread that calls
+ * cat_run without registering an object of its own still gets one, and a thread
+ * that waits before it ran gets a scheduler instead of an error.
+ * ========================================================================== */
+
+TEST(cat_thread, a_thread_that_runs_becomes_its_own_root)
+{
+    struct bare_s {
+        cat_bool_t has_runtime;
+        cat_bool_t run;
+        cat_bool_t has_current;
+        cat_bool_t is_root;
+        cat_thread_id_t id;
+    } bare = {};
+
+    uv_thread_t tid;
+    ASSERT_EQ(uv_thread_create(&tid, [](void *data) {
+        struct bare_s *self = (struct bare_s *) data;
+        cat_thread_t *current;
+
+        /* the whole runtime, because this thread runs coroutines of its own */
+        self->has_runtime = cat_runtime_init_all();
+        if (!self->has_runtime) {
+            return;
+        }
+
+        /* nothing is registered, so this call has to establish the root */
+        self->run = cat_run(CAT_RUN_EASY);
+        current = cat_thread_get_current();
+        self->has_current = current != NULL;
+        self->is_root = current != NULL && cat_thread_get_parent(current) == NULL;
+        if (current != NULL) {
+            self->id = cat_thread_get_id(current);
+        }
+
+        (void) cat_stop();
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+    }, &bare), 0);
+    ASSERT_EQ(uv_thread_join(&tid), 0);
+
+    ASSERT_TRUE(bare.has_runtime);
+    ASSERT_TRUE(bare.run);
+    ASSERT_TRUE(bare.has_current);
+    ASSERT_TRUE(bare.is_root);
+    ASSERT_TRUE(uv_thread_equal(&bare.id, &tid));
+}
+
 #endif /* CAT_THREAD_SAFE */

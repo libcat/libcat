@@ -18,6 +18,7 @@
 
 #include "cat.h"
 
+#include "cat_api.h"
 #include "cat_thread.h"
 
 #ifdef CAT_THREAD_SAFE
@@ -25,12 +26,12 @@
 CAT_GLOBALS_DECLARE(cat_thread);
 
 /*
- * The root and the two counters belong to the process, because every thread
- * reads them. Only the object of the running thread is thread local, and it
- * lives in the globals block above.
+ * The first root of the process is what cat_thread_is_main answers about, so it
+ * lives here for every thread to read. The root of one thread's own runtime is
+ * thread local and lives in the globals block above.
  *
- * The root is written once and read afterwards, so it needs no lock. The
- * counters take writes from the registering threads, so they are atomic.
+ * The pointer below takes one write and reads afterwards, so it needs no lock.
+ * The two counters take writes from the registering threads, so they are atomic.
  */
 static cat_thread_t *cat_thread_main;
 static cat_atomic_uint32_t cat_thread_count;
@@ -45,6 +46,9 @@ CAT_API cat_bool_t cat_thread_module_init(void)
 
 CAT_API cat_bool_t cat_thread_module_shutdown(void)
 {
+    /* The object may belong to the caller, so drop the pointer here. */
+    cat_thread_main = NULL;
+
     CAT_GLOBALS_UNREGISTER(cat_thread);
 
     return cat_true;
@@ -52,8 +56,8 @@ CAT_API cat_bool_t cat_thread_module_shutdown(void)
 
 CAT_API cat_bool_t cat_thread_runtime_init(void)
 {
-    /* nothing of this thread is known until it registers an object, so a caller
-     * that reads the current thread before that gets a null */
+    /* A thread has no object until it registers one, so a read of the current
+     * thread returns null before that. */
     return cat_true;
 }
 
@@ -64,7 +68,7 @@ CAT_API cat_bool_t cat_thread_runtime_shutdown(void)
     if (thread != NULL) {
         /* an external thread stands in both counts, because the root is one of
          * them and it takes the same path */
-        if (thread->state & CAT_THREAD_STATE_EXTERNAL) {
+        if (cat_atomic_uint32_load(&thread->state) & CAT_THREAD_STATE_EXTERNAL) {
             cat_atomic_uint32_fetch_sub(&cat_thread_external_count, 1);
             cat_atomic_uint32_fetch_sub(&cat_thread_count, 1);
         } else {
@@ -73,11 +77,16 @@ CAT_API cat_bool_t cat_thread_runtime_shutdown(void)
         (void) cat_thread_set_current(NULL);
     }
 
+    /* The next init of this thread must start from nothing. */
+    if (cat_globals_available()) {
+        CAT_THREAD_G(root) = NULL;
+    }
+
     return cat_true;
 }
 
-/* the checks both public entries share, so a rejected call leaves the object of
- * the caller untouched */
+/* The checks both public entries share. A rejected call leaves the object of the
+ * caller untouched. */
 static cat_bool_t cat_thread_register_check(const cat_thread_t *thread)
 {
     if (thread == NULL) {
@@ -102,7 +111,6 @@ static cat_bool_t cat_thread_register_check(const cat_thread_t *thread)
     return cat_true;
 }
 
-/* the one write path of the thread state, which both public entries use */
 CAT_API cat_bool_t cat_thread_register(cat_thread_t *thread)
 {
     if (!cat_thread_register_check(thread)) {
@@ -114,28 +122,41 @@ CAT_API cat_bool_t cat_thread_register(cat_thread_t *thread)
     }
 
     thread->id = uv_thread_self();
-    thread->state |= CAT_THREAD_STATE_JOINABLE;
+    cat_atomic_uint32_store(&thread->state,
+        cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_JOINABLE);
 
     return cat_thread_set_current(thread);
 }
 
-CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
+static cat_bool_t cat_thread_register_root(cat_thread_t *thread)
 {
     if (thread == NULL) {
         cat_update_last_error(CAT_EINVAL, "Thread object is null");
         return cat_false;
     }
 
-    if (cat_thread_main != NULL) {
-        /* the root is settled, so this call either repeats it or breaks it; a
-         * thread id tells the two apart, because another thread may hold this
-         * pointer */
-        cat_thread_id_t current_id = uv_thread_self();
-        if (cat_thread_main != thread || !uv_thread_equal(&thread->id, &current_id)) {
-            cat_update_last_error(CAT_EMISUSE, "The main thread is already registered");
+    cat_thread_id_t current_id = uv_thread_self();
+
+    if (CAT_THREAD_G(root) != NULL) {
+        /* A second call with the same object repeats the registration. Any other
+         * call breaks it. */
+        if (CAT_THREAD_G(root) != thread || !uv_thread_equal(&thread->id, &current_id)) {
+            cat_update_last_error(CAT_EMISUSE, "This thread already has a root");
             return cat_false;
         }
         return cat_true;
+    }
+
+    if (cat_thread_get_current_safe() != NULL && cat_thread_get_current_safe() != thread) {
+        cat_update_last_error(CAT_EMISUSE, "This thread has already registered an object");
+        return cat_false;
+    }
+
+    if (cat_atomic_uint32_load(&thread->state) != 0 && !uv_thread_equal(&thread->id, &current_id)) {
+        /* Adopting it would overwrite the id and the state of the other
+         * thread. */
+        cat_update_last_error(CAT_EMISUSE, "The object belongs to another thread");
+        return cat_false;
     }
 
     if (!cat_thread_register_check(thread)) {
@@ -143,18 +164,47 @@ CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
     }
 
     memset(thread, 0, sizeof(*thread));
-    thread->state = CAT_THREAD_STATE_EXTERNAL | CAT_THREAD_STATE_JOINABLE;
+    cat_atomic_uint32_store(&thread->state, CAT_THREAD_STATE_EXTERNAL | CAT_THREAD_STATE_JOINABLE);
     thread->parent = NULL;
     thread->id = uv_thread_self();
     if (!cat_thread_set_current(thread)) {
         return cat_false;
     }
-    cat_thread_main = thread;
+    CAT_THREAD_G(root) = thread;
+    if (cat_thread_main == NULL) {
+        /* The first root of the process is the main thread. */
+        cat_thread_main = thread;
+    }
     cat_atomic_uint32_fetch_add(&cat_thread_count, 1);
     cat_atomic_uint32_fetch_add(&cat_thread_external_count, 1);
 
     return cat_true;
 }
+
+CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
+{
+    return cat_thread_register_root(thread);
+}
+
+/*
+ * Give this thread a root object when it has none. A thread can then run without
+ * the caller that declares itself first.
+ */
+CAT_API cat_bool_t cat_thread_ensure_root(void)
+{
+    if (!cat_globals_available()) {
+        cat_update_last_error(CAT_EMISUSE, "This thread has no runtime");
+        return cat_false;
+    }
+
+    /* A thread that libcat started already has its object. */
+    if (CAT_THREAD_G(current) != NULL) {
+        return cat_true;
+    }
+
+    return cat_thread_register_root(&CAT_THREAD_G(root_storage));
+}
+
 
 CAT_API cat_bool_t cat_thread_register_external(cat_thread_t *thread)
 {
@@ -178,14 +228,15 @@ CAT_API cat_bool_t cat_thread_register_external(cat_thread_t *thread)
     }
 
     memset(thread, 0, sizeof(*thread));
-    thread->state = CAT_THREAD_STATE_EXTERNAL | CAT_THREAD_STATE_JOINABLE;
-    thread->parent = cat_thread_main;
+    cat_atomic_uint32_store(&thread->state, CAT_THREAD_STATE_EXTERNAL | CAT_THREAD_STATE_JOINABLE);
+    thread->parent = cat_thread_get_current_safe() != NULL ? cat_thread_get_current_safe()
+                                                          : cat_thread_main;
     thread->id = uv_thread_self();
     if (!cat_thread_set_current(thread)) {
         return cat_false;
     }
-    /* an external thread stands in both counts, because the root is one of them
-     * and it takes the same path */
+    /* An external thread counts as an external object and as a thread, so
+     * subtract both. */
     cat_atomic_uint32_fetch_add(&cat_thread_count, 1);
     cat_atomic_uint32_fetch_add(&cat_thread_external_count, 1);
 
@@ -219,7 +270,8 @@ CAT_API cat_bool_t cat_thread_is_main(const cat_thread_t *thread)
 
 CAT_API cat_bool_t cat_thread_is_running(const cat_thread_t *thread)
 {
-    return thread != NULL && !(thread->state & CAT_THREAD_STATE_EXITED);
+    return thread != NULL &&
+        !(cat_atomic_uint32_load(&((cat_thread_t *) thread)->state) & CAT_THREAD_STATE_EXITED);
 }
 
 CAT_API cat_thread_t *cat_thread_get_parent(const cat_thread_t *thread)
@@ -252,11 +304,6 @@ CAT_API uint32_t cat_thread_get_external_count(void)
     return cat_atomic_uint32_load(&cat_thread_external_count);
 }
 
-CAT_API void *cat_thread_get_return_value(const cat_thread_t *thread)
-{
-    return thread != NULL ? thread->return_value : NULL;
-}
-
 CAT_API cat_bool_t cat_thread_set_name(const char *name)
 {
     cat_thread_t *thread = cat_thread_get_current();
@@ -264,8 +311,8 @@ CAT_API cat_bool_t cat_thread_set_name(const char *name)
         return cat_false;
     }
 
-    /* the platform sets the name of the running thread only, and uv keeps the
-     * per-platform spelling of the length limit */
+    /* The platform sets the name of the running thread only. The limit comes
+     * from the platform. */
     const char *wanted = name != NULL ? name : "";
     size_t length = strlen(wanted);
     if (length > CAT_THREAD_NAME_MAX) {
@@ -273,8 +320,8 @@ CAT_API cat_bool_t cat_thread_set_name(const char *name)
         return cat_false;
     }
 
-    /* an empty name drops the name of this thread: the platform may refuse to
-     * take it back, and the object drops it either way */
+    /* An empty name drops the name of this thread. The platform may refuse that,
+     * and the object drops the name either way. */
     if (length == 0) {
         thread->name[0] = '\0';
         (void) uv_thread_setname("");
@@ -282,8 +329,8 @@ CAT_API cat_bool_t cat_thread_set_name(const char *name)
         return cat_true;
     }
 
-    /* the platform is asked first, so a name it refuses never reaches the
-     * object and the two stay in step */
+    /* Ask the platform first. A name it refuses never reaches the object, so the
+     * two stay in step. */
     int error = uv_thread_setname(wanted);
     if (error != 0) {
         cat_update_last_error(CAT_EINVAL, "Thread name is not accepted by the platform, reason: %s",
@@ -292,6 +339,198 @@ CAT_API cat_bool_t cat_thread_set_name(const char *name)
     }
 
     memcpy(thread->name, wanted, length + 1);
+
+    return cat_true;
+}
+
+/*
+ * Apply a name to the running thread without a write to its object. The creator
+ * filled the object already, and a write here would race with a reader.
+ */
+static void cat_thread_apply_name(const char *name)
+{
+    (void) uv_thread_setname(name);
+}
+
+/*
+ * The entry of a thread that libcat started. The thread takes a runtime of its
+ * own, so the routine can use this library, and can suspend a coroutine.
+ */
+static void cat_thread_entry(void *data)
+{
+    cat_thread_t *thread = (cat_thread_t *) data;
+    cat_bool_t runtime_was_up = cat_false;
+
+    if (unlikely(!cat_runtime_init_all())) {
+        goto _done;
+    }
+    runtime_was_up = cat_true;
+
+    /* The object was filled by create, so this thread only takes it as its own.
+     * Do not register it again, because that would clear the fields. */
+    if (unlikely(!cat_thread_set_current(thread))) {
+        goto _done;
+    }
+    cat_atomic_uint32_fetch_add(&cat_thread_count, 1);
+
+    if (thread->name[0] != '\0') {
+        cat_thread_apply_name(thread->name);
+    }
+
+    /* After this the main coroutine of this thread can wait. */
+    if (unlikely(!cat_run(CAT_RUN_EASY))) {
+        goto _done;
+    }
+
+    thread->routine(thread->data);
+
+    /* Wait for the coroutines that this thread still has. */
+    (void) cat_stop();
+
+_done:
+    if (runtime_was_up) {
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+    }
+
+    /* Record the exit last, so a joiner that sees it sees a finished thread. The
+     * store is atomic because the joiner reads it from another thread. */
+    cat_atomic_uint32_store(&thread->state,
+        cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_EXITED);
+    (void) cat_thread_wait_wake_all(&thread->join);
+}
+
+CAT_API cat_bool_t cat_thread_create_ex(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data,
+                                        const cat_thread_options_t *options)
+{
+    int error;
+
+    if (unlikely(thread == NULL || routine == NULL)) {
+        cat_update_last_error(CAT_EINVAL, "Thread object and routine are required");
+        return cat_false;
+    }
+
+    memset(thread, 0, sizeof(*thread));
+    thread->parent = cat_thread_get_current();
+    thread->routine = routine;
+    thread->data = data;
+    cat_atomic_uint32_store(&thread->state, CAT_THREAD_STATE_JOINABLE);
+
+    if (options != NULL && options->name != NULL) {
+        size_t length = strlen(options->name);
+
+        if (length > CAT_THREAD_NAME_MAX) {
+            length = CAT_THREAD_NAME_MAX;
+        }
+        memcpy(thread->name, options->name, length);
+        thread->name[length] = '\0';
+    }
+
+    if (unlikely(!cat_thread_wait_init(&thread->join))) {
+        return cat_false;
+    }
+
+    if (options != NULL && options->stack_size != 0) {
+        uv_thread_options_t uv_options = {
+            .flags = UV_THREAD_HAS_STACK_SIZE,
+            .stack_size = options->stack_size,
+        };
+
+        error = uv_thread_create_ex(&thread->id, &uv_options, cat_thread_entry, thread);
+    } else {
+        error = uv_thread_create(&thread->id, cat_thread_entry, thread);
+    }
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Thread create failed");
+        cat_thread_wait_destroy(&thread->join);
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_thread_create(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data)
+{
+    return cat_thread_create_ex(thread, routine, data, NULL);
+}
+
+static cat_bool_t cat_thread_exited(const void *data)
+{
+    const cat_thread_t *thread = (const cat_thread_t *) data;
+
+    return (cat_atomic_uint32_load(&thread->state) & CAT_THREAD_STATE_EXITED) != 0;
+}
+
+CAT_API cat_bool_t cat_thread_join(cat_thread_t *thread, cat_timeout_t timeout)
+{
+    uint32_t state;
+
+    if (unlikely(thread == NULL)) {
+        cat_update_last_error(CAT_EINVAL, "Thread object is null");
+        return cat_false;
+    }
+
+    if (unlikely(thread == cat_thread_get_current_safe())) {
+        /* a thread that waits for itself waits for ever */
+        cat_update_last_error(CAT_EMISUSE, "A thread can not join itself");
+        return cat_false;
+    }
+
+    state = cat_atomic_uint32_load(&thread->state);
+
+    if (unlikely(!(state & CAT_THREAD_STATE_JOINABLE) || (state & CAT_THREAD_STATE_JOINED) ||
+                 (state & CAT_THREAD_STATE_DETACHED))) {
+        /* a detached thread finishes on its own, so there is no exit to take */
+        cat_update_last_error(CAT_EMISUSE, "The thread is not joinable");
+        return cat_false;
+    }
+
+    /* the predicate is read under the lock of the queue, so an exit that lands
+     * between the check and the park still wakes this caller */
+    if (unlikely(!cat_thread_wait_park_until(&thread->join, timeout,
+                                             cat_thread_exited, thread))) {
+        return cat_false;
+    }
+
+    /* only one caller takes the exit, because the thread can be joined once */
+    state = cat_atomic_uint32_load(&thread->state);
+    while (!cat_atomic_uint32_compare_exchange_strong(&thread->state, &state,
+                                                      state | CAT_THREAD_STATE_JOINED)) {
+        if (state & CAT_THREAD_STATE_JOINED) {
+            cat_update_last_error(CAT_EMISUSE, "The thread is already joined");
+            return cat_false;
+        }
+    }
+
+    (void) uv_thread_join(&thread->id);
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_thread_detach(cat_thread_t *thread)
+{
+    uint32_t state;
+
+    if (unlikely(thread == NULL)) {
+        cat_update_last_error(CAT_EINVAL, "Thread object is null");
+        return cat_false;
+    }
+
+    state = cat_atomic_uint32_load(&thread->state);
+
+    if (unlikely(!(state & CAT_THREAD_STATE_JOINABLE) || (state & CAT_THREAD_STATE_JOINED))) {
+        cat_update_last_error(CAT_EMISUSE, "The thread is not joinable");
+        return cat_false;
+    }
+
+    if (unlikely(state & CAT_THREAD_STATE_DETACHED)) {
+        cat_update_last_error(CAT_EMISUSE, "The thread is already detached");
+        return cat_false;
+    }
+
+    cat_atomic_uint32_store(&thread->state, state | CAT_THREAD_STATE_DETACHED);
+    (void) uv_thread_detach(&thread->id);
 
     return cat_true;
 }

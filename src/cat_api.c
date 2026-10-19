@@ -117,6 +117,13 @@ CAT_API cat_bool_t cat_runtime_close_all(void)
 
 CAT_API cat_bool_t cat_run(cat_run_mode_t run_mode)
 {
+#ifdef CAT_THREAD_SAFE
+    /* the thread that runs first is the root of its runtime */
+    if (!cat_thread_ensure_root()) {
+        return cat_false;
+    }
+#endif
+
     switch (run_mode) {
         case CAT_RUN_EASY: {
             return cat_event_scheduler_run(NULL) != NULL;
