@@ -476,10 +476,11 @@ TEST(cat_thread, several_workers_are_all_joined)
     struct work_s {
         cat_thread_t thread;
         int index;
-        int *counter;
+        std::atomic<int> *counter;
     } work[3] = {};
 
-    int counter = 0;
+    /* The workers increment it at the same time, so it must be atomic. */
+    std::atomic<int> counter{0};
 
     for (int index = 0; index < 3; index++) {
         work[index].index = index;
@@ -489,7 +490,7 @@ TEST(cat_thread, several_workers_are_all_joined)
     auto routine = [](cat_data_t *data) {
         struct work_s *self = (struct work_s *) data;
 
-        (*self->counter)++;
+        self->counter->fetch_add(1);
     };
 
     for (int index = 0; index < 3; index++) {
@@ -857,10 +858,11 @@ TEST(cat_thread, many_threads_run_at_once)
 {
     struct work_s {
         cat_thread_t thread;
-        int *counter;
+        std::atomic<int> *counter;
     } work[8] = {};
 
-    int counter = 0;
+    /* The workers increment it at the same time, so it must be atomic. */
+    std::atomic<int> counter{0};
 
     for (int index = 0; index < 8; index++) {
         work[index].counter = &counter;
@@ -869,7 +871,7 @@ TEST(cat_thread, many_threads_run_at_once)
     auto routine = [](cat_data_t *data) {
         struct work_s *self = (struct work_s *) data;
 
-        (*self->counter)++;
+        self->counter->fetch_add(1);
     };
 
     for (int index = 0; index < 8; index++) {
