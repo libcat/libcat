@@ -219,8 +219,13 @@ endif()
 
 # ASan options
 option(LIBCAT_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
-# TODO: TSAN support, see: https://github.com/libuv/libuv/commit/22d62239289c7c6e50e6cc4a93642b3b46bf2dad (@dixyes)
+# TSan options
+option(LIBCAT_ENABLE_TSAN "Enable ThreadSanitizer (TSan)" OFF)
 # TODO: MSAN, UBSAN support
+
+if(LIBCAT_ENABLE_ASAN AND LIBCAT_ENABLE_TSAN)
+    message(FATAL_ERROR "ASan and TSan can not be enabled at the same time")
+endif()
 
 if(LIBCAT_ENABLE_ASAN)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
@@ -271,6 +276,25 @@ if(LIBCAT_ENABLE_ASAN)
     endif()
 else()
     message(STATUS "ASan is not enabled")
+endif()
+
+if(LIBCAT_ENABLE_TSAN)
+    if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+        message(WARNING "TSan is not supported in release build")
+        message(STATUS "TSan is not enabled")
+    elseif(NOT CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+        message(WARNING "TSan is not supported by ${CMAKE_C_COMPILER_ID}")
+        message(STATUS "TSan is not enabled")
+    else()
+        # tsan cflags needs to be added in global cflags
+        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+        set (CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+        set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+        message(STATUS "TSan is enabled by ${CMAKE_C_COMPILER_ID}")
+    endif()
+else()
+    message(STATUS "TSan is not enabled")
 endif()
 
 # ========== Context ===========

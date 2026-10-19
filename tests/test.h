@@ -99,6 +99,22 @@ fail:
 #define SKIP_IF_OFFLINE()      SKIP_IF_(is_offline(), "Internet connection required")
 #define SKIP_IF_USE_VALGRIND() SKIP_IF_(is_valgrind(), "Valgrind is too slow")
 
+/* ThreadSanitizer needs its own option to return NULL on an allocation that can
+ * not be served, and it does not support fork in a process with threads. */
+#if defined(__SANITIZE_THREAD__)
+# define CAT_TESTS_TSAN 1
+#elif defined(__has_feature)
+# if __has_feature(thread_sanitizer)
+#  define CAT_TESTS_TSAN 1
+# endif
+#endif
+
+#ifdef CAT_TESTS_TSAN
+# define SKIP_IF_TSAN(message) SKIP_IF_(true, message)
+#else
+# define SKIP_IF_TSAN(message) do { } while (0)
+#endif
+
 #define TEST_BUFFER_SIZE_STD               8192
 
 #define TEST_IO_TIMEOUT                    ::testing::CONFIG_IO_TIMEOUT

@@ -192,6 +192,7 @@ TEST(cat_event, real_fork)
 #ifdef CAT_COROUTINE_USE_THREAD_CONTEXT
     SKIP_IF_(1, "Unable to test it with thread-context");
 #endif
+    SKIP_IF_TSAN("ThreadSanitizer does not support fork with threads");
     cat_socket_t server;
     cat_socket_t dummy, dummy_peer;
     int port;

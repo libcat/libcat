@@ -42,19 +42,29 @@ TEST(cat_memory, out_of_memory_terminates_process)
 
 TEST(cat_memory, unrecoverable_allocators_oom_terminate_process)
 {
-    char *original_options = cat_env_get_silent("ASAN_OPTIONS", nullptr);
+    char *original_asan_options = cat_env_get_silent("ASAN_OPTIONS", nullptr);
+    char *original_tsan_options = cat_env_get_silent("TSAN_OPTIONS", nullptr);
     DEFER({
-        if (original_options == nullptr) {
+        if (original_asan_options == nullptr) {
             EXPECT_EQ(uv_os_unsetenv("ASAN_OPTIONS"), 0);
         } else {
-            EXPECT_TRUE(cat_env_set("ASAN_OPTIONS", original_options));
+            EXPECT_TRUE(cat_env_set("ASAN_OPTIONS", original_asan_options));
         }
-        cat_free(original_options);
+        if (original_tsan_options == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("TSAN_OPTIONS"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("TSAN_OPTIONS", original_tsan_options));
+        }
+        cat_free(original_asan_options);
+        cat_free(original_tsan_options);
     });
-    std::string options = original_options == nullptr ? "" : original_options;
+    std::string asan_options = original_asan_options == nullptr ? "" : original_asan_options;
+    std::string tsan_options = original_tsan_options == nullptr ? "" : original_tsan_options;
     // Re-executed death-test children must let allocation failures reach Libcat.
-    options += ":allocator_may_return_null=1";
-    ASSERT_TRUE(cat_env_set("ASAN_OPTIONS", options.c_str()));
+    asan_options += ":allocator_may_return_null=1";
+    tsan_options += ":allocator_may_return_null=1";
+    ASSERT_TRUE(cat_env_set("ASAN_OPTIONS", asan_options.c_str()));
+    ASSERT_TRUE(cat_env_set("TSAN_OPTIONS", tsan_options.c_str()));
     for (int operation = 0; operation < 6; operation++) {
         SCOPED_TRACE(operation);
         ASSERT_EXIT({
