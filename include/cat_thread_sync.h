@@ -137,6 +137,9 @@ CAT_API cat_bool_t cat_mutex_destroy(cat_mutex_t *mutex);
 /*
  * Take the lock, or wait for the holder to release it.
  *
+ * The mutex is not recursive. A second lock from the same thread waits like any
+ * other lock, even when it comes from another coroutine of that thread.
+ *
  * cat_false: nothing was taken. The last error gives the reason.
  * CAT_ETIMEDOUT on a timeout, CAT_EBUSY when the timeout is 0, and CAT_EMISUSE
  * without a runtime or without a coroutine to suspend.
