@@ -19,6 +19,7 @@
 #include "cat.h"
 
 #include "cat_thread.h"
+#include "cat_thread_sync.h"
 
 CAT_API CAT_GLOBALS_DECLARE(cat);
 
@@ -74,6 +75,9 @@ CAT_API cat_bool_t cat_module_init(void)
     cat_error_module_init();
 #ifdef CAT_THREAD_SAFE
     cat_thread_module_init();
+    if (!cat_thread_sync_module_init()) {
+        return cat_false;
+    }
 #endif
 
     return cat_true;
@@ -82,6 +86,7 @@ CAT_API cat_bool_t cat_module_init(void)
 CAT_API cat_bool_t cat_module_shutdown(void)
 {
 #ifdef CAT_THREAD_SAFE
+    cat_thread_sync_module_shutdown();
     cat_thread_module_shutdown();
 #endif
     cat_error_module_shutdown();
