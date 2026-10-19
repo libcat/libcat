@@ -82,6 +82,9 @@ TEST(cat_watchdog, single)
 
 TEST(cat_watchdog, scheduler_blocking)
 {
+    /* recycle possible residual coroutines */
+    ASSERT_TRUE(cat_coroutine_wait_all());
+
     testing::internal::CaptureStderr();
 
     ([&] {
