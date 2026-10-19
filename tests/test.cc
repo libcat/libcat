@@ -156,37 +156,47 @@ namespace testing
         }, function_ptr);
     }
 
+    struct work_context_s {
+        std::function<void(void)> function;
+        uv_sem_t sem;
+        std::atomic<int> references;
+    };
+
+    static void work_context_release(struct work_context_s *context)
+    {
+        if (context->references.fetch_sub(1) == 1) {
+            uv_sem_destroy(&context->sem);
+            delete context;
+        }
+    }
+
     bool work(cat_work_kind_t kind, std::function<void(void)> function, cat_timeout_t timeout)
     {
-        struct work_context_s {
-            std::function<void(void)> function;
-            uv_sem_t *sem;
-        };
-        /* The worker may start after this function returned, for example when
-         * the work times out, so the context can not live on the stack. */
-        struct work_context_s *context = new (std::nothrow) struct work_context_s;
-        uv_sem_t sem;
         int error;
         bool ret = true, wait = true, done = false;
+        /* The worker may start after this function returned, for example when
+         * the work times out, so the context can not live on the stack. The
+         * caller and the worker release one reference each. */
+        struct work_context_s *context = new (std::nothrow) struct work_context_s;
         if (context == nullptr) {
             cat_update_last_error(CAT_ENOMEM, "Alloc for the work context failed");
             return false;
         }
-        error = uv_sem_init(&sem, 0);
+        error = uv_sem_init(&context->sem, 0);
         if (error != 0) {
             delete context;
             cat_update_last_error_with_reason(error, "Sem init failed");
             return false;
         }
         context->function = function;
-        context->sem = &sem;
+        context->references = 2;
         cat_coroutine_t *waiter = cat_coroutine_get_current();
         cat_coroutine_t *worker = co([&] {
             ret = cat_work(kind, [](cat_data_t *data) {
                 struct work_context_s *context = (struct work_context_s *) data;
                 std::function<void(void)> function = context->function; // must copy it
-                uv_sem_post(context->sem); // notify
-                delete context; // the worker owns it now
+                uv_sem_post(&context->sem); // notify
+                work_context_release(context);
                 function();
             }, nullptr, context, timeout);
             done = true;
@@ -195,14 +205,14 @@ namespace testing
             }
         });
         if (ret) {
-            uv_sem_wait(&sem);
+            uv_sem_wait(&context->sem);
         }
         cat_coroutine_yield(nullptr, nullptr);
         wait = false;
         if (!done) {
             cat_coroutine_resume(worker, nullptr, nullptr);
         }
-        uv_sem_destroy(&sem);
+        work_context_release(context);
 
         return ret;
     }
