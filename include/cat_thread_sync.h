@@ -110,6 +110,12 @@ typedef struct cat_mutex_s {
      * mistake at the release.
      */
     cat_atomic_bool_t held;
+    /*
+     * The thread that holds the lock. A condition variable has to know whether
+     * the caller is the holder, and the lock itself can not answer that on
+     * Windows, where it is a critical section that the owning thread re-enters.
+     */
+    cat_atomic_uint64_t owner;
 } cat_mutex_t;
 
 typedef struct cat_sem_s {

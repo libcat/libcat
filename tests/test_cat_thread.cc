@@ -898,7 +898,9 @@ TEST(cat_thread, a_thread_that_runs_becomes_its_own_root)
         cat_bool_t run;
         cat_bool_t has_current;
         cat_bool_t is_root;
+        cat_bool_t id_matches;
         cat_thread_id_t id;
+        cat_thread_id_t current_id;
     } bare = {};
 
     uv_thread_t tid;
@@ -918,7 +920,12 @@ TEST(cat_thread, a_thread_that_runs_becomes_its_own_root)
         self->has_current = current != NULL;
         self->is_root = current != NULL && cat_thread_get_parent(current) == NULL;
         if (current != NULL) {
+            /* An id from uv_thread_self can not be compared with the handle that
+             * uv_thread_create returned on Windows, so compare two reads of the
+             * running thread instead. */
             self->id = cat_thread_get_id(current);
+            self->current_id = cat_thread_get_current_id();
+            self->id_matches = uv_thread_equal(&self->id, &self->current_id);
         }
 
         (void) cat_stop();
@@ -931,7 +938,7 @@ TEST(cat_thread, a_thread_that_runs_becomes_its_own_root)
     ASSERT_TRUE(bare.run);
     ASSERT_TRUE(bare.has_current);
     ASSERT_TRUE(bare.is_root);
-    ASSERT_TRUE(uv_thread_equal(&bare.id, &tid));
+    ASSERT_TRUE(bare.id_matches);
 }
 
 #endif /* CAT_THREAD_SAFE */

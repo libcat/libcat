@@ -342,68 +342,30 @@ CAT_API cat_bool_t cat_cond_broadcast(cat_cond_t *cond)
     return cat_thread_wait_wake_all(&cond->wait);
 }
 
-CAT_API cat_bool_t cat_cond_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeout_t timeout)
-{
-    struct cat_thread_wait_park_s park;
-    cat_coroutine_t *current;
-    cat_bool_t woken;
-
-    if (unlikely(!cat_globals_available())) {
-        cat_update_last_error(CAT_EMISUSE, "This thread has no runtime");
-        return cat_false;
-    }
-
-    current = cat_coroutine_get_current();
-    if (unlikely(current == NULL)) {
-        cat_update_last_error(CAT_EMISUSE, "No coroutine to suspend");
-        return cat_false;
-    }
-
-    /* The caller must hold the mutex. A mutex that can be taken here is the
-     * proof that it does not. */
-    if (uv_mutex_trylock(&mutex->lock) == 0) {
-        uv_mutex_unlock(&mutex->lock);
-        cat_update_last_error(CAT_EMISUSE, "The caller does not hold the mutex");
-        return cat_false;
-    }
-
-    park.wait = &cond->wait;
-    park.timer = NULL;
-
-    /* Insert the waiter and release the mutex as one step. A signal needs the
-     * mutex, so no signal can arrive between them and get lost. */
-    uv_mutex_lock(&cond->wait.lock);
-    cat_thread_wait_enqueue(&park, current);
-    cat_atomic_bool_store(&mutex->held, cat_false);
-    uv_mutex_unlock(&mutex->lock);
-    uv_mutex_unlock(&cond->wait.lock);
-
-    woken = cat_thread_wait_suspend(&park, timeout);
-
-    /* Both paths take the mutex again, so the caller keeps what it held. */
-    if (unlikely(!cat_mutex_lock(mutex, CAT_TIMEOUT_FOREVER))) {
-        return cat_false;
-    }
-
-    if (!woken) {
-        cat_update_last_error(CAT_ETIMEDOUT, "Timed out waiting for the condition");
-        return cat_false;
-    }
-
-    return cat_true;
-}
-
 /* ready() for the mutex: taking it is the check, so a lock that is free is taken
  * while the queue is locked and cannot be taken by anybody else in between. */
 static cat_bool_t cat_mutex_try_take(const void *data)
 {
     cat_mutex_t *mutex = (cat_mutex_t *) data;
+    cat_bool_t free = cat_false;
 
-    if (uv_mutex_trylock(&mutex->lock) != 0) {
+    /*
+     * The flag decides, not the lock. On Windows the lock is a critical
+     * section, and a critical section lets the thread that owns it take it
+     * again. Every coroutine of a thread would then take a lock that another
+     * coroutine of the same thread holds.
+     */
+    if (!cat_atomic_bool_compare_exchange_strong(&mutex->held, &free, cat_true)) {
         return cat_false;
     }
 
-    cat_atomic_bool_store(&mutex->held, cat_true);
+    if (uv_mutex_trylock(&mutex->lock) != 0) {
+        /* The holder cleared the flag but has not released the lock yet. */
+        cat_atomic_bool_store(&mutex->held, cat_false);
+        return cat_false;
+    }
+
+    cat_atomic_uint64_store(&mutex->owner, (uint64_t) (uintptr_t) uv_thread_self());
 
     return cat_true;
 }
@@ -434,6 +396,65 @@ static void cat_thread_wait_resume(cat_thread_wait_t *wait, cat_coroutine_t *cor
     cat_coroutine_wake(coroutine);
 }
 
+CAT_API cat_bool_t cat_cond_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeout_t timeout)
+{
+    struct cat_thread_wait_park_s park;
+    cat_coroutine_t *current;
+    cat_coroutine_t *waiting;
+    cat_bool_t woken;
+
+    if (unlikely(!cat_globals_available())) {
+        cat_update_last_error(CAT_EMISUSE, "This thread has no runtime");
+        return cat_false;
+    }
+
+    current = cat_coroutine_get_current();
+    if (unlikely(current == NULL)) {
+        cat_update_last_error(CAT_EMISUSE, "No coroutine to suspend");
+        return cat_false;
+    }
+
+    /* The caller must hold the mutex, and the owner is how that is known. A
+     * trylock here would answer for the thread, not for the caller. */
+    if (cat_atomic_uint64_load(&mutex->owner) != (uint64_t) (uintptr_t) uv_thread_self()) {
+        cat_update_last_error(CAT_EMISUSE, "The caller does not hold the mutex");
+        return cat_false;
+    }
+
+    park.wait = &cond->wait;
+    park.timer = NULL;
+
+    /* Insert the waiter and release the mutex as one step. A signal needs the
+     * mutex, so no signal can arrive between them and get lost. */
+    uv_mutex_lock(&cond->wait.lock);
+    cat_thread_wait_enqueue(&park, current);
+    cat_atomic_bool_store(&mutex->held, cat_false);
+
+    /* The release has to wake a coroutine that waits for the mutex, the same way
+     * an unlock does. */
+    uv_mutex_lock(&mutex->wait.lock);
+    uv_mutex_unlock(&mutex->lock);
+    waiting = cat_thread_wait_publish(&mutex->wait);
+    uv_mutex_unlock(&mutex->wait.lock);
+    uv_mutex_unlock(&cond->wait.lock);
+
+    cat_thread_wait_resume(&mutex->wait, waiting);
+
+    woken = cat_thread_wait_suspend(&park, timeout);
+
+    /* Both paths take the mutex again, so the caller keeps what it held. */
+    if (unlikely(!cat_mutex_lock(mutex, CAT_TIMEOUT_FOREVER))) {
+        return cat_false;
+    }
+
+    if (!woken) {
+        cat_update_last_error(CAT_ETIMEDOUT, "Timed out waiting for the condition");
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex)
 {
     do {
@@ -446,6 +467,7 @@ CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex)
     } while (0);
 
     cat_atomic_bool_init(&mutex->held, cat_false);
+    cat_atomic_uint64_init(&mutex->owner, 0);
 
     return cat_thread_wait_init(&mutex->wait);
 }

@@ -1462,4 +1462,48 @@ TEST(cat_thread_sync, a_wait_starts_the_scheduler_of_a_thread_that_did_not_run)
     ASSERT_EQ(lazy.value, 42);
 }
 
+
+TEST(cat_cond, a_wait_lets_a_coroutine_that_waits_for_the_mutex_in)
+{
+    struct share_s {
+        cat_mutex_t mutex;
+        cat_cond_t cond;
+        cat_bool_t other_took_it;
+        cat_bool_t release;
+    } share = {};
+
+    ASSERT_TRUE(cat_mutex_init(&share.mutex));
+    ASSERT_TRUE(cat_cond_init(&share.cond));
+
+    co([&share] {
+        ASSERT_TRUE(cat_mutex_lock(&share.mutex, TEST_IO_TIMEOUT));
+
+        /* The waiter is already asking for the mutex when the wait releases it. */
+        co([&share] {
+            if (cat_mutex_lock(&share.mutex, 1000)) {
+                share.other_took_it = cat_true;
+                share.release = cat_true;
+                cat_mutex_unlock(&share.mutex);
+            }
+        });
+
+        ASSERT_TRUE(cat_cond_wait(&share.cond, &share.mutex, 1000));
+        ASSERT_TRUE(cat_mutex_unlock(&share.mutex));
+    });
+
+    /* The signal comes after the other coroutine left the mutex, so the wait
+     * above only returns if the release let that coroutine in. */
+    co([&share] {
+        while (!share.release) {
+            ASSERT_TRUE(cat_time_delay(1));
+        }
+        ASSERT_TRUE(cat_cond_signal(&share.cond));
+    });
+
+    ASSERT_TRUE(share.other_took_it);
+
+    cat_cond_destroy(&share.cond);
+    ASSERT_TRUE(cat_mutex_destroy(&share.mutex));
+}
+
 #endif /* CAT_THREAD_SAFE */
