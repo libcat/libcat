@@ -103,6 +103,16 @@ TEST(cat, runtime_init_with_error_output_stdout)
 {
     FILE *original_error_output = cat_get_error_output();
     DEFER(cat_set_error_output(original_error_output));
+    /* Another runtime init would read the variable again, so put it back. */
+    char *original_error_output_env = cat_env_get_silent("CAT_LOG_ERROR_OUTPUT", nullptr);
+    DEFER({
+        if (original_error_output_env == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("CAT_LOG_ERROR_OUTPUT"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("CAT_LOG_ERROR_OUTPUT", original_error_output_env));
+        }
+        cat_free(original_error_output_env);
+    });
 
     cat_env_set("CAT_LOG_ERROR_OUTPUT", "stdout");
     cat_runtime_shutdown();
@@ -117,6 +127,16 @@ TEST(cat, runtime_init_with_error_output_stderr)
 {
     FILE *original_error_output = cat_get_error_output();
     DEFER(cat_set_error_output(original_error_output));
+    /* Another runtime init would read the variable again, so put it back. */
+    char *original_error_output_env = cat_env_get_silent("CAT_LOG_ERROR_OUTPUT", nullptr);
+    DEFER({
+        if (original_error_output_env == nullptr) {
+            EXPECT_EQ(uv_os_unsetenv("CAT_LOG_ERROR_OUTPUT"), 0);
+        } else {
+            EXPECT_TRUE(cat_env_set("CAT_LOG_ERROR_OUTPUT", original_error_output_env));
+        }
+        cat_free(original_error_output_env);
+    });
 
     cat_env_set("CAT_LOG_ERROR_OUTPUT", "stderr");
     cat_runtime_shutdown();
