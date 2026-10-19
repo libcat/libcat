@@ -26,6 +26,7 @@ TEST(cat_os_wait, fork_restores_child_event_loop)
 #ifdef CAT_COROUTINE_USE_THREAD_CONTEXT
     SKIP_IF_(1, "Unable to fork with thread-context");
 #endif
+    SKIP_IF_TSAN("ThreadSanitizer does not support fork with threads");
     cat_pid_t pid = cat_os_fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {

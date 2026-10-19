@@ -76,6 +76,10 @@
 # include <valgrind/valgrind.h>
 #endif
 
+#ifdef CAT_COROUTINE_USE_TSAN
+# include <sanitizer/tsan_interface.h>
+#endif
+
 #ifdef CAT_COROUTINE_USE_ASAN
 # ifdef _MSC_VER
 // for warning -Wstrict-prototypes/C4255
@@ -342,6 +346,10 @@ CAT_API cat_bool_t cat_coroutine_runtime_init(void)
         main_coroutine->asan_fake_stack = NULL;
         main_coroutine->asan_stack = NULL;
         main_coroutine->asan_stack_size = 0;
+#endif
+#ifdef CAT_COROUTINE_USE_TSAN
+        /* the main coroutine runs on the stack of the thread itself */
+        main_coroutine->tsan_fiber = __tsan_get_current_fiber();
 #endif
         main_coroutine->wakeup_target = cat_coroutine_own_block();
         main_coroutine->wakeup_queue = &CAT_COROUTINE_G(wakeup_queue);
@@ -712,6 +720,11 @@ CAT_API cat_coroutine_t *cat_coroutine_create_ex(cat_coroutine_t *coroutine, cat
     coroutine->asan_stack = stack;
     coroutine->asan_stack_size = stack_size;
 #endif
+#ifdef CAT_COROUTINE_USE_TSAN
+    /* Without the fiber ThreadSanitizer sees the coroutine stack as plain
+     * memory, so the build still works but the reports are not reliable. */
+    coroutine->tsan_fiber = __tsan_create_fiber(0);
+#endif
 #ifndef CAT_COROUTINE_USE_THREAD_CONTEXT
     CAT_LOG_DEBUG(COROUTINE, "coroutine_create(function: %p, stack_size: %zu) = R" CAT_COROUTINE_ID_FMT " "
         "{ stack: %p, virtual_memory: %p, virtual_memory_size: %zu }",
@@ -755,6 +768,12 @@ CAT_API void cat_coroutine_free(cat_coroutine_t *coroutine)
         if (unlikely(!ret)) {
             CAT_SYSCALL_FAILURE(NOTICE, COROUTINE, "Unprotect stack page failed");
         }
+    }
+#endif
+#ifdef CAT_COROUTINE_USE_TSAN
+    if (coroutine->tsan_fiber != NULL && coroutine->tsan_fiber != __tsan_get_current_fiber()) {
+        __tsan_destroy_fiber(coroutine->tsan_fiber);
+        coroutine->tsan_fiber = NULL;
     }
 #endif
 #if defined(CAT_COROUTINE_USE_USER_STACK) && defined(CAT_COROUTINE_USE_ASAN)
@@ -826,6 +845,12 @@ CAT_API void cat_coroutine_jump_standard(cat_coroutine_t *coroutine, cat_data_t 
     /* jump {{{ */
 #ifdef CAT_COROUTINE_USE_USER_TRANSFER_DATA
     coroutine->transfer_data = data;
+#endif
+#ifdef CAT_COROUTINE_USE_TSAN
+    /* This must be the last call before the stack switch. */
+    if (coroutine->tsan_fiber != NULL) {
+        __tsan_switch_to_fiber(coroutine->tsan_fiber, 0);
+    }
 #endif
 #if defined(CAT_COROUTINE_USE_THREAD_CONTEXT)
     uv_sem_post(&coroutine->sem);

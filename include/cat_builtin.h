@@ -277,3 +277,7 @@
 #if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
 # define CAT_HAVE_ASAN 1
 #endif
+
+#if defined(__SANITIZE_THREAD__) || __has_feature(thread_sanitizer)
+# define CAT_HAVE_TSAN 1
+#endif

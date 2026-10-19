@@ -67,6 +67,10 @@ typedef void *cat_coroutine_context_t;
 #define CAT_COROUTINE_USE_ASAN
 #endif
 
+#if defined(CAT_HAVE_TSAN) && !defined(CAT_COROUTINE_USE_THREAD_CONTEXT)
+#define CAT_COROUTINE_USE_TSAN
+#endif
+
 typedef uint64_t cat_coroutine_id_t;
 #define CAT_COROUTINE_ID_FMT "%" PRIu64
 #define CAT_COROUTINE_ID_FMT_SPEC PRIu64
@@ -172,6 +176,10 @@ struct cat_coroutine_s
     void *asan_fake_stack;
     const void *asan_stack;
     size_t asan_stack_size;
+#endif
+#ifdef CAT_COROUTINE_USE_TSAN
+    /* the ThreadSanitizer view of this coroutine's stack */
+    void *tsan_fiber;
 #endif
 };
 
