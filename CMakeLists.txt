@@ -97,6 +97,7 @@ set(cat_sources
     src/cat_async.c
     src/cat_thread.c
     src/cat_thread_sync.c
+    src/cat_thannel.c
     src/cat_watchdog.c
     src/cat_process.c
     src/cat_http.c
@@ -1040,6 +1041,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_atomic_c.c
         tests/test_cat_thread.cc
         tests/test_cat_thread_sync.cc
+        tests/test_cat_thannel.cc
         tests/test_cat_http.cc
         tests/test_cat_http_errors.cc
         tests/test_cat_websocket.cc
