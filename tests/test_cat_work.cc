@@ -22,7 +22,8 @@ TEST(cat_work, base)
 {
     cat_coroutine_t *coroutine = cat_coroutine_get_current();
     uv_sem_t sem;
-    bool done = false;
+    /* The work thread writes it, so it must be atomic. */
+    std::atomic<bool> done{false};
 
     ASSERT_EQ(uv_sem_init(&sem, 0), 0);
     DEFER(uv_sem_destroy(&sem));
