@@ -1,0 +1,68 @@
+# nmake build for the mandelbrot example. The Makefile serves the POSIX builds.
+#
+# Run it from an x64 Native Tools Command Prompt for Visual Studio:
+#
+#   nmake /f NMakefile
+#
+# main needs zlib, main-gui adds SDL3 and is skipped when SDL3 is not installed.
+# LIBCAT_VCPKG_ROOT points at the vcpkg checkout that provides them, and VCPKG_ROOT
+# is used when it is unset. Override the library build directory with BUILD= and the
+# library itself with LIBCAT=.
+
+BUILD = ..\..\build-nmake
+
+!IFNDEF LIBCAT_VCPKG_ROOT
+LIBCAT_VCPKG_ROOT = $(VCPKG_ROOT)
+!ENDIF
+!IF !EXIST("$(LIBCAT_VCPKG_ROOT)\installed\x64-windows")
+!ERROR Set LIBCAT_VCPKG_ROOT to a vcpkg checkout with the x64-windows triplet installed
+!ENDIF
+VCPKG = $(LIBCAT_VCPKG_ROOT)\installed\x64-windows
+
+!IFNDEF LIBCAT
+!IF EXIST("$(BUILD)\Release\cat.lib")
+LIBCAT = $(BUILD)\Release\cat.lib
+!ELSE
+LIBCAT = $(BUILD)\cat.lib
+!ENDIF
+!ENDIF
+
+!IF EXIST("$(VCPKG)\lib\SDL3.lib")
+SDL3_LIBS = $(VCPKG)\lib\SDL3.lib
+SDL3_TARGET = main-gui.exe
+!ELSE
+SDL3_LIBS =
+SDL3_TARGET =
+!ENDIF
+
+CC = cl
+CFLAGS = /nologo /O2 /MD /W3 /std:c11 /utf-8 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /wd5287
+DEFS = /DHAVE_LIBCAT=1 /DCAT_USE_THREAD_KEY=1 /DCAT_HAVE_OPENSSL=1
+INCS = /I..\..\include /I..\..\deps\libuv\include /I..\msvc /I"$(VCPKG)\include"
+COMMON_LIBS = $(LIBCAT) $(VCPKG)\lib\zlib.lib $(VCPKG)\lib\libssl.lib \
+              $(VCPKG)\lib\libcrypto.lib ws2_32.lib iphlpapi.lib userenv.lib \
+              psapi.lib user32.lib advapi32.lib ole32.lib shell32.lib \
+              dbghelp.lib synchronization.lib crypt32.lib
+
+all: main.exe $(SDL3_TARGET) redist
+
+main.exe: main.c mandel.h png.h pool.h $(LIBCAT)
+    $(CC) $(CFLAGS) $(DEFS) $(INCS) main.c /Fe:main.exe /link $(COMMON_LIBS)
+
+main-gui.exe: main-gui.c mandel.h png.h pool.h $(LIBCAT)
+    $(CC) $(CFLAGS) $(DEFS) $(INCS) main-gui.c /Fe:main-gui.exe /link $(COMMON_LIBS) $(SDL3_LIBS)
+
+redist:
+    -copy /y "$(VCPKG)\bin\libssl-3-x64.dll" . >nul
+    -copy /y "$(VCPKG)\bin\libcrypto-3-x64.dll" . >nul
+    -copy /y "$(VCPKG)\bin\zlib1.dll" . >nul
+    -copy /y "$(VCPKG)\bin\SDL3.dll" . >nul
+
+$(LIBCAT):
+    cmake -S ..\.. -B $(BUILD) -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=$(LIBCAT_VCPKG_ROOT)\scripts\buildsystems\vcpkg.cmake \
+        -DLIBCAT_USE_THREAD_KEY=1 -DLIBCAT_BUILD_TESTS=OFF
+    cmake --build $(BUILD) --target cat --config Release
+
+clean:
+    -del /q main.exe main-gui.exe main.obj main-gui.obj main.lib main-gui.lib main.exp main-gui.exp libssl-3-x64.dll libcrypto-3-x64.dll zlib1.dll SDL3.dll

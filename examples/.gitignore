@@ -1,1 +1,7 @@
 main
+
+*.exe
+*.obj
+*.lib
+*.exp
+*.dll
