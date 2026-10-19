@@ -302,7 +302,7 @@ jobs:
           if-no-files-found: error
 
   unix-tests:
-    name: Test on ${{matrix.os}} thread-safe=${{matrix.thread-safe}}
+    name: Test on ${{matrix.os}} thread-safe=${{matrix.thread-safe}} sanitizer=${{matrix.sanitizer}}
     runs-on: ${{matrix.os}}
     timeout-minutes: 30
     permissions:
@@ -312,10 +312,11 @@ jobs:
       matrix:
         # should use latest, strange that gh still use 18.04 for libcat/libcat
         thread-safe: [ "OFF", "THREAD_KEY", "THREAD_LOCAL" ]
+        sanitizer: [ "ASAN", "TSAN" ]
         os: [ "ubuntu-latest", "macos-latest", "ubuntu-24.04" ]
         # os: [ "ubuntu-latest"]
         # os: [ "macos-latest"]
-      max-parallel: 3
+      max-parallel: 6
       fail-fast: false
     steps:
       - name: Install dependencies
@@ -416,9 +417,13 @@ jobs:
           mkdir -p build && cd build || exit 1
           echo "::endgroup::"
           echo "::group::Make cmake cache"
+          if [ "${{ matrix.sanitizer }}" = "ASAN" ]; then
+            cmake_options+=(-DLIBCAT_ENABLE_ASAN=ON)
+          elif [ "${{ matrix.sanitizer }}" = "TSAN" ]; then
+            cmake_options+=(-DLIBCAT_ENABLE_TSAN=ON)
+          fi
           cmake .. \
             "${cmake_options[@]}" \
-            -DLIBCAT_ENABLE_ASAN=ON \
             -DCODE_COVERAGE=ON \
             -DCMAKE_C_FLAGS="-Werror" || exit 1
           echo "::endgroup::"
@@ -427,11 +432,14 @@ jobs:
           echo "::endgroup::"
           echo "::group::Test libcat"
           exit_status=0
-          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes || exit_status=$?
-          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ASAN_OPTIONS=log_path=asan.log ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
+          # each sanitizer reads its own variable, and the unused one is ignored
+          export ASAN_OPTIONS=log_path=asan.log
+          export TSAN_OPTIONS=log_path=tsan.log
+          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" ./cat_tests --gtest_color=yes || exit_status=$?
+          SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
           tail -n 40 test-debug.log
-          echo "ASan log:"
-          cat asan.log* || :
+          echo "Sanitizer log:"
+          cat asan.log* tsan.log* || :
           if [ "$exit_status" -ne 0 ]; then
             echo "::error::Test failed"
             exit $exit_status
@@ -501,7 +509,8 @@ jobs:
         if: always() && hashFiles('libcat/build/test-debug.log') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: test-logs-${{ matrix.os }}-${{ matrix.thread-safe }}
+          name: test-logs-${{ matrix.os }}-${{ matrix.thread-safe }}-${{ matrix.sanitizer }}
           path: |
             libcat/build/test-debug.log
             libcat/build/asan.log*
+            libcat/build/tsan.log*
