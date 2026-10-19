@@ -24,6 +24,18 @@ extern "C" {
 
 #include "cat.h"
 
+/*
+ * ThreadSanitizer does not support a thread fence, and its instrumentation tracks
+ * the ordering of the accesses itself. A signal fence is what is left to do.
+ */
+#if defined(__SANITIZE_THREAD__)
+# define CAT_ATOMIC_TSAN 1
+#elif defined(__has_feature)
+# if __has_feature(thread_sanitizer)
+#  define CAT_ATOMIC_TSAN 1
+# endif
+#endif
+
 /* TODO: Fixed implementation selection
  * or provided C API for external use. */
 #if __has_feature(c_atomic) && defined(__clang__)
@@ -232,10 +244,17 @@ typedef enum cat_atomic_memory_order_e {
 # define CAT_ATOMIC_PLAIN_COMPARE_EXCHANGE_ORDERED(address, expected, desired, type_name_t, success, failure) \
         (cat_bool_t) __atomic_compare_exchange_n(address, (expected), (desired), 0, \
             CAT_ATOMIC_RMW_ORDERS_TO_NATIVE(success), CAT_ATOMIC_LOAD_ORDERS_TO_NATIVE(failure))
-# define CAT_ATOMIC_PLAIN_FENCE() \
+# if defined(CAT_ATOMIC_TSAN)
+#  define CAT_ATOMIC_PLAIN_FENCE() \
+        __atomic_signal_fence(__ATOMIC_SEQ_CST)
+#  define CAT_ATOMIC_PLAIN_FENCE_ORDERED(order) \
+        __atomic_signal_fence(CAT_ATOMIC_FENCE_ORDERS_TO_NATIVE(order))
+# else
+#  define CAT_ATOMIC_PLAIN_FENCE() \
         __atomic_thread_fence(__ATOMIC_SEQ_CST)
-# define CAT_ATOMIC_PLAIN_FENCE_ORDERED(order) \
+#  define CAT_ATOMIC_PLAIN_FENCE_ORDERED(order) \
         __atomic_thread_fence(CAT_ATOMIC_FENCE_ORDERS_TO_NATIVE(order))
+# endif
 #endif
 
 
