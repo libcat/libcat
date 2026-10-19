@@ -435,6 +435,10 @@ jobs:
           # each sanitizer reads its own variable, and the unused one is ignored
           export ASAN_OPTIONS=log_path=asan.log
           export TSAN_OPTIONS=log_path=tsan.log
+          # ThreadSanitizer slows the socket tests by an order of magnitude
+          if [ "${{ matrix.sanitizer }}" = "TSAN" ]; then
+            export TEST_IO_TIMEOUT=120000
+          fi
           SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" ./cat_tests --gtest_color=yes || exit_status=$?
           SSL_CERT_FILE="$LIBCAT_TEST_CERT_FILE" CAT_DEBUG=3 ./cat_tests --gtest_color=yes > test-debug.log 2>&1 || exit_status=$?
           tail -n 40 test-debug.log
