@@ -374,15 +374,21 @@ jobs:
           ref: v1.18.0
           path: googletest
 
-      - name: Build GoogleTest with AddressSanitizer
+      - name: Build GoogleTest with the job sanitizer
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          # libc++ container annotations must agree with the instrumented tests.
+          # libc++ container annotations must agree with the instrumented tests,
+          # so GoogleTest takes the sanitizer of this job.
+          if [ "${{ matrix.sanitizer }}" = "TSAN" ]; then
+            gtest_sanitizer=-fsanitize=thread
+          else
+            gtest_sanitizer=-fsanitize=address
+          fi
           cmake -S googletest -B googletest/build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_STANDARD=20 \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="$gtest_sanitizer -fno-omit-frame-pointer" \
             -DBUILD_GMOCK=OFF \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/googletest"
           cmake --build googletest/build -j
