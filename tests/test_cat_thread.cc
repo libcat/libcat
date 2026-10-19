@@ -442,6 +442,7 @@ TEST(cat_thread, a_worker_runs_and_is_joined)
  * which is what the library offers instead of a return value. */
 TEST(cat_thread, a_worker_hands_the_result_back_through_a_semaphore)
 {
+    SKIP_IF_TSAN_ON_DARWIN("Mach semaphores are invisible to ThreadSanitizer");
     struct work_s {
         cat_thread_t thread;
         cat_sem_t done;

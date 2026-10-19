@@ -116,6 +116,14 @@ fail:
 # define SKIP_IF_TSAN(message) do { } while (0)
 #endif
 
+/* On macOS a uv_sem_t is a Mach semaphore, and ThreadSanitizer does not track
+ * Mach semaphores, so a value handed over with one looks unsynchronized. */
+#if defined(CAT_TESTS_TSAN) && defined(CAT_OS_DARWIN)
+# define SKIP_IF_TSAN_ON_DARWIN(message) SKIP_IF_(true, message)
+#else
+# define SKIP_IF_TSAN_ON_DARWIN(message) do { } while (0)
+#endif
+
 #define TEST_BUFFER_SIZE_STD               8192
 
 #define TEST_IO_TIMEOUT                    ::testing::CONFIG_IO_TIMEOUT
