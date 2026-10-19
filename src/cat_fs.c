@@ -239,6 +239,9 @@ static inline cat_errno_t cat_fs_set_error_code(cat_fs_error_t *e)
         default:
             CAT_NEVER_HERE("Strange error type");
     }
+
+    /* CAT_NEVER_HERE does not return, but the compiler does not know that. */
+    return CAT_EINVAL;
 }
 
 #ifdef CAT_OS_WIN
