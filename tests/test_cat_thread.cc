@@ -546,10 +546,18 @@ TEST(cat_thread, create_records_the_parent_and_the_name)
 {
     struct work_s {
         cat_thread_t thread;
+        cat_sem_t release;
     } work = {};
 
+    ASSERT_TRUE(cat_sem_init(&work.release, 0));
+    DEFER(cat_sem_destroy(&work.release));
+
+    /* the worker must stay alive until the check below, because this test
+     * looks at the state of a running thread */
     auto routine = [](cat_data_t *data) {
-        (void) data;
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_sem_acquire(&self->release, TEST_IO_TIMEOUT);
     };
 
     cat_thread_options_t options = {
@@ -563,9 +571,44 @@ TEST(cat_thread, create_records_the_parent_and_the_name)
     ASSERT_STREQ(work.thread.name, "worker");
     ASSERT_TRUE(cat_thread_is_running(&work.thread));
 
+    cat_sem_post(&work.release);
+
     ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
 
     ASSERT_FALSE(cat_thread_is_running(&work.thread));
+}
+
+/* A thread whose routine has returned is not running any more, even before a
+ * join, and joining it afterwards still works. */
+TEST(cat_thread, a_finished_thread_is_not_running_before_the_join)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        cat_sem_post(&self->done);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&work.thread, routine, &work));
+
+    /* the routine returned here, the exit flag follows it a moment later */
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+
+    for (int round = 0; round < 1000 && cat_thread_is_running(&work.thread); round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+
+    cat_sem_destroy(&work.done);
 }
 
 /* Every state a thread goes through is visible. */
