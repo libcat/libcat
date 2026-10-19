@@ -168,6 +168,17 @@
 # define CAT_OPT_SPEED
 #endif
 
+/* For a function whose memory accesses are intentionally not synchronized with
+ * another thread, so ThreadSanitizer must not report them as a race. */
+#if defined(__has_attribute)
+# if __has_attribute(no_sanitize)
+#  define CAT_ATTRIBUTE_NO_TSAN __attribute__((no_sanitize("thread")))
+# endif
+#endif
+#ifndef CAT_ATTRIBUTE_NO_TSAN
+# define CAT_ATTRIBUTE_NO_TSAN
+#endif
+
 #if defined(__GNUC__) && CAT_GCC_VERSION >= 5000
 # define CAT_ATTRIBUTE_UNUSED_LABEL __attribute__((cold, unused));
 # define CAT_ATTRIBUTE_COLD_LABEL __attribute__((cold));

@@ -70,7 +70,12 @@ static void cat_improve_timer_resolution(void)
 }
 #endif
 
-static void cat_watchdog_loop(void* arg)
+/*
+ * The loop reads the coroutine counters of the watched thread without a lock,
+ * on purpose, and a switch may write them at the same time. A misread only
+ * delays an alert, so the accesses are left uninstrumented.
+ */
+CAT_ATTRIBUTE_NO_TSAN static void cat_watchdog_loop(void* arg)
 {
     cat_watchdog_t *watchdog = (cat_watchdog_t *) arg;
 

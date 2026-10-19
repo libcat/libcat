@@ -90,7 +90,8 @@ TEST(cat_async, notify_timeout)
 
 TEST(cat_async, cancel)
 {
-    static bool done;
+    /* The work thread reads this flag, so it must be atomic. */
+    static std::atomic<bool> done;
     done = false;
     cat_async_t *async = cat_async_create(nullptr);
     ASSERT_NE(async, nullptr);

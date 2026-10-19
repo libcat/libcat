@@ -18,6 +18,8 @@
  */
 
 #include "cat_fs.h"
+
+#include "cat_atomic.h"
 #include "cat_coroutine.h"
 #include "cat_event.h"
 #include "cat_time.h"
@@ -2486,8 +2488,8 @@ typedef struct cat_fs_flock_data_s {
     cat_file_t fd;
     cat_fs_flock_flags_t op;
     cat_bool_t non_blocking; /* operation is non-blocking (UN/NB) */
-    cat_bool_t started; /* new thread in worker */
-    cat_bool_t done; /* new thread finished */
+    cat_atomic_bool_t started; /* new thread in worker, read by other threads */
+    cat_atomic_bool_t done; /* new thread finished, read by other threads */
     uv_thread_t tid;
     cat_async_t async;
     cat_event_shutdown_task_t *shutdown_task;
@@ -2578,7 +2580,7 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
     data->ret.ret.num = -1;
 
     // tell calling thread return
-    data->done = cat_true;
+    cat_atomic_bool_store(&data->done, cat_true);
     cat_async_notify(&data->async);
 
     DWORD dummy;
@@ -2678,7 +2680,7 @@ static void cat_fs_orig_flock(cat_data_t *ptr)
     goto _done;
 #endif // LOCK_EX...
     _done:
-    data->done = cat_true;
+    cat_atomic_bool_store(&data->done, cat_true);
     if (!data->non_blocking) {
         cat_async_notify(&data->async);
     }
@@ -2695,15 +2697,18 @@ static void cat_fs_flock_cb(cat_data_t *ptr)
         .flags = UV_THREAD_HAS_STACK_SIZE,
         .stack_size = 4 * cat_getpagesize()
     };
+    /* Set the flag before the thread exists. The thread may finish and notify
+     * the loop before this callback returns, and the cleanup of the waiter must
+     * already see that there is a thread to join. */
+    cat_atomic_bool_store(&data->started, cat_true);
     int error = uv_thread_create_ex(&data->tid, &params, cat_fs_orig_flock, data);
     if (0 != error) {
         // printf("thread failed\n");
+        cat_atomic_bool_store(&data->started, cat_false);
         data->ret.ret.num = -1;
         data->ret.error.type = CAT_FS_ERROR_CAT_ERRNO;
         data->ret.error.val.cat_errno = error;
         cat_async_notify(&data->async);
-    } else {
-        data->started = cat_true;
     }
 }
 
@@ -2711,11 +2716,14 @@ static void cat_fs_flock_data_cleanup(cat_async_t *async)
 {
     cat_fs_flock_data_t *data = cat_container_of(async, cat_fs_flock_data_t, async);
 
-    CAT_ASSERT(!data->started || data->done);
+    cat_bool_t started = cat_atomic_bool_load(&data->started);
+    cat_bool_t done = cat_atomic_bool_load(&data->done);
+
+    CAT_ASSERT(!started || done);
     if (data->shutdown_task != NULL) {
         cat_event_unregister_runtime_shutdown_task(data->shutdown_task);
     }
-    if (data->started) {
+    if (started) {
         uv_thread_join(&data->tid); // shell we run it in work()?
     }
     cat_free(data);
@@ -2725,10 +2733,10 @@ static void cat_fs_flock_shutdown(cat_data_t *ptr)
 {
     cat_fs_flock_data_t *data = (cat_fs_flock_data_t *) ptr;
 
-    while (!data->started) {
+    while (!cat_atomic_bool_load(&data->started)) {
         cat_sys_usleep(1000);
     }
-    if (!data->done) {
+    if (!cat_atomic_bool_load(&data->done)) {
         // try to kill thread as much as possible
 #ifndef CAT_OS_WIN
         (void) pthread_kill(data->tid, SIGKILL);
@@ -2770,8 +2778,8 @@ static cat_always_inline int cat_fs_flock_impl(cat_file_t fd, cat_fs_flock_flags
     memset(&data->ret, 0, sizeof(data->ret));
     data->fd = fd;
     data->op = op;
-    data->started = cat_false;
-    data->done = cat_false;
+    cat_atomic_bool_init(&data->started, cat_false);
+    cat_atomic_bool_init(&data->done, cat_false);
     data->non_blocking = ((data->op & (CAT_FS_FLOCK_FLAG_SHARED | CAT_FS_FLOCK_FLAG_EXCLUSIVE | CAT_FS_FLOCK_FLAG_UNLOCK)) == CAT_FS_FLOCK_FLAG_UNLOCK) || (data->op & _CAT_FS_FLOCK_FLAG_NONBLOCK);
     data->shutdown_task = NULL;
     if (data->non_blocking) {
