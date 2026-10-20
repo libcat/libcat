@@ -939,6 +939,7 @@ int uv_spawn(uv_loop_t* loop,
                               UV_PROCESS_WINDOWS_HIDE |
                               UV_PROCESS_WINDOWS_HIDE_CONSOLE |
                               UV_PROCESS_WINDOWS_HIDE_GUI |
+                              UV_PROCESS_WINDOWS_NEW_PROCESS_GROUP |
                               UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS)));
 
   err = uv__utf8_to_utf16_alloc(options->file, &application);
@@ -1114,6 +1115,12 @@ int uv_spawn(uv_loop_t* loop,
     startup.StartupInfo.wShowWindow = SW_HIDE;
   } else {
     startup.StartupInfo.wShowWindow = SW_SHOWDEFAULT;
+  }
+
+  if (options->flags & UV_PROCESS_WINDOWS_NEW_PROCESS_GROUP) {
+    /* The child keeps the console of the parent, so a console control event can
+     * reach the whole group by its id. */
+    process_flags |= CREATE_NEW_PROCESS_GROUP;
   }
 
   if (options->flags & UV_PROCESS_DETACHED) {
