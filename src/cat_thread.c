@@ -181,6 +181,44 @@ static cat_bool_t cat_thread_register_root(cat_thread_t *thread)
     return cat_true;
 }
 
+/*
+ * Apply a name to the running thread without a write to its object. The creator
+ * filled the object already, and a write here would race with a reader.
+ */
+static void cat_thread_apply_name(const char *name)
+{
+    (void) uv_thread_setname(name);
+}
+
+CAT_API cat_bool_t cat_thread_bootstrap(cat_thread_t *thread)
+{
+    if (unlikely(thread == NULL)) {
+        cat_update_last_error(CAT_EINVAL, "Thread object is null");
+        return cat_false;
+    }
+
+    if (unlikely(!cat_globals_available())) {
+        cat_update_last_error(CAT_EMISUSE, "The thread has no runtime");
+        return cat_false;
+    }
+
+    if (CAT_THREAD_G(current) == thread) {
+        return cat_true;
+    }
+
+    if (unlikely(!cat_thread_set_current(thread))) {
+        return cat_false;
+    }
+
+    cat_atomic_uint32_fetch_add(&cat_thread_count, 1);
+
+    if (thread->name[0] != '\0') {
+        cat_thread_apply_name(thread->name);
+    }
+
+    return cat_true;
+}
+
 CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
 {
     return cat_thread_register_root(thread);
@@ -344,15 +382,6 @@ CAT_API cat_bool_t cat_thread_set_name(const char *name)
 }
 
 /*
- * Apply a name to the running thread without a write to its object. The creator
- * filled the object already, and a write here would race with a reader.
- */
-static void cat_thread_apply_name(const char *name)
-{
-    (void) uv_thread_setname(name);
-}
-
-/*
  * The entry of a thread that libcat started. The thread takes a runtime of its
  * own, so the routine can use this library, and can suspend a coroutine.
  */
@@ -361,6 +390,12 @@ static void cat_thread_entry(void *data)
     cat_thread_t *thread = (cat_thread_t *) data;
     cat_bool_t runtime_was_up = cat_false;
 
+    if (thread->create_flags & CAT_THREAD_CREATE_MANUAL_RUNTIME) {
+        /* The routine takes the runtime of this thread. */
+        thread->routine(thread->data);
+        goto _done;
+    }
+
     if (unlikely(!cat_runtime_init_all())) {
         goto _done;
     }
@@ -368,13 +403,8 @@ static void cat_thread_entry(void *data)
 
     /* The object was filled by create, so this thread only takes it as its own.
      * Do not register it again, because that would clear the fields. */
-    if (unlikely(!cat_thread_set_current(thread))) {
+    if (unlikely(!cat_thread_bootstrap(thread))) {
         goto _done;
-    }
-    cat_atomic_uint32_fetch_add(&cat_thread_count, 1);
-
-    if (thread->name[0] != '\0') {
-        cat_thread_apply_name(thread->name);
     }
 
     /* After this the main coroutine of this thread can wait. */
@@ -410,10 +440,16 @@ CAT_API cat_bool_t cat_thread_create_ex(cat_thread_t *thread, cat_thread_routine
         return cat_false;
     }
 
+    if (unlikely(options != NULL && (options->flags & ~CAT_THREAD_CREATE_MANUAL_RUNTIME) != 0)) {
+        cat_update_last_error(CAT_EINVAL, "Unknown thread create flags");
+        return cat_false;
+    }
+
     memset(thread, 0, sizeof(*thread));
     thread->parent = cat_thread_get_current();
     thread->routine = routine;
     thread->data = data;
+    thread->create_flags = options != NULL ? options->flags : 0;
     cat_atomic_uint32_store(&thread->state, CAT_THREAD_STATE_JOINABLE);
 
     if (options != NULL && options->name != NULL) {

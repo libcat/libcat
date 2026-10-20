@@ -987,4 +987,125 @@ TEST(cat_thread, a_thread_that_runs_becomes_its_own_root)
     ASSERT_TRUE(bare.id_matches);
 }
 
+/* A thread whose routine takes the runtime, like a host with its own per-thread
+ * bootstrap. The routine inits the runtime, then registers its own object. */
+TEST(cat_thread, a_manual_runtime_worker_takes_its_own_runtime)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+        cat_bool_t runtime_ok;
+        cat_bool_t bootstrap_ok;
+        cat_bool_t bootstrap_twice_ok;
+        cat_bool_t current_ok;
+        cat_bool_t coroutine_ok;
+        uint32_t count;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    const uint32_t count_before = cat_thread_get_count();
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        self->runtime_ok = cat_runtime_init_all();
+        self->bootstrap_ok = cat_thread_bootstrap(&self->thread);
+        /* a second call must change nothing */
+        self->bootstrap_twice_ok = cat_thread_bootstrap(&self->thread);
+        self->count = cat_thread_get_count();
+        self->current_ok = cat_thread_get_current() == &self->thread;
+        co([&] {
+            /* the runtime of this thread drives the coroutine */
+            (void) cat_time_delay(1);
+            self->coroutine_ok = cat_true;
+        });
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        cat_sem_post(&self->done);
+    };
+
+    cat_thread_options_t options = {
+        .name = "manual",
+        .stack_size = 0,
+        .flags = CAT_THREAD_CREATE_MANUAL_RUNTIME,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work.thread, routine, &work, &options));
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_TRUE(work.runtime_ok);
+    ASSERT_TRUE(work.bootstrap_ok);
+    ASSERT_TRUE(work.bootstrap_twice_ok);
+    ASSERT_TRUE(work.current_ok);
+    ASSERT_TRUE(work.coroutine_ok);
+    ASSERT_EQ(work.count, count_before + 1);
+    ASSERT_EQ(cat_thread_get_count(), count_before);
+
+    cat_sem_destroy(&work.done);
+}
+
+/* A manual runtime worker may skip the registration. It then has no current
+ * object and does not count, but join still works. */
+TEST(cat_thread, a_manual_runtime_worker_without_bootstrap_is_not_registered)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+        cat_bool_t has_current;
+        cat_errno_t error;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    const uint32_t count_before = cat_thread_get_count();
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_runtime_init_all();
+        self->has_current = cat_thread_get_current() != NULL;
+        self->error = cat_get_last_error_code();
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        cat_sem_post(&self->done);
+    };
+
+    cat_thread_options_t options = {
+        .name = "anonymous",
+        .stack_size = 0,
+        .flags = CAT_THREAD_CREATE_MANUAL_RUNTIME,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work.thread, routine, &work, &options));
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_FALSE(work.has_current);
+    ASSERT_EQ(work.error, CAT_EMISUSE);
+    ASSERT_EQ(cat_thread_get_count(), count_before);
+
+    cat_sem_destroy(&work.done);
+}
+
+/* Unknown create flags are refused, so a typo does not start a wrong thread. */
+TEST(cat_thread, unknown_create_flags_are_refused)
+{
+    cat_thread_t thread;
+
+    auto routine = [](cat_data_t *data) {
+        (void) data;
+    };
+
+    cat_thread_options_t options = {
+        .name = nullptr,
+        .stack_size = 0,
+        .flags = 0x80000000u,
+    };
+
+    ASSERT_FALSE(cat_thread_create_ex(&thread, routine, nullptr, &options));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
 #endif /* CAT_THREAD_SAFE */

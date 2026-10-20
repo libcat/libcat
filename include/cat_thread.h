@@ -50,11 +50,26 @@ typedef struct cat_thread_s cat_thread_t;
  */
 typedef void (*cat_thread_routine_t)(cat_data_t *data);
 
+typedef uint32_t cat_thread_create_flags_t;
+
+/*
+ * The routine takes the runtime of its thread. It must call cat_runtime_init_all()
+ * before it uses the library, and cat_runtime_shutdown_all() and
+ * cat_runtime_close_all() before it returns. A thread of this kind has no event
+ * loop and no coroutine until the routine starts them.
+ *
+ * The routine should call cat_thread_bootstrap() after its runtime is up. A
+ * thread that skips that call has no current object and does not count.
+ */
+#define CAT_THREAD_CREATE_MANUAL_RUNTIME (1u << 0)
+
 typedef struct cat_thread_options_s {
     /* the name given to the thread, or NULL to leave it alone */
     const char *name;
     /* the stack size of the coroutines of this thread, 0 for the default */
     size_t stack_size;
+    /* zero, or CAT_THREAD_CREATE_MANUAL_RUNTIME */
+    cat_thread_create_flags_t flags;
 } cat_thread_options_t;
 
 struct cat_thread_s {
@@ -67,6 +82,7 @@ struct cat_thread_s {
     cat_thread_wait_t join;
     /* 4 byte */
     cat_atomic_uint32_t state;
+    cat_thread_create_flags_t create_flags;
     /* at most CAT_THREAD_NAME_MAX bytes plus the terminator, kept last */
     char name[CAT_THREAD_NAME_MAX + 1];
 };
@@ -83,6 +99,18 @@ CAT_API cat_bool_t cat_thread_module_init(void);
 CAT_API cat_bool_t cat_thread_module_shutdown(void);
 CAT_API cat_bool_t cat_thread_runtime_init(void);
 CAT_API cat_bool_t cat_thread_runtime_shutdown(void);
+
+/*
+ * Register the object of the calling thread, after the thread took a runtime.
+ *
+ * libcat registers a managed thread itself, so only a routine of a manual runtime
+ * thread calls this. After the call, cat_thread_get_current() returns the object
+ * and the thread counts as alive.
+ *
+ * The call does nothing after the first one. It fails with CAT_EMISUSE on a
+ * thread that has no runtime.
+ */
+CAT_API cat_bool_t cat_thread_bootstrap(cat_thread_t *thread);
 
 /* Optional. A thread that runs cat_run becomes the root of its own runtime when
  * no earlier call registered it. */
@@ -110,7 +138,9 @@ CAT_API cat_bool_t      cat_thread_set_name(const char *name);
  * that needs to know it started synchronizes with it.
  *
  * The thread takes a runtime of its own, so routine may use the facilities of
- * this library.
+ * this library. With CAT_THREAD_CREATE_MANUAL_RUNTIME the routine takes the
+ * runtime instead, because a host with its own per-thread setup needs to run it
+ * at its own point. See cat_thread_create_ex().
  */
 CAT_API cat_bool_t cat_thread_create(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data);
 CAT_API cat_bool_t cat_thread_create_ex(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data,
