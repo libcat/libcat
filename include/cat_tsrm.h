@@ -127,14 +127,22 @@ CAT_API cat_bool_t cat_globals_key_available(void);
 # define CAT_GLOBALS_BULK(name)         (&CAT_GLOBALS(name))
 #endif
 
+#endif /* ndef CAT_THREAD_SAFE */
+
+/*
+ * A host that defines CAT_THREAD_SAFE and keeps the globals itself must also
+ * define CAT_GLOBALS_AVAILABLE(): cat_true when the current thread has a block.
+ */
+#if !defined(CAT_GLOBALS_AVAILABLE)
+# error "Define CAT_GLOBALS_AVAILABLE() for this globals storage"
+#endif
+
 /*
  * Every read of a block goes through this, because a thread without a runtime
  * has nowhere to keep one and the accessor above would walk away from a null
- * base. The name stays the same in all three modes.
+ * base. The name stays the same in all storage modes.
  */
 static cat_always_inline cat_bool_t cat_globals_available(void)
 {
     return CAT_GLOBALS_AVAILABLE();
 }
-
-#endif /* ndef CAT_THREAD_SAFE */
