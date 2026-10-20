@@ -53,13 +53,16 @@ typedef void (*cat_thread_routine_t)(cat_data_t *data);
 typedef uint32_t cat_thread_create_flags_t;
 
 /*
- * The routine takes the runtime of its thread. It must call cat_runtime_init_all()
- * before it uses the library, and cat_runtime_shutdown_all() and
- * cat_runtime_close_all() before it returns. A thread of this kind has no event
- * loop and no coroutine until the routine starts them.
+ * The routine takes the runtime of its thread.
  *
- * The routine should call cat_thread_bootstrap() after its runtime is up. A
- * thread that skips that call has no current object and does not count.
+ * It must start the runtime before the first call into this library, and stop it
+ * before it returns. A host that stops the modules one by one must call
+ * cat_thread_runtime_shutdown() as part of that, so the registration of the
+ * thread goes away with the runtime.
+ *
+ * It must call cat_thread_bootstrap() after the runtime is up, and
+ * cat_thread_teardown() as its last call on the object. A thread of this kind has
+ * no event loop and no coroutine until the routine starts them.
  */
 #define CAT_THREAD_CREATE_MANUAL_RUNTIME (1u << 0)
 
@@ -111,6 +114,21 @@ CAT_API cat_bool_t cat_thread_runtime_shutdown(void);
  * thread that has no runtime.
  */
 CAT_API cat_bool_t cat_thread_bootstrap(cat_thread_t *thread);
+
+/*
+ * Mark the calling thread as exited and wake whoever joins it.
+ *
+ * It is the last call a manual runtime routine makes on its own object, and the
+ * entry of that thread touches nothing after the routine returns. The routine may
+ * release the storage right after this call.
+ *
+ * It also drops the registration of the thread when the runtime is still up, so
+ * the count and the current object stay clean when the host does not call
+ * cat_thread_runtime_shutdown().
+ *
+ * The call does nothing after the first one.
+ */
+CAT_API void cat_thread_teardown(cat_thread_t *thread);
 
 /* Optional. A thread that runs cat_run becomes the root of its own runtime when
  * no earlier call registered it. */

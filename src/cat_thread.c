@@ -219,6 +219,25 @@ CAT_API cat_bool_t cat_thread_bootstrap(cat_thread_t *thread)
     return cat_true;
 }
 
+CAT_API void cat_thread_teardown(cat_thread_t *thread)
+{
+    if (cat_atomic_uint32_load(&thread->state) & CAT_THREAD_STATE_EXITED) {
+        return;
+    }
+
+    /* the registration needs a runtime, the wake of the joiners does not */
+    if (cat_globals_available() && CAT_THREAD_G(current) == thread) {
+        cat_atomic_uint32_fetch_sub(&cat_thread_count, 1);
+        (void) cat_thread_set_current(NULL);
+    }
+
+    /* Record the exit last, so a joiner that sees it sees a finished thread. The
+     * store is atomic because the joiner reads it from another thread. */
+    cat_atomic_uint32_store(&thread->state,
+        cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_EXITED);
+    (void) cat_thread_wait_wake_all(&thread->join);
+}
+
 CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
 {
     return cat_thread_register_root(thread);
@@ -391,9 +410,10 @@ static void cat_thread_entry(void *data)
     cat_bool_t runtime_was_up = cat_false;
 
     if (thread->create_flags & CAT_THREAD_CREATE_MANUAL_RUNTIME) {
-        /* The routine takes the runtime of this thread. */
+        /* The routine takes the runtime and calls cat_thread_teardown(), so this
+         * entry touches nothing after the routine returns. */
         thread->routine(thread->data);
-        goto _done;
+        return;
     }
 
     if (unlikely(!cat_runtime_init_all())) {
@@ -423,11 +443,7 @@ _done:
         (void) cat_runtime_close_all();
     }
 
-    /* Record the exit last, so a joiner that sees it sees a finished thread. The
-     * store is atomic because the joiner reads it from another thread. */
-    cat_atomic_uint32_store(&thread->state,
-        cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_EXITED);
-    (void) cat_thread_wait_wake_all(&thread->join);
+    cat_thread_teardown(thread);
 }
 
 CAT_API cat_bool_t cat_thread_create_ex(cat_thread_t *thread, cat_thread_routine_t routine, cat_data_t *data,

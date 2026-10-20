@@ -1022,6 +1022,7 @@ TEST(cat_thread, a_manual_runtime_worker_takes_its_own_runtime)
         });
         (void) cat_runtime_shutdown_all();
         (void) cat_runtime_close_all();
+        cat_thread_teardown(&self->thread);
         cat_sem_post(&self->done);
     };
 
@@ -1069,6 +1070,7 @@ TEST(cat_thread, a_manual_runtime_worker_without_bootstrap_is_not_registered)
         self->error = cat_get_last_error_code();
         (void) cat_runtime_shutdown_all();
         (void) cat_runtime_close_all();
+        cat_thread_teardown(&self->thread);
         cat_sem_post(&self->done);
     };
 
@@ -1087,6 +1089,136 @@ TEST(cat_thread, a_manual_runtime_worker_without_bootstrap_is_not_registered)
     ASSERT_EQ(cat_thread_get_count(), count_before);
 
     cat_sem_destroy(&work.done);
+}
+
+/* The routine may call teardown after it closed the runtime, because the exit
+ * signal and the wake of the joiners need no runtime. */
+TEST(cat_thread, a_manual_runtime_worker_tears_down_without_a_runtime)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+        cat_bool_t bootstrapped;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    const uint32_t count_before = cat_thread_get_count();
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_runtime_init_all();
+        self->bootstrapped = cat_thread_bootstrap(&self->thread);
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        /* the runtime is gone here, and the thread count already went back */
+        cat_thread_teardown(&self->thread);
+        cat_sem_post(&self->done);
+    };
+
+    cat_thread_options_t options = {
+        .name = "late-teardown",
+        .stack_size = 0,
+        .flags = CAT_THREAD_CREATE_MANUAL_RUNTIME,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work.thread, routine, &work, &options));
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_TRUE(work.bootstrapped);
+    ASSERT_EQ(cat_thread_get_count(), count_before);
+    ASSERT_FALSE(cat_thread_is_running(&work.thread));
+
+    cat_sem_destroy(&work.done);
+}
+
+/* A teardown before the runtime shutdown drops the registration itself, so the
+ * later shutdown does not count the thread twice. */
+TEST(cat_thread, a_manual_runtime_worker_tears_down_before_the_runtime)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t done;
+        cat_bool_t bootstrapped;
+        uint32_t count_after_teardown;
+    } work = {};
+
+    ASSERT_TRUE(cat_sem_init(&work.done, 0));
+
+    const uint32_t count_before = cat_thread_get_count();
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_runtime_init_all();
+        self->bootstrapped = cat_thread_bootstrap(&self->thread);
+        cat_thread_teardown(&self->thread);
+        self->count_after_teardown = cat_thread_get_count();
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        cat_sem_post(&self->done);
+    };
+
+    cat_thread_options_t options = {
+        .name = "early-teardown",
+        .stack_size = 0,
+        .flags = CAT_THREAD_CREATE_MANUAL_RUNTIME,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work.thread, routine, &work, &options));
+    ASSERT_TRUE(cat_sem_acquire(&work.done, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thread_join(&work.thread, TEST_IO_TIMEOUT));
+
+    ASSERT_TRUE(work.bootstrapped);
+    ASSERT_EQ(work.count_after_teardown, count_before);
+    ASSERT_EQ(cat_thread_get_count(), count_before);
+
+    cat_sem_destroy(&work.done);
+}
+
+/* The entry of a manual runtime thread touches nothing after the routine
+ * returns, so a detached thread may release its own object. */
+TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
+{
+    struct work_s {
+        cat_thread_t thread;
+        cat_sem_t *done;
+    };
+
+    cat_sem_t done;
+    ASSERT_TRUE(cat_sem_init(&done, 0));
+
+    auto *work = new work_s{
+        .thread = {},
+        .done = &done,
+    };
+
+    auto routine = [](cat_data_t *data) {
+        struct work_s *self = (struct work_s *) data;
+
+        (void) cat_runtime_init_all();
+        (void) cat_thread_bootstrap(&self->thread);
+        cat_thread_teardown(&self->thread);
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        cat_sem_post(self->done);
+        /* the entry does not touch the object after this point */
+        delete self;
+    };
+
+    cat_thread_options_t options = {
+        .name = "detached",
+        .stack_size = 0,
+        .flags = CAT_THREAD_CREATE_MANUAL_RUNTIME,
+    };
+
+    ASSERT_TRUE(cat_thread_create_ex(&work->thread, routine, work, &options));
+    ASSERT_TRUE(cat_thread_detach(&work->thread));
+    ASSERT_TRUE(cat_sem_acquire(&done, TEST_IO_TIMEOUT));
+
+    cat_sem_destroy(&done);
 }
 
 /* Unknown create flags are refused, so a typo does not start a wrong thread. */
