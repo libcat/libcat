@@ -111,6 +111,105 @@ TEST(cat_os_wait, timeout)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
 }
 
+/* A child that is still running is not a result for WNOHANG: the call returns
+ * zero at once and leaves the child waitable. */
+TEST(cat_os_wait, wnohang_returns_zero_while_the_child_runs)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(200 * 1000);
+        _exit(0);
+    }
+
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
+
+    int status = 0;
+    pid_t ret = cat_os_waitpid_ex(pid, &status, WNOHANG, TEST_IO_TIMEOUT);
+    ASSERT_EQ(ret, 0);
+
+    /* the child is still there, so a blocking call waits for it */
+    ret = cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT);
+    reaped = ret == pid;
+    ASSERT_EQ(ret, pid);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 0);
+}
+
+/* WNOHANG reports a child that already exited, with its status. */
+TEST(cat_os_wait, wnohang_returns_an_exited_child)
+{
+    pid_t pid = new_child_process(7);
+    int status = 0;
+
+    /* the child exits after a millisecond */
+    ASSERT_TRUE(cat_time_delay(20));
+
+    pid_t ret = cat_os_waitpid_ex(pid, &status, WNOHANG, 0);
+    ASSERT_EQ(ret, pid);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 7);
+}
+
+/* A timed out wait leaves the child waitable, and the second wait gets it. */
+TEST(cat_os_wait, a_timed_out_wait_leaves_the_child_waitable)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(100 * 1000);
+        _exit(3);
+    }
+
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
+
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, 10), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 3);
+}
+
+/* wait4 takes the same options, and WNOHANG means the same there. */
+TEST(cat_os_wait, wnohang_returns_zero_for_wait4)
+{
+#ifdef CAT_OS_WAIT_HAVE_RUSAGE
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(200 * 1000);
+        _exit(0);
+    }
+
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
+
+    int status = 0;
+    struct rusage rusage;
+    memset(&rusage, 0, sizeof(rusage));
+    ASSERT_EQ(cat_os_wait4_ex(pid, &status, WNOHANG, &rusage, TEST_IO_TIMEOUT), 0);
+    ASSERT_EQ(cat_os_wait4_ex(pid, &status, 0, &rusage, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(WIFEXITED(status));
+#else
+    SKIP_IF_(1, "rusage is not available");
+#endif
+}
+
 TEST(cat_os_wait, reject_non_child_pids)
 {
     for (pid_t pid : {getpid(), getppid()}) {

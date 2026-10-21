@@ -273,7 +273,7 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
     }
 
     size_t dispatched;
-    do {
+    for (;;) {
         cat_os_child_process_stat_t *child_process_state = NULL;
         if (pid < 0) {
             RB_FOREACH(child_process_state, cat_os_child_process_stat_tree_s, &CAT_OS_WAIT_G(child_process_state_tree)) {
@@ -300,11 +300,23 @@ static cat_pid_t cat_os__wait(cat_pid_t pid, int *status, int options, void *rus
         int error = 0;
         dispatched = cat_os_wait_dispatch(pid > 0 ? pid : -1, &error);
         if (unlikely(error != 0)) {
+            if (error == EINTR) {
+                /* a signal arrived before any status was ready, look again */
+                continue;
+            }
             cat_errno_t code = error == ECHILD ? CAT_ECHILD : cat_translate_sys_error(error);
             cat_update_last_error_with_reason(code, "OS %s(pid=%d) failed", cat_os_wait_type_name(type), pid);
             return -1;
         }
-    } while (dispatched > 0);
+        if (dispatched == 0) {
+            break;
+        }
+    }
+
+    /* Nothing is ready, and WNOHANG asks for an answer without waiting. */
+    if (options & WNOHANG) {
+        return 0;
+    }
 
     cat_os_wait_task_t wait_task;
     cat_os_waitpid_task_t *waitpid_task;
@@ -431,7 +443,7 @@ CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options)
 
 CAT_API cat_pid_t cat_os_waitpid_ex(cat_pid_t pid, int *status, int options, cat_msec_t timeout)
 {
-    return cat_os__wait_wrapper(pid, status, 0, NULL, timeout, CAT_OS_WAIT_TYPE_WAITPID);
+    return cat_os__wait_wrapper(pid, status, options, NULL, timeout, CAT_OS_WAIT_TYPE_WAITPID);
 }
 
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE

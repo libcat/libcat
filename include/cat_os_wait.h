@@ -46,6 +46,22 @@ CAT_API cat_bool_t cat_os_wait_runtime_shutdown(void);
  */
 CAT_API cat_pid_t cat_os_fork(void);
 
+/*
+ * Wait for a child process, without blocking the thread that waits.
+ *
+ * Return the pid of the child that changed state, 0 when WNOHANG is set and no
+ * child is ready, and -1 on error. A wait that runs out of time returns -1 with
+ * CAT_ETIMEDOUT, so a timeout is not a child state.
+ *
+ * A stopped child is reported even when WUNTRACED is not set, because the
+ * bookkeeping keeps every status it takes from the kernel.
+ *
+ * Do not wait for the same child with this API and with cat_process_*: the
+ * SIGCHLD handler here can take the exit status of a process that uv_spawn()
+ * started, and the cat_process wait then never completes.
+ *
+ * pid 0 is not supported (CAT_ENOTSUP). pid -1 waits for any child.
+ */
 CAT_API cat_pid_t cat_os_wait(int *status);
 CAT_API cat_pid_t cat_os_wait_ex(int *status, cat_msec_t timeout);
 CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options);
