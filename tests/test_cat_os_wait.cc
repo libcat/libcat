@@ -575,6 +575,33 @@ TEST(cat_os_wait, status_decoders_match_the_wait_macros)
     ASSERT_EQ(cat_os_wait_status_exit_code(status), 3);
 }
 
+/* The decoders report a signal and no exit code for a killed child. */
+TEST(cat_os_wait, status_decoders_report_a_signal)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(100 * 1000);
+        _exit(0);
+    }
+
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
+
+    ASSERT_TRUE(cat_kill(pid, CAT_SIGTERM));
+
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(cat_os_wait_status_signaled(status));
+    ASSERT_EQ(cat_os_wait_status_term_signal(status), CAT_SIGTERM);
+    ASSERT_FALSE(cat_os_wait_status_exited(status));
+    ASSERT_EQ(cat_os_wait_status_exit_code(status), -1);
+}
+
 #endif
 
 #ifdef CAT_OS_WIN
