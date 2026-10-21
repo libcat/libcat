@@ -194,9 +194,23 @@ CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t tim
     return ret;
 }
 
-CAT_API void cat_process_close(cat_process_t *process)
+CAT_API cat_bool_t cat_process_close(cat_process_t *process)
 {
+    if (unlikely(process == NULL)) {
+        cat_update_last_error(CAT_EINVAL, "Process is null");
+        return cat_false;
+    }
+
+    if (unlikely(!cat_queue_empty(&process->waiters))) {
+        /* the object goes away in the close callback, and a parked waiter would
+         * read it after that */
+        cat_update_last_error(CAT_EBUSY, "Process has waiters");
+        return cat_false;
+    }
+
     uv_close(&process->u.handle, cat_process_close_callback);
+
+    return cat_true;
 }
 
 CAT_API cat_pid_t cat_process_get_pid(const cat_process_t *process)

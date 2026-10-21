@@ -413,6 +413,31 @@ TEST_PROCESS_START(cat_process, exit_1, [] {
     ASSERT_EQ(cat_process_get_term_signal(process), 0);
 } TEST_PROCESS_END();
 
+/* Close is refused while a coroutine waits for the process, because the object
+ * goes away in the close callback. */
+TEST_PROCESS_START(cat_process, close_with_a_waiter_is_refused, [] {
+    greeter();
+    cat_sys_sleep(TEST_IO_TIMEOUT * 10);
+}) {
+    ASSERT_TRUE(wait_for_greetings(pipe_stderr));
+
+    bool wait_done = false;
+    cat_coroutine_t *waiter = co([&] {
+        ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+        wait_done = true;
+    });
+    ASSERT_NE(waiter, nullptr);
+
+    ASSERT_FALSE(cat_process_close(process));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+
+    /* the object is untouched, so the wait and the close still work */
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(wait_done);
+    ASSERT_TRUE(cat_process_has_exited(process));
+} TEST_PROCESS_END();
+
 /* Signal zero asks whether the process is still there, and changes nothing. */
 TEST(cat_process, kill_ex_zero_checks_a_running_process)
 {

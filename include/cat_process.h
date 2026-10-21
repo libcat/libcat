@@ -175,7 +175,18 @@ struct cat_process_s {
 CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options);
 CAT_API cat_bool_t cat_process_wait(cat_process_t *process);
 CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t timeout);
-CAT_API void cat_process_close(cat_process_t *process);
+/*
+ * Close the process object. The loop frees it once it releases the handle, so
+ * the object is not usable after a successful call.
+ *
+ * The call fails with CAT_EBUSY while a coroutine waits for the process. Wait
+ * first, then close.
+ *
+ * The call does not stop the process and does not close its stdio streams. A
+ * close before the process exits leaves a child that the loop can not reap, so
+ * wait for the process first.
+ */
+CAT_API cat_bool_t cat_process_close(cat_process_t *process);
 
 CAT_API cat_pid_t cat_process_get_pid(const cat_process_t *process);
 
