@@ -146,10 +146,22 @@ TEST(cat_os_wait, wnohang_returns_an_exited_child)
     pid_t pid = new_child_process(7);
     int status = 0;
 
-    /* the child exits after a millisecond */
-    ASSERT_TRUE(cat_time_delay(20));
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
 
-    pid_t ret = cat_os_waitpid_ex(pid, &status, WNOHANG, 0);
+    /* A sanitizer can slow the child down, so poll instead of guessing a delay.
+     * A call that does not block returns zero until the child exits. */
+    pid_t ret = 0;
+    for (cat_timeout_t waited = 0; waited < TEST_IO_TIMEOUT && ret == 0; waited += 10) {
+        ret = cat_os_waitpid_ex(pid, &status, WNOHANG, 0);
+        if (ret == 0) {
+            ASSERT_TRUE(cat_time_delay(10));
+        }
+    }
+    reaped = ret == pid;
     ASSERT_EQ(ret, pid);
     ASSERT_TRUE(WIFEXITED(status));
     ASSERT_EQ(WEXITSTATUS(status), 7);
