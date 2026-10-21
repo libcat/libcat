@@ -154,7 +154,7 @@ jobs:
         run: |
           vcpkg install gtest:x64-windows && ^
           vcpkg install openssl:x64-windows && ^
-          vcpkg install curl[core,non-http,ssl]:x64-windows
+          vcpkg install curl[core,ssl]:x64-windows
 
       - name: Save vcpkg cache
         uses: actions/cache/save@v6
