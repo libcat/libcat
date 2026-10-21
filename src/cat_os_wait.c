@@ -19,7 +19,9 @@
 
 #include "cat_os_wait.h"
 
-#ifdef CAT_OS_WAIT
+/* The POSIX backend. A Windows backend joins this file later, so that the wait
+ * API is the same on every platform. */
+#ifdef CAT_OS_UNIX_LIKE
 
 #include "cat_signal.h"
 #include "cat_event.h"
@@ -30,13 +32,13 @@
 #include <sys/wait.h>
 
 typedef struct cat_os_wait_task_s {
+    cat_coroutine_t *coroutine;
     cat_queue_t node;
     cat_pid_t pid;
     int status;
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
     struct rusage rusage;
 #endif
-    cat_coroutine_t *coroutine;
 } cat_os_wait_task_t;
 
 typedef struct cat_os_waitpid_task_s {
@@ -470,6 +472,18 @@ CAT_API cat_pid_t cat_os_wait4_ex(cat_pid_t pid, int *status, int options, struc
 
 #endif /* CAT_OS_WAIT_HAVE_RUSAGE */
 
+CAT_API cat_pid_t cat_os_fork(void)
+{
+    cat_pid_t pid = fork();
+    if (pid == 0) {
+        /* 子进程：重建事件循环，使 libuv handles 在子进程中正常工作 */
+        cat_event_fork();
+    } else if (pid < 0) {
+        cat_update_last_error_of_syscall("Fork failed");
+    }
+    return pid;
+}
+
 CAT_API cat_bool_t cat_os_wait_module_init(void)
 {
     CAT_GLOBALS_REGISTER(cat_os_wait);
@@ -512,16 +526,79 @@ CAT_API cat_bool_t cat_os_wait_runtime_shutdown(void)
     return cat_true;
 }
 
-CAT_API cat_pid_t cat_os_fork(void)
+#else /* !CAT_OS_UNIX_LIKE */
+
+/*
+ * The Windows backend is not written yet. The functions exist, so a caller links
+ * and gets a clear error instead of a missing symbol.
+ */
+
+static cat_bool_t cat_os_wait_unsupported(const char *name)
 {
-    cat_pid_t pid = fork();
-    if (pid == 0) {
-        /* 子进程：重建事件循环，使 libuv handles 在子进程中正常工作 */
-        cat_event_fork();
-    } else if (pid < 0) {
-        cat_update_last_error_of_syscall("Fork failed");
-    }
-    return pid;
+    cat_update_last_error(CAT_ENOTSUP, "%s() is not supported on this platform yet", name);
+    return cat_false;
 }
 
-#endif /* CAT_OS_WAIT */
+CAT_API cat_pid_t cat_os_wait(int *status)
+{
+    (void) status;
+
+    (void) cat_os_wait_unsupported("cat_os_wait");
+
+    return -1;
+}
+
+CAT_API cat_pid_t cat_os_wait_ex(int *status, cat_msec_t timeout)
+{
+    (void) status;
+    (void) timeout;
+
+    (void) cat_os_wait_unsupported("cat_os_wait_ex");
+
+    return -1;
+}
+
+CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options)
+{
+    (void) pid;
+    (void) status;
+    (void) options;
+
+    (void) cat_os_wait_unsupported("cat_os_waitpid");
+
+    return -1;
+}
+
+CAT_API cat_pid_t cat_os_waitpid_ex(cat_pid_t pid, int *status, int options, cat_msec_t timeout)
+{
+    (void) pid;
+    (void) status;
+    (void) options;
+    (void) timeout;
+
+    (void) cat_os_wait_unsupported("cat_os_waitpid_ex");
+
+    return -1;
+}
+
+CAT_API cat_bool_t cat_os_wait_module_init(void)
+{
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_os_wait_module_shutdown(void)
+{
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_os_wait_runtime_init(void)
+{
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_os_wait_runtime_shutdown(void)
+{
+    return cat_true;
+}
+
+#endif /* CAT_OS_UNIX_LIKE */

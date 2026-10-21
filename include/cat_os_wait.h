@@ -25,26 +25,26 @@ extern "C" {
 #include "cat.h"
 
 #ifdef CAT_OS_UNIX_LIKE
-
-#include <sys/resource.h>
-
-# define CAT_OS_WAIT 1
+# include <sys/resource.h>
 
 /* we believe it's always available on nowadays machines,
  * we can consider checking it only when someone met this problem :) */
 # define CAT_OS_WAIT_HAVE_RUSAGE 1
+#endif
 
 CAT_API cat_bool_t cat_os_wait_module_init(void);
 CAT_API cat_bool_t cat_os_wait_module_shutdown(void);
 CAT_API cat_bool_t cat_os_wait_runtime_init(void);
 CAT_API cat_bool_t cat_os_wait_runtime_shutdown(void);
 
+#ifdef CAT_OS_UNIX_LIKE
 /**
  * 协程安全的 fork 封装
  * 子进程中自动调用 cat_event_fork() 重建事件循环
  * @return 父进程返回子进程 PID，子进程返回 0，失败返回 -1
  */
 CAT_API cat_pid_t cat_os_fork(void);
+#endif
 
 /*
  * Wait for a child process, without blocking the thread that waits.
@@ -73,8 +73,6 @@ CAT_API cat_pid_t cat_os_wait3_ex(int *status, int options, struct rusage *rusag
 CAT_API cat_pid_t cat_os_wait4(cat_pid_t pid, int *status, int options, struct rusage *rusage);
 CAT_API cat_pid_t cat_os_wait4_ex(cat_pid_t pid, int *status, int options, struct rusage *rusage, cat_msec_t timeout);
 #endif /* CAT_OS_WAIT_HAVE_RUSAGE */
-
-#endif
 
 #ifdef __cplusplus
 }

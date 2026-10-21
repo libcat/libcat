@@ -19,7 +19,7 @@
 #include "test.h"
 #include <algorithm>
 
-#ifdef CAT_OS_WAIT
+#ifdef CAT_OS_UNIX_LIKE
 
 TEST(cat_os_wait, fork_restores_child_event_loop)
 {
