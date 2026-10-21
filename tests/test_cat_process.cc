@@ -332,6 +332,49 @@ TEST(cat_process, new_process_group_flag_spawns_the_child)
     ASSERT_EQ(cat_process_get_exit_status(process), 7);
 }
 
+/* A normal exit reports the exit code and no signal. */
+TEST_PROCESS_START(cat_process, status_of_a_normal_exit, [] {
+    exit(7);
+}) {
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    cat_process_status_t status = cat_process_get_status(process);
+    ASSERT_TRUE(status.exited);
+    ASSERT_FALSE(status.signaled);
+    ASSERT_EQ(status.exit_code, 7);
+    ASSERT_EQ(status.term_signal, -1);
+} TEST_PROCESS_END();
+
+/* A killed process reports the signal and no exit code. */
+TEST_PROCESS_START(cat_process, status_of_a_killed_process, [] {
+    greeter();
+    cat_sys_sleep(TEST_IO_TIMEOUT * 10);
+}) {
+    ASSERT_TRUE(wait_for_greetings(pipe_stderr));
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    cat_process_status_t status = cat_process_get_status(process);
+    ASSERT_TRUE(status.exited);
+    ASSERT_TRUE(status.signaled);
+    ASSERT_EQ(status.exit_code, -1);
+    ASSERT_EQ(status.term_signal, CAT_SIGKILL);
+} TEST_PROCESS_END();
+
+/* A process that still runs reports neither a code nor a signal. */
+TEST_PROCESS_START(cat_process, status_of_a_running_process, [] {
+    greeter();
+    cat_sys_sleep(TEST_IO_TIMEOUT * 10);
+}) {
+    ASSERT_TRUE(wait_for_greetings(pipe_stderr));
+    cat_process_status_t status = cat_process_get_status(process);
+    ASSERT_FALSE(status.exited);
+    ASSERT_FALSE(status.signaled);
+    ASSERT_EQ(status.exit_code, -1);
+    ASSERT_EQ(status.term_signal, -1);
+    /* the kill only cleans up, and SIGKILL is the one signal both platforms map */
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+} TEST_PROCESS_END();
+
 TEST_PROCESS_START(cat_process, cancel_wait, [] {
     do {
         char buffer[CAT_STRLEN(GREETING_STRING) + 1];

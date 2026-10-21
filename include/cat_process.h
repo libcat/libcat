@@ -140,6 +140,25 @@ typedef struct cat_process_options_s {
     cat_gid_t gid;
 } cat_process_options_t;
 
+/*
+ * The state of a process in one value, so a caller does not read a raw wait
+ * status.
+ *
+ * exit_code is the code of a normal exit, or -1. term_signal is the signal that
+ * ended the process, or -1. A process that has not exited reports -1 for both,
+ * and signaled is false.
+ *
+ * On Windows the backend reports a signal only for a kill that this library
+ * sent. A process that the system stopped in another way (for example, from the
+ * task manager) looks like a normal exit with the code the system used.
+ */
+typedef struct cat_process_status_s {
+    int64_t exit_code;
+    int term_signal;
+    cat_bool_t exited;
+    cat_bool_t signaled;
+} cat_process_status_t;
+
 typedef struct cat_process_s cat_process_t;
 
 struct cat_process_s {
@@ -161,7 +180,15 @@ CAT_API void cat_process_close(cat_process_t *process);
 CAT_API cat_pid_t cat_process_get_pid(const cat_process_t *process);
 
 CAT_API cat_bool_t cat_process_has_exited(const cat_process_t *process);
+
+/* The same value on every platform. */
+CAT_API cat_process_status_t cat_process_get_status(const cat_process_t *process);
+
+/* The raw value from the backend: on a Unix-like platform a process that a
+ * signal ended reports 0 here. Use cat_process_get_status() for a portable
+ * value. */
 CAT_API int64_t cat_process_get_exit_status(const cat_process_t *process);
+/* The raw value from the backend: 0 when a normal exit ended the process. */
 CAT_API int cat_process_get_term_signal(const cat_process_t *process);
 
 CAT_API cat_bool_t cat_process_kill(cat_process_t *process, int signum);

@@ -208,6 +208,29 @@ CAT_API cat_bool_t cat_process_has_exited(const cat_process_t *process)
     return process->exited;
 }
 
+CAT_API cat_process_status_t cat_process_get_status(const cat_process_t *process)
+{
+    cat_process_status_t status = {
+        .exit_code = -1,
+        .term_signal = -1,
+        .exited = process != NULL && process->exited,
+        .signaled = cat_false,
+    };
+
+    if (process == NULL || !process->exited) {
+        return status;
+    }
+
+    if (process->term_signal != 0) {
+        status.signaled = cat_true;
+        status.term_signal = process->term_signal;
+    } else {
+        status.exit_code = process->exit_status;
+    }
+
+    return status;
+}
+
 CAT_API int64_t cat_process_get_exit_status(const cat_process_t *process)
 {
     return process->exit_status;
