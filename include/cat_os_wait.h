@@ -38,10 +38,11 @@ CAT_API cat_bool_t cat_os_wait_runtime_init(void);
 CAT_API cat_bool_t cat_os_wait_runtime_shutdown(void);
 
 #ifdef CAT_OS_UNIX_LIKE
-/**
- * 协程安全的 fork 封装
- * 子进程中自动调用 cat_event_fork() 重建事件循环
- * @return 父进程返回子进程 PID，子进程返回 0，失败返回 -1
+/*
+ * Fork the process, without blocking the coroutine.
+ *
+ * The child calls cat_event_fork() and gets a fresh event loop. The parent gets
+ * the pid of the child, the child gets 0, and a failure gets -1.
  */
 CAT_API cat_pid_t cat_os_fork(void);
 #endif

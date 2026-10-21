@@ -476,7 +476,7 @@ CAT_API cat_pid_t cat_os_fork(void)
 {
     cat_pid_t pid = fork();
     if (pid == 0) {
-        /* 子进程：重建事件循环，使 libuv handles 在子进程中正常工作 */
+        /* in the child: rebuild the event loop, so that the libuv handles work */
         cat_event_fork();
     } else if (pid < 0) {
         cat_update_last_error_of_syscall("Fork failed");
