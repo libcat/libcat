@@ -278,18 +278,26 @@ TEST_PROCESS_START(cat_process, kill, [] {
     }
 #endif
     ASSERT_FALSE(cat_process_has_exited(process));
+#ifdef CAT_OS_WIN
+    /* Windows does not map SIGTERM, so the kill uses the signal that it maps */
+    ASSERT_FALSE(cat_process_kill(process, CAT_SIGTERM));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSYS);
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+#else
     ASSERT_TRUE(cat_process_kill(process, CAT_SIGTERM));
+#endif
     ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
     ASSERT_FALSE(cat_process_kill(process, CAT_SIGTERM));
     ASSERT_EQ(cat_get_last_error_code(), CAT_ESRCH);
 #ifndef CAT_OS_WIN
     ASSERT_EQ(cat_process_get_exit_status(process), 0);
+    ASSERT_EQ(cat_process_get_term_signal(process), CAT_SIGTERM);
 #else
     /* it seems that exit status will be 1
      * if the process was terminated on Windows */
     ASSERT_EQ(cat_process_get_exit_status(process), 1);
+    ASSERT_EQ(cat_process_get_term_signal(process), CAT_SIGKILL);
 #endif
-    ASSERT_EQ(cat_process_get_term_signal(process), CAT_SIGTERM);
 } TEST_PROCESS_END();
 
 /* The Windows process group flag is accepted on every platform. A Unix-like
@@ -404,3 +412,133 @@ TEST_PROCESS_START(cat_process, exit_1, [] {
     ASSERT_EQ(cat_process_get_exit_status(process), 1);
     ASSERT_EQ(cat_process_get_term_signal(process), 0);
 } TEST_PROCESS_END();
+
+/* Signal zero asks whether the process is still there, and changes nothing. */
+TEST(cat_process, kill_ex_zero_checks_a_running_process)
+{
+    ASSERT_TRUE(cat_kill_ex(cat_getpid(), 0));
+}
+
+/* A pid that belongs to no process is reported, not guessed. */
+TEST(cat_process, kill_ex_zero_reports_a_missing_process)
+{
+    ASSERT_FALSE(cat_kill_ex((cat_pid_t) INT_MAX, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESRCH);
+}
+
+#ifdef CAT_OS_UNIX_LIKE
+/* A signal that the platform maps reaches the child and ends it. */
+TEST(cat_process, kill_ex_terminates_a_child)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(200 * 1000);
+        _exit(0);
+    }
+
+    bool reaped = false;
+    DEFER(if (!reaped) {
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+    });
+
+    ASSERT_TRUE(cat_kill_ex(pid, CAT_SIGTERM));
+
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(WIFSIGNALED(status));
+    ASSERT_EQ(WTERMSIG(status), CAT_SIGTERM);
+}
+#endif
+
+#ifdef CAT_OS_WIN
+
+static volatile LONG ctrl_event_received = 0;
+
+static BOOL WINAPI ctrl_event_handler(DWORD type)
+{
+    if (type != CTRL_C_EVENT && type != CTRL_BREAK_EVENT) {
+        return FALSE;
+    }
+
+    InterlockedExchange(&ctrl_event_received, 1);
+
+    return TRUE;
+}
+
+/* A console control event reaches the child group, and the child handles it. */
+TEST(cat_process, kill_ex_sends_a_console_control_event)
+{
+    if (cat_env_is_true("TEST_CAT_PROCESS_IS_CHILD", cat_false)) {
+        if (!SetConsoleCtrlHandler(ctrl_event_handler, TRUE)) {
+            exit(1);
+        }
+        greeter();
+        for (int round = 0; round < 100; round++) {
+            if (InterlockedCompareExchange(&ctrl_event_received, 0, 0) != 0) {
+                exit(42);
+            }
+            cat_sys_sleep(10);
+        }
+        exit(1);
+    }
+
+    if (GetConsoleWindow() == NULL) {
+        SKIP_IF_(1, "The test needs a console");
+    }
+
+    const cat_const_string_t *exepath;
+    ASSERT_NE(exepath = cat_exepath(), nullptr);
+
+    const char *args[] = {
+        exepath->data,
+        "--gtest_filter=cat_process.kill_ex_sends_a_console_control_event",
+        NULL,
+    };
+    const char *env[] = { "TEST_CAT_PROCESS_IS_CHILD=1", NULL };
+    cat_socket_t *pipe_stdout;
+    cat_socket_t *pipe_stderr;
+    ASSERT_NE(pipe_stdout = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE), nullptr);
+    DEFER(cat_socket_close(pipe_stdout));
+    ASSERT_NE(pipe_stderr = cat_socket_create(nullptr, CAT_SOCKET_TYPE_PIPE), nullptr);
+    DEFER(cat_socket_close(pipe_stderr));
+
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
+    stdio[0].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[1].flags = CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | CAT_PROCESS_STDIO_FLAG_WRITABLE_PIPE;
+    stdio[1].data.stream = pipe_stdout;
+    stdio[2].flags = CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | CAT_PROCESS_STDIO_FLAG_WRITABLE_PIPE;
+    stdio[2].data.stream = pipe_stderr;
+
+    cat_process_options_t options = { nullptr };
+    options.file = args[0];
+    options.args = args;
+    options.env = env;
+    options.stdio = stdio;
+    options.stdio_count = CAT_ARRAY_SIZE(stdio);
+    options.flags = CAT_PROCESS_FLAG_WINDOWS_NEW_PROCESS_GROUP;
+
+    cat_process_t *process;
+    ASSERT_NE(process = cat_process_run(&options), nullptr);
+    DEFER(cat_process_close(process));
+
+    ASSERT_TRUE(wait_for_greetings(pipe_stderr));
+
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGINT));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+
+    cat_process_status_t status = cat_process_get_status(process);
+    ASSERT_TRUE(status.exited);
+    ASSERT_EQ(status.exit_code, 42);
+}
+
+/* Windows does not map SIGTERM, by design. */
+TEST(cat_process, kill_ex_rejects_sigterm_on_windows)
+{
+    ASSERT_FALSE(cat_kill_ex(cat_getpid(), CAT_SIGTERM));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOSYS);
+}
+
+#endif

@@ -19,6 +19,7 @@
 #include "cat_process.h"
 
 #include "cat_event.h"
+#include "cat_signal.h"
 
 #define CAT_PROCESS_CHECK_SILENT(_process, _failure) \
     if (unlikely(_process->exited)) { \
@@ -245,6 +246,16 @@ CAT_API cat_bool_t cat_process_kill(cat_process_t *process, int signum)
 {
     CAT_PROCESS_CHECK(process, return cat_false);
     int error;
+
+#ifdef CAT_OS_WIN
+    if (signum != CAT_SIGKILL) {
+        /* A console control event goes to the process group by its id, and the
+         * uv handle path only terminates the process. A kill goes through uv,
+         * because uv records the signal on the handle and the status reports
+         * it. */
+        return cat_kill_ex(process->u.process.pid, signum);
+    }
+#endif
 
     error = uv_process_kill(&process->u.process, signum);
 
