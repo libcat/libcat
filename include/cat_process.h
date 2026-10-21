@@ -166,6 +166,8 @@ struct cat_process_s {
     int64_t exit_status;
     int term_signal;
     cat_bool_t exited;
+    /* the caller gave up the object, and the exit callback releases it */
+    cat_bool_t closing;
     union {
         uv_process_t process;
         uv_handle_t handle;
@@ -176,15 +178,18 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options);
 CAT_API cat_bool_t cat_process_wait(cat_process_t *process);
 CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t timeout);
 /*
- * Close the process object. The loop frees it once it releases the handle, so
- * the object is not usable after a successful call.
+ * Release the process object.
+ *
+ * A process that already exited is released now. A process that still runs is
+ * released in the background: the loop keeps the handle, the exit callback reaps
+ * the child and frees the object, and the loop does not wait for it. The exit
+ * status is dropped.
  *
  * The call fails with CAT_EBUSY while a coroutine waits for the process. Wait
  * first, then close.
  *
- * The call does not stop the process and does not close its stdio streams. A
- * close before the process exits leaves a child that the loop can not reap, so
- * wait for the process first.
+ * The call does not stop the process and does not close its stdio streams. The
+ * object is not usable after a successful call, even while the process runs.
  */
 CAT_API cat_bool_t cat_process_close(cat_process_t *process);
 
@@ -203,6 +208,10 @@ CAT_API int64_t cat_process_get_exit_status(const cat_process_t *process);
 CAT_API int cat_process_get_term_signal(const cat_process_t *process);
 
 CAT_API cat_bool_t cat_process_kill(cat_process_t *process, int signum);
+
+/* Release the process objects that are still open when the runtime stops. A
+ * process that still runs is left alone; the child becomes an orphan. */
+CAT_API cat_bool_t cat_process_runtime_shutdown(void);
 
 #ifdef __cplusplus
 }

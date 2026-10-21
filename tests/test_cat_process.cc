@@ -438,6 +438,99 @@ TEST_PROCESS_START(cat_process, close_with_a_waiter_is_refused, [] {
     ASSERT_TRUE(cat_process_has_exited(process));
 } TEST_PROCESS_END();
 
+/* A child that the close tests spawn without the test macros: the macros close
+ * the object at the end, and these tests release it themselves. */
+TEST(cat_process, close_child)
+{
+    if (!cat_env_is_true("TEST_CAT_PROCESS_IS_CHILD", cat_false)) {
+        GTEST_SKIP() << "Only runs as a child process";
+    }
+
+    cat_sys_sleep(5000);
+    exit(0);
+}
+
+static cat_process_t *run_close_child(void)
+{
+    const cat_const_string_t *exepath = cat_exepath();
+    if (exepath == nullptr) {
+        return nullptr;
+    }
+
+    const char *args[] = {
+        exepath->data,
+        "--gtest_filter=cat_process.close_child",
+        NULL,
+    };
+    const char *env[] = { "TEST_CAT_PROCESS_IS_CHILD=1", NULL };
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
+    stdio[0].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[1].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[2].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+
+    cat_process_options_t options = { nullptr };
+    options.file = args[0];
+    options.args = args;
+    options.env = env;
+    options.stdio = stdio;
+    options.stdio_count = CAT_ARRAY_SIZE(stdio);
+
+    return cat_process_run(&options);
+}
+
+/* Close on a running process keeps it running, and the exit callback reaps it. */
+TEST(cat_process, close_a_running_process_reaps_it_later)
+{
+    cat_process_t *process;
+    ASSERT_NE(process = run_close_child(), nullptr);
+    cat_pid_t pid = cat_process_get_pid(process);
+
+    ASSERT_TRUE(cat_process_close(process));
+
+    /* the object belongs to the loop now, and the process still runs */
+    ASSERT_TRUE(cat_kill_ex(pid, 0));
+
+    ASSERT_TRUE(cat_kill_ex(pid, CAT_SIGKILL));
+    bool reaped = false;
+    for (cat_timeout_t waited = 0; waited < TEST_IO_TIMEOUT; waited += 10) {
+        if (!cat_kill_ex(pid, 0)) {
+            reaped = true;
+            break;
+        }
+        ASSERT_TRUE(cat_time_delay(10));
+    }
+    ASSERT_TRUE(reaped);
+}
+
+/* The object is not usable after a close, and the close happens once. */
+TEST(cat_process, wait_after_close_is_refused)
+{
+    cat_process_t *process;
+    ASSERT_NE(process = run_close_child(), nullptr);
+    cat_pid_t pid = cat_process_get_pid(process);
+
+    ASSERT_TRUE(cat_process_close(process));
+
+    ASSERT_FALSE(cat_process_close(process));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_process_wait_ex(process, 10));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    /* stop the child by pid, the exit callback reaps and frees it */
+    ASSERT_TRUE(cat_kill_ex(pid, CAT_SIGKILL));
+    bool reaped = false;
+    for (cat_timeout_t waited = 0; waited < TEST_IO_TIMEOUT; waited += 10) {
+        if (!cat_kill_ex(pid, 0)) {
+            reaped = true;
+            break;
+        }
+        ASSERT_TRUE(cat_time_delay(10));
+    }
+    ASSERT_TRUE(reaped);
+}
+
 /* Signal zero asks whether the process is still there, and changes nothing. */
 TEST(cat_process, kill_ex_zero_checks_a_running_process)
 {

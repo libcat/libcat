@@ -51,6 +51,11 @@ static void cat_process_exit_callback(uv_process_t* uprocess, int64_t exit_statu
     while ((waiter = cat_queue_front_data(&process->waiters, cat_coroutine_t, waiter.node))) {
         cat_coroutine_schedule(waiter, PROCESS, "Process");
     }
+
+    if (process->closing) {
+        /* The caller released the object while the process still ran. */
+        uv_close(&process->u.handle, cat_process_close_callback);
+    }
 }
 
 static int cat_process_check_stdio(uv_stdio_container_t *stdio)
@@ -136,6 +141,7 @@ CAT_API cat_process_t *cat_process_run(const cat_process_options_t *options)
     }
 #endif
     process->exited = cat_false;
+    process->closing = cat_false;
     process->exit_status = 0;
     process->term_signal = 0;
     cat_queue_init(&process->waiters);
@@ -177,6 +183,11 @@ CAT_API cat_bool_t cat_process_wait(cat_process_t *process)
 
 CAT_API cat_bool_t cat_process_wait_ex(cat_process_t *process, cat_timeout_t timeout)
 {
+    if (unlikely(process != NULL && process->closing)) {
+        cat_update_last_error(CAT_EINVAL, "Process is closing");
+        return cat_false;
+    }
+
     CAT_PROCESS_CHECK_SILENT(process, return cat_true);
     cat_queue_t *waiter = &CAT_COROUTINE_G(current)->waiter.node;
     cat_bool_t ret;
@@ -201,6 +212,11 @@ CAT_API cat_bool_t cat_process_close(cat_process_t *process)
         return cat_false;
     }
 
+    if (unlikely(process->closing)) {
+        cat_update_last_error(CAT_EINVAL, "Process is already closing");
+        return cat_false;
+    }
+
     if (unlikely(!cat_queue_empty(&process->waiters))) {
         /* the object goes away in the close callback, and a parked waiter would
          * read it after that */
@@ -208,7 +224,14 @@ CAT_API cat_bool_t cat_process_close(cat_process_t *process)
         return cat_false;
     }
 
-    uv_close(&process->u.handle, cat_process_close_callback);
+    if (process->exited) {
+        uv_close(&process->u.handle, cat_process_close_callback);
+    } else {
+        /* The exit callback reaps the child and releases the object, and the loop
+         * does not wait for it. */
+        process->closing = cat_true;
+        uv_unref(&process->u.handle);
+    }
 
     return cat_true;
 }
@@ -258,6 +281,11 @@ CAT_API int cat_process_get_term_signal(const cat_process_t *process)
 
 CAT_API cat_bool_t cat_process_kill(cat_process_t *process, int signum)
 {
+    if (unlikely(process != NULL && process->closing)) {
+        cat_update_last_error(CAT_EINVAL, "Process is closing");
+        return cat_false;
+    }
+
     CAT_PROCESS_CHECK(process, return cat_false);
     int error;
 
@@ -277,6 +305,23 @@ CAT_API cat_bool_t cat_process_kill(cat_process_t *process, int signum)
         cat_update_last_error_with_reason(error, "Process kill(%d) failed", signum);
         return cat_false;
     }
+
+    return cat_true;
+}
+
+static void cat_process_shutdown_walk(uv_handle_t *handle, void *arg)
+{
+    (void) arg;
+
+    if (handle->type == UV_PROCESS && !uv_is_closing(handle)) {
+        uv_close(handle, cat_process_close_callback);
+    }
+}
+
+CAT_API cat_bool_t cat_process_runtime_shutdown(void)
+{
+    /* A process that still runs becomes an orphan when its handle goes away. */
+    uv_walk(&CAT_EVENT_G(loop), cat_process_shutdown_walk, NULL);
 
     return cat_true;
 }

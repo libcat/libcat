@@ -89,6 +89,7 @@ CAT_API cat_bool_t cat_runtime_shutdown_all(void)
 #ifdef CAT_THREAD_SAFE
     ret = cat_thread_runtime_shutdown() && ret;
 #endif
+    ret = cat_process_runtime_shutdown() && ret;
     ret = cat_event_runtime_shutdown() && ret;
     ret = cat_coroutine_runtime_shutdown() && ret;
     ret = cat_runtime_shutdown() && ret;
