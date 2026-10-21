@@ -48,25 +48,46 @@ CAT_API cat_pid_t cat_os_fork(void);
 #endif
 
 /*
- * Wait for a child process, without blocking the thread that waits.
+ * Wait for a process, without blocking the thread that waits.
  *
- * Return the pid of the child that changed state, 0 when WNOHANG is set and no
- * child is ready, and -1 on error. A wait that runs out of time returns -1 with
- * CAT_ETIMEDOUT, so a timeout is not a child state.
+ * Return the pid of the process that changed state, 0 when WNOHANG is set and
+ * the process is not ready, and -1 on error. A wait that runs out of time
+ * returns -1 with CAT_ETIMEDOUT, so a timeout is not a process state.
  *
- * A stopped child is reported even when WUNTRACED is not set, because the
- * bookkeeping keeps every status it takes from the kernel.
+ * A Unix-like platform reports a stopped child even when WUNTRACED is not set,
+ * because the bookkeeping keeps every status it takes from the kernel. Windows
+ * has no child process relation and no wait status: only a positive pid is
+ * supported, the status is the exit code, and a process that the system stopped
+ * is reported as an exit.
  *
- * Do not wait for the same child with this API and with cat_process_*: the
- * SIGCHLD handler here can take the exit status of a process that uv_spawn()
- * started, and the cat_process wait then never completes.
+ * On Windows, pid -1 and pid 0 fail with CAT_ENOTSUP. On a Unix-like platform,
+ * pid -1 waits for any child and pid 0 fails with CAT_ENOTSUP.
  *
- * pid 0 is not supported (CAT_ENOTSUP). pid -1 waits for any child.
+ * Do not wait for the same child with this API and with cat_process_* on a
+ * Unix-like platform: the SIGCHLD handler here can take the exit status of a
+ * process that uv_spawn() started, and the cat_process wait then never completes.
+ * Windows waits on the process handle, so both waits can observe the same
+ * process.
+ *
+ * Read the status with cat_os_wait_status_*(), which decodes the raw wait status
+ * on a Unix-like platform and the exit code on Windows.
  */
 CAT_API cat_pid_t cat_os_wait(int *status);
 CAT_API cat_pid_t cat_os_wait_ex(int *status, cat_msec_t timeout);
 CAT_API cat_pid_t cat_os_waitpid(cat_pid_t pid, int *status, int options);
 CAT_API cat_pid_t cat_os_waitpid_ex(cat_pid_t pid, int *status, int options, cat_msec_t timeout);
+
+CAT_API cat_bool_t cat_os_wait_status_exited(int status);
+CAT_API int cat_os_wait_status_exit_code(int status);
+CAT_API cat_bool_t cat_os_wait_status_signaled(int status);
+CAT_API int cat_os_wait_status_term_signal(int status);
+
+#ifdef CAT_OS_WIN
+/* The value that the POSIX platforms use, so one call compiles on both. */
+# ifndef WNOHANG
+#  define WNOHANG 0x0001
+# endif
+#endif
 
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
 CAT_API cat_pid_t cat_os_wait3(int *status, int options, struct rusage *rusage);

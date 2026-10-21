@@ -561,4 +561,146 @@ TEST(cat_os_wait, waitpid_after_wait)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECHILD);
 }
 
+/* The status decoders agree with the wait macros. */
+TEST(cat_os_wait, status_decoders_match_the_wait_macros)
+{
+    pid_t pid = new_child_process(3);
+    int status = 0;
+
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    ASSERT_EQ(cat_os_wait_status_exited(status), WIFEXITED(status) != 0 ? cat_true : cat_false);
+    ASSERT_EQ(cat_os_wait_status_exit_code(status), WEXITSTATUS(status));
+    ASSERT_EQ(cat_os_wait_status_signaled(status), WIFSIGNALED(status) != 0 ? cat_true : cat_false);
+    ASSERT_EQ(cat_os_wait_status_term_signal(status), -1);
+    ASSERT_EQ(cat_os_wait_status_exit_code(status), 3);
+}
+
 #endif
+
+#ifdef CAT_OS_WIN
+
+#include "cat_process.h"
+
+/* A child process that the tests below wait for. */
+TEST(cat_os_wait, windows_child)
+{
+    if (!cat_env_is_true("TEST_CAT_OS_WAIT_CHILD", cat_false)) {
+        GTEST_SKIP() << "Only runs as a child process";
+    }
+
+    if (cat_env_is_true("TEST_CAT_OS_WAIT_CHILD_SLEEP", cat_false)) {
+        cat_sys_sleep(60 * 1000);
+    }
+
+    exit(7);
+}
+
+static cat_process_t *spawn_windows_wait_child(bool sleep)
+{
+    const cat_const_string_t *exepath = cat_exepath();
+    if (exepath == nullptr) {
+        return nullptr;
+    }
+
+    const char *args[] = {
+        exepath->data,
+        "--gtest_filter=cat_os_wait.windows_child",
+        NULL,
+    };
+    const char *env_awake[] = {
+        "TEST_CAT_OS_WAIT_CHILD=1",
+        NULL,
+    };
+    const char *env_sleep[] = {
+        "TEST_CAT_OS_WAIT_CHILD=1",
+        "TEST_CAT_OS_WAIT_CHILD_SLEEP=1",
+        NULL,
+    };
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
+    stdio[0].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[1].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[2].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+
+    cat_process_options_t options = { nullptr };
+    options.file = args[0];
+    options.args = args;
+    options.env = sleep ? env_sleep : env_awake;
+    options.stdio = stdio;
+    options.stdio_count = CAT_ARRAY_SIZE(stdio);
+
+    return cat_process_run(&options);
+}
+
+/* Windows waits for a known pid and reports the exit code as the status. */
+TEST(cat_os_wait, windows_waitpid_reports_the_exit_code)
+{
+    cat_process_t *process;
+    ASSERT_NE(process = spawn_windows_wait_child(false), nullptr);
+    DEFER(cat_process_close(process));
+
+    cat_pid_t pid = cat_process_get_pid(process);
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid(pid, &status, 0), pid);
+    ASSERT_TRUE(cat_os_wait_status_exited(status));
+    ASSERT_FALSE(cat_os_wait_status_signaled(status));
+    ASSERT_EQ(cat_os_wait_status_exit_code(status), 7);
+    ASSERT_EQ(cat_os_wait_status_term_signal(status), -1);
+
+    /* let the uv process handle take its own exit before the close */
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+}
+
+/* WNOHANG returns zero while the process still runs. */
+TEST(cat_os_wait, windows_wnohang_returns_zero_while_the_process_runs)
+{
+    cat_process_t *process;
+    ASSERT_NE(process = spawn_windows_wait_child(true), nullptr);
+    DEFER(cat_process_close(process));
+
+    cat_pid_t pid = cat_process_get_pid(process);
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, WNOHANG, 0), 0);
+
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    ASSERT_TRUE(cat_os_wait_status_exited(status));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+}
+
+/* A timed out wait leaves the process waitable. */
+TEST(cat_os_wait, windows_waitpid_times_out)
+{
+    cat_process_t *process;
+    ASSERT_NE(process = spawn_windows_wait_child(true), nullptr);
+    DEFER(cat_process_close(process));
+
+    cat_pid_t pid = cat_process_get_pid(process);
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, 10), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+
+    ASSERT_TRUE(cat_process_kill(process, CAT_SIGKILL));
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+}
+
+/* Windows has no child process relation, so waiting for any child is refused. */
+TEST(cat_os_wait, windows_wait_for_any_child_is_refused)
+{
+    int status = 0;
+    ASSERT_EQ(cat_os_wait(&status), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
+
+    ASSERT_EQ(cat_os_wait_ex(&status, 10), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
+}
+
+/* A pid that belongs to no process is reported, not guessed. */
+TEST(cat_os_wait, windows_waitpid_rejects_a_missing_process)
+{
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex((cat_pid_t) INT_MAX, &status, 0, TEST_IO_TIMEOUT), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ESRCH);
+}
+
+#endif /* CAT_OS_WIN */
