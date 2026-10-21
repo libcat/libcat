@@ -231,11 +231,17 @@ CAT_API void cat_thread_teardown(cat_thread_t *thread)
         (void) cat_thread_set_current(NULL);
     }
 
-    /* Record the exit last, so a joiner that sees it sees a finished thread. The
-     * store is atomic because the joiner reads it from another thread. */
+    /* Record the exit before the wake, so a joiner that sees it sees a finished
+     * thread. The store is atomic because the joiner reads it from another
+     * thread. */
     cat_atomic_uint32_store(&thread->state,
         cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_EXITED);
     (void) cat_thread_wait_wake_all(&thread->join);
+
+    /* The wake above still touches the object. Mark the end after it, so a
+     * caller that sees a stopped thread may reuse the object. */
+    cat_atomic_uint32_store(&thread->state,
+        cat_atomic_uint32_load(&thread->state) | CAT_THREAD_STATE_FINISHED);
 }
 
 CAT_API cat_bool_t cat_thread_register_main(cat_thread_t *thread)
@@ -327,8 +333,10 @@ CAT_API cat_bool_t cat_thread_is_main(const cat_thread_t *thread)
 
 CAT_API cat_bool_t cat_thread_is_running(const cat_thread_t *thread)
 {
+    /* A thread that is still in its teardown counts as running, so a caller
+     * that sees a stopped thread may reuse the object. */
     return thread != NULL &&
-        !(cat_atomic_uint32_load(&((cat_thread_t *) thread)->state) & CAT_THREAD_STATE_EXITED);
+        !(cat_atomic_uint32_load(&((cat_thread_t *) thread)->state) & CAT_THREAD_STATE_FINISHED);
 }
 
 CAT_API cat_thread_t *cat_thread_get_parent(const cat_thread_t *thread)

@@ -97,6 +97,8 @@ struct cat_thread_s {
 #define CAT_THREAD_STATE_EXTERNAL    (1 << 3)
 /* the thread finishes on its own and can not be joined */
 #define CAT_THREAD_STATE_DETACHED    (1 << 4)
+/* the teardown is complete, so the thread no longer touches the object */
+#define CAT_THREAD_STATE_FINISHED    (1 << 5)
 
 CAT_API cat_bool_t cat_thread_module_init(void);
 CAT_API cat_bool_t cat_thread_module_shutdown(void);
@@ -140,6 +142,8 @@ CAT_API cat_bool_t cat_thread_register(cat_thread_t *thread); CAT_INTERNAL
 CAT_API cat_thread_t   *cat_thread_get_current(void);
 CAT_API cat_bool_t      cat_thread_equal(const cat_thread_t *a, const cat_thread_t *b);
 CAT_API cat_bool_t      cat_thread_is_main(const cat_thread_t *thread);
+/* False once the thread finished its teardown, so a caller that sees false may
+ * reuse the object. */
 CAT_API cat_bool_t      cat_thread_is_running(const cat_thread_t *thread);
 CAT_API cat_thread_t   *cat_thread_get_parent(const cat_thread_t *thread);
 CAT_API cat_thread_id_t cat_thread_get_id(const cat_thread_t *thread);

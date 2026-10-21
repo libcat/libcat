@@ -1185,14 +1185,18 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
     struct work_s {
         cat_thread_t thread;
         cat_sem_t *done;
+        cat_atomic_bool_t *posted;
     };
 
     cat_sem_t done;
     ASSERT_TRUE(cat_sem_init(&done, 0));
+    cat_atomic_bool_t posted;
+    cat_atomic_bool_init(&posted, cat_false);
 
     auto *work = new work_s{
         .thread = {},
         .done = &done,
+        .posted = &posted,
     };
 
     auto routine = [](cat_data_t *data) {
@@ -1204,6 +1208,8 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
         (void) cat_runtime_shutdown_all();
         (void) cat_runtime_close_all();
         cat_sem_post(self->done);
+        /* the post still touches the semaphore when the waiter wakes up */
+        cat_atomic_bool_store(self->posted, cat_true);
         /* the entry does not touch the object after this point */
         delete self;
     };
@@ -1217,6 +1223,17 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
     ASSERT_TRUE(cat_thread_create_ex(&work->thread, routine, work, &options));
     ASSERT_TRUE(cat_thread_detach(&work->thread));
     ASSERT_TRUE(cat_sem_acquire(&done, TEST_IO_TIMEOUT));
+
+    /* the worker runs the post and the runtime close after it woke this thread,
+     * so wait for it to come back before the semaphore and the runtime memory go
+     * away */
+    for (int round = 0; round < TEST_IO_TIMEOUT / 10; round++) {
+        if (cat_atomic_bool_load(&posted)) {
+            break;
+        }
+        ASSERT_TRUE(cat_time_delay(10));
+    }
+    ASSERT_TRUE(cat_atomic_bool_load(&posted));
 
     cat_sem_destroy(&done);
 }
