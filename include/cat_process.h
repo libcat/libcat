@@ -59,6 +59,11 @@ extern "C" {
         * option is only meaningful on Windows systems. On Unix it is silently
         * ignored. */ \
         XX(WINDOWS_HIDE_GUI) \
+        /* Start the child in a new process group, and keep the console of the
+        * parent. The child is then the target of a console control event that
+        * carries its pid as the group id. This option is only meaningful on
+        * Windows systems. On Unix it is silently ignored. */ \
+        XX(WINDOWS_NEW_PROCESS_GROUP) \
 
 typedef enum cat_process_flag_e {
 #define CAT_PROCESS_FLAG_GEN(name) CAT_PROCESS_FLAG_##name = UV_PROCESS_##name,

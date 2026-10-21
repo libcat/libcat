@@ -292,6 +292,46 @@ TEST_PROCESS_START(cat_process, kill, [] {
     ASSERT_EQ(cat_process_get_term_signal(process), CAT_SIGTERM);
 } TEST_PROCESS_END();
 
+/* The Windows process group flag is accepted on every platform. A Unix-like
+ * platform ignores it, and the child still runs. */
+TEST(cat_process, new_process_group_flag_spawns_the_child)
+{
+    if (cat_env_is_true("TEST_CAT_PROCESS_IS_CHILD", cat_false)) {
+        exit(7);
+        return;
+    }
+
+    const cat_const_string_t *exepath;
+    ASSERT_NE(exepath = cat_exepath(), nullptr);
+
+    const char *args[] = {
+        exepath->data,
+        "--gtest_filter=cat_process.new_process_group_flag_spawns_the_child",
+        NULL,
+    };
+    const char *env[] = { "TEST_CAT_PROCESS_IS_CHILD=1", NULL };
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
+    stdio[0].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[1].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    stdio[2].flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+
+    cat_process_options_t options = { nullptr };
+    options.file = args[0];
+    options.args = args;
+    options.env = env;
+    options.stdio = stdio;
+    options.stdio_count = CAT_ARRAY_SIZE(stdio);
+    options.flags = CAT_PROCESS_FLAG_WINDOWS_NEW_PROCESS_GROUP;
+
+    cat_process_t *process;
+    ASSERT_NE(process = cat_process_run(&options), nullptr);
+    DEFER(cat_process_close(process));
+
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_process_has_exited(process));
+    ASSERT_EQ(cat_process_get_exit_status(process), 7);
+}
+
 TEST_PROCESS_START(cat_process, cancel_wait, [] {
     do {
         char buffer[CAT_STRLEN(GREETING_STRING) + 1];
