@@ -378,7 +378,7 @@ CAT_API cat_bool_t cat_thannel_popv(cat_thannel_t *thannel, cat_thannel_item_t *
 CAT_API cat_bool_t cat_thannel_pop(cat_thannel_t *thannel, void **data, size_t *size,
                                    cat_timeout_t timeout)
 {
-    cat_thannel_item_t item = {};
+    cat_thannel_item_t item = { 0 };
     size_t count = 0;
 
     if (unlikely(data == NULL || size == NULL)) {
