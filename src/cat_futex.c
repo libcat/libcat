@@ -155,90 +155,85 @@ static cat_bool_t cat_futex_wake_at(cat_futex_t *futex, int32_t count)
 
 #elif defined(CAT_HAVE_OS_SYNC_WAIT_ON_ADDRESS)
 
-static cat_bool_t cat_futex_is_supported(void)
-{
-    return __builtin_available(macOS 14.4, *) ? cat_true : cat_false;
-}
-
 static cat_bool_t cat_futex_wait_at(cat_futex_t *futex, int32_t expected, cat_timeout_t timeout)
 {
     cat_msec_t deadline = timeout > 0 ? cat_time_msec() + (cat_msec_t) timeout : 0;
     uint64_t value = (uint64_t) (uint32_t) expected;
 
-    if (!cat_futex_is_supported()) {
-        cat_update_last_error(CAT_ENOTSUP, "This macOS version has no wait on an address");
-        return cat_false;
-    }
+    if (__builtin_available(macOS 14.4, *)) {
+        for (;;) {
+            int result;
 
-    for (;;) {
-        int result;
+            if (timeout > 0) {
+                cat_msec_t now = cat_time_msec();
+                cat_msec_t remaining = deadline > now ? deadline - now : 0;
 
-        if (timeout > 0) {
-            cat_msec_t now = cat_time_msec();
-            cat_msec_t remaining = deadline > now ? deadline - now : 0;
+                if (remaining == 0) {
+                    cat_update_last_error(CAT_ETIMEDOUT, "Timed out waiting for the value");
+                    return cat_false;
+                }
+                result = os_sync_wait_on_address_with_timeout(&futex->value, value, sizeof(int32_t),
+                    OS_SYNC_WAIT_ON_ADDRESS_SHARED, OS_CLOCK_MACH_ABSOLUTE_TIME, remaining * 1000000ULL);
+            } else {
+                result = os_sync_wait_on_address(&futex->value, value, sizeof(int32_t),
+                    OS_SYNC_WAIT_ON_ADDRESS_SHARED);
+            }
 
-            if (remaining == 0) {
+            if (result >= 0) {
+                return cat_true;
+            }
+
+            if (errno == ETIMEDOUT) {
                 cat_update_last_error(CAT_ETIMEDOUT, "Timed out waiting for the value");
                 return cat_false;
             }
-            result = os_sync_wait_on_address_with_timeout(&futex->value, value, sizeof(int32_t),
-                OS_SYNC_WAIT_ON_ADDRESS_SHARED, OS_CLOCK_MACH_ABSOLUTE_TIME, remaining * 1000000ULL);
-        } else {
-            result = os_sync_wait_on_address(&futex->value, value, sizeof(int32_t),
-                OS_SYNC_WAIT_ON_ADDRESS_SHARED);
-        }
+            if (errno == EINTR || errno == EFAULT) {
+                continue;
+            }
 
-        if (result >= 0) {
-            return cat_true;
-        }
-
-        if (errno == ETIMEDOUT) {
-            cat_update_last_error(CAT_ETIMEDOUT, "Timed out waiting for the value");
+            cat_update_last_error_with_reason(cat_translate_sys_error(errno),
+                "os_sync_wait_on_address failed");
             return cat_false;
         }
-        if (errno == EINTR || errno == EFAULT) {
-            continue;
-        }
-
-        cat_update_last_error_with_reason(cat_translate_sys_error(errno),
-            "os_sync_wait_on_address failed");
-        return cat_false;
     }
+
+    cat_update_last_error(CAT_ENOTSUP, "This macOS version has no wait on an address");
+    return cat_false;
 }
 
 static cat_bool_t cat_futex_wake_at(cat_futex_t *futex, int32_t count)
 {
     int32_t index;
 
-    if (!cat_futex_is_supported()) {
-        cat_update_last_error(CAT_ENOTSUP, "This macOS version has no wake on an address");
-        return cat_false;
-    }
-
-    if (count < 0) {
-        if (os_sync_wake_by_address_all(&futex->value, sizeof(int32_t),
-            OS_SYNC_WAKE_BY_ADDRESS_SHARED) != 0 && errno != ENOENT) {
-            cat_update_last_error_with_reason(cat_translate_sys_error(errno),
-                "os_sync_wake_by_address_all failed");
-            return cat_false;
+    if (__builtin_available(macOS 14.4, *)) {
+        if (count < 0) {
+            if (os_sync_wake_by_address_all(&futex->value, sizeof(int32_t),
+                OS_SYNC_WAKE_BY_ADDRESS_SHARED) != 0 && errno != ENOENT) {
+                cat_update_last_error_with_reason(cat_translate_sys_error(errno),
+                    "os_sync_wake_by_address_all failed");
+                return cat_false;
+            }
+            return cat_true;
         }
+
+        for (index = 0; index < count; index++) {
+            if (os_sync_wake_by_address_any(&futex->value, sizeof(int32_t),
+                OS_SYNC_WAKE_BY_ADDRESS_SHARED) != 0) {
+                /* ENOENT: no waiter is left to wake */
+                if (errno == ENOENT) {
+                    break;
+                }
+                cat_update_last_error_with_reason(cat_translate_sys_error(errno),
+                    "os_sync_wake_by_address_any failed");
+                return cat_false;
+            }
+        }
+
         return cat_true;
     }
 
-    for (index = 0; index < count; index++) {
-        if (os_sync_wake_by_address_any(&futex->value, sizeof(int32_t),
-            OS_SYNC_WAKE_BY_ADDRESS_SHARED) != 0) {
-            /* ENOENT: no waiter is left to wake */
-            if (errno == ENOENT) {
-                break;
-            }
-            cat_update_last_error_with_reason(cat_translate_sys_error(errno),
-                "os_sync_wake_by_address_any failed");
-            return cat_false;
-        }
-    }
-
-    return cat_true;
+    cat_update_last_error(CAT_ENOTSUP, "This macOS version has no wake on an address");
+    return cat_false;
 }
 
 #else /* no wait on an address */
