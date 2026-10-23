@@ -121,6 +121,8 @@ typedef struct cat_mutex_s {
 typedef struct cat_sem_s {
     uv_sem_t sem;
     cat_thread_wait_t wait;
+    /* libuv has no getter for the count, so the library keeps a copy of it */
+    cat_atomic_int64_t value;
 } cat_sem_t;
 
 CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex);
@@ -160,6 +162,23 @@ CAT_API void cat_sem_destroy(cat_sem_t *sem);
 /* cat_false on a timeout (CAT_ETIMEDOUT) or on the reasons above. */
 CAT_API cat_bool_t cat_sem_acquire(cat_sem_t *sem, cat_timeout_t timeout);
 CAT_API void       cat_sem_post(cat_sem_t *sem);
+
+/* Add count counts and wake up to count waiters. A count of 0 posts nothing. */
+CAT_API void cat_sem_release(cat_sem_t *sem, size_t count);
+
+/*
+ * Take a count without a wait. cat_false with CAT_EBUSY when no count is left.
+ */
+CAT_API cat_bool_t cat_sem_try_acquire(cat_sem_t *sem);
+
+/*
+ * The count that a post adds and an acquire takes. The copy is one step behind
+ * while a post and a take run at the same time, so do not treat it as a lock.
+ */
+CAT_API int64_t cat_sem_get_value(const cat_sem_t *sem);
+
+/* The number of coroutines that wait on the semaphore. */
+CAT_API size_t cat_sem_get_waiter_count(const cat_sem_t *sem);
 
 /*
  * A condition variable reports that a predicate became true. The caller owns the

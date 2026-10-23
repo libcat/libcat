@@ -305,6 +305,70 @@ TEST(cat_thread_sync, several_semaphore_waiters_are_served_in_turn)
     sem_case_close(&s);
 }
 
+/* A take and a release are visible in the value that the semaphore reports. */
+TEST(cat_thread_sync, a_semaphore_reports_its_value)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 2);
+
+    ASSERT_EQ(cat_sem_get_value(&s), 2);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+
+    ASSERT_TRUE(cat_sem_acquire(&s, 0));
+    ASSERT_EQ(cat_sem_get_value(&s), 1);
+
+    ASSERT_TRUE(cat_sem_try_acquire(&s));
+    ASSERT_EQ(cat_sem_get_value(&s), 0);
+
+    ASSERT_FALSE(cat_sem_try_acquire(&s));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+
+    cat_sem_release(&s, 3);
+    ASSERT_EQ(cat_sem_get_value(&s), 3);
+
+    /* a release of no count posts nothing */
+    cat_sem_release(&s, 0);
+    ASSERT_EQ(cat_sem_get_value(&s), 3);
+
+    sem_case_close(&s);
+}
+
+/* The counts of one release serve the same number of waiters, and no more. */
+TEST(cat_thread_sync, a_release_wakes_the_counted_waiters)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    enum { WAITERS = 3 };
+    int acquired = 0;
+
+    for (int index = 0; index < WAITERS; index++) {
+        co([&] {
+            if (cat_sem_acquire(&s, TEST_IO_TIMEOUT)) {
+                acquired++;
+            }
+        });
+    }
+
+    ASSERT_EQ(acquired, 0);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), WAITERS);
+
+    cat_sem_release(&s, 2);
+    ASSERT_TRUE(cat_time_delay(10));
+
+    ASSERT_EQ(acquired, 2);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 1);
+    ASSERT_EQ(cat_sem_get_value(&s), 0);
+
+    cat_sem_release(&s, 1);
+    ASSERT_TRUE(cat_time_delay(10));
+
+    ASSERT_EQ(acquired, WAITERS);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+
+    sem_case_close(&s);
+}
+
 /* An empty semaphore with nobody to post gives up with a timeout. */
 TEST(cat_thread_sync, a_semaphore_waiter_times_out)
 {

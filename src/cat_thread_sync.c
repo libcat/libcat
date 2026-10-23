@@ -375,7 +375,13 @@ static cat_bool_t cat_sem_try_take(const void *data)
 {
     cat_sem_t *sem = (cat_sem_t *) data;
 
-    return uv_sem_trywait(&sem->sem) == 0 ? cat_true : cat_false;
+    if (uv_sem_trywait(&sem->sem) != 0) {
+        return cat_false;
+    }
+
+    cat_atomic_int64_fetch_sub(&sem->value, 1);
+
+    return cat_true;
 }
 
 /* The queue lock is held, so the resource has just become available and no
@@ -547,6 +553,8 @@ CAT_API cat_bool_t cat_sem_init(cat_sem_t *sem, unsigned int value)
         }
     } while (0);
 
+    cat_atomic_int64_init(&sem->value, (int64_t) value);
+
     return cat_thread_wait_init(&sem->wait);
 }
 
@@ -582,18 +590,58 @@ CAT_API cat_bool_t cat_sem_acquire(cat_sem_t *sem, cat_timeout_t timeout)
     }
 }
 
-CAT_API void cat_sem_post(cat_sem_t *sem)
+CAT_API void cat_sem_release(cat_sem_t *sem, size_t count)
 {
     cat_coroutine_t *coroutine;
+    size_t index;
 
-    /* Add the count and take a waiter while the queue lock is held. A waiter
-     * cannot miss this count between its check and its suspend. */
+    if (count == 0) {
+        return;
+    }
+
+    /* Add the counts and take a waiter while the queue lock is held. A waiter
+     * cannot miss a count between its check and its suspend. */
     uv_mutex_lock(&sem->wait.lock);
-    uv_sem_post(&sem->sem);
+    for (index = 0; index < count; index++) {
+        uv_sem_post(&sem->sem);
+    }
+    cat_atomic_int64_fetch_add(&sem->value, (int64_t) count);
     coroutine = cat_thread_wait_publish(&sem->wait);
     uv_mutex_unlock(&sem->wait.lock);
 
     cat_thread_wait_resume(&sem->wait, coroutine);
+
+    /* Each count serves one coroutine, so no waiter beyond the count leaves. */
+    for (index = 1; index < count; index++) {
+        if (!cat_thread_wait_wake(&sem->wait)) {
+            break;
+        }
+    }
+}
+
+CAT_API void cat_sem_post(cat_sem_t *sem)
+{
+    cat_sem_release(sem, 1);
+}
+
+CAT_API cat_bool_t cat_sem_try_acquire(cat_sem_t *sem)
+{
+    if (cat_sem_try_take(sem)) {
+        return cat_true;
+    }
+
+    cat_update_last_error(CAT_EBUSY, "The semaphore is empty");
+    return cat_false;
+}
+
+CAT_API int64_t cat_sem_get_value(const cat_sem_t *sem)
+{
+    return cat_atomic_int64_load(&sem->value);
+}
+
+CAT_API size_t cat_sem_get_waiter_count(const cat_sem_t *sem)
+{
+    return (size_t) cat_atomic_int64_load(&sem->wait.count);
 }
 
 #endif /* CAT_THREAD_SAFE */
