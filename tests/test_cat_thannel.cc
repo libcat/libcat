@@ -509,4 +509,374 @@ TEST(cat_thannel, two_producers_of_a_rendezvous_all_arrive)
     ASSERT_EQ(seen[1], 1);
 }
 
+/* A batch enters and leaves the queue as one step. */
+TEST(cat_thannel, a_batch_enters_and_leaves_as_one_step)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 8), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int values[3] = { 11, 22, 33 };
+    cat_thannel_item_t input[3] = {};
+    for (int index = 0; index < 3; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 3, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_thannel_get_length(&thannel), 3);
+
+    cat_thannel_item_t output[3] = {};
+    size_t count = 0;
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 3, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 3);
+    for (int index = 0; index < 3; index++) {
+        ASSERT_EQ(output[index].size, sizeof(int));
+        ASSERT_EQ(*(int *) output[index].data, values[index]);
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_TRUE(cat_thannel_is_empty(&thannel));
+}
+
+/* A pop takes what fits, and leaves the rest for the next call. */
+TEST(cat_thannel, a_batch_pop_takes_no_more_than_the_capacity)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 8), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    for (int index = 0; index < 5; index++) {
+        ASSERT_TRUE(cat_thannel_push(&thannel, &index, sizeof(index), TEST_IO_TIMEOUT));
+    }
+
+    size_t count = 0;
+    cat_thannel_item_t output[2] = {};
+
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 2);
+    for (int index = 0; index < 2; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 2);
+    for (int index = 0; index < 2; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 1);
+    cat_sys_free(output[0].data);
+
+    /* the queue is empty now */
+    ASSERT_FALSE(cat_thannel_popv(&thannel, output, 2, &count, 20));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+}
+
+/* A batch push waits until the whole batch fits. */
+TEST(cat_thannel, a_batch_push_waits_for_room)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 4), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int values[2] = { 1, 2 };
+    cat_thannel_item_t input[2] = {};
+    for (int index = 0; index < 2; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thannel_is_full(&thannel));
+
+    cat_bool_t pushed = cat_false;
+    bool finished = false;
+    co([&] {
+        pushed = cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT);
+        finished = true;
+    });
+    ASSERT_FALSE(finished);
+
+    cat_thannel_item_t output[2] = {};
+    size_t count = 0;
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 2);
+    for (int index = 0; index < 2; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_TRUE(cat_time_delay(0));
+    ASSERT_TRUE(finished);
+    ASSERT_TRUE(pushed);
+    ASSERT_EQ(cat_thannel_get_length(&thannel), 4);
+}
+
+/* One batch pop wakes every producer that waits for room. */
+TEST(cat_thannel, a_batch_pop_wakes_the_producers_once)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 2), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int values[2] = { 1, 2 };
+    cat_thannel_item_t input[2] = {};
+    for (int index = 0; index < 2; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+
+    bool finished[2] = { false, false };
+    for (int index = 0; index < 2; index++) {
+        co([&, index] {
+            finished[index] = cat_thannel_pushv(&thannel, &input[index], 1, TEST_IO_TIMEOUT);
+        });
+    }
+    ASSERT_FALSE(finished[0]);
+    ASSERT_FALSE(finished[1]);
+
+    cat_thannel_item_t output[2] = {};
+    size_t count = 0;
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 2);
+    for (int index = 0; index < 2; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_TRUE(cat_time_delay(10));
+    ASSERT_TRUE(finished[0]);
+    ASSERT_TRUE(finished[1]);
+    ASSERT_EQ(cat_thannel_get_length(&thannel), 2);
+}
+
+/* A drain takes what the queue holds and does not wait for more. */
+TEST(cat_thannel, a_drain_takes_what_the_queue_holds)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 8), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    for (int index = 0; index < 5; index++) {
+        ASSERT_TRUE(cat_thannel_push(&thannel, &index, sizeof(index), TEST_IO_TIMEOUT));
+    }
+
+    cat_thannel_item_t output[8] = {};
+    size_t count = cat_thannel_drain(&thannel, output, 8);
+    ASSERT_EQ(count, 5);
+    for (size_t index = 0; index < count; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_EQ(cat_thannel_drain(&thannel, output, 8), 0);
+}
+
+/* A closed queue hands out what it holds, and then reports the close. */
+TEST(cat_thannel, a_batch_pop_reports_the_close_after_the_values)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 8), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int values[2] = { 7, 8 };
+    cat_thannel_item_t input[2] = {};
+    for (int index = 0; index < 2; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thannel_close(&thannel));
+
+    cat_thannel_item_t output[2] = {};
+    size_t count = 0;
+    ASSERT_TRUE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(count, 2);
+    for (int index = 0; index < 2; index++) {
+        cat_sys_free(output[index].data);
+    }
+
+    ASSERT_FALSE(cat_thannel_popv(&thannel, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ECLOSED);
+}
+
+/* A rendezvous queue holds one value, so it refuses a larger batch. */
+TEST(cat_thannel, a_rendezvous_refuses_a_larger_batch)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, CAT_THANNEL_CAPACITY_UNBUFFERED), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int values[2] = { 1, 2 };
+    cat_thannel_item_t input[2] = {};
+    for (int index = 0; index < 2; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+
+    ASSERT_FALSE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
+/* The counters show a park of one side and the wake that ended it. */
+TEST(cat_thannel, a_batch_counts_its_parks_and_wakes)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 1), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    cat_thannel_item_t output[1] = {};
+    size_t count = 0;
+    cat_bool_t popped = cat_false;
+
+    co([&] {
+        popped = cat_thannel_popv(&thannel, output, 1, &count, TEST_IO_TIMEOUT);
+    });
+
+    ASSERT_EQ(cat_thannel_get_park_count(&thannel), 1);
+    ASSERT_EQ(cat_thannel_get_wake_count(&thannel), 0);
+
+    int value = 5;
+    cat_thannel_item_t input = { &value, sizeof(value) };
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, &input, 1, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_time_delay(0));
+
+    ASSERT_TRUE(popped);
+    ASSERT_EQ(count, 1);
+    ASSERT_EQ(*(int *) output[0].data, value);
+    cat_sys_free(output[0].data);
+
+    ASSERT_EQ(cat_thannel_get_wake_count(&thannel), 1);
+}
+
+/* A rendezvous push that nobody takes gives up and leaves nothing behind. */
+TEST(cat_thannel, a_rendezvous_push_gives_up_on_the_timeout)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, CAT_THANNEL_CAPACITY_UNBUFFERED), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int value = 1;
+    ASSERT_FALSE(cat_thannel_push(&thannel, &value, sizeof(value), 20));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+
+    ASSERT_TRUE(cat_thannel_is_empty(&thannel));
+
+    void *data = nullptr;
+    size_t size = 0;
+    ASSERT_FALSE(cat_thannel_pop(&thannel, &data, &size, 20));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+}
+
+/* Every batch entry point refuses a bad argument. */
+TEST(cat_thannel, a_batch_argument_is_refused)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 4), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int value = 1;
+    cat_thannel_item_t item = { &value, sizeof(value) };
+    cat_thannel_item_t null_item = { nullptr, sizeof(value) };
+    cat_thannel_item_t output[2] = {};
+    size_t count = 0;
+
+    ASSERT_FALSE(cat_thannel_pushv(nullptr, &item, 1, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_pushv(&thannel, nullptr, 1, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_pushv(&thannel, &null_item, 1, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_pushv(&thannel, &item, 5, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    /* an empty batch succeeds and puts nothing in the queue */
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, nullptr, 0, TEST_IO_TIMEOUT));
+    ASSERT_TRUE(cat_thannel_is_empty(&thannel));
+
+    ASSERT_FALSE(cat_thannel_popv(nullptr, output, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_popv(&thannel, nullptr, 2, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_popv(&thannel, output, 2, nullptr, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_thannel_popv(&thannel, output, 0, &count, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_EQ(cat_thannel_drain(nullptr, output, 2), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(cat_thannel_drain(&thannel, nullptr, 2), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(cat_thannel_drain(&thannel, output, 0), 0);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    cat_thannel_cleanup(nullptr);
+    ASSERT_FALSE(cat_thannel_close(nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(cat_thannel_get_capacity(nullptr), 0);
+    ASSERT_TRUE(cat_thannel_is_empty(nullptr));
+    ASSERT_FALSE(cat_thannel_is_full(nullptr));
+    ASSERT_FALSE(cat_thannel_is_closed(nullptr));
+    ASSERT_EQ(cat_thannel_get_wake_count(nullptr), 0);
+    ASSERT_EQ(cat_thannel_get_park_count(nullptr), 0);
+}
+
+/* A close ends a rendezvous push that still waits for its take. */
+TEST(cat_thannel, a_close_ends_a_rendezvous_push)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, CAT_THANNEL_CAPACITY_UNBUFFERED), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    cat_bool_t pushed = cat_true;
+    cat_errno_t error = 0;
+    bool finished = false;
+
+    co([&] {
+        int value = 1;
+
+        pushed = cat_thannel_push(&thannel, &value, sizeof(value), TEST_IO_TIMEOUT);
+        error = cat_get_last_error_code();
+        finished = true;
+    });
+
+    ASSERT_FALSE(finished);
+    ASSERT_TRUE(cat_thannel_close(&thannel));
+    ASSERT_TRUE(cat_time_delay(0));
+
+    ASSERT_TRUE(finished);
+    ASSERT_FALSE(pushed);
+    ASSERT_EQ(error, CAT_ECLOSED);
+    ASSERT_TRUE(cat_thannel_is_empty(&thannel));
+}
+
+/* A drain frees room, so the producer that waits for it goes on. */
+TEST(cat_thannel, a_drain_wakes_the_producer)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 1), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int value = 1;
+    cat_thannel_item_t input = { &value, sizeof(value) };
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, &input, 1, TEST_IO_TIMEOUT));
+
+    bool pushed = false;
+    co([&] {
+        pushed = cat_thannel_pushv(&thannel, &input, 1, CAT_TIMEOUT_FOREVER);
+    });
+    ASSERT_FALSE(pushed);
+
+    cat_thannel_item_t output[1] = {};
+    size_t count = cat_thannel_drain(&thannel, output, 1);
+    ASSERT_EQ(count, 1);
+    cat_sys_free(output[0].data);
+
+    ASSERT_TRUE(cat_time_delay(0));
+    ASSERT_TRUE(pushed);
+    ASSERT_EQ(cat_thannel_get_length(&thannel), 1);
+    ASSERT_EQ(cat_thannel_get_wake_count(&thannel), 1);
+}
+
 #endif /* CAT_THREAD_SAFE */
