@@ -324,21 +324,44 @@ CAT_API cat_bool_t cat_thread_wait_park_until(cat_thread_wait_t *wait, cat_timeo
 
 CAT_API cat_bool_t cat_cond_init(cat_cond_t *cond)
 {
-    return cat_thread_wait_init(&cond->wait);
+    do {
+        int error = uv_cond_init(&cond->wakeup);
+
+        if (unlikely(error != 0)) {
+            cat_update_last_error_with_reason(error, "Condition init failed");
+            return cat_false;
+        }
+    } while (0);
+
+    if (unlikely(!cat_thread_wait_init(&cond->wait))) {
+        uv_cond_destroy(&cond->wakeup);
+        return cat_false;
+    }
+
+    return cat_true;
 }
 
 CAT_API void cat_cond_destroy(cat_cond_t *cond)
 {
     cat_thread_wait_destroy(&cond->wait);
+    uv_cond_destroy(&cond->wakeup);
 }
 
 CAT_API cat_bool_t cat_cond_signal(cat_cond_t *cond)
 {
+    uv_mutex_lock(&cond->wait.lock);
+    uv_cond_signal(&cond->wakeup);
+    uv_mutex_unlock(&cond->wait.lock);
+
     return cat_thread_wait_wake(&cond->wait);
 }
 
 CAT_API cat_bool_t cat_cond_broadcast(cat_cond_t *cond)
 {
+    uv_mutex_lock(&cond->wait.lock);
+    uv_cond_broadcast(&cond->wakeup);
+    uv_mutex_unlock(&cond->wait.lock);
+
     return cat_thread_wait_wake_all(&cond->wait);
 }
 
@@ -402,12 +425,20 @@ static void cat_thread_wait_resume(cat_thread_wait_t *wait, cat_coroutine_t *cor
     cat_coroutine_wake(coroutine);
 }
 
+/* The BLOCK form of cat_cond_wait below, which needs the mutex calls that come
+ * after this function. */
+static cat_bool_t cat_cond_block_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeout_t timeout);
+
 CAT_API cat_bool_t cat_cond_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeout_t timeout)
 {
     struct cat_thread_wait_park_s park;
     cat_coroutine_t *current;
     cat_coroutine_t *waiting;
     cat_bool_t woken;
+
+    if (mutex->wait_mode == CAT_SYNC_WAIT_BLOCK) {
+        return cat_cond_block_wait(cond, mutex, timeout);
+    }
 
     if (unlikely(!cat_globals_available())) {
         cat_update_last_error(CAT_EMISUSE, "This thread has no runtime");
@@ -461,8 +492,13 @@ CAT_API cat_bool_t cat_cond_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeo
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex)
+CAT_API cat_bool_t cat_mutex_init_ex(cat_mutex_t *mutex, cat_sync_wait_t wait)
 {
+    if (unlikely(wait != CAT_SYNC_WAIT_PARK && wait != CAT_SYNC_WAIT_BLOCK)) {
+        cat_update_last_error(CAT_EINVAL, "Unknown wait mode");
+        return cat_false;
+    }
+
     do {
         int error = uv_mutex_init(&mutex->lock);
 
@@ -472,10 +508,32 @@ CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex)
         }
     } while (0);
 
+    do {
+        int error = uv_cond_init(&mutex->wakeup);
+
+        if (unlikely(error != 0)) {
+            cat_update_last_error_with_reason(error, "Mutex init cond failed");
+            uv_mutex_destroy(&mutex->lock);
+            return cat_false;
+        }
+    } while (0);
+
     cat_atomic_bool_init(&mutex->held, cat_false);
     cat_atomic_uint64_init(&mutex->owner, 0);
+    mutex->wait_mode = wait;
 
-    return cat_thread_wait_init(&mutex->wait);
+    if (unlikely(!cat_thread_wait_init(&mutex->wait))) {
+        uv_cond_destroy(&mutex->wakeup);
+        uv_mutex_destroy(&mutex->lock);
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
+CAT_API cat_bool_t cat_mutex_init(cat_mutex_t *mutex)
+{
+    return cat_mutex_init_ex(mutex, CAT_SYNC_WAIT_PARK);
 }
 
 CAT_API cat_bool_t cat_mutex_destroy(cat_mutex_t *mutex)
@@ -487,7 +545,40 @@ CAT_API cat_bool_t cat_mutex_destroy(cat_mutex_t *mutex)
     }
 
     cat_thread_wait_destroy(&mutex->wait);
+    uv_cond_destroy(&mutex->wakeup);
     uv_mutex_destroy(&mutex->lock);
+
+    return cat_true;
+}
+
+/* Block the calling thread until a release signals the condition, or the
+ * timeout runs out. cat_false with CAT_ETIMEDOUT when the timeout runs out. */
+static cat_bool_t cat_mutex_block(cat_mutex_t *mutex, cat_timeout_t timeout)
+{
+    int error;
+
+    uv_mutex_lock(&mutex->wait.lock);
+
+    if (!cat_atomic_bool_load(&mutex->held)) {
+        /* the holder released between the failed take and this lock */
+        uv_mutex_unlock(&mutex->wait.lock);
+        return cat_true;
+    }
+
+    if (timeout == CAT_TIMEOUT_FOREVER) {
+        uv_cond_wait(&mutex->wakeup, &mutex->wait.lock);
+        error = 0;
+    } else {
+        error = uv_cond_timedwait(&mutex->wakeup, &mutex->wait.lock,
+            (uint64_t) timeout * 1000000ULL);
+    }
+
+    uv_mutex_unlock(&mutex->wait.lock);
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Timed out waiting for the mutex");
+        return cat_false;
+    }
 
     return cat_true;
 }
@@ -504,6 +595,14 @@ CAT_API cat_bool_t cat_mutex_lock(cat_mutex_t *mutex, cat_timeout_t timeout)
         if (timeout == 0) {
             cat_update_last_error(CAT_EBUSY, "The mutex is held by somebody else");
             return cat_false;
+        }
+
+        if (mutex->wait_mode == CAT_SYNC_WAIT_BLOCK) {
+            if (unlikely(!cat_mutex_block(mutex, timeout))) {
+                return cat_false;
+            }
+            /* a release woke the thread, so look again */
+            continue;
         }
 
         result = cat_thread_wait_wait_for(&mutex->wait, timeout, cat_mutex_try_take, mutex);
@@ -523,21 +622,75 @@ CAT_API cat_bool_t cat_mutex_unlock(cat_mutex_t *mutex)
     cat_bool_t held = cat_true;
     cat_coroutine_t *coroutine;
 
+    /* Release the lock and wake a waiter while the queue lock is held. A waiter
+     * cannot miss this release between its check and its wait. */
+    uv_mutex_lock(&mutex->wait.lock);
+
     /* A release with no holder is a mistake. Report it here, because the pthread
      * release accepts it and fails later at destroy. */
     if (unlikely(!cat_atomic_bool_compare_exchange_strong(&mutex->held, &held, cat_false))) {
+        uv_mutex_unlock(&mutex->wait.lock);
         cat_update_last_error(CAT_EMISUSE, "The caller does not hold the mutex");
         return cat_false;
     }
 
-    /* Release the lock and take a waiter while the queue lock is held. A waiter
-     * cannot miss this release between its check and its suspend. */
-    uv_mutex_lock(&mutex->wait.lock);
     uv_mutex_unlock(&mutex->lock);
+
+    if (mutex->wait_mode == CAT_SYNC_WAIT_BLOCK) {
+        uv_cond_signal(&mutex->wakeup);
+        uv_mutex_unlock(&mutex->wait.lock);
+        return cat_true;
+    }
+
     coroutine = cat_thread_wait_publish(&mutex->wait);
     uv_mutex_unlock(&mutex->wait.lock);
 
     cat_thread_wait_resume(&mutex->wait, coroutine);
+
+    return cat_true;
+}
+
+/* The BLOCK form of cat_cond_wait: release the mutex, sleep in the condition,
+ * and take the mutex again. */
+static cat_bool_t cat_cond_block_wait(cat_cond_t *cond, cat_mutex_t *mutex, cat_timeout_t timeout)
+{
+    int error;
+
+    /* The caller must hold the mutex, and the owner is how that is known. */
+    if (unlikely(cat_atomic_uint64_load(&mutex->owner) != (uint64_t) (uintptr_t) uv_thread_self())) {
+        cat_update_last_error(CAT_EMISUSE, "The caller does not hold the mutex");
+        return cat_false;
+    }
+
+    uv_mutex_lock(&cond->wait.lock);
+
+    /* Release the mutex and wake a thread that waits for it as one step, so a
+     * release is not lost between the two. */
+    uv_mutex_lock(&mutex->wait.lock);
+    cat_atomic_bool_store(&mutex->held, cat_false);
+    uv_mutex_unlock(&mutex->lock);
+    uv_cond_signal(&mutex->wakeup);
+    uv_mutex_unlock(&mutex->wait.lock);
+
+    if (timeout == CAT_TIMEOUT_FOREVER) {
+        uv_cond_wait(&cond->wakeup, &cond->wait.lock);
+        error = 0;
+    } else {
+        error = uv_cond_timedwait(&cond->wakeup, &cond->wait.lock,
+            (uint64_t) timeout * 1000000ULL);
+    }
+
+    uv_mutex_unlock(&cond->wait.lock);
+
+    /* Both paths take the mutex again, so the caller keeps what it held. */
+    if (unlikely(!cat_mutex_lock(mutex, CAT_TIMEOUT_FOREVER))) {
+        return cat_false;
+    }
+
+    if (unlikely(error != 0)) {
+        cat_update_last_error_with_reason(error, "Timed out waiting for the condition");
+        return cat_false;
+    }
 
     return cat_true;
 }

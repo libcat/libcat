@@ -229,6 +229,203 @@ TEST(cat_thread_sync, a_mutex_waiter_times_out)
     mutex_case_close(&m);
 }
 
+/* A BLOCK mutex needs no runtime: the waiter sleeps in the kernel. */
+TEST(cat_thread_sync, a_blocking_mutex_holds_a_bare_thread)
+{
+    struct block_mutex_s {
+        cat_mutex_t *mutex;
+        std::atomic<int> state; /* 0: start, 1: in the wait, 2: held */
+        cat_bool_t took;
+    } state = {};
+
+    cat_mutex_t m;
+    ASSERT_TRUE(cat_mutex_init_ex(&m, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_mutex_lock(&m, TEST_IO_TIMEOUT));
+
+    state.mutex = &m;
+    uv_thread_t tid;
+    ASSERT_EQ(uv_thread_create(&tid, [](void *data) {
+        struct block_mutex_s *self = (struct block_mutex_s *) data;
+
+        self->state = 1;
+        self->took = cat_mutex_lock(self->mutex, CAT_TIMEOUT_FOREVER);
+        if (self->took) {
+            self->state = 2;
+            cat_mutex_unlock(self->mutex);
+        }
+    }, &state), 0);
+
+    /* the thread is in the wait by now, and no release has come */
+    for (int round = 0; round < 5000 && state.state.load() == 0; round++) {
+        uv_sleep(1);
+    }
+    ASSERT_EQ(state.state.load(), 1);
+    uv_sleep(50);
+    ASSERT_EQ(state.state.load(), 1);
+
+    ASSERT_TRUE(cat_mutex_unlock(&m));
+    ASSERT_EQ(uv_thread_join(&tid), 0);
+
+    ASSERT_TRUE(state.took);
+    ASSERT_EQ(state.state.load(), 2);
+
+    ASSERT_TRUE(cat_mutex_destroy(&m));
+}
+
+/* A blocked waiter wakes one after another, so both threads take the lock. */
+TEST(cat_thread_sync, a_blocking_mutex_serves_several_threads)
+{
+    struct block_mutex_count_s {
+        cat_mutex_t *mutex;
+        std::atomic<int> waiting;
+        std::atomic<int> served;
+    } state = {};
+
+    cat_mutex_t m;
+    ASSERT_TRUE(cat_mutex_init_ex(&m, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_mutex_lock(&m, TEST_IO_TIMEOUT));
+
+    state.mutex = &m;
+    uv_thread_t tid[2];
+    for (int index = 0; index < 2; index++) {
+        ASSERT_EQ(uv_thread_create(&tid[index], [](void *data) {
+            struct block_mutex_count_s *self = (struct block_mutex_count_s *) data;
+
+            self->waiting++;
+            if (cat_mutex_lock(self->mutex, TEST_IO_TIMEOUT)) {
+                self->served++;
+                cat_mutex_unlock(self->mutex);
+            }
+        }, &state), 0);
+    }
+
+    for (int round = 0; round < 5000 && state.waiting.load() < 2; round++) {
+        uv_sleep(1);
+    }
+    ASSERT_EQ(state.waiting.load(), 2);
+    uv_sleep(50);
+
+    ASSERT_TRUE(cat_mutex_unlock(&m));
+
+    for (int index = 0; index < 2; index++) {
+        ASSERT_EQ(uv_thread_join(&tid[index]), 0);
+    }
+    ASSERT_EQ(state.served.load(), 2);
+
+    ASSERT_TRUE(cat_mutex_destroy(&m));
+}
+
+/* A blocked lock gives up on the timeout and says so. */
+TEST(cat_thread_sync, a_blocking_mutex_waiter_times_out)
+{
+    struct block_mutex_timeout_s {
+        cat_mutex_t *mutex;
+        cat_bool_t took;
+        cat_errno_t error;
+    } state = {};
+
+    cat_mutex_t m;
+    ASSERT_TRUE(cat_mutex_init_ex(&m, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_mutex_lock(&m, TEST_IO_TIMEOUT));
+
+    state.mutex = &m;
+
+    struct plain_thread_s worker;
+    ASSERT_TRUE(plain_thread_start(&worker, [](void *data) {
+        struct block_mutex_timeout_s *self = (struct block_mutex_timeout_s *) data;
+
+        self->took = cat_mutex_lock(self->mutex, 50);
+        self->error = cat_get_last_error_code();
+    }, &state));
+    plain_thread_join(&worker);
+
+    ASSERT_FALSE(state.took);
+    ASSERT_EQ(state.error, CAT_ETIMEDOUT);
+
+    ASSERT_TRUE(cat_mutex_unlock(&m));
+    ASSERT_TRUE(cat_mutex_destroy(&m));
+}
+
+/* The signal of one thread ends the blocking wait of another. */
+TEST(cat_thread_sync, a_blocking_condition_wakes_a_thread)
+{
+    struct block_cond_s {
+        cat_mutex_t mutex;
+        cat_cond_t cond;
+        bool predicate;
+    } state = {};
+
+    ASSERT_TRUE(cat_mutex_init_ex(&state.mutex, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_cond_init(&state.cond));
+    ASSERT_TRUE(cat_mutex_lock(&state.mutex, TEST_IO_TIMEOUT));
+
+    struct plain_thread_s worker;
+    ASSERT_TRUE(plain_thread_start(&worker, [](void *data) {
+        struct block_cond_s *self = (struct block_cond_s *) data;
+
+        if (cat_mutex_lock(&self->mutex, TEST_IO_TIMEOUT)) {
+            self->predicate = true;
+            cat_cond_signal(&self->cond);
+            cat_mutex_unlock(&self->mutex);
+        }
+    }, &state));
+
+    /* the wait releases the mutex, so the worker takes it and signals */
+    ASSERT_TRUE(cat_cond_wait(&state.cond, &state.mutex, CAT_TIMEOUT_FOREVER));
+    ASSERT_TRUE(state.predicate);
+    cat_mutex_unlock(&state.mutex);
+
+    plain_thread_join(&worker);
+
+    cat_cond_destroy(&state.cond);
+    ASSERT_TRUE(cat_mutex_destroy(&state.mutex));
+}
+
+/* A condition wait needs the caller to hold the mutex, in BLOCK mode too. */
+TEST(cat_thread_sync, a_blocking_condition_wait_needs_the_holder)
+{
+    cat_mutex_t m;
+    cat_cond_t c;
+    ASSERT_TRUE(cat_mutex_init_ex(&m, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_cond_init(&c));
+
+    ASSERT_FALSE(cat_cond_wait(&c, &m, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
+
+    cat_cond_destroy(&c);
+    ASSERT_TRUE(cat_mutex_destroy(&m));
+}
+
+/* A blocked condition wait gives up on the timeout and holds the mutex again. */
+TEST(cat_thread_sync, a_blocking_condition_waiter_times_out)
+{
+    cat_mutex_t m;
+    cat_cond_t c;
+    ASSERT_TRUE(cat_mutex_init_ex(&m, CAT_SYNC_WAIT_BLOCK));
+    ASSERT_TRUE(cat_cond_init(&c));
+
+    ASSERT_TRUE(cat_mutex_lock(&m, TEST_IO_TIMEOUT));
+
+    cat_msec_t start = cat_time_msec();
+    ASSERT_FALSE(cat_cond_wait(&c, &m, 50));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_GE(cat_time_msec() - start, 30);
+
+    /* the caller holds the mutex again */
+    ASSERT_TRUE(cat_mutex_unlock(&m));
+
+    cat_cond_destroy(&c);
+    ASSERT_TRUE(cat_mutex_destroy(&m));
+}
+
+TEST(cat_thread_sync, a_mutex_rejects_an_unknown_wait_mode)
+{
+    cat_mutex_t m;
+
+    ASSERT_FALSE(cat_mutex_init_ex(&m, (cat_sync_wait_t) 42));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
 /* A semaphore hands out its count, and an empty one waits for a post. */
 TEST(cat_thread_sync, a_semaphore_waiter_wakes_on_a_post)
 {
