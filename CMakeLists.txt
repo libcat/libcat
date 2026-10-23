@@ -101,6 +101,7 @@ set(cat_sources
     src/cat_watchdog.c
     src/cat_process.c
     src/cat_futex.c
+    src/cat_shm.c
     src/cat_http.c
     src/cat_websocket.c
 )
@@ -1043,6 +1044,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_thread.cc
         tests/test_cat_thread_sync.cc
         tests/test_cat_futex.cc
+        tests/test_cat_shm.cc
         tests/test_cat_thannel.cc
         tests/test_cat_http.cc
         tests/test_cat_http_errors.cc
