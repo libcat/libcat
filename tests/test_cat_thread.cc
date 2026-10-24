@@ -843,6 +843,58 @@ TEST(cat_thread, joining_twice_is_refused)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EMISUSE);
 }
 
+/*
+ * Two waiters may park on the same thread at the same time. One takes the exit
+ * and the other one gets CAT_EMISUSE, and the object of the first one stays
+ * usable until it returns from the call.
+ */
+TEST(cat_thread, two_waiters_on_one_join_share_the_exit)
+{
+    struct join_s {
+        cat_thread_t thread;
+        cat_futex_t go;
+        cat_bool_t ok[2];
+        cat_errno_t error[2];
+        bool finished[2];
+    } state = {};
+    cat_atomic_int32_init(&state.go, 0);
+
+    auto routine = [](cat_data_t *data) {
+        struct join_s *self = (struct join_s *) data;
+
+        (void) cat_futex_wait(&self->go, 0, TEST_IO_TIMEOUT);
+    };
+
+    ASSERT_TRUE(cat_thread_create(&state.thread, routine, &state));
+
+    for (int index = 0; index < 2; index++) {
+        co([&state, index] {
+            state.ok[index] = cat_thread_join(&state.thread, TEST_IO_TIMEOUT);
+            state.error[index] = cat_get_last_error_code();
+            state.finished[index] = true;
+        });
+    }
+    ASSERT_FALSE(state.finished[0]);
+    ASSERT_FALSE(state.finished[1]);
+
+    cat_atomic_int32_store(&state.go, 1);
+    ASSERT_TRUE(cat_futex_wake(&state.go, 1));
+
+    for (int round = 0; round < 5000 && !(state.finished[0] && state.finished[1]); round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+
+    ASSERT_TRUE(state.finished[0]);
+    ASSERT_TRUE(state.finished[1]);
+    /* the thread can only be joined once, so exactly one of them took it */
+    ASSERT_NE(state.ok[0], state.ok[1]);
+    for (int index = 0; index < 2; index++) {
+        if (!state.ok[index]) {
+            ASSERT_EQ(state.error[index], CAT_EMISUSE);
+        }
+    }
+}
+
 /* A join that runs out of time reports it, and the thread can still be joined
  * afterwards. */
 TEST(cat_thread, a_join_times_out_and_can_be_repeated)
