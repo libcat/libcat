@@ -15,6 +15,8 @@
 #include "cat_api.h"
 #include "cat_thread_sync.h"
 
+#include <limits.h>
+
 #ifdef CAT_THREAD_SAFE
 
 CAT_API cat_bool_t cat_thread_sync_module_init(void)
@@ -804,6 +806,16 @@ CAT_API void cat_sem_release(cat_sem_t *sem, size_t count)
     /* Add the counts and take a waiter while the queue lock is held. A waiter
      * cannot miss a count between its check and its suspend. */
     uv_mutex_lock(&sem->wait.lock);
+    /* uv_sem_post aborts the process when the count passes SEM_VALUE_MAX, so a
+     * release beyond the limit adds what still fits */
+    if (count > (size_t) (INT_MAX - cat_atomic_int64_load(&sem->value))) {
+        count = (size_t) (INT_MAX - cat_atomic_int64_load(&sem->value));
+    }
+    if (count == 0) {
+        uv_mutex_unlock(&sem->wait.lock);
+        cat_update_last_error(CAT_EINVAL, "The semaphore count is at its limit");
+        return;
+    }
     for (index = 0; index < count; index++) {
         uv_sem_post(&sem->sem);
     }

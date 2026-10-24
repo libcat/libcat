@@ -18,6 +18,7 @@
 
 #include "test.h"
 
+#include <climits>
 #include <thread>
 
 #if defined(CAT_THREAD_SAFE)
@@ -1903,6 +1904,31 @@ TEST(cat_thread_sync, a_negative_timeout_gives_up_at_once)
     ASSERT_EQ(error, CAT_EBUSY);
     ASSERT_EQ(cat_sem_get_value(&s), 0);
     ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+
+    sem_case_close(&s);
+}
+
+/*
+ * The count stops at the limit libuv accepts, because a post beyond it aborts
+ * the process. Reaching the limit by posting is too slow for a test, so the
+ * mirror count goes there directly.
+ */
+TEST(cat_thread_sync, a_release_beyond_the_count_limit_is_refused)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    cat_atomic_int64_store(&s.value, INT_MAX);
+
+    cat_sem_release(&s, 1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(cat_sem_get_value(&s), INT_MAX);
+
+    /* an empty semaphore still takes a release */
+    cat_atomic_int64_store(&s.value, 0);
+    cat_sem_release(&s, 2);
+    ASSERT_EQ(cat_sem_get_value(&s), 2);
+    ASSERT_TRUE(cat_sem_acquire(&s, 0));
 
     sem_case_close(&s);
 }
