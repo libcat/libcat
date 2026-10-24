@@ -1186,6 +1186,8 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
         cat_thread_t thread;
         cat_sem_t *done;
         cat_atomic_bool_t *posted;
+        /* the test detaches the thread before the routine may release the object */
+        cat_futex_t go;
     };
 
     cat_sem_t done;
@@ -1197,10 +1199,16 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
         .thread = {},
         .done = &done,
         .posted = &posted,
+        .go = {},
     };
+    cat_atomic_int32_init(&work->go, 0);
 
     auto routine = [](cat_data_t *data) {
         struct work_s *self = (struct work_s *) data;
+
+        /* the detachment touches the object, so it has to happen while the
+         * object is still here */
+        (void) cat_futex_wait(&self->go, 0, TEST_IO_TIMEOUT);
 
         (void) cat_runtime_init_all();
         (void) cat_thread_bootstrap(&self->thread);
@@ -1222,6 +1230,11 @@ TEST(cat_thread, a_detached_manual_runtime_worker_releases_its_object)
 
     ASSERT_TRUE(cat_thread_create_ex(&work->thread, routine, work, &options));
     ASSERT_TRUE(cat_thread_detach(&work->thread));
+
+    /* the object is still alive here, and the routine waits for this release */
+    cat_atomic_int32_store(&work->go, 1);
+    ASSERT_TRUE(cat_futex_wake(&work->go, 1));
+
     ASSERT_TRUE(cat_sem_acquire(&done, TEST_IO_TIMEOUT));
 
     /* the worker runs the post and the runtime close after it woke this thread,
