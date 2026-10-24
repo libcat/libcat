@@ -879,4 +879,56 @@ TEST(cat_thannel, a_drain_wakes_the_producer)
     ASSERT_EQ(cat_thannel_get_wake_count(&thannel), 1);
 }
 
+/*
+ * Every value of a batch wakes one consumer, so a batch cannot leave a consumer
+ * asleep next to a value it could have taken.
+ */
+TEST(cat_thannel, a_batch_wakes_one_consumer_for_each_value)
+{
+    cat_thannel_t thannel;
+    ASSERT_NE(cat_thannel_create(&thannel, 4), nullptr);
+    DEFER(cat_thannel_cleanup(&thannel));
+
+    int received[2] = { 0, 0 };
+    cat_bool_t ok[2] = { cat_false, cat_false };
+    bool finished[2] = { false, false };
+
+    for (int index = 0; index < 2; index++) {
+        co([&, index] {
+            cat_thannel_item_t item = {};
+            size_t count = 0;
+
+            ok[index] = cat_thannel_popv(&thannel, &item, 1, &count, 500);
+            if (ok[index] && count == 1) {
+                memcpy(&received[index], item.data, sizeof(int));
+                cat_sys_free(item.data);
+            }
+            finished[index] = true;
+        });
+    }
+
+    int values[2] = { 11, 22 };
+    cat_thannel_item_t input[2] = {};
+    for (int index = 0; index < 2; index++) {
+        input[index].data = &values[index];
+        input[index].size = sizeof(int);
+    }
+    ASSERT_TRUE(cat_thannel_pushv(&thannel, input, 2, TEST_IO_TIMEOUT));
+
+    /* a consumer that no wake reached gives up at its own timeout, so wait for
+     * both of them before the assertions */
+    for (int round = 0; round < 1500 && !(finished[0] && finished[1]); round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+
+    ASSERT_TRUE(finished[0]);
+    ASSERT_TRUE(finished[1]);
+    ASSERT_TRUE(ok[0]);
+    ASSERT_TRUE(ok[1]);
+    ASSERT_NE(received[0], received[1]);
+    ASSERT_TRUE(received[0] == values[0] || received[0] == values[1]);
+    ASSERT_TRUE(received[1] == values[0] || received[1] == values[1]);
+    ASSERT_EQ(cat_thannel_get_length(&thannel), 0);
+}
+
 #endif /* CAT_THREAD_SAFE */
