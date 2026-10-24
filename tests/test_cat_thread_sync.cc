@@ -1767,4 +1767,144 @@ TEST(cat_cond, a_wait_lets_a_coroutine_that_waits_for_the_mutex_in)
     ASSERT_TRUE(cat_mutex_destroy(&share.mutex));
 }
 
+/*
+ * A timer that ends one wait must not take the count of the waiters that stay,
+ * and must not drop their nodes. The count used to go down once more than it
+ * went up, and a stale removal could unlink a live waiter.
+ */
+TEST(cat_thread_sync, a_timed_out_waiter_leaves_the_other_waiters_counted)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    cat_bool_t first_ok = cat_true;
+    cat_errno_t first_error = 0;
+    cat_bool_t second_ok = cat_false;
+    bool second_finished = false;
+
+    co([&] {
+        first_ok = cat_sem_acquire(&s, 30);
+        first_error = cat_get_last_error_code();
+    });
+    co([&] {
+        second_ok = cat_sem_acquire(&s, 1000);
+        second_finished = true;
+    });
+
+    /* the first waiter gives up, the second one stays parked */
+    ASSERT_TRUE(cat_time_delay(100));
+
+    size_t waiters = cat_sem_get_waiter_count(&s);
+    cat_bool_t second_was_parked = second_finished ? cat_false : cat_true;
+
+    /* let the second one finish, so a failure cannot leave it parked here */
+    cat_sem_release(&s, 1);
+    for (int round = 0; round < 2000 && !second_finished; round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+
+    ASSERT_FALSE(first_ok);
+    ASSERT_EQ(first_error, CAT_ETIMEDOUT);
+    ASSERT_EQ(waiters, 1);
+    ASSERT_TRUE(second_was_parked);
+    ASSERT_TRUE(second_finished);
+    ASSERT_TRUE(second_ok);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+
+    sem_case_close(&s);
+}
+
+/* A timeout takes out one waiter and one count, no matter how many end. */
+TEST(cat_thread_sync, two_timed_out_waiters_leave_a_zero_count)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    cat_errno_t first_error = 0;
+    cat_errno_t second_error = 0;
+
+    co([&] {
+        (void) cat_sem_acquire(&s, 20);
+        first_error = cat_get_last_error_code();
+    });
+    co([&] {
+        (void) cat_sem_acquire(&s, 50);
+        second_error = cat_get_last_error_code();
+    });
+
+    ASSERT_TRUE(cat_time_delay(120));
+
+    ASSERT_EQ(first_error, CAT_ETIMEDOUT);
+    ASSERT_EQ(second_error, CAT_ETIMEDOUT);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+    ASSERT_EQ(cat_sem_get_value(&s), 0);
+
+    sem_case_close(&s);
+}
+
+/*
+ * A wake that brings no count must not restart the timeout. The wait takes the
+ * remaining time of one deadline, not a fresh timeout for every wake.
+ */
+TEST(cat_thread_sync, a_wake_without_a_count_keeps_the_deadline)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    cat_bool_t ok = cat_true;
+    cat_errno_t error = 0;
+    bool finished = false;
+    cat_msec_t start = cat_time_msec();
+
+    co([&] {
+        ok = cat_sem_acquire(&s, 400);
+        error = cat_get_last_error_code();
+        finished = true;
+    });
+
+    /* wake the waiter twice without giving it a count */
+    for (int round = 0; round < 2; round++) {
+        ASSERT_TRUE(cat_time_delay(150));
+        ASSERT_FALSE(finished);
+        ASSERT_TRUE(cat_thread_wait_wake(&s.wait));
+    }
+
+    for (int round = 0; round < 5000 && !finished; round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+
+    ASSERT_TRUE(finished);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ(error, CAT_ETIMEDOUT);
+    /* 400 msec from the call, not 400 msec from the last wake (which is 700) */
+    ASSERT_LT(cat_time_msec() - start, 550);
+
+    sem_case_close(&s);
+}
+
+/* Every timeout below zero but the forever one gives up at once. */
+TEST(cat_thread_sync, a_negative_timeout_gives_up_at_once)
+{
+    cat_sem_t s;
+    sem_case_init(&s, 0);
+
+    cat_bool_t ok = cat_true;
+    cat_errno_t error = 0;
+    bool finished = false;
+
+    co([&] {
+        ok = cat_sem_acquire(&s, -5);
+        error = cat_get_last_error_code();
+        finished = true;
+    });
+
+    ASSERT_TRUE(finished);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ(error, CAT_EBUSY);
+    ASSERT_EQ(cat_sem_get_value(&s), 0);
+    ASSERT_EQ(cat_sem_get_waiter_count(&s), 0);
+
+    sem_case_close(&s);
+}
+
 #endif /* CAT_THREAD_SAFE */
