@@ -25,6 +25,7 @@
 #ifndef CAT_OS_WIN
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -33,8 +34,32 @@
 
 static std::string shm_test_name(const char *suffix)
 {
-    return "libcat-shm-test-" + std::to_string((long) uv_os_getpid()) + "-" + suffix;
+    /* libcat adds the leading slash, and macOS accepts at most 31 characters in
+     * total, so a generated name stays within 30 characters */
+    std::string name = "libcat-shm-test-" + std::to_string((long) uv_os_getpid()) + "-" + suffix;
+#ifdef __APPLE__
+    EXPECT_LE(name.size(), 30u) << name;
+#endif
+    return name;
 }
+
+#ifndef CAT_OS_WIN
+
+/* macOS maps a shared memory object by page, so an attach reports the requested
+ * size rounded up to the page size. Other platforms keep the requested size. */
+static size_t shm_attached_size(size_t requested)
+{
+#ifdef __APPLE__
+    long page = sysconf(_SC_PAGESIZE);
+    size_t page_size = page > 0 ? (size_t) page : (size_t) 4096;
+
+    return (requested + page_size - 1) / page_size * page_size;
+#else
+    return requested;
+#endif
+}
+
+#endif
 
 /* A mapping of the process alone holds what the caller writes to it. */
 TEST(cat_shm, an_anonymous_mapping_holds_data)
@@ -154,7 +179,12 @@ TEST(cat_shm, a_named_mapping_attaches_by_name)
     ASSERT_NE(attached, nullptr);
     DEFER(cat_shm_detach(attached));
 
-    ASSERT_EQ(cat_shm_get_size(attached), sizeof(int));
+#ifdef CAT_OS_WIN
+    /* VirtualQuery reports the view rounded up to a page */
+    ASSERT_GE(cat_shm_get_size(attached), sizeof(int));
+#else
+    ASSERT_EQ(cat_shm_get_size(attached), shm_attached_size(sizeof(int)));
+#endif
     ASSERT_STREQ(cat_shm_get_name(attached), name.c_str());
     ASSERT_NE(cat_shm_get_address(attached), cat_shm_get_address(created));
 
@@ -218,7 +248,8 @@ TEST(cat_shm, an_attach_refuses_a_missing_name)
     ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
 }
 
-/* An empty name has no object behind it, on every entry point. */
+/* An empty name has no object behind it, on every entry point, and neither
+ * does a missing name. */
 TEST(cat_shm, an_empty_name_is_refused)
 {
     ASSERT_EQ(cat_shm_create_named("", sizeof(int)), nullptr);
@@ -231,10 +262,60 @@ TEST(cat_shm, an_empty_name_is_refused)
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
-/* A size that leaves no room for the header is refused before any allocation. */
-TEST(cat_shm, a_size_that_does_not_fit_is_refused)
+/* A missing name is no name at all. */
+TEST(cat_shm, a_null_name_is_refused)
+{
+    ASSERT_EQ(cat_shm_create_named(nullptr, sizeof(int)), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_EQ(cat_shm_attach_named(nullptr), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_FALSE(cat_shm_unlink(nullptr));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
+/* A size that no mapping can hold fails at the platform, now that no header
+ * arithmetic bounds it. The error is the one that the platform reports. */
+TEST(cat_shm, a_size_that_no_mapping_can_hold_is_refused)
 {
     ASSERT_EQ(cat_shm_create_anonymous(SIZE_MAX), nullptr);
+
+    cat_errno_t code = cat_get_last_error_code();
+    ASSERT_TRUE(code == CAT_ENOMEM || code == CAT_EINVAL);
+}
+
+/* The platform bounds the length of a name, and libcat reports the bound at the
+ * call instead of a platform error. Windows limits the name to MAX_PATH (260)
+ * characters, macOS to 31 characters including the leading slash that the
+ * backend adds, and a POSIX file name component to NAME_MAX (255). */
+TEST(cat_shm, a_name_beyond_the_platform_limit_is_refused)
+{
+#ifdef CAT_OS_WIN
+    const size_t limit = 260;
+#elif defined(__APPLE__)
+    const size_t limit = 30;
+#else
+    const size_t limit = 255;
+#endif
+    std::string longest(limit, 'a');
+    std::string too_long(limit + 1, 'a');
+
+#ifndef CAT_OS_WIN
+    /* a name at the limit still creates an object */
+    cat_shm_t *created = cat_shm_create_named(longest.c_str(), sizeof(int));
+    ASSERT_NE(created, nullptr);
+    DEFER(cat_shm_detach(created));
+    DEFER(cat_shm_unlink(longest.c_str()));
+#endif
+
+    ASSERT_EQ(cat_shm_create_named(too_long.c_str(), sizeof(int)), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_EQ(cat_shm_attach_named(too_long.c_str()), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ASSERT_FALSE(cat_shm_unlink(too_long.c_str()));
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
 
@@ -258,9 +339,44 @@ TEST(cat_shm, a_posix_name_may_keep_its_leading_slash)
     ASSERT_EQ(*(int *) cat_shm_get_address(attached), 3);
 }
 
-/* A shared object that libcat did not create has no header, so attach refuses
- * it instead of handing out an address with the wrong size. */
-TEST(cat_shm, an_attach_refuses_a_foreign_mapping)
+/* A create reports the size that the caller passed, and the object starts at
+ * the address with no libcat metadata in front of the caller data. */
+TEST(cat_shm, a_posix_create_maps_exactly_the_requested_size)
+{
+    const size_t size = 128;
+    std::string name = shm_test_name("exact");
+    std::string path = "/" + name;
+
+    cat_shm_t *created = cat_shm_create_named(name.c_str(), size);
+    ASSERT_NE(created, nullptr);
+    DEFER(cat_shm_detach(created));
+    DEFER(cat_shm_unlink(name.c_str()));
+
+    int fd = shm_open(path.c_str(), O_RDWR, 0);
+    ASSERT_NE(fd, -1);
+    DEFER(close(fd));
+    struct stat information;
+    ASSERT_EQ(fstat(fd, &information), 0);
+    ASSERT_EQ((size_t) information.st_size, shm_attached_size(size));
+
+    ASSERT_EQ(cat_shm_get_size(created), size);
+
+    /* the address is the start of the object, so both ends belong to it */
+    char *data = (char *) cat_shm_get_address(created);
+    data[0] = 'a';
+    data[size - 1] = 'z';
+
+    cat_shm_t *attached = cat_shm_attach_named(name.c_str());
+    ASSERT_NE(attached, nullptr);
+    DEFER(cat_shm_detach(attached));
+    ASSERT_EQ(cat_shm_get_size(attached), shm_attached_size(size));
+    ASSERT_EQ(((char *) cat_shm_get_address(attached))[0], 'a');
+    ASSERT_EQ(((char *) cat_shm_get_address(attached))[size - 1], 'z');
+}
+
+/* A shared object that libcat did not create has no metadata to check, so an
+ * attach takes it with the size that the object reports. */
+TEST(cat_shm, an_attach_takes_a_foreign_mapping)
 {
     std::string name = shm_test_name("foreign");
     std::string path = "/" + name;
@@ -271,25 +387,98 @@ TEST(cat_shm, an_attach_refuses_a_foreign_mapping)
     ASSERT_EQ(ftruncate(fd, 8192), 0);
     close(fd);
 
-    ASSERT_EQ(cat_shm_attach_named(name.c_str()), nullptr);
-    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    cat_shm_t *attached = cat_shm_attach_named(name.c_str());
+    ASSERT_NE(attached, nullptr);
+    DEFER(cat_shm_detach(attached));
+    ASSERT_EQ(cat_shm_get_size(attached), shm_attached_size(8192));
 }
 
-/* An object that cannot hold the header is refused at the size, not at the
- * magic. */
-TEST(cat_shm, an_attach_refuses_an_object_without_room_for_a_header)
+/* The name is visible before the create finished its truncate, so an empty
+ * object is an early attach and attach refuses it. */
+TEST(cat_shm, an_attach_refuses_an_empty_object)
 {
-    std::string name = shm_test_name("tiny");
+    std::string name = shm_test_name("empty");
     std::string path = "/" + name;
     int fd = shm_open(path.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
     ASSERT_NE(fd, -1);
     DEFER(shm_unlink(path.c_str()));
-
-    ASSERT_EQ(ftruncate(fd, 128), 0);
     close(fd);
 
     ASSERT_EQ(cat_shm_attach_named(name.c_str()), nullptr);
     ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
 }
+
+/* An object that no call created has no name to remove. */
+TEST(cat_shm, an_unlink_refuses_a_missing_name)
+{
+    std::string name = shm_test_name("unlinked");
+
+#ifdef CAT_OS_WIN
+    /* a named section ends when the last handle closes, and no call removes the
+     * name earlier, so an unlink only reports success */
+    ASSERT_TRUE(cat_shm_unlink(name.c_str()));
+#else
+    ASSERT_FALSE(cat_shm_unlink(name.c_str()));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+#endif
+}
+
+#ifdef CAT_OS_LINUX
+
+/* shm_open rejects a name with a separator inside. macOS accepts a separator
+ * there, so this case is Linux only. */
+TEST(cat_shm, a_create_refuses_a_name_that_shm_open_rejects)
+{
+    ASSERT_EQ(cat_shm_create_named("libcat/inner-slash", sizeof(int)), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+}
+
+#endif /* CAT_OS_LINUX */
+
+#if SIZE_MAX > 0xFFFFFFFFUL
+
+/* A size that ftruncate refuses fails the create, and the name that the create
+ * took before the truncate does not stay. */
+TEST(cat_shm, a_create_that_cannot_truncate_removes_its_name)
+{
+    std::string name = shm_test_name("truncate");
+
+    ASSERT_EQ(cat_shm_create_named(name.c_str(), SIZE_MAX), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_EQ(cat_shm_attach_named(name.c_str()), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+}
+
+/* A size that the kernel accepts for the object but not for the mapping fails
+ * the create, and the name that no mapping holds does not stay. */
+TEST(cat_shm, a_create_that_cannot_map_removes_its_name)
+{
+    /* the suffix stays short, because macOS rejects a name over 30 characters */
+    std::string name = shm_test_name("nomap");
+
+    ASSERT_EQ(cat_shm_create_named(name.c_str(), (size_t) 1 << 50), nullptr);
+    ASSERT_EQ(cat_shm_attach_named(name.c_str()), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOENT);
+}
+
+/* An object that exists but cannot be mapped fails the attach with the reason
+ * of the map, and its name stays for the next attach. */
+TEST(cat_shm, an_attach_reports_an_object_that_does_not_fit)
+{
+    std::string name = shm_test_name("huge");
+    std::string path = "/" + name;
+    int fd = shm_open(path.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
+    ASSERT_NE(fd, -1);
+    DEFER(shm_unlink(path.c_str()));
+    ASSERT_EQ(ftruncate(fd, (off_t) 1 << 50), 0);
+    close(fd);
+
+    ASSERT_EQ(cat_shm_attach_named(name.c_str()), nullptr);
+#ifdef CAT_OS_LINUX
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ENOMEM);
+#endif
+}
+
+#endif /* SIZE_MAX > 0xFFFFFFFFUL */
 
 #endif
