@@ -577,3 +577,48 @@ TEST(cat_socket, pipe_bind_path_and_flag_errors)
 }
 
 #endif
+
+/* A heap socket that is opened again must keep its storage: closing the previous
+ * transport releases that transport, not the caller's object. */
+TEST(cat_socket, open_socket_on_an_allocated_destination)
+{
+    cat_socket_t origin;
+    ASSERT_EQ(cat_socket_create(&origin, CAT_SOCKET_TYPE_TCP4), &origin);
+    DEFER(cat_socket_close(&origin));
+    ASSERT_TRUE(cat_socket_bind_to(&origin, CAT_STRL(TEST_LISTEN_IPV4), 0));
+
+    cat_socket_t *heap = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP4);
+    ASSERT_NE(heap, nullptr);
+    ASSERT_TRUE(cat_socket_is_available(heap));
+
+    ASSERT_TRUE(cat_socket_open_socket(heap, &origin));
+    ASSERT_TRUE(cat_socket_is_available(heap));
+    ASSERT_EQ(cat_socket_get_fd(heap), cat_socket_get_fd(&origin));
+
+    ASSERT_TRUE(cat_socket_close(heap));
+}
+
+/* libuv always reads sizeof(struct sockaddr_un) for an AF_LOCAL UDP address, so
+ * a short address must be rejected instead of passed down. */
+TEST(cat_socket, a_short_af_local_address_is_rejected_for_udp)
+{
+    cat_socket_t socket;
+    ASSERT_EQ(cat_socket_create(&socket, CAT_SOCKET_TYPE_UDP4), &socket);
+    DEFER(cat_socket_close(&socket));
+    ASSERT_TRUE(cat_socket_bind_to(&socket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+
+    /* sockaddr layout differs between platforms, use the struct fields */
+    struct sockaddr_storage storage;
+    memset(&storage, 0, sizeof(storage));
+    struct sockaddr *addr = (struct sockaddr *) &storage;
+    addr->sa_family = AF_LOCAL;
+    cat_socklen_t short_length = (cat_socklen_t) offsetof(struct sockaddr, sa_data);
+
+    ASSERT_FALSE(cat_socket_sendto(&socket, CAT_STRL("x"),
+        (const cat_sockaddr_t *) addr, short_length));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+
+    ssize_t result = cat_socket_try_sendto(&socket, CAT_STRL("x"),
+        (const cat_sockaddr_t *) addr, short_length);
+    ASSERT_EQ(result, CAT_EINVAL);
+}

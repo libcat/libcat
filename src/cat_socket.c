@@ -1201,7 +1201,13 @@ static cat_always_inline cat_bool_t cat_socket_open_socket_impl(cat_socket_t *so
         return cat_true;
     }
     if (cat_socket_is_available(socket)) {
-        cat_socket_close(socket);
+        if (socket->flags & CAT_SOCKET_FLAG_ALLOCATED) {
+            /* a normal close would free the allocated object; release only the old
+             * transport and keep the caller's storage for the new reference */
+            cat_socket_internal_close(socket->internal, socket, cat_false);
+        } else if (!cat_socket_close(socket)) {
+            return cat_false;
+        }
     }
     // socket->id will not change
     socket->flags = (origin_socket->flags & ~CAT_SOCKET_FLAGS_NON_TRANSFERABLE_BITS) | inherited_flags;
@@ -3564,10 +3570,11 @@ static cat_bool_t cat_socket_internal_write_raw(
 
 #ifdef CAT_OS_UNIX_LIKE
     /* libuv does not support dynamic address length */
-    CAT_ASSERT(
-        (!is_udp || address == NULL || address->sa_family != AF_UNIX || address_length >= sizeof(struct sockaddr_un)) &&
-        "Socket does not support variable size UNIX address on UDP"
-    );
+    if (unlikely(is_udp && address != NULL && address->sa_family == AF_LOCAL &&
+                 address_length < (cat_socklen_t) sizeof(struct sockaddr_un))) {
+        cat_update_last_error(CAT_EINVAL, "A UDP AF_LOCAL address must be a full sockaddr_un");
+        return cat_false;
+    }
     if (is_dgram && !is_udp) {
         ret = cat_socket_internal_udg_write(socket_i, vector, vector_count, address, address_length, timeout);
         goto _out;
@@ -3695,10 +3702,11 @@ static ssize_t cat_socket_internal_try_write_raw(
 #ifdef CAT_OS_UNIX_LIKE
     cat_bool_t is_udp = ((socket_i->type & CAT_SOCKET_TYPE_UDP) == CAT_SOCKET_TYPE_UDP);
     /* libuv does not support dynamic address length */
-    CAT_ASSERT(
-        (!is_udp || address == NULL || address->sa_family != AF_UNIX || address_length >= sizeof(struct sockaddr_un)) &&
-        "Socket does not support variable size UNIX address on UDP"
-    );
+    if (unlikely(is_udp && address != NULL && address->sa_family == AF_LOCAL &&
+                 address_length < (cat_socklen_t) sizeof(struct sockaddr_un))) {
+        cat_update_last_error(CAT_EINVAL, "A UDP AF_LOCAL address must be a full sockaddr_un");
+        return CAT_EINVAL;
+    }
     if (is_dgram && !is_udp) {
         return cat_socket_internal_udg_try_write(socket_i, vector, vector_count, address, address_length);
     }
