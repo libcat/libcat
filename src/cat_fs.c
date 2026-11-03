@@ -804,10 +804,10 @@ static cat_always_inline int cat_fs_scandir_impl(const char *path, cat_dirent_t 
     cat_dirent_t dirent, *tmp = NULL;
     int cnt = 0, len = 0;
 
+    /* Snapshot the whole listing before any user callback runs. cat_fs_callback()
+     * releases the request as soon as this coroutine yields, and a filter or a
+     * comparator is allowed to block. */
     while (uv_fs_scandir_next(req, (uv_dirent_t *) &dirent) == 0) {
-        if (filter && !filter(&dirent)) {
-            continue;
-        }
         if (cnt >= len) {
             len = 2*len+1;
             void *_tmp = realloc(tmp, len * sizeof(*tmp));
@@ -827,7 +827,22 @@ static cat_always_inline int cat_fs_scandir_impl(const char *path, cat_dirent_t 
         tmp[cnt++].type = dirent.type;
     }
 
-    if (compar) {
+    if (filter != NULL) {
+        int kept = 0;
+        for (int i = 0; i < cnt; i++) {
+            if (filter(&tmp[i])) {
+                if (kept != i) {
+                    tmp[kept] = tmp[i];
+                }
+                kept++;
+            } else {
+                free((void*) tmp[i].name);
+            }
+        }
+        cnt = kept;
+    }
+
+    if (compar != NULL && cnt > 0) {
 #ifdef _MSC_VER
 # pragma warning(disable:4191) /* FIXME: workaround for MSVC bug */
 #endif

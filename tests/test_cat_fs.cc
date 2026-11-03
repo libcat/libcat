@@ -813,6 +813,14 @@ static int cat_test_reverse_compare(const cat_dirent_t * a, const cat_dirent_t *
     return -strcoll(a->name, b->name);
 }
 
+/* A filter that may block. The scan must not keep using the request after it. */
+static int cat_test_yield_filter(const cat_dirent_t *dirent)
+{
+    (void) dirent;
+    (void) cat_time_wait(1);
+    return 1;
+}
+
 TEST(cat_fs, scandir)
 {
     SKIP_IF_(no_tmp(), "Temp dir not writable");
@@ -861,6 +869,46 @@ TEST(cat_fs, scandir)
     ASSERT_EQ(std::string("cat_tests_dir_dir2"), std::string(namelist[0].name));
     ASSERT_EQ(std::string("cat_tests_dir_dir1"), std::string(namelist[1].name));
 
+}
+
+/* The documented filter contract does not forbid blocking, and a filter that
+ * yields while the scan is in progress must not read the finished request. */
+TEST(cat_fs, scandir_filter_can_yield)
+{
+    SKIP_IF_(no_tmp(), "Temp dir not writable");
+
+    std::string fnstr = path_join(TEST_TMP_PATH, "cat_tests_scandir_yield");
+    const char *fn = fnstr.c_str();
+    std::string filestr = path_join(fnstr, "file");
+    const char *file = filestr.c_str();
+    DEFER({
+        cat_fs_unlink(file);
+        cat_fs_rmdir(fn);
+    });
+    cat_fs_unlink(file);
+    cat_fs_rmdir(fn);
+
+    ASSERT_EQ(cat_fs_mkdir(fn, 0777), 0);
+    ASSERT_EQ(cat_fs_close(cat_fs_open(file,
+        CAT_FS_OPEN_FLAG_WRONLY | CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_TRUNC, 0644)), 0);
+
+    cat_dirent_t *namelist = nullptr;
+    int ret = cat_fs_scandir(fn, &namelist, cat_test_yield_filter, nullptr);
+    ASSERT_GT(ret, 0);
+    ASSERT_NE(namelist, nullptr);
+    DEFER({
+        for (int i = 0; i < ret; i++) {
+            free((void *) namelist[i].name);
+        }
+        free(namelist);
+    });
+    cat_bool_t found = cat_false;
+    for (int i = 0; i < ret; i++) {
+        if (strcmp(namelist[i].name, "file") == 0) {
+            found = cat_true;
+        }
+    }
+    ASSERT_TRUE(found);
 }
 
 TEST(cat_fs, rename)
