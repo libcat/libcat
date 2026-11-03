@@ -202,6 +202,8 @@ if(MSVC)
     # for code like: `procmask & (1 << i)`, `threadmask |= 1 << i`
     check_add_cflags(/wd4334 uv_cflags HAVE_MSVC_LINT_wd4334)
     check_add_cflags(/wd4819 uv_cflags HAVE_MSVC_LINT_wd4819)
+    # arrange llhttp's warnings: the generated code is not /W4 clean
+    check_add_cflags(/W3 llhttp_cflags HAVE_MSVC_LLHTTP_LINT_W3)
     # arrange global warnings
     # for while (0, 0) in FD_SET() at Winsock2.h:
     # https://developercommunity.visualstudio.com/t/fd-clr-and-fd-set-macros-generate-warning-c4548/172702
@@ -216,6 +218,10 @@ else()
         # Keep libuv's original constant-array declarations under newer Clang.
         check_add_cflags(-Wno-gnu-folding-constant uv_cflags HAVE_UV_LINT_NO_GNU_FOLDING_CONSTANT)
     endif()
+    # The dependency callbacks leave parameters unused on purpose; keep -Wextra
+    # usable for these targets without reporting that warning.
+    check_add_cflags(-Wno-unused-parameter uv_cflags HAVE_UV_LINT_NO_UNUSED_PARAMETER)
+    check_add_cflags(-Wno-unused-parameter llhttp_cflags HAVE_LLHTTP_LINT_NO_UNUSED_PARAMETER)
     check_add_cflags(-Wstrict-prototypes cat_cflags HAVE_STRICT_PROTOTYPES)
     check_add_cflags(-Werror=implicit-function-declaration cat_cflags HAVE_LINT_ERROR_IMPLICIT_FUNCTION_DECLARATION)
 endif()
@@ -794,6 +800,7 @@ if (1)
     if(MSVC)
         set_property(TARGET cat_llhttp PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     endif()
+    target_compile_options(cat_llhttp PRIVATE ${llhttp_cflags})
     list(APPEND cat_includes ${llhttp_dir}/include)
     target_include_directories(cat_llhttp PRIVATE ${llhttp_dir}/include)
 endif()
