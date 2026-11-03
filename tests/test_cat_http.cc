@@ -1778,6 +1778,126 @@ TEST(cat_http_parser, multipart_events_without_content_type)
 /*
 * a normal Content-Length multipart request is still parsed as multipart
 */
+/* Drive the parser to the first headers-complete pause. */
+static cat_bool_t cat_test_http_run_to_headers_complete(cat_http_parser_t *parser, const char *data, size_t length)
+{
+    size_t offset = 0;
+
+    for (int i = 0; i < 1000 && offset <= length; i++) {
+        if (!cat_http_parser_execute(parser, data + offset, length - offset)) {
+            return cat_false;
+        }
+        offset += cat_http_parser_get_parsed_length(parser);
+        if (cat_http_parser_get_event(parser) == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE ||
+            cat_http_parser_is_completed(parser)) {
+            return cat_true;
+        }
+    }
+    return cat_false;
+}
+
+/* Drive the parser until it completes, fails, or stops making progress. */
+static cat_bool_t cat_test_http_run_until_done(cat_http_parser_t *parser, const char *data, size_t length)
+{
+    size_t offset = 0;
+
+    for (int i = 0; i < 10000 && offset <= length; i++) {
+        if (!cat_http_parser_execute(parser, data + offset, length - offset)) {
+            return cat_false;
+        }
+        size_t parsed = cat_http_parser_get_parsed_length(parser);
+        offset += parsed;
+        if (cat_http_parser_is_completed(parser)) {
+            return cat_true;
+        }
+        if (parsed == 0) {
+            break;
+        }
+    }
+    return cat_true;
+}
+
+/* A header with an empty value has no value callback, so the next field must
+ * start its own name accumulator. Splitting "content-type" across two field
+ * names used to enable the multipart path without a content-type header. */
+TEST(cat_http_parser, an_empty_header_value_does_not_spoof_content_type)
+{
+    static const char spoof[] =
+        "POST / HTTP/1.1\r\n"
+        "c:\r\n"
+        "ontent-type: multipart/form-data; boundary=x\r\n"
+        "\r\n";
+    static const char normal[] =
+        "POST / HTTP/1.1\r\n"
+        "X-Empty:\r\n"
+        "Content-Type: multipart/form-data; boundary=x\r\n"
+        "\r\n";
+
+    {
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        ASSERT_TRUE(cat_test_http_run_to_headers_complete(&parser, spoof, sizeof(spoof) - 1));
+        ASSERT_EQ(cat_http_parser_get_event(&parser), CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE);
+        ASSERT_FALSE(cat_http_parser_is_multipart(&parser)) <<
+            "a split field name must not become a content-type header";
+    }
+    {
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        ASSERT_TRUE(cat_test_http_run_to_headers_complete(&parser, normal, sizeof(normal) - 1));
+        ASSERT_EQ(cat_http_parser_get_event(&parser), CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE);
+        ASSERT_TRUE(cat_http_parser_is_multipart(&parser)) <<
+            "a real content-type after an empty-valued header must still be found";
+    }
+}
+
+/* The declared body ends without the closing boundary. The parser must report an
+ * error instead of returning success and consuming nothing forever. */
+TEST(cat_http_parser, a_truncated_multipart_body_reports_an_error)
+{
+    static const char request[] =
+        "POST / HTTP/1.1\r\n"
+        "Content-Type: multipart/form-data; boundary=x\r\n"
+        "Content-Length: 18\r\n"
+        "\r\n"
+        "--x\r\nA: b\r\n\r\nvalue";
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_MULTIPART_BODY);
+    ASSERT_FALSE(cat_test_http_run_until_done(&parser, request, sizeof(request) - 1));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+}
+
+/* Values that a caller may read before the first execute. */
+TEST(cat_http_parser, getters_are_initialized_for_a_new_parser)
+{
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    ASSERT_EQ(cat_http_parser_get_previous_event(&parser), CAT_HTTP_PARSER_EVENT_NONE);
+    ASSERT_STREQ(cat_http_parser_get_previous_event_name(&parser), "NONE");
+    ASSERT_STREQ(cat_http_parser_event_get_name((cat_http_parser_event_t) CAT_HTTP_PARSER_EVENTS_ALL),
+        "UNKNOWN");
+}
+
+/* The multipart body path is Content-Length framed for responses as well. */
+TEST(cat_http_parser, a_chunked_multipart_response_is_rejected)
+{
+    static const char response[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Content-Type: multipart/form-data; boundary=x\r\n"
+        "\r\n"
+        "5\r\nhello\r\n0\r\n\r\n";
+    cat_http_parser_t parser;
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    cat_http_parser_set_type(&parser, CAT_HTTP_PARSER_TYPE_RESPONSE);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENT_MULTIPART_BODY);
+    ASSERT_FALSE(cat_http_parser_execute(&parser, response, sizeof(response) - 1));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+}
+
 TEST(cat_http_parser, multipart_content_length_request_is_supported)
 {
     const std::string body =
