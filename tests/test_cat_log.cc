@@ -339,3 +339,20 @@ TEST(cat_log, write_failure_and_libc_fallback)
     };
     ASSERT_EXIT(check_write_failure(), testing::ExitedWithCode(0), "un-outputted log message");
 }
+
+/* The *_WITH_LAST macros pass the current last error message to the logger. The
+ * logger stores the log text as the new last error before it formats the line,
+ * so the old message must stay alive until the line was built. */
+TEST(cat_log, with_last_keeps_the_old_error_until_the_line_is_built)
+{
+    CAT_LOG_G(types) = CAT_LOG_TYPES_ALL;
+
+    cat_update_last_error(CAT_ENOENT, "the old message that the line needs");
+    const char *old_reason = cat_get_last_error_message();
+    ASSERT_NE(old_reason, nullptr);
+
+    CAT_WARN_WITH_LAST(SOCKET, "a warning with the previous error");
+
+    ASSERT_NE(cat_get_last_error_message(), old_reason);
+    ASSERT_NE(strstr(cat_get_last_error_message(), "the old message that the line needs"), nullptr);
+}
