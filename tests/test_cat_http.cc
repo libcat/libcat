@@ -369,6 +369,102 @@ TEST(cat_http_parser, get_protocol_version_unknown)
     }
 }
 
+TEST(cat_http_parser, protocol_event)
+{
+    cat_http_parser_t *parser, _parser;
+    size_t parsed;
+
+    ASSERT_EQ((parser = cat_http_parser_create(&_parser)), &_parser);
+    cat_http_parser_set_events(parser, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+
+    {
+        const cat_const_string_t http_request = cat_const_string(
+            "GET /get HTTP/1.1\r\n"
+            "Host: www.foo.com\r\n"
+            "\r\n"
+        );
+        ASSERT_TRUE(cat_http_parser_execute(parser, http_request.data, http_request.length));
+        ASSERT_EQ(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+        ASSERT_EQ(std::string(parser->data, parser->data_length), std::string("HTTP"));
+    }
+    {
+        const cat_const_string_t rtsp_request = cat_const_string(
+            "OPTIONS * RTSP/1.0\r\n"
+            "CSeq: 1\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_execute(parser, rtsp_request.data, rtsp_request.length));
+        ASSERT_EQ(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+        ASSERT_EQ(std::string(parser->data, parser->data_length), std::string("RTSP"));
+    }
+    {
+        const cat_const_string_t ice_request = cat_const_string(
+            "SOURCE / ICE/1.0\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_execute(parser, ice_request.data, ice_request.length));
+        ASSERT_EQ(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+        ASSERT_EQ(std::string(parser->data, parser->data_length), std::string("ICE"));
+    }
+    {
+        /* llhttp reports the protocol of a response only when the type is known */
+        const cat_const_string_t rtsp_response = cat_const_string(
+            "RTSP/1.0 200 OK\r\n"
+            "Content-Length: 0\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_set_type(parser, CAT_HTTP_PARSER_TYPE_RESPONSE));
+        ASSERT_TRUE(cat_http_parser_execute(parser, rtsp_response.data, rtsp_response.length));
+        ASSERT_EQ(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+        ASSERT_EQ(std::string(parser->data, parser->data_length), std::string("RTSP"));
+    }
+    {
+        /* a response parsed as BOTH is not reported by llhttp */
+        const cat_const_string_t http_response = cat_const_string(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 0\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_set_type(parser, CAT_HTTP_PARSER_TYPE_BOTH));
+        ASSERT_TRUE(cat_http_parser_execute(parser, http_response.data, http_response.length));
+        ASSERT_TRUE(cat_http_parser_is_completed(parser));
+        ASSERT_NE(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+    }
+    {
+        /* HTCPCP (RFC 2324): llhttp knows HTTP, RTSP and ICE only, so it reports
+         * the matching part of the token and then fails */
+        const cat_const_string_t htcpcp_request = cat_const_string(
+            "POST /pot HTCPCP/1.0\r\n"
+            "Accept-Additions: milk\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_set_type(parser, CAT_HTTP_PARSER_TYPE_BOTH));
+        ASSERT_TRUE(cat_http_parser_execute(parser, htcpcp_request.data, htcpcp_request.length));
+        ASSERT_EQ(parser->event, CAT_HTTP_PARSER_EVENT_PROTOCOL);
+        ASSERT_EQ(std::string(parser->data, parser->data_length), std::string("HT"));
+        parsed = cat_http_parser_get_parsed_length(parser);
+        ASSERT_FALSE(cat_http_parser_execute(parser, htcpcp_request.data + parsed, htcpcp_request.length - parsed));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_INVALID_CONSTANT);
+    }
+    {
+        /* BREW is not an HTTP method, so the method fails before the protocol */
+        const cat_const_string_t htcpcp_brew = cat_const_string(
+            "BREW /pot HTCPCP/1.0\r\n"
+            "Safe: yes\r\n"
+            "\r\n"
+        );
+        cat_http_parser_reset(parser);
+        ASSERT_TRUE(cat_http_parser_set_type(parser, CAT_HTTP_PARSER_TYPE_BOTH));
+        ASSERT_FALSE(cat_http_parser_execute(parser, htcpcp_brew.data, htcpcp_brew.length));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_INVALID_METHOD);
+    }
+}
+
 TEST(cat_http_parser, get_status_code)
 {
     cat_http_parser_t *parser, _parser;
@@ -1112,6 +1208,7 @@ const struct {
 } multipart_stream_events[] = {
     ITEM_EVENT(MESSAGE_BEGIN)
     ITEM_DATA(URL, "/upload")
+    ITEM_DATA(PROTOCOL, "HTTP")
     ITEM_DATA(HEADER_FIELD, "Host")
     ITEM_DATA(HEADER_VALUE, "www.foo.com")
     ITEM_DATA(HEADER_FIELD, "User-Agent")

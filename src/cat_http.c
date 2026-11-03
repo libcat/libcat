@@ -193,6 +193,7 @@ CAT_HTTP_PARSER_ON_DATA_BEGIN(name, NAME) \
 CAT_HTTP_PARSER_ON_DATA_END()
 
 CAT_HTTP_PARSER_ON_EVENT(message_begin, MESSAGE_BEGIN)
+CAT_HTTP_PARSER_ON_DATA (protocol,      PROTOCOL     )
 CAT_HTTP_PARSER_ON_DATA (url,           URL          )
 CAT_HTTP_PARSER_ON_DATA (status,        STATUS       )
 
@@ -306,6 +307,7 @@ static const llhttp_settings_t cat_http_parser_settings = {
     cat_http_parser_on_message_begin,
 
     /* Possible return values 0, -1, HPE_USER */
+    cat_http_parser_on_protocol,
     cat_http_parser_on_url,
     cat_http_parser_on_status,
     NULL, // cat_http_parser_on_method,
@@ -331,6 +333,7 @@ static const llhttp_settings_t cat_http_parser_settings = {
 
     /* Possible return values 0, -1, `HPE_PAUSED` */
     cat_http_parser_on_message_complete,
+    NULL, // cat_http_parser_on_protocol_complete,
     NULL, // cat_http_parser_on_url_complete,
     NULL, // cat_http_parser_on_status_complete,
     NULL, // cat_http_parser_on_method_complete,
