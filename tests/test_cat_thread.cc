@@ -386,6 +386,123 @@ TEST(cat_thread, an_external_thread_follows_the_documented_teardown)
     ASSERT_TRUE(child.teardown_ok);
 }
 
+/* An external thread registers an object that the host zeroed, and a coroutine
+ * joins it. The registration must set up everything the join and the teardown
+ * use, because the host owns the storage and only the library knows the
+ * lifecycle fields. */
+TEST(cat_thread, an_external_thread_can_be_joined)
+{
+    static cat_thread_t child_storage;
+
+    struct child_s {
+        cat_sem_t registered;
+        cat_bool_t registered_ok;
+        cat_bool_t torn_down;
+    } child = {};
+
+    memset(&child_storage, 0, sizeof(child_storage));
+    ASSERT_TRUE(cat_sem_init(&child.registered, 0));
+
+    uv_thread_t tid;
+    ASSERT_EQ(uv_thread_create(&tid, [](void *data) {
+        struct child_s *self = (struct child_s *) data;
+
+        if (!cat_runtime_init_all()) {
+            cat_sem_post(&self->registered);
+            return;
+        }
+        self->registered_ok = cat_thread_register_external(&child_storage);
+        cat_sem_post(&self->registered);
+        if (!self->registered_ok) {
+            (void) cat_runtime_shutdown_all();
+            (void) cat_runtime_close_all();
+            return;
+        }
+        (void) cat_runtime_shutdown_all();
+        (void) cat_runtime_close_all();
+        /* the wake of a joiner needs no runtime */
+        cat_thread_teardown(&child_storage);
+        self->torn_down = cat_true;
+    }, &child), 0);
+
+    ASSERT_TRUE(cat_sem_acquire(&child.registered, TEST_IO_TIMEOUT));
+
+    cat_bool_t joined = cat_false;
+    cat_errno_t join_error = 0;
+    co([&] {
+        joined = cat_thread_join(&child_storage, TEST_IO_TIMEOUT);
+        join_error = cat_get_last_error_code();
+    });
+
+    for (int round = 0; round < 5000 && !joined; round++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+    if (!joined) {
+        /* the successful join released the handle already */
+        (void) uv_thread_join(&tid);
+    }
+
+    ASSERT_TRUE(child.registered_ok);
+    ASSERT_TRUE(child.torn_down);
+    ASSERT_TRUE(joined) << "join error: " << join_error;
+
+    cat_sem_destroy(&child.registered);
+}
+
+/* A join and a detach race for the same thread. Both are claims on the state
+ * word, so exactly one of them may win. */
+TEST(cat_thread, a_detach_and_a_join_claim_the_thread_once)
+{
+    struct work_s {
+        cat_futex_t go;
+    };
+
+    for (int round = 0; round < 100; round++) {
+        struct work_s work = {};
+        cat_atomic_int32_init(&work.go, 0);
+
+        cat_thread_t *thread = (cat_thread_t *) cat_malloc(sizeof(*thread));
+        ASSERT_NE(thread, nullptr);
+
+        auto routine = [](cat_data_t *data) {
+            struct work_s *self = (struct work_s *) data;
+            (void) cat_futex_wait(&self->go, 0, TEST_IO_TIMEOUT);
+        };
+
+        ASSERT_TRUE(cat_thread_create(thread, routine, &work));
+
+        cat_bool_t join_ok = cat_false;
+        cat_bool_t join_done = cat_false;
+        co([&] {
+            join_ok = cat_thread_join(thread, TEST_IO_TIMEOUT);
+            join_done = cat_true;
+        });
+
+        cat_bool_t detach_ok = cat_thread_detach(thread);
+
+        cat_atomic_int32_store(&work.go, 1);
+        ASSERT_TRUE(cat_futex_wake(&work.go, 1));
+
+        for (int spin = 0; spin < 5000 && !join_done; spin++) {
+            ASSERT_TRUE(cat_time_delay(1));
+        }
+        ASSERT_TRUE(join_done);
+
+        /* exactly one claim: a join or a detach, not both */
+        ASSERT_NE(join_ok, detach_ok) << "round " << round;
+
+        if (!join_ok) {
+            /* the detached thread finishes on its own */
+            for (int spin = 0; spin < 5000 && cat_thread_is_running(thread); spin++) {
+                ASSERT_TRUE(cat_time_delay(1));
+            }
+            ASSERT_FALSE(cat_thread_is_running(thread));
+        }
+
+        cat_free(thread);
+    }
+}
+
 /* A user thread follows the teardown of the design in the same way, and the
  * error of the thread goes away with the runtime that holds it. */
 TEST(cat_thread, a_user_thread_follows_the_documented_teardown)
