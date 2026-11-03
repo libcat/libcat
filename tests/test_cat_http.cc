@@ -1654,3 +1654,173 @@ TEST(cat_http_parser, multipart_bad_heads)
         }
     }
 }
+
+/*
+* A multipart body over Transfer-Encoding: chunked cannot be handled by the
+* Content-Length based multipart path, and must be rejected on headers complete
+*/
+TEST(cat_http_parser, chunked_multipart_request_is_rejected)
+{
+    const std::string headers =
+        "POST /upload HTTP/1.1\r\n"
+        "Host: x\r\n"
+        "Content-Type: multipart/form-data; boundary=form\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n";
+    const std::string wire = headers + "5\r\nhello\r\n0\r\n\r\n";
+
+    // no feed boundary may reach the multipart body solve path
+    for (size_t input_size : {size_t(1), size_t(7), wire.size()}) {
+        SCOPED_TRACE(input_size);
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        size_t offset = 0, iterations = 0;
+        size_t available = (std::min)(input_size, wire.size());
+        bool rejected = false;
+        while (offset < wire.size()) {
+            ASSERT_LT(iterations++, wire.size() * 4);
+            const size_t length = available - offset;
+            const std::string input = wire.substr(offset, length);
+            if (!cat_http_parser_execute(&parser, input.data(), input.size())) {
+                rejected = true;
+                break;
+            }
+            const cat_http_parser_event_t event = cat_http_parser_get_event(&parser);
+            ASSERT_EQ(event & (cat_http_parser_event_t) CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
+            ASSERT_NE(event, CAT_HTTP_PARSER_EVENT_BODY);
+            const size_t parsed = cat_http_parser_get_parsed_length(&parser);
+            ASSERT_LE(parsed, length);
+            offset += parsed;
+            available = (std::min)(wire.size(), (std::max)(available, offset) + input_size);
+        }
+        ASSERT_TRUE(rejected);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+        ASSERT_NE(std::string(cat_get_last_error_message()).find("chunked"), std::string::npos);
+        ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+    }
+
+    // the combination is known on headers complete, so reject it before any
+    // chunk or body event is reported
+    {
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        size_t offset = 0, iterations = 0;
+        bool rejected = false;
+        while (offset < headers.size()) {
+            ASSERT_LT(iterations++, 16);
+            if (!cat_http_parser_execute(&parser, headers.data() + offset, headers.size() - offset)) {
+                rejected = true;
+                break;
+            }
+            const cat_http_parser_event_t event = cat_http_parser_get_event(&parser);
+            ASSERT_EQ(event & (cat_http_parser_event_t) CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
+            ASSERT_NE(event, CAT_HTTP_PARSER_EVENT_BODY);
+            offset += cat_http_parser_get_parsed_length(&parser);
+            ASSERT_LE(offset, headers.size());
+        }
+        ASSERT_TRUE(rejected);
+        ASSERT_EQ(cat_get_last_error_code(), CAT_EHP_MULTIPART);
+        ASSERT_NE(std::string(cat_get_last_error_message()).find("chunked"), std::string::npos);
+        // the parser must not expose a multipart boundary for the rejected message
+        ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+        ASSERT_FALSE(cat_http_parser_is_completed(&parser));
+    }
+}
+
+/*
+* multipart event subscription must not depend on the media type parser state
+* left by a previous message
+*/
+TEST(cat_http_parser, multipart_events_without_content_type)
+{
+    const char request[] = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+
+    cat_http_parser_t parser;
+    // poison the storage to expose reads of uninitialised parser fields
+    memset(&parser, 0xee, sizeof(parser));
+    ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+    // 1 is mt_start, the entry state of the content-type value parser
+    ASSERT_EQ(parser.header_value_parser_state, 1);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+
+    size_t offset = 0, iterations = 0;
+    while (!cat_http_parser_is_completed(&parser)) {
+        ASSERT_LT(iterations++, 16);
+        ASSERT_TRUE(cat_http_parser_execute(&parser, request + offset, CAT_STRLEN(request) - offset));
+        ASSERT_EQ(cat_http_parser_get_event(&parser) & (cat_http_parser_event_t) CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
+        ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+        offset += cat_http_parser_get_parsed_length(&parser);
+        ASSERT_LE(offset, CAT_STRLEN(request));
+    }
+    ASSERT_EQ(offset, CAT_STRLEN(request));
+    ASSERT_EQ(cat_http_parser_get_method(&parser), CAT_HTTP_METHOD_GET);
+
+    // reset must re-initialise the state like a fresh parser
+    cat_http_parser_reset(&parser);
+    ASSERT_EQ(parser.header_value_parser_state, 1);
+    cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+    offset = 0;
+    iterations = 0;
+    while (!cat_http_parser_is_completed(&parser)) {
+        ASSERT_LT(iterations++, 16);
+        ASSERT_TRUE(cat_http_parser_execute(&parser, request + offset, CAT_STRLEN(request) - offset));
+        ASSERT_EQ(cat_http_parser_get_event(&parser) & (cat_http_parser_event_t) CAT_HTTP_PARSER_EVENT_FLAG_MULTIPART, 0);
+        ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+        offset += cat_http_parser_get_parsed_length(&parser);
+        ASSERT_LE(offset, CAT_STRLEN(request));
+    }
+    ASSERT_EQ(offset, CAT_STRLEN(request));
+    ASSERT_FALSE(cat_http_parser_is_multipart(&parser));
+}
+
+/*
+* a normal Content-Length multipart request is still parsed as multipart
+*/
+TEST(cat_http_parser, multipart_content_length_request_is_supported)
+{
+    const std::string body =
+        "--form\r\n"
+        "Content-Disposition: form-data; name=\"field\"\r\n"
+        "\r\n"
+        "value\r\n"
+        "--form--";
+    const std::string request =
+        "POST /upload HTTP/1.1\r\n"
+        "Host: x\r\n"
+        "Content-Type: multipart/form-data; boundary=form\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n"
+        "\r\n" + body;
+
+    for (size_t input_size : {size_t(1), size_t(7), request.size()}) {
+        SCOPED_TRACE(input_size);
+        cat_http_parser_t parser;
+        ASSERT_EQ(cat_http_parser_create(&parser), &parser);
+        cat_http_parser_set_events(&parser, CAT_HTTP_PARSER_EVENTS_ALL);
+        size_t offset = 0, iterations = 0;
+        size_t available = (std::min)(input_size, request.size());
+        std::string value;
+        bool multipart = false;
+        while (!cat_http_parser_is_completed(&parser)) {
+            ASSERT_LT(iterations++, request.size() * 10);
+            const size_t length = available - offset;
+            const std::string input = request.substr(offset, length);
+            ASSERT_TRUE(cat_http_parser_execute(&parser, input.data(), input.size()));
+            const cat_http_parser_event_t event = cat_http_parser_get_event(&parser);
+            if (event == CAT_HTTP_PARSER_EVENT_HEADERS_COMPLETE) {
+                multipart = cat_http_parser_is_multipart(&parser);
+            } else if (event == CAT_HTTP_PARSER_EVENT_MULTIPART_BODY) {
+                value.append(cat_http_parser_get_data(&parser), cat_http_parser_get_data_length(&parser));
+            }
+            const size_t parsed = cat_http_parser_get_parsed_length(&parser);
+            ASSERT_LE(parsed, length);
+            offset += parsed;
+            ASSERT_LE(offset, request.size());
+            available = (std::min)(request.size(), (std::max)(available, offset) + input_size);
+        }
+        ASSERT_TRUE(multipart);
+        ASSERT_TRUE(cat_http_parser_is_completed(&parser));
+        ASSERT_EQ(value, "value");
+    }
+}
