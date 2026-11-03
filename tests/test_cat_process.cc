@@ -660,3 +660,40 @@ TEST(cat_process, kill_ex_rejects_sigterm_on_windows)
 }
 
 #endif
+
+/* A spawn starts the child and then fails to attach a stdio pipe. The handle is
+ * already in the loop, so freeing the object would leave a dangling queue node
+ * for the next SIGCHLD walk. */
+TEST(cat_process, spawn_failure_after_exec_keeps_the_running_handle)
+{
+    if (!file_exists("/bin/true")) {
+        GTEST_SKIP() << "/bin/true is not available";
+    }
+
+    /* libuv requires a named pipe for CREATE_PIPE; a bound pipe already owns an
+     * fd, so opening it for the child fails after the child was started */
+    std::string path = get_random_path();
+    cat_socket_t pipe;
+    ASSERT_EQ(cat_socket_create(&pipe, CAT_SOCKET_TYPE_PIPE), &pipe);
+    DEFER(cat_fs_unlink(path.c_str()));
+    DEFER(cat_socket_close(&pipe));
+    ASSERT_TRUE(cat_socket_bind_to(&pipe, path.data(), path.length(), 0));
+
+    const char *args[] = { "/bin/true", NULL };
+    cat_process_options_t options = { nullptr };
+    options.file = args[0];
+    options.args = args;
+    cat_process_stdio_container_t stdio[1] = { { 0 } };
+    stdio[0].flags = CAT_PROCESS_STDIO_FLAG_CREATE_PIPE | CAT_PROCESS_STDIO_FLAG_READABLE_PIPE;
+    stdio[0].data.stream = &pipe;
+    options.stdio = stdio;
+    options.stdio_count = 1;
+
+    ASSERT_EQ(cat_process_run(&options), nullptr);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EBUSY);
+
+    /* run the loop so the child is reaped and the process queue is walked */
+    for (int i = 0; i < 500; i++) {
+        ASSERT_TRUE(cat_time_delay(1));
+    }
+}
