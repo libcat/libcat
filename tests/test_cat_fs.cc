@@ -1619,3 +1619,103 @@ TEST(cat_fs, get_or_put_content)
     ASSERT_EQ(length, content_str.length());
     ASSERT_STREQ(content, content_str.c_str());
 }
+
+/* A canceled pwrite must not keep reading the caller buffer while the worker
+ * still writes. The threadpool is occupied first, so the request is queued;
+ * one worker is released and picks the write while the loop stays blocked.
+ * The waiter is canceled after the worker started, then the caller reuses its
+ * buffer. The file must contain only the snapshot taken before submission. */
+struct cat_test_fs_gate_s {
+    uv_sem_t gate;
+    uv_sem_t started;
+    uv_sem_t released;
+};
+
+static void cat_test_fs_gate_worker(cat_data_t *data)
+{
+    cat_test_fs_gate_s *sems = (cat_test_fs_gate_s *) data;
+    uv_sem_post(&sems->started);
+    uv_sem_wait(&sems->gate);
+    uv_sem_post(&sems->released);
+}
+
+TEST(cat_fs, canceled_pwrite_keeps_the_submitted_snapshot)
+{
+    const size_t size = 64 * 1024 * 1024;
+    std::string filename = get_random_path();
+
+    cat_file_t fd = cat_fs_open(filename.c_str(),
+        CAT_FS_OPEN_FLAG_CREAT | CAT_FS_OPEN_FLAG_TRUNC | CAT_FS_OPEN_FLAG_RDWR, 0600);
+    ASSERT_NE(fd, CAT_OS_INVALID_FD);
+    ASSERT_EQ(cat_fs_ftruncate(fd, (int64_t) size), 0);
+    DEFER(unlink(filename.c_str()));
+
+    char *buffer = (char *) cat_malloc(size);
+    ASSERT_NE(buffer, nullptr);
+    DEFER(cat_free(buffer));
+    memset(buffer, 0xAA, size);
+
+    cat_test_fs_gate_s sems;
+    ASSERT_EQ(uv_sem_init(&sems.gate, 0), 0);
+    ASSERT_EQ(uv_sem_init(&sems.started, 0), 0);
+    ASSERT_EQ(uv_sem_init(&sems.released, 0), 0);
+    DEFER({
+        uv_sem_destroy(&sems.gate);
+        uv_sem_destroy(&sems.started);
+        uv_sem_destroy(&sems.released);
+    });
+
+    wait_group blockers;
+    for (int i = 0; i < 4; i++) {
+        blockers++;
+        co([&] {
+            DEFER(blockers--);
+            ASSERT_TRUE(cat_work(CAT_WORK_KIND_FAST_IO,
+                cat_test_fs_gate_worker, nullptr, &sems, CAT_TIMEOUT_FOREVER));
+        });
+    }
+    for (int i = 0; i < 4; i++) {
+        uv_sem_wait(&sems.started);
+    }
+
+    ssize_t written = 1;
+    cat_errno_t error = 0;
+    cat_coroutine_t *coroutine = co([&] {
+        written = cat_fs_pwrite(fd, buffer, size, 0);
+        error = cat_get_last_error_code();
+    });
+    ASSERT_NE(coroutine, nullptr);
+
+    /* a released worker picks the queued write, the loop stays blocked */
+    uv_sem_post(&sems.gate);
+    uv_sem_wait(&sems.released);
+    uv_sleep(1);
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+
+    ASSERT_LT(written, 0);
+    ASSERT_EQ(error, CAT_ECANCELED);
+
+    /* the caller is free to reuse its buffer while the worker runs */
+    memset(buffer, 0xFF, size);
+
+    for (int i = 0; i < 3; i++) {
+        uv_sem_post(&sems.gate);
+    }
+    /* one delay, so the loop runs and the worker finishes the remaining write */
+    ASSERT_TRUE(cat_time_delay(2000));
+
+    ASSERT_EQ(cat_fs_close(fd), 0);
+    size_t length = 0;
+    char *content = cat_fs_get_contents(filename.c_str(), &length);
+    ASSERT_NE(content, nullptr);
+    DEFER(cat_free(content));
+    ASSERT_EQ(length, size);
+
+    size_t changed = 0;
+    for (size_t i = 0; i < size; i++) {
+        if ((unsigned char) content[i] != 0xAA) {
+            changed++;
+        }
+    }
+    ASSERT_EQ(changed, 0) << "the worker kept reading the reused caller buffer";
+}
