@@ -338,6 +338,9 @@ static int cat_ssl_context_password_callback(char *buf, int length, int verify, 
     (void) verify;
     cat_ssl_context_t *context = (cat_ssl_context_t *) data;
 
+    if (length <= 1) {
+        return 0;
+    }
     if (context->passphrase.length < (size_t) length - 1) {
         memcpy(buf, context->passphrase.value, context->passphrase.length);
         return (int) context->passphrase.length;
@@ -1275,6 +1278,14 @@ CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t si
 {
     int n;
 
+    if (size == 0) {
+        return CAT_RET_NONE;
+    }
+    if (unlikely(size > INT_MAX)) {
+        cat_ssl_update_last_error(CAT_ESSL, "BIO_read size %zu is too large", size);
+        return CAT_RET_ERROR;
+    }
+
     cat_ssl_clear_error();
 
     n = BIO_read(ssl->nbio, buffer, (int) size);
@@ -1295,6 +1306,14 @@ CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t si
 CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, size_t length)
 {
     int n;
+
+    if (length == 0) {
+        return CAT_RET_NONE;
+    }
+    if (unlikely(length > INT_MAX)) {
+        cat_ssl_update_last_error(CAT_ESSL, "BIO_write size %zu is too large", length);
+        return CAT_RET_ERROR;
+    }
 
     cat_ssl_clear_error();
 
@@ -1345,8 +1364,12 @@ CAT_API cat_bool_t cat_ssl_encrypt(
 
             cat_ssl_clear_error();
 
-            CAT_ASSUME(current_vector->length - offset < INT_MAX);
-            int nwrote = SSL_write(ssl->connection, current_vector->base + offset, (int) (current_vector->length - offset));
+            /* OpenSSL takes an int length; feed the vector in int-sized chunks */
+            size_t write_chunk = current_vector->length - offset;
+            if (write_chunk > INT_MAX) {
+                write_chunk = INT_MAX;
+            }
+            int nwrote = SSL_write(ssl->connection, current_vector->base + offset, (int) write_chunk);
 
             CAT_LOG_DEBUG_VA(SSL, {
                 char *s;
@@ -1391,10 +1414,15 @@ CAT_API cat_bool_t cat_ssl_encrypt(
                             }
 #endif
                         }
+                        /* BIO_read() takes an int length; the spare space may be larger */
+                        size_t read_size = encrypted_buffer_size - encrypted_total_length;
+                        if (read_size > INT_MAX) {
+                            read_size = INT_MAX;
+                        }
                         int n = cat_ssl_read_encrypted_bytes(
                             ssl,
                             encrypted_buffer + encrypted_total_length,
-                            encrypted_buffer_size - encrypted_total_length
+                            read_size
                         );
                         // fprintf(stderr, "cat_ssl_encrypt: error: %d, bufsize: %zu, length: %zu, n: %d\n", error, encrypted_buffer_size, encrypted_total_length, n);
 
@@ -1402,7 +1430,7 @@ CAT_API cat_bool_t cat_ssl_encrypt(
                             char *s;
                             CAT_LOG_DEBUG_D(SSL, "BIO_read(%p, %s, %zu) = %d",
                                 ssl, cat_log_str_quote(encrypted_buffer + encrypted_total_length, n < 0 ? 0 : n, &s),
-                                encrypted_buffer_size - encrypted_total_length, n);
+                                read_size, n);
                             cat_free(s);
                         });
 
@@ -1467,8 +1495,13 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
         int n;
 
         if (have_encrypted_data) {
+            /* BIO_write() takes an int length; feed the buffer in int-sized chunks */
+            size_t write_size = buffer->length - nwrite;
+            if (write_size > INT_MAX) {
+                write_size = INT_MAX;
+            }
             n = cat_ssl_write_encrypted_bytes(
-                ssl, buffer->value + nwrite, buffer->length - nwrite
+                ssl, buffer->value + nwrite, write_size
             );
             if (n > 0) {
                 nwrite += n;
@@ -1482,7 +1515,12 @@ CAT_API cat_bool_t cat_ssl_decrypt(cat_ssl_t *ssl, char *out, size_t *out_length
 
         cat_ssl_clear_error();
 
-        n = SSL_read(ssl->connection, out + nread, (int) (out_size - nread));
+        /* OpenSSL takes an int length; read in int-sized chunks */
+        size_t read_chunk = out_size - nread;
+        if (read_chunk > INT_MAX) {
+            read_chunk = INT_MAX;
+        }
+        n = SSL_read(ssl->connection, out + nread, (int) read_chunk);
 
         CAT_LOG_DEBUG_VA(SSL, {
             char *s;

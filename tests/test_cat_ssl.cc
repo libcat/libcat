@@ -1253,4 +1253,119 @@ TEST(cat_ssl, alpn_client_protocols)
 }
 #endif
 
+/* The BIO helpers take size_t but OpenSSL takes int; oversized and empty
+ * requests must be handled before BIO_read()/BIO_write() is called. */
+TEST(cat_ssl, rejects_oversized_encrypted_buffer_requests)
+{
+    cat_ssl_context_t *context = cat_ssl_context_create(CAT_SSL_METHOD_TLS, CAT_SSL_PROTOCOLS_DEFAULT);
+    ASSERT_NE(context, nullptr);
+    DEFER(cat_ssl_context_close(context));
+
+    cat_ssl_t storage;
+    cat_ssl_t *ssl = cat_ssl_create(&storage, context);
+    ASSERT_NE(ssl, nullptr);
+    DEFER(cat_ssl_close(ssl));
+
+    char buffer[16] = {};
+
+    ASSERT_EQ(cat_ssl_read_encrypted_bytes(ssl, buffer, 0), CAT_RET_NONE);
+    ASSERT_EQ(cat_ssl_write_encrypted_bytes(ssl, buffer, 0), CAT_RET_NONE);
+
+#if SIZE_MAX > INT_MAX
+    size_t too_large = (size_t) INT_MAX + 1;
+    ASSERT_EQ(cat_ssl_read_encrypted_bytes(ssl, buffer, too_large), CAT_RET_ERROR);
+    ASSERT_NE(strstr(cat_get_last_error_message(), "too large"), nullptr);
+    ASSERT_EQ(cat_ssl_write_encrypted_bytes(ssl, buffer, too_large), CAT_RET_ERROR);
+    ASSERT_NE(strstr(cat_get_last_error_message(), "too large"), nullptr);
+#endif
+}
+
+#if SIZE_MAX > INT_MAX
+/* One vector larger than INT_MAX exercises the SSL_write() chunk clamp. */
+TEST(cat_ssl, encrypts_a_vector_larger_than_int_max)
+{
+    auto publicCAPath = publicCAPair->exportPEMs();
+    X509KeyCertPairConfig serverConfig = {
+        {"issuer", publicCAPair},
+        {"keyType", "RSA2048"},
+        {"C", "CN"},
+        {"O", "Test"},
+        {"CN", "localhost"},
+        {"notBeforeOffsetSeconds", 0},
+        {"notAfterOffsetSeconds", 30 * 86400 /* 30 days */},
+        {"keyUsage", "critical,digitalSignature,dataEncipherment"},
+        {"extKeyUsage", "critical,serverAuth"},
+        {"basicConstraints", "critical,CA:FALSE"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
+    };
+    auto serverPair = X509KeyCertPair::create(serverConfig);
+    ASSERT_NE(serverPair, nullptr);
+    auto serverPEMsPath = serverPair->exportPEMs();
+    ASSERT_NE(serverPEMsPath.key, nullptr);
+    ASSERT_NE(serverPEMsPath.cert, nullptr);
+
+    cat_socket_t *serverSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(serverSocket, nullptr);
+    DEFER(cat_socket_close(serverSocket));
+    ASSERT_TRUE(cat_socket_bind_to(serverSocket, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(serverSocket, TEST_SERVER_BACKLOG));
+    unsigned short port = cat_socket_get_port(serverSocket, false);
+
+    wait_group wg;
+    cat_socket_t *connSocket = cat_socket_create(nullptr, cat_socket_get_simple_type(serverSocket));
+    ASSERT_NE(connSocket, nullptr);
+    DEFER(cat_socket_close(connSocket));
+    co([&serverSocket, &connSocket, &serverPEMsPath, &publicCAPath, &wg] {
+        wg++;
+        DEFER(wg--);
+        ASSERT_TRUE(cat_socket_accept(serverSocket, connSocket));
+        cat_socket_crypto_options_t options;
+        cat_socket_crypto_options_init(&options, false);
+        options.ca_file = publicCAPath.cert;
+        options.certificate = serverPEMsPath.cert;
+        options.certificate_key = serverPEMsPath.key;
+        options.verify_peer = false;
+        ASSERT_TRUE(cat_socket_enable_crypto(connSocket, &options));
+    });
+
+    cat_socket_t *clientSocket = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(clientSocket, nullptr);
+    DEFER(cat_socket_close(clientSocket));
+    ASSERT_TRUE(cat_socket_connect_to(clientSocket, CAT_STRL(TEST_LISTEN_IPV4), port));
+    cat_socket_crypto_options_t options;
+    cat_socket_crypto_options_init(&options, true);
+    options.ca_file = publicCAPath.cert;
+    options.verify_peer = true;
+    options.peer_name = "localhost";
+    options.verify_peer_name = true;
+    ASSERT_TRUE(cat_socket_enable_crypto(clientSocket, &options));
+    wg();
+
+    cat_ssl_t *ssl = clientSocket->internal->ssl;
+    ASSERT_NE(ssl, nullptr);
+    ASSERT_TRUE(cat_ssl_is_established(ssl));
+
+    const size_t size = (size_t) INT_MAX + 1;
+    char *input = (char *) cat_malloc(size);
+    ASSERT_NE(input, nullptr);
+    DEFER(cat_free(input));
+
+    cat_io_vector_t vector = {};
+#ifndef CAT_OS_WIN
+    vector.base = input;
+    vector.length = size;
+#else
+    vector.base = input;
+    vector.length = (ULONG) size;
+#endif
+
+    char *encrypted = nullptr;
+    size_t encrypted_length = 0;
+    ASSERT_TRUE(cat_ssl_encrypt(ssl, &vector, 1, &encrypted, &encrypted_length))
+        << cat_get_last_error_message();
+    DEFER(cat_free(encrypted));
+    ASSERT_GT(encrypted_length, size);
+}
+#endif
+
 #endif
