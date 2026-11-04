@@ -168,6 +168,19 @@ TEST(cat_websocket, header_preserves_masking_key)
     ASSERT_EQ(cat_websocket_header_get_size(&header), 4);
 }
 
+/* The payload length getters read the extended length and the masking key. */
+TEST(cat_websocket, header_init_clears_the_whole_header)
+{
+    cat_websocket_header_t header;
+    memset(&header, 0xff, sizeof(header));
+    cat_websocket_header_init(&header);
+
+    cat_websocket_header_t empty;
+    memset(&empty, 0, sizeof(empty));
+    ASSERT_EQ(memcmp(&header, &empty, sizeof(header)), 0);
+    ASSERT_EQ(cat_websocket_header_get_payload_length(&header), 0u);
+}
+
 TEST(cat_websocket, mask_binary_data)
 {
     const char input[] = {'\0', '\x7f', '\x01', '\x02', '\x03', '\0', '\x04'};
