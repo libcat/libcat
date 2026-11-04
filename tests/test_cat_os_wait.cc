@@ -273,6 +273,12 @@ TEST(cat_os_wait, wait)
 #endif
 }
 
+TEST(cat_os_wait, wait_accepts_a_null_status)
+{
+    pid_t pid = new_child_process(0);
+    ASSERT_EQ(cat_os_wait(nullptr), pid);
+}
+
 TEST(cat_os_wait, waitpid)
 {
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
