@@ -350,3 +350,47 @@ TEST(cat_string, str_quote)
         ASSERT_STREQ(new_str, "\\x64\\x75\\x61\\x7f");
     }
 }
+
+/* The recorded length must describe the copied bytes: a NUL inside the source
+ * ends the copy, and the length must not point past it. */
+TEST(cat_string, create_clamps_the_length_to_the_copied_bytes)
+{
+    cat_string_t string;
+    cat_string_init(&string);
+
+    static const char value[] = { 'a', 'b', '\0', 'c', 'd' };
+    ASSERT_TRUE(cat_string_create(&string, value, sizeof(value)));
+    DEFER(cat_string_close(&string));
+
+    ASSERT_EQ(string.length, 2);
+    ASSERT_EQ(memcmp(string.value, "ab", 2), 0);
+    ASSERT_EQ(string.value[2], '\0');
+}
+
+/* The EMIT_COMMENT suffix and prefix are part of the quoted line. */
+TEST(cat_string, quote_size_counts_the_comment_flag)
+{
+    static const char input[] = "abc";
+    const cat_str_quote_style_flags_t style = CAT_STR_QUOTE_STYLE_FLAG_EMIT_COMMENT;
+
+    size_t size = cat_str_quote_size(CAT_STRLEN(input), style);
+    ASSERT_GE(size, CAT_STRLEN(input) * 4 + 1 + CAT_STRLEN(" /* ") + CAT_STRLEN(" */"));
+
+    char *quoted = nullptr;
+    size_t quoted_length = 0;
+    cat_bool_t is_complete = cat_false;
+    ASSERT_TRUE(cat_str_quote_ex(CAT_STRL(input), &quoted, &quoted_length, style, NULL, &is_complete));
+    DEFER(cat_free(quoted));
+
+    ASSERT_GE(size, quoted_length + 1);
+    ASSERT_NE(std::string(quoted, quoted_length).find(" /* "), std::string::npos);
+    ASSERT_NE(std::string(quoted, quoted_length).find(" */"), std::string::npos);
+}
+
+/* A zero count has no byte to terminate. */
+TEST(cat_string, srand_with_a_zero_count_writes_nothing)
+{
+    char buffer[4] = { 'k', 'e', 'p', 't' };
+    cat_srand(buffer, 0);
+    ASSERT_EQ(std::string(buffer, sizeof(buffer)), "kept");
+}
