@@ -881,4 +881,59 @@ TEST(cat_curl_multi, expect_100_continue)
     );
 }
 
+/* When the socket handed to libcurl can not be polled, the socket callback
+ * must release the context and report CURLM_INTERNAL_ERROR instead of using
+ * the failed uv_poll_t. */
+TEST(cat_curl, socket_callback_rejects_an_unpollable_socket)
+{
+    cat_socket_t *server = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(server, nullptr);
+    DEFER(cat_socket_close(server));
+    ASSERT_TRUE(cat_socket_bind_to(server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(server, TEST_SERVER_BACKLOG));
+    unsigned short port = cat_socket_get_port(server, false);
+
+    cat_socket_t *fake = cat_socket_create(nullptr, CAT_SOCKET_TYPE_TCP);
+    ASSERT_NE(fake, nullptr);
+    DEFER(cat_socket_close(fake));
+    ASSERT_TRUE(cat_socket_bind_to(fake, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    cat_os_socket_t fd = cat_socket_get_fd(fake);
+
+    uv_poll_t watcher;
+    bool watcher_open = false;
+    ASSERT_EQ(uv_poll_init_socket(&CAT_EVENT_G(loop), &watcher, fd), 0);
+    ASSERT_EQ(uv_poll_start(&watcher, UV_READABLE, +[](uv_poll_t *, int, int) {}), 0);
+    watcher_open = true;
+    DEFER({
+        if (watcher_open) {
+            uv_close((uv_handle_t *) &watcher, nullptr);
+            (void) cat_time_delay(1);
+        }
+    });
+
+    CURL *ch = curl_easy_init();
+    ASSERT_NE(ch, nullptr);
+    DEFER(curl_easy_cleanup(ch));
+    std::string url = "http://" TEST_LISTEN_IPV4 ":" + std::to_string(port) + "/";
+    curl_easy_setopt(ch, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(ch, CURLOPT_PROXY, "");
+    curl_easy_setopt(ch, CURLOPT_TIMEOUT_MS, 1500);
+    curl_easy_setopt(ch, CURLOPT_OPENSOCKETFUNCTION,
+        +[](void *clientp, curlsocktype, struct curl_sockaddr *) -> curl_socket_t {
+            return *(cat_os_socket_t *) clientp;
+        });
+    curl_easy_setopt(ch, CURLOPT_OPENSOCKETDATA, &fd);
+    curl_easy_setopt(ch, CURLOPT_CLOSESOCKETFUNCTION,
+        +[](void *, curl_socket_t) -> int { return 0; });
+    curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION,
+        +[](const char *, size_t length, size_t n, void *) -> size_t { return length * n; });
+
+    CURLcode code = cat_curl_easy_perform(ch);
+
+    uv_close((uv_handle_t *) &watcher, nullptr);
+    watcher_open = false;
+    ASSERT_TRUE(cat_time_delay(1));
+    ASSERT_NE(code, CURLE_OK);
+}
+
 #endif
