@@ -780,3 +780,20 @@ TEST(cat_buffer, allocator_receives_length_updates)
     ASSERT_EQ(updated_length, 0);
     ASSERT_EQ(updated_value, buffer.value);
 }
+
+/* snprintf reports the length the value needs, not the length it wrote. The
+ * copy must stay inside the scratch buffer. */
+TEST(cat_buffer, append_double_handles_a_value_wider_than_the_scratch_buffer)
+{
+    cat_buffer_t buffer;
+    ASSERT_TRUE(cat_buffer_create(&buffer, 0));
+    DEFER(cat_buffer_close(&buffer));
+
+    char expected[512];
+    int expected_length = snprintf(expected, sizeof(expected), "%f", 1e300);
+    ASSERT_GT(expected_length, 32);
+
+    ASSERT_TRUE(cat_buffer_append_double(&buffer, 1e300));
+    ASSERT_EQ(std::string(buffer.value, buffer.length),
+        std::string(expected, (size_t) expected_length));
+}
