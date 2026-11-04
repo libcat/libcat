@@ -222,6 +222,10 @@ else()
     # usable for these targets without reporting that warning.
     check_add_cflags(-Wno-unused-parameter uv_cflags HAVE_UV_LINT_NO_UNUSED_PARAMETER)
     check_add_cflags(-Wno-unused-parameter llhttp_cflags HAVE_LLHTTP_LINT_NO_UNUSED_PARAMETER)
+    # libuv documents that it relies on -fno-strict-aliasing; the libcat patches
+    # add more type punning on top
+    check_add_cflags(-fno-strict-aliasing cat_cflags HAVE_FNO_STRICT_ALIASING)
+    check_add_cflags(-fno-strict-aliasing uv_cflags HAVE_UV_FNO_STRICT_ALIASING)
     check_add_cflags(-Wstrict-prototypes cat_cflags HAVE_STRICT_PROTOTYPES)
     check_add_cflags(-Werror=implicit-function-declaration cat_cflags HAVE_LINT_ERROR_IMPLICIT_FUNCTION_DECLARATION)
 endif()
