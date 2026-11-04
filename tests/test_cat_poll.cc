@@ -410,6 +410,17 @@ TEST(cat_poll, invalid_descriptors)
     ASSERT_NE(descriptors[1].revents & (POLLERR | POLLNVAL), 0);
 }
 
+/* A count whose allocation size wraps must be rejected before the descriptors
+ * are read; the caller only owns the one descriptor below. */
+TEST(cat_poll, a_wrapped_descriptor_count_is_rejected)
+{
+    cat_pollfd_t descriptor = { CAT_OS_INVALID_SOCKET, POLLIN, POLLNONE };
+    /* one past the int result range; the caller array holds one descriptor */
+    cat_nfds_t nfds = (cat_nfds_t) INT_MAX + 1;
+    ASSERT_EQ(cat_poll(&descriptor, nfds, 0), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EOVERFLOW);
+}
+
 TEST(cat_poll, datagram_ready_and_timeout)
 {
     cat_socket_t socket;
