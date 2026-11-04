@@ -514,6 +514,7 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
 #endif
         poll->initialized = cat_false;
         poll->ret.events = UV_EVENT_NONE;
+        poll->ret.status = CAT_ECANCELED;
         poll->u.context = context;
         do {
             cat_os_socket_t fd_no = fd->fd;
