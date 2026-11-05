@@ -2922,3 +2922,187 @@ TEST(cat_socket, open_socket_preserves_connection)
     ASSERT_EQ(cat_socket_read(&alias, buffer, sizeof(buffer)), sizeof(buffer));
     ASSERT_EQ(std::string(buffer, sizeof(buffer)), "shared");
 }
+
+/* Park a read on a handle that shares its internal socket with another handle.
+ * Returns the connecting peer so the caller keeps the connection alive. */
+TEST(cat_socket, close_cancels_pending_read_of_shared_internal)
+{
+    cat_socket_t server, client, connection, alias;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+    DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+
+    /* share the connection with a second handle; the internal socket is refcounted */
+    ASSERT_EQ(cat_socket_create(&alias, CAT_SOCKET_TYPE_TCP4), &alias);
+    DEFER(if (cat_socket_is_available(&alias)) { cat_socket_close(&alias); });
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &connection));
+
+    /* the client sends nothing, so this read parks on the shared internal socket */
+    bool read_done = false;
+    ssize_t read_result = 0;
+    cat_errno_t read_error = 0;
+    testing::wait_group read_group;
+    co([&] {
+        read_group++;
+        DEFER(read_group--);
+        char buffer[16];
+        read_result = cat_socket_recv(&alias, buffer, sizeof(buffer));
+        read_error = cat_get_last_error_code();
+        read_done = true;
+    });
+    ASSERT_FALSE(read_done);
+    ASSERT_EQ(cat_socket_get_io_state(&alias), CAT_SOCKET_IO_FLAG_READ);
+
+    /* Closing the handle that started the read must cancel it, even though the
+     * sibling reference keeps the internal socket open and the transport alive.
+     * Without the cancel the reader stays parked until its own timeout, so a
+     * short wait is enough to tell the two apart. */
+    ASSERT_TRUE(cat_socket_close(&alias));
+    bool cancelled = read_group(1000);
+    /* Close the remaining reference first: that is what unblocks the reader when
+     * the cancel is missing, so a failed assertion cannot leave it parked. */
+    ASSERT_TRUE(cat_socket_close(&connection));
+    ASSERT_TRUE(read_group(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(read_done);
+    ASSERT_LE(read_result, 0);
+    ASSERT_EQ(read_error, CAT_ECANCELED);
+    ASSERT_TRUE(cancelled) << "a close must cancel the reads its own handle started";
+}
+
+TEST(cat_socket, close_keeps_pending_read_of_other_handle)
+{
+    cat_socket_t server, client, connection, alias;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(cat_socket_close(&server));
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+    ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+    DEFER(if (cat_socket_is_available(&client)) { cat_socket_close(&client); });
+    ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4), cat_socket_get_sock_port(&server)));
+    ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+    DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); });
+    ASSERT_TRUE(cat_socket_accept(&server, &connection));
+
+    ASSERT_EQ(cat_socket_create(&alias, CAT_SOCKET_TYPE_TCP4), &alias);
+    DEFER(if (cat_socket_is_available(&alias)) { cat_socket_close(&alias); });
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &connection));
+
+    bool read_done = false;
+    testing::wait_group read_group;
+    co([&] {
+        read_group++;
+        DEFER(read_group--);
+        char buffer[16];
+        (void) cat_socket_recv(&alias, buffer, sizeof(buffer));
+        read_done = true;
+    });
+    ASSERT_FALSE(read_done);
+    ASSERT_EQ(cat_socket_get_io_state(&alias), CAT_SOCKET_IO_FLAG_READ);
+
+    /* Closing the sibling reference must leave this handle's read alone: the
+     * handle that started it is still open and the read is a normal wait. */
+    ASSERT_TRUE(cat_socket_close(&connection));
+    ASSERT_FALSE(read_group(1000)) << "closing another reference must not cancel this handle's pending read";
+    ASSERT_FALSE(read_done);
+    ASSERT_EQ(cat_socket_get_io_state(&alias), CAT_SOCKET_IO_FLAG_READ);
+
+    /* the read is still parked, so closing its own handle cancels it normally */
+    ASSERT_TRUE(cat_socket_close(&alias));
+    ASSERT_TRUE(read_group(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(read_done);
+}
+
+TEST(cat_socket, close_cancels_pending_accept_of_shared_internal)
+{
+    cat_socket_t server, alias;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); });
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+
+    /* a second handle can accept on the same listening transport */
+    ASSERT_EQ(cat_socket_create(&alias, CAT_SOCKET_TYPE_TCP4), &alias);
+    DEFER(if (cat_socket_is_available(&alias)) { cat_socket_close(&alias); });
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &server));
+
+    /* nothing ever connects, so the accept stays parked */
+    bool accept_done = false;
+    cat_errno_t accept_error = 0;
+    testing::wait_group accept_group;
+    co([&] {
+        accept_group++;
+        DEFER(accept_group--);
+        cat_socket_t connection;
+        if (!cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP)) {
+            accept_done = true;
+            return;
+        }
+        (void) cat_socket_accept(&alias, &connection);
+        accept_error = cat_get_last_error_code();
+        if (cat_socket_is_available(&connection)) {
+            cat_socket_close(&connection);
+        }
+        accept_done = true;
+    });
+    ASSERT_FALSE(accept_done);
+    ASSERT_EQ(cat_socket_get_io_state(&alias), CAT_SOCKET_IO_FLAG_ACCEPT);
+
+    /* Closing the handle that started the accept must cancel it, even though the
+     * sibling keeps the listening transport open. */
+    ASSERT_TRUE(cat_socket_close(&alias));
+    bool cancelled = accept_group(1000);
+    ASSERT_TRUE(cat_socket_close(&server));
+
+    ASSERT_TRUE(accept_group(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(accept_done);
+    ASSERT_EQ(accept_error, CAT_ECANCELED);
+    ASSERT_TRUE(cancelled) << "a close must cancel the accept its own handle started";
+}
+
+TEST(cat_socket, close_keeps_pending_accept_of_other_handle)
+{
+    cat_socket_t server, alias;
+    ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+    DEFER(if (cat_socket_is_available(&server)) { cat_socket_close(&server); });
+    ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+    ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+
+    ASSERT_EQ(cat_socket_create(&alias, CAT_SOCKET_TYPE_TCP4), &alias);
+    DEFER(if (cat_socket_is_available(&alias)) { cat_socket_close(&alias); });
+    ASSERT_TRUE(cat_socket_open_socket(&alias, &server));
+
+    bool accept_done = false;
+    testing::wait_group accept_group;
+    co([&] {
+        accept_group++;
+        DEFER(accept_group--);
+        cat_socket_t connection;
+        if (!cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP)) {
+            accept_done = true;
+            return;
+        }
+        (void) cat_socket_accept(&alias, &connection);
+        if (cat_socket_is_available(&connection)) {
+            cat_socket_close(&connection);
+        }
+        accept_done = true;
+    });
+    ASSERT_FALSE(accept_done);
+    ASSERT_EQ(cat_socket_get_io_state(&alias), CAT_SOCKET_IO_FLAG_ACCEPT);
+
+    /* the accept was started by alias, so closing the sibling leaves it parked */
+    ASSERT_TRUE(cat_socket_close(&server));
+    ASSERT_FALSE(accept_group(1000)) << "closing another reference must not cancel this handle's pending accept";
+    ASSERT_FALSE(accept_done);
+
+    ASSERT_TRUE(cat_socket_close(&alias));
+    ASSERT_TRUE(accept_group(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(accept_done);
+}
