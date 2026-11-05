@@ -90,8 +90,12 @@ TEST(cat_ssl, stale_openssl_error_does_not_break_handshake)
     ASSERT_NE(ERR_peek_error(), 0);
     testing::internal::CaptureStderr();
     cat_ssl_ret_t result = cat_ssl_handshake(&ssl);
-    const std::string warning = testing::internal::GetCapturedStderr();
-    ASSERT_NE(warning.find("Ignoring stale global SSL error"), std::string::npos);
+    const std::string output = testing::internal::GetCapturedStderr();
+    /*
+     * The stale errors are a diagnostic detail, not a notice for the
+     * application, so the default configuration stays quiet about them
+     */
+    ASSERT_EQ(output.find("Ignoring stale global SSL error"), std::string::npos);
     ASSERT_EQ(result, CAT_SSL_RET_WANT_READ);
     ASSERT_EQ(ERR_peek_error(), 0);
     ASSERT_FALSE(cat_ssl_is_down(&ssl));

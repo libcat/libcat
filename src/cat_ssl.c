@@ -1776,7 +1776,13 @@ static void cat_ssl_clear_error(void)
 {
     while (unlikely(ERR_peek_error())) {
         char *reason = cat_ssl_get_error_reason();
-        CAT_NOTICE(SSL, "Ignoring stale global SSL error%s", reason != NULL ? reason : " (SSL: Unknown)");
+        /*
+         * The queue may hold errors that this library did not raise, for example
+         * a failed configuration load during OPENSSL_init_ssl(). Clearing them is
+         * required to attribute the next error correctly, so this is a diagnostic
+         * detail and not a notice for the application
+         */
+        CAT_LOG_DEBUG(SSL, "Ignoring stale global SSL error%s", reason != NULL ? reason : " (SSL: Unknown)");
         if (reason != NULL) {
             cat_free(reason);
         }
