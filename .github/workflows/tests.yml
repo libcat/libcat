@@ -199,6 +199,18 @@ jobs:
             sleep 0.1
           done
 
+      - name: Disable Windows Defender for OpenCppCoverage
+        shell: powershell
+        run: |
+          Set-MpPreference `
+            -DisableRealtimeMonitoring $true `
+            -DisableBehaviorMonitoring $true `
+            -DisableScriptScanning $true
+
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+          Add-MpPreference -ExclusionPath "C:\OpenCppCoverage"
+          Add-MpPreference -ExclusionPath "C:\vcpkg"
+
       - name: Prepare coverage dependencies
         if: matrix.build-type == 'Debug'
         shell: powershell
