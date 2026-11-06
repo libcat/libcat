@@ -449,34 +449,65 @@ TEST(cat_socket, renegotiation_decisions_preserve_connection_lifetime)
 TEST(cat_ssl, peer_certificate_identity_rules)
 {
     const struct {
+        /* null when the certificate carries no subject alternative name */
         const char *alternative_names;
+        const char *common_name;
         const char *peer_name;
         cat_bool_t matches;
     } cases[] = {
-        {"DNS:localhost.", "localhost", cat_true},
-        {"DNS:localhost.", "other.example", cat_false},
-        {"URI:https://service.example", "localhost", cat_false},
-        {"otherName:1.3.6.1.5.5.7.8.7;IA5:_http.localhost", "localhost", cat_false},
-        {"otherName:1.2.3.4;UTF8:unrelated", "localhost", cat_true},
-        {"DNS:127.0.0.1", "127.0.0.1", cat_false},
-        {"IP:127.0.0.1", "127.0.0.1", cat_true},
-        {"DNS:*.example.com", "www.example.com", cat_true},
-        {"DNS:*.example.com", "deep.www.example.com", cat_false},
+        {"DNS:localhost.", "localhost", "localhost", cat_true},
+        {"DNS:localhost.", "localhost", "other.example", cat_false},
+        {"URI:https://service.example", "localhost", "localhost", cat_false},
+        {"otherName:1.3.6.1.5.5.7.8.7;IA5:_http.localhost", "localhost", "localhost", cat_false},
+        {"otherName:1.2.3.4;UTF8:unrelated", "localhost", "localhost", cat_true},
+        {"DNS:127.0.0.1", "localhost", "127.0.0.1", cat_false},
+        {"IP:127.0.0.1", "localhost", "127.0.0.1", cat_true},
+        {"DNS:*.example.com", "localhost", "www.example.com", cat_true},
+        {"DNS:*.example.com", "localhost", "deep.www.example.com", cat_false},
+        /* a wildcard covers exactly one label, so it never covers the bare name */
+        {"DNS:*.example.com", "localhost", "example.com", cat_false},
+        /* RFC 6125 6.4.3: only the complete left-most label may be a wildcard */
+        {"DNS:foo.*.example.com", "localhost", "foo.bar.example.com", cat_false},
+        /* RFC 9525 6.3 ignores a partial-label wildcard, OpenSSL accepts it */
+        {"DNS:w*.example.com", "localhost", "www.example.com", cat_true},
+        /* a wildcard alone, and a wildcard in a top-level label, name no host */
+        {"DNS:*", "localhost", "localhost", cat_false},
+        {"DNS:*.com", "localhost", "foo.com", cat_false},
+        /* RFC 6125 6.4.3 rejects a wildcard in a public suffix, OpenSSL accepts it */
+        {"DNS:*.co.uk", "localhost", "foo.co.uk", cat_true},
+        /* a name is compared without regard to case */
+        {"DNS:Example.COM", "localhost", "example.com", cat_true},
+        {"DNS:example.com", "localhost", "EXAMPLE.COM", cat_true},
+        /* a terminal root dot is stripped from the certificate name only */
+        {"DNS:example.com", "localhost", "example.com.", cat_false},
         // Preserve OpenSSL's rejection of wildcard patterns with a final empty label.
-        {"DNS:*.example.com.", "www.example.com", cat_false},
-        {"DNS:*.example.com.", "deep.www.example.com", cat_false},
-        {"DNS:other.example", "localhost", cat_false},
+        {"DNS:*.example.com.", "localhost", "www.example.com", cat_false},
+        {"DNS:*.example.com.", "localhost", "deep.www.example.com", cat_false},
+        {"DNS:other.example", "localhost", "localhost", cat_false},
+        /* the common name is the identity when the certificate holds no SAN */
+        {nullptr, "localhost", "localhost", cat_true},
+        {nullptr, "localhost", "other.example", cat_false},
+        /*
+         * A numeric name is an IP identity: only an IP SAN may name it, never the
+         * subject common name, whether or not the certificate carries a SAN
+         */
+        {nullptr, "127.0.0.1", "127.0.0.1", cat_false},
+        {"IP:10.0.0.1", "127.0.0.1", "127.0.0.1", cat_false},
+        {"IP:::1", "::1", "::1", cat_true},
     };
     for (const auto &test_case : cases) {
-        SCOPED_TRACE(test_case.alternative_names);
+        SCOPED_TRACE(test_case.alternative_names != nullptr ? test_case.alternative_names : "(no SAN)");
+        SCOPED_TRACE(test_case.common_name);
         SCOPED_TRACE(test_case.peer_name);
         X509KeyCertPairConfig config = {
             {"keyType", "RSA2048"},
-            {"CN", "localhost"},
+            {"CN", test_case.common_name},
             {"notBeforeOffsetSeconds", 0},
             {"notAfterOffsetSeconds", 86400},
-            {"subjectAltName", std::string(test_case.alternative_names)},
         };
+        if (test_case.alternative_names != nullptr) {
+            config["subjectAltName"] = std::string(test_case.alternative_names);
+        }
         auto certificate = X509KeyCertPair::create(config);
         ASSERT_NE(certificate, nullptr);
         const auto paths = certificate->exportPEMs();

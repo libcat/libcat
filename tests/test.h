@@ -473,7 +473,8 @@ namespace testing
             X509KeyCertPairConfig &config
         ) {
             int ret;
-            X509_NAME *name;
+            /* OpenSSL 4 returns a const view, older versions a mutable one */
+            const X509_NAME *name;
             X509V3_CTX ctx = {0};
             X509_EXTENSION *ext = nullptr;
             EVP_PKEY *pkey = nullptr, *issuerPkey = nullptr;
@@ -524,7 +525,9 @@ namespace testing
             name = X509_get_subject_name(x509);
             for (std::string key : {"C", "O", "CN"}) {
                 if (config.find(key) != config.end()) {
-                    ret = X509_NAME_add_entry_by_txt(name, key.c_str(), MBSTRING_ASC, (const unsigned char *)std::get<std::string>(config[key]).c_str(), -1, -1, 0);
+                    /* the certificate owns the name, so adding entries to it is
+                     * valid even though the accessor hands out a const view */
+                    ret = X509_NAME_add_entry_by_txt((X509_NAME *) name, key.c_str(), MBSTRING_ASC, (const unsigned char *)std::get<std::string>(config[key]).c_str(), -1, -1, 0);
                     checkOpenSSL(ret != 1);
                 }
             }

@@ -1155,6 +1155,9 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
 
 static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_t name_length)
 {
+    cat_bool_t has_rooted_dns_id = cat_false;
+    unsigned int flags = 0;
+
     if (name_length == 0 || memchr(name, '\0', name_length) != NULL) {
         return cat_false;
     }
@@ -1168,64 +1171,35 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
     cat_free(address_name);
     if (address != NULL) {
         /* Numeric addresses require an IP SAN; DNS names and CNs are not IP identities. */
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
         const unsigned char *address_data = ASN1_STRING_get0_data(address);
-#else
-        const unsigned char *address_data = ASN1_STRING_data(address);
-#endif
         cat_bool_t ret = X509_check_ip(cert, address_data,
             (size_t) ASN1_STRING_length(address), 0) == 1;
         ASN1_OCTET_STRING_free(address);
         return ret;
     }
-    unsigned int flags = 0;
-    cat_bool_t has_rooted_dns_id = cat_false;
     GENERAL_NAMES *names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
-    if (names != NULL) {
-#ifndef X509_CHECK_FLAG_NEVER_CHECK_SUBJECT
-        cat_bool_t has_service_id = cat_false;
-        cat_bool_t has_dns_id = cat_false;
-#endif
-        /* A CA may validate only SAN service IDs; a matching CN must not override them. */
-        for (int i = 0; i < sk_GENERAL_NAME_num(names); i++) {
-            GENERAL_NAME *san = sk_GENERAL_NAME_value(names, i);
-            if (san->type == GEN_DNS) {
-                int length = ASN1_STRING_length(san->d.dNSName);
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-                const unsigned char *value = ASN1_STRING_get0_data(san->d.dNSName);
-#else
-                const unsigned char *value = ASN1_STRING_data(san->d.dNSName);
-#endif
-                if (length > 0 && value[length - 1] == '.') {
-                    has_rooted_dns_id = cat_true;
-                }
-            }
-            cat_bool_t is_service_id = san->type == GEN_DNS || san->type == GEN_URI;
-            if (san->type == GEN_OTHERNAME) {
-                static const char srv_name_oid[] = "1.3.6.1.5.5.7.8.7";
-                char oid[sizeof(srv_name_oid)];
-                is_service_id = OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
-                    == (int) (sizeof(srv_name_oid) - 1) && strcmp(oid, srv_name_oid) == 0;
-            }
-            if (is_service_id) {
-#ifdef X509_CHECK_FLAG_NEVER_CHECK_SUBJECT
-                flags |= X509_CHECK_FLAG_NEVER_CHECK_SUBJECT;
-#else
-                if (san->type == GEN_DNS) {
-                    has_dns_id = cat_true;
-                }
-                has_service_id = cat_true;
-#endif
+    for (int i = 0; names != NULL && i < sk_GENERAL_NAME_num(names); i++) {
+        GENERAL_NAME *san = sk_GENERAL_NAME_value(names, i);
+        if (san->type == GEN_DNS) {
+            int length = ASN1_STRING_length(san->d.dNSName);
+            const unsigned char *value = ASN1_STRING_get0_data(san->d.dNSName);
+            if (length > 0 && value[length - 1] == '.') {
+                has_rooted_dns_id = cat_true;
             }
         }
-        GENERAL_NAMES_free(names);
-#ifndef X509_CHECK_FLAG_NEVER_CHECK_SUBJECT
-        /* OpenSSL 1.0.2 suppresses CN fallback only when a DNS SAN is present. */
-        if (has_service_id && !has_dns_id) {
-            return cat_false;
+        cat_bool_t is_service_id = san->type == GEN_DNS || san->type == GEN_URI;
+        if (san->type == GEN_OTHERNAME) {
+            static const char srv_name_oid[] = "1.3.6.1.5.5.7.8.7";
+            char oid[sizeof(srv_name_oid)];
+            is_service_id = OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
+                == (int) (sizeof(srv_name_oid) - 1) && strcmp(oid, srv_name_oid) == 0;
         }
-#endif
+        if (is_service_id) {
+            /* a service ID replaces the subject common name */
+            flags |= X509_CHECK_FLAG_NEVER_CHECK_SUBJECT;
+        }
     }
+    GENERAL_NAMES_free(names);
     if (X509_check_host(cert, (char *) name, name_length, flags, NULL) != 1) {
         /* A terminal DNS root dot identifies the same SAN name. Keep OpenSSL's
          * wildcard and SAN precedence checks; do not extend this rule to CNs. */
@@ -1245,6 +1219,20 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
                 return cat_true;
             }
         }
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
+        /*
+         * OpenSSL 4 no longer falls back to the subject common name on its own,
+         * so ask for it explicitly. A certificate that holds a service ID names a
+         * host by that ID only, and a numeric name never reaches this point
+         */
+        if ((flags & X509_CHECK_FLAG_NEVER_CHECK_SUBJECT) == 0
+            && X509_check_host(cert, (char *) name, name_length,
+                X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT, NULL) == 1
+        ) {
+            CAT_LOG_DEBUG(SSL, "X509_check_host(%p, \"%.*s\", %zu): common name match", cert, (int) name_length, name, name_length);
+            return cat_true;
+        }
+#endif
         CAT_LOG_DEBUG(SSL, "X509_check_host(%p, \"%.*s\", %zu): no match", cert, (int) name_length, name, name_length);
         return cat_false;
     }
