@@ -849,10 +849,10 @@ else()
     message(STATUS "Thread-safe mode is disabled (by default)")
 endif()
 
-# OpenSSL dep
-find_package(OpenSSL QUIET)
+# OpenSSL dep, 1.1.1 or a LibreSSL that reports the same API level
+find_package(OpenSSL 1.1.1 QUIET)
 if (NOT OPENSSL_FOUND AND PkgConfig_FOUND)
-    pkg_check_modules(OPENSSL openssl QUIET)
+    pkg_check_modules(OPENSSL "openssl >= 1.1.1" QUIET)
 endif()
 if (APPLE AND NOT OPENSSL_INCLUDE_DIR)
     message(WARNING "OpenSSL shipped with macOS cannot be used, please install openssl from brew and set environment variables")

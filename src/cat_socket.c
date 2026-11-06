@@ -5393,6 +5393,7 @@ static cat_always_inline cat_bool_t cat_socket_internal_ssl_get_liveness(const c
         return cat_true;
     }
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+    /* LibreSSL has no SSL_has_pending() */
     return SSL_has_pending(ssl->connection) ? cat_true : cat_false;
 #else
     return cat_false;
