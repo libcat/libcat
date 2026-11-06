@@ -294,12 +294,12 @@ jobs:
           fail_ci_if_error: true
 
       - name: Save coverage report
-        if: always() && matrix.build-type == 'Debug' && hashFiles('coverage.xml') != ''
+        if: always() && matrix.build-type == 'Debug'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-${{ matrix.build-type }}-${{ matrix.thread-safe }}
           path: coverage.xml
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   unix-tests:
     name: Test on ${{matrix.os}} thread-safe=${{matrix.thread-safe}} sanitizer=${{matrix.sanitizer}}
@@ -508,15 +508,15 @@ jobs:
           fail_ci_if_error: true
 
       - name: Save coverage report
-        if: always() && hashFiles('libcat/coverage.info') != ''
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-${{ matrix.thread-safe }}
           path: libcat/coverage.info
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Save debug test logs
-        if: always() && hashFiles('libcat/build/test-debug.log') != ''
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-logs-${{ matrix.os }}-${{ matrix.thread-safe }}-${{ matrix.sanitizer }}
@@ -524,3 +524,4 @@ jobs:
             libcat/build/test-debug.log
             libcat/build/asan.log*
             libcat/build/tsan.log*
+          if-no-files-found: ignore
