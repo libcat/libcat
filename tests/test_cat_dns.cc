@@ -131,3 +131,70 @@ TEST(cat_dns, nospc)
     }
 #endif
 }
+
+static void test_cat_dns_loopback_address(cat_sockaddr_info_t *address, cat_sa_family_t af)
+{
+    memset(address, 0, sizeof(*address));
+    address->length = sizeof(address->address);
+    address->address.common.sa_family = af;
+    const char *ip = af == AF_INET ? "127.0.0.1" : "::1";
+    ASSERT_TRUE(cat_sockaddr_getbyname(&address->address.common, &address->length, ip, strlen(ip), 0));
+}
+
+TEST(cat_dns, getnameinfo)
+{
+    const cat_sa_family_t af_list[] = { AF_INET, AF_INET6 };
+
+    for (cat_sa_family_t af : af_list) {
+        cat_sockaddr_info_t address;
+        char host[NI_MAXHOST];
+        test_cat_dns_loopback_address(&address, af);
+        // NI_NUMERICHOST keeps the result independent of the local hosts file
+        ASSERT_TRUE(cat_dns_getnameinfo(&address.address.common, CAT_STRS(host), nullptr, 0, NI_NUMERICHOST));
+        ASSERT_STREQ(host, af == AF_INET ? "127.0.0.1" : "::1");
+    }
+}
+
+TEST(cat_dns, getnameinfo_service)
+{
+    cat_sockaddr_info_t address;
+    char service[NI_MAXSERV];
+    test_cat_dns_loopback_address(&address, AF_INET);
+    ((struct sockaddr_in *) &address.address.common)->sin_port = htons(8080);
+    ASSERT_TRUE(cat_dns_getnameinfo(&address.address.common, nullptr, 0, CAT_STRS(service), NI_NUMERICSERV));
+    ASSERT_STREQ(service, "8080");
+}
+
+TEST(cat_dns, getnameinfo_invalid)
+{
+    char host[NI_MAXHOST];
+    cat_sockaddr_info_t address;
+    test_cat_dns_loopback_address(&address, AF_INET);
+    ASSERT_FALSE(cat_dns_getnameinfo(nullptr, CAT_STRS(host), nullptr, 0, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINVAL);
+    ASSERT_FALSE(cat_dns_getnameinfo(&address.address.common, nullptr, 0, nullptr, 0, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAI_NONAME);
+    ASSERT_FALSE(cat_dns_getnameinfo(&address.address.common, host, 0, nullptr, 0, 0));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAI_NONAME);
+}
+
+TEST(cat_dns, getnameinfo_overflow)
+{
+    char host[4];
+    cat_sockaddr_info_t address;
+    test_cat_dns_loopback_address(&address, AF_INET);
+    ASSERT_FALSE(cat_dns_getnameinfo(&address.address.common, CAT_STRS(host), nullptr, 0, NI_NUMERICHOST));
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EAI_OVERFLOW);
+}
+
+TEST(cat_dns, getnameinfo_cancel)
+{
+    cat_coroutine_t *coroutine = co([&] {
+        char host[NI_MAXHOST];
+        cat_sockaddr_info_t address;
+        test_cat_dns_loopback_address(&address, AF_INET);
+        ASSERT_FALSE(cat_dns_getnameinfo(&address.address.common, CAT_STRS(host), nullptr, 0, 0));
+        ASSERT_EQ(cat_get_last_error_code(), CAT_ECANCELED);
+    });
+    cat_coroutine_resume(coroutine, nullptr, nullptr);
+}
