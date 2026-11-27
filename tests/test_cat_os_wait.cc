@@ -103,8 +103,25 @@ static pid_t new_child_process(int exit_status = 0)
     return pid;
 }
 
+/* Report whether a child has exited, without reaping it, so that the tests can
+ * wait for the exit of a child that is going to be waited for later. */
+static bool child_has_exited(pid_t pid)
+{
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    return waitid(P_PID, (id_t) pid, &info, WEXITED | WNOHANG | WNOWAIT) == 0 && info.si_pid == pid;
+}
+
 TEST(cat_os_wait, timeout)
 {
+    /* wait(2) fails with ECHILD at once when there is no child, so keep one running */
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        usleep(1000 * 1000);
+        _exit(0);
+    }
+    DEFER({ kill(pid, SIGKILL); waitpid(pid, nullptr, 0); });
     int status;
     pid_t w_pid = cat_os_wait_ex(&status, 1);
     ASSERT_EQ(w_pid, -1);
@@ -311,14 +328,15 @@ TEST(cat_os_wait, waitpid)
         }
 #endif
     }
-    /* error cases */
+    /* pid 0 waits for a child in the process group of the caller, as waitpid(2) does */
     {
+        pid_t pid = new_child_process(5);
         int status;
-        pid_t w_pid;
-        w_pid = cat_os_waitpid(0, &status, 0);
+        pid_t w_pid = cat_os_waitpid(0, &status, 0);
 
-        ASSERT_EQ(w_pid, -1);
-        ASSERT_EQ(cat_get_last_error_code(), CAT_ENOTSUP);
+        ASSERT_EQ(w_pid, pid);
+        ASSERT_EQ(WIFEXITED(status), 1);
+        ASSERT_EQ(WEXITSTATUS(status), 5);
     }
 #ifdef CAT_OS_WAIT_HAVE_RUSAGE
     }
@@ -403,17 +421,16 @@ TEST(cat_os_wait, concurrent_waiters_match_child_status)
         start_waiter(order[n], false);
         ASSERT_FALSE(reaped[order[n]]);
     }
-    // Pending sibling waiters keep SIGCHLD active while these exited children are cached.
+    // Pending sibling waiters keep SIGCHLD active; these exited children stay zombies until waited for.
     for (size_t n = pending; n < order.size(); n++) {
         const size_t i = order[n];
         ASSERT_EQ(write(gates[i][1], "x", 1), 1);
         released[i] = true;
         const cat_msec_t start = cat_time_msec();
-        while (cat_kill(pids[i], 0)) {
+        while (!child_has_exited(pids[i])) {
             ASSERT_LT(cat_time_msec() - start, TEST_IO_TIMEOUT);
             ASSERT_EQ(cat_time_msleep(1), 0);
         }
-        ASSERT_EQ(cat_get_last_error_code(), CAT_ESRCH);
     }
     for (size_t n = pending; n < order.size(); n++) {
         start_waiter(order[n], true);
@@ -430,7 +447,9 @@ TEST(cat_os_wait, concurrent_waiters_match_child_status)
     }
 }
 
-TEST(cat_os_wait, shutdown_discards_unused_child_status)
+/* Children that exit while another child is awaited are not reaped on their
+ * behalf, so they survive a runtime restart and stay waitable, as zombies do. */
+TEST(cat_os_wait, unawaited_children_survive_a_runtime_restart)
 {
     using children_t = std::array<pid_t, 3>;
     ASSERT_EXIT({
@@ -460,12 +479,11 @@ TEST(cat_os_wait, shutdown_discards_unused_child_status)
         for (size_t i = 0; i < children.size(); i++) {
             children[i] = new_child_process(static_cast<int>(17 + i));
             const cat_msec_t start = cat_time_msec();
-            while (cat_kill(children[i], 0)) {
+            while (!child_has_exited(children[i])) {
                 if (cat_time_msec() - start >= TEST_IO_TIMEOUT || cat_time_msleep(1) != 0) { std::exit(1); }
             }
-            if (cat_get_last_error_code() != CAT_ESRCH) { std::exit(1); }
         }
-        // Consume one cached result, leaving the other records for aggregate shutdown.
+        // The exited children are still zombies: the waiter of `held` did not take them.
         int status = 0;
         if (cat_os_waitpid_ex(children[0], &status, 0, 0) != children[0] ||
             !WIFEXITED(status) || WEXITSTATUS(status) != 17) { std::exit(1); }
@@ -474,8 +492,8 @@ TEST(cat_os_wait, shutdown_discards_unused_child_status)
         if (!wg(TEST_IO_TIMEOUT) || !completed || !success) { std::exit(1); }
         if (!cat_stop() || !cat_shutdown_all() || !cat_init_all() || !cat_run(CAT_RUN_EASY)) { std::exit(1); }
         for (size_t i = 1; i < children.size(); i++) {
-            if (cat_os_waitpid_ex(children[i], &status, 0, 0) != -1 ||
-                cat_get_last_error_code() != CAT_ECHILD) { std::exit(1); }
+            if (cat_os_waitpid_ex(children[i], &status, 0, 0) != children[i] ||
+                !WIFEXITED(status) || WEXITSTATUS(status) != static_cast<int>(17 + i)) { std::exit(1); }
         }
         if (!cat_time_delay(0) || !cat_stop() || !cat_shutdown_all()) { std::exit(1); }
         std::exit(0);
@@ -490,7 +508,7 @@ TEST(cat_os_wait, wait_after_sigchld)
     for (auto type : std::array<int, 2>{ 0, 1 })  {
         pid_t pid = new_child_process();
 
-        while (cat_kill(pid, 0) == 0) {
+        while (!child_has_exited(pid)) {
             (void) cat_time_msleep(1);
         }
         (void) cat_time_msleep(100);
@@ -565,6 +583,248 @@ TEST(cat_os_wait, waitpid_after_wait)
     w_pid = cat_os_waitpid(pid, &status, 0);
     ASSERT_EQ(w_pid, -1);
     ASSERT_EQ(cat_get_last_error_code(), CAT_ECHILD);
+}
+
+/* Fork a child that exits only after the parent writes to the returned gate, so
+ * that a coroutine can keep a wait pending for as long as a test needs it. */
+static pid_t new_gated_child_process(int &gate_out, int exit_status = 0)
+{
+    int gate[2];
+    if (pipe(gate) != 0) {
+        return -1;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(gate[1]);
+        char permit;
+        _exit(read(gate[0], &permit, 1) == 1 ? exit_status : 127);
+    }
+    close(gate[0]);
+    if (pid < 0) {
+        close(gate[1]);
+        return -1;
+    }
+    gate_out = gate[1];
+    return pid;
+}
+
+/* While a coroutine waits for one child, the SIGCHLD of another child must not
+ * make the library reap it: a raw waitpid() (as pclose() and PHP's pcntl_waitpid()
+ * do) still gets that child and its status. */
+TEST(cat_os_wait, a_raw_waitpid_still_gets_its_child)
+{
+    int gate = -1;
+    pid_t held = new_gated_child_process(gate, 0);
+    ASSERT_GT(held, 0);
+    bool held_reaped = false;
+    wait_group wg;
+    DEFER(
+        if (gate >= 0) { (void) write(gate, "x", 1); close(gate); }
+        wg();
+        if (!held_reaped) { waitpid(held, nullptr, 0); }
+    );
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        int status = 0;
+        held_reaped = cat_os_waitpid_ex(held, &status, 0, TEST_IO_TIMEOUT) == held;
+        ASSERT_TRUE(held_reaped);
+        ASSERT_TRUE(WIFEXITED(status));
+        ASSERT_EQ(WEXITSTATUS(status), 0);
+    });
+
+    pid_t other = new_child_process(9);
+    ASSERT_GT(other, 0);
+    int status = 0;
+    pid_t ret = 0;
+    /* poll with yields, so that the SIGCHLD of `other` reaches the event loop */
+    for (cat_msec_t start = cat_time_msec(); ret == 0 && cat_time_msec() - start < TEST_IO_TIMEOUT;) {
+        ret = waitpid(other, &status, WNOHANG);
+        if (ret == 0) {
+            ASSERT_EQ(cat_time_msleep(5), 0);
+        }
+    }
+    ASSERT_EQ(ret, other);
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 9);
+
+    ASSERT_EQ(write(gate, "x", 1), 1);
+    close(gate);
+    gate = -1;
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(held_reaped);
+}
+
+/* A process that uv_spawn() started is reaped by libuv itself, even while a
+ * coroutine waits here for another child. */
+TEST(cat_os_wait, a_spawned_process_still_reports_its_exit)
+{
+    SKIP_IF(!file_exists("/bin/sh"));
+    int gate = -1;
+    pid_t held = new_gated_child_process(gate, 0);
+    ASSERT_GT(held, 0);
+    bool held_reaped = false;
+    wait_group wg;
+    DEFER(
+        if (gate >= 0) { (void) write(gate, "x", 1); close(gate); }
+        wg();
+        if (!held_reaped) { waitpid(held, nullptr, 0); }
+    );
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        held_reaped = cat_os_waitpid_ex(held, nullptr, 0, TEST_IO_TIMEOUT) == held;
+        ASSERT_TRUE(held_reaped);
+    });
+
+    const char *args[] = { "/bin/sh", "-c", "exit 6", NULL };
+    cat_process_options_t options = { nullptr };
+    cat_process_stdio_container_t stdio[3] = { { 0 } };
+    for (auto &container : stdio) {
+        container.flags = CAT_PROCESS_STDIO_FLAG_IGNORE;
+    }
+    options.file = args[0];
+    options.args = args;
+    options.stdio = stdio;
+    options.stdio_count = CAT_ARRAY_SIZE(stdio);
+    cat_process_t *process = cat_process_run(&options);
+    ASSERT_NE(process, nullptr);
+    DEFER(cat_process_close(process));
+    ASSERT_TRUE(cat_process_wait_ex(process, TEST_IO_TIMEOUT));
+    ASSERT_EQ(cat_process_get_exit_status(process), 6);
+
+    ASSERT_EQ(write(gate, "x", 1), 1);
+    close(gate);
+    gate = -1;
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+}
+
+/* WUNTRACED decides whether a stop is a result, as it does for waitpid(2). */
+TEST(cat_os_wait, a_stop_is_reported_only_with_wuntraced)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        for (;;) {
+            pause();
+        }
+    }
+    bool reaped = false;
+    DEFER(if (!reaped) { kill(pid, SIGKILL); waitpid(pid, nullptr, 0); });
+
+    ASSERT_EQ(kill(pid, SIGSTOP), 0);
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, 100), -1);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, WUNTRACED, TEST_IO_TIMEOUT), pid);
+    ASSERT_TRUE(WIFSTOPPED(status));
+    ASSERT_EQ(WSTOPSIG(status), SIGSTOP);
+
+    ASSERT_EQ(kill(pid, SIGKILL), 0);
+    ASSERT_EQ(cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(WIFSIGNALED(status));
+    ASSERT_EQ(WTERMSIG(status), SIGKILL);
+}
+
+/* A negative pid waits for a process group, as it does for waitpid(2). */
+TEST(cat_os_wait, a_negative_pid_waits_for_a_process_group)
+{
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        (void) setpgid(0, 0);
+        usleep(50 * 1000);
+        _exit(4);
+    }
+    bool reaped = false;
+    DEFER(if (!reaped) { kill(pid, SIGKILL); waitpid(pid, nullptr, 0); });
+    /* set the group from both sides, so the wait never races the child */
+    (void) setpgid(pid, pid);
+
+    int status = 0;
+    ASSERT_EQ(cat_os_waitpid_ex(-pid, &status, 0, TEST_IO_TIMEOUT), pid);
+    reaped = true;
+    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_EQ(WEXITSTATUS(status), 4);
+}
+
+/* Two coroutines that wait for the same child both get its status. */
+TEST(cat_os_wait, waiters_of_the_same_child_share_its_status)
+{
+    int gate = -1;
+    pid_t pid = new_gated_child_process(gate, 11);
+    ASSERT_GT(pid, 0);
+    std::array<bool, 2> reaped = {};
+    wait_group wg;
+    DEFER(
+        if (gate >= 0) { (void) write(gate, "x", 1); close(gate); }
+        wg();
+        if (!reaped[0] && !reaped[1]) { waitpid(pid, nullptr, 0); }
+    );
+    for (size_t i = 0; i < reaped.size(); i++) {
+        co([&, i] {
+            wg++;
+            DEFER(wg--);
+            int status = 0;
+            reaped[i] = cat_os_waitpid_ex(pid, &status, 0, TEST_IO_TIMEOUT) == pid;
+            ASSERT_TRUE(reaped[i]);
+            ASSERT_TRUE(WIFEXITED(status));
+            ASSERT_EQ(WEXITSTATUS(status), 11);
+        });
+    }
+    ASSERT_EQ(write(gate, "x", 1), 1);
+    close(gate);
+    gate = -1;
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_TRUE(reaped[0]);
+    ASSERT_TRUE(reaped[1]);
+}
+
+/* A wait for a pid gets its child before a pending wait for any child does, and
+ * the wait for any child then gets the next one. */
+TEST(cat_os_wait, a_wait_by_pid_comes_before_a_wait_for_any_child)
+{
+    int gate_a = -1, gate_b = -1;
+    pid_t a = new_gated_child_process(gate_a, 21);
+    ASSERT_GT(a, 0);
+    pid_t b = new_gated_child_process(gate_b, 22);
+    ASSERT_GT(b, 0);
+    pid_t by_pid = 0, by_any = 0;
+    int any_status = 0;
+    wait_group wg;
+    DEFER(
+        if (gate_a >= 0) { (void) write(gate_a, "x", 1); close(gate_a); }
+        if (gate_b >= 0) { (void) write(gate_b, "x", 1); close(gate_b); }
+        wg();
+        if (by_pid != a && by_any != a) { waitpid(a, nullptr, 0); }
+        if (by_pid != b && by_any != b) { waitpid(b, nullptr, 0); }
+    );
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        by_any = cat_os_wait_ex(&any_status, TEST_IO_TIMEOUT);
+    });
+    co([&] {
+        wg++;
+        DEFER(wg--);
+        by_pid = cat_os_waitpid_ex(a, nullptr, 0, TEST_IO_TIMEOUT);
+    });
+    ASSERT_EQ(write(gate_a, "x", 1), 1);
+    close(gate_a);
+    gate_a = -1;
+    for (cat_msec_t start = cat_time_msec(); by_pid == 0 && cat_time_msec() - start < TEST_IO_TIMEOUT;) {
+        ASSERT_EQ(cat_time_msleep(5), 0);
+    }
+    ASSERT_EQ(by_pid, a);
+    ASSERT_EQ(by_any, 0);
+    ASSERT_EQ(write(gate_b, "x", 1), 1);
+    close(gate_b);
+    gate_b = -1;
+    ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
+    ASSERT_EQ(by_any, b);
+    ASSERT_TRUE(WIFEXITED(any_status));
+    ASSERT_EQ(WEXITSTATUS(any_status), 22);
 }
 
 /* The status decoders agree with the wait macros. */
