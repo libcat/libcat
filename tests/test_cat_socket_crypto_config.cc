@@ -561,7 +561,102 @@ TEST(cat_ssl, peer_certificate_identity_rules)
             /* the same certificate names the host once the common name is
              * allowed as an identity */
             ASSERT_TRUE(cat_ssl_check_host_ex(&peer, test_case.peer_name,
-                strlen(test_case.peer_name), CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME));
+                strlen(test_case.peer_name), CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME));
+        }
+    }
+}
+
+/* The handshake check reads the same policy that cat_ssl_check_host_ex() takes
+ * as an argument, so a caller that allows the common name completes a handshake
+ * with a certificate that names the host only there */
+TEST(cat_socket, crypto_peer_name_check_flags_reach_the_handshake)
+{
+    const auto paths = publicCAPair->exportPEMs();
+
+    struct case_s {
+        cat_ssl_check_host_flags_t client_flags;
+        cat_bool_t expect_handshake;
+    } cases[] = {
+        /* the default only accepts a subjectAltName */
+        {CAT_SSL_CHECK_HOST_FLAG_NONE, cat_false},
+        /* the common name names the host once the caller asks for it */
+        {CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME, cat_true},
+    };
+
+    for (const case_s &test_case : cases) {
+        SCOPED_TRACE(test_case.client_flags);
+        /* the DEFER calls below belong to this round only */
+        {
+
+        cat_socket_t server, client, connection;
+        ASSERT_EQ(cat_socket_create(&server, CAT_SOCKET_TYPE_TCP4), &server);
+        DEFER(cat_socket_close(&server));
+        ASSERT_TRUE(cat_socket_bind_to(&server, CAT_STRL(TEST_LISTEN_IPV4), 0));
+        ASSERT_TRUE(cat_socket_listen(&server, TEST_SERVER_BACKLOG));
+        ASSERT_EQ(cat_socket_create(&client, CAT_SOCKET_TYPE_TCP4), &client);
+        DEFER(cat_socket_close(&client));
+        ASSERT_TRUE(cat_socket_connect_to(&client, CAT_STRL(TEST_LISTEN_IPV4),
+            cat_socket_get_sock_port(&server)));
+        ASSERT_EQ(cat_socket_create(&connection, CAT_SOCKET_TYPE_TCP), &connection);
+        DEFER(cat_socket_close(&connection));
+        ASSERT_TRUE(cat_socket_accept(&server, &connection));
+
+        /* a certificate that names the host only in its common name */
+        X509KeyCertPairConfig cert_config = {
+            /* the client trusts the CA, so the certificate must be issued by it */
+            {"issuer", publicCAPair},
+            {"keyType", "RSA2048"},
+            {"C", "CN"},
+            {"O", "TestCA"},
+            {"CN", "cn-only.test"},
+            {"notBeforeOffsetSeconds", 0},
+            {"notAfterOffsetSeconds", 86400},
+            {"keyUsage", "critical,digitalSignature,keyEncipherment"},
+            {"extKeyUsage", "serverAuth"},
+            {"basicConstraints", "CA:FALSE"},
+            /* an unrelated SAN keeps the certificate valid for a handshake while
+             * the common name stays the only identity that names the host */
+            {"subjectAltName", "DNS:other.test"},
+        };
+        std::shared_ptr<X509KeyCertPair> pair = X509KeyCertPair::create(cert_config);
+        ASSERT_NE(pair, nullptr);
+        const auto pair_paths = pair->exportPEMs();
+
+        cat_socket_crypto_options_t server_options, client_options;
+        cat_socket_crypto_options_init(&server_options, cat_false);
+        server_options.certificate = pair_paths.cert;
+        server_options.certificate_key = pair_paths.key;
+        cat_socket_crypto_options_init(&client_options, cat_true);
+        client_options.ca_file = paths.cert;
+        /* the chain is not under test, so only the name check may fail */
+        client_options.verify_peer = cat_false;
+        client_options.peer_name = "cn-only.test";
+        client_options.peer_name_check_flags = test_case.client_flags;
+        client_options.protocols = CAT_SSL_PROTOCOL_TLSv1_2;
+
+        wait_group wg;
+        cat_bool_t server_ready = cat_false;
+        co([&] {
+            wg++;
+            DEFER(wg--);
+            server_ready = cat_socket_enable_crypto(&connection, &server_options);
+            if (!server_ready && cat_socket_is_available(&connection)) {
+                cat_socket_close(&connection);
+            }
+        });
+        /* the cleanup belongs before the wait, so a timeout still joins it */
+        DEFER(if (cat_socket_is_available(&connection)) { cat_socket_close(&connection); }
+            if (cat_socket_is_available(&client)) { cat_socket_close(&client); } wg(TEST_IO_TIMEOUT));
+        cat_clear_last_error();
+        cat_bool_t client_ready = cat_socket_enable_crypto(&client, &client_options);
+        ASSERT_EQ(wg(TEST_IO_TIMEOUT), cat_true);
+        ASSERT_EQ(client_ready, test_case.expect_handshake);
+        if (!test_case.expect_handshake) {
+            /* the chain is not verified here, so the failing reason is the name */
+            ASSERT_NE(cat_get_last_error_code(), 0);
+            ASSERT_NE(cat_get_last_error_message(), nullptr);
+        }
+
         }
     }
 }

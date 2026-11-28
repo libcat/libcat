@@ -180,8 +180,8 @@ TEST(cat_ssl, peer_name_dns_comparison_is_case_insensitive)
 
 TEST(cat_ssl, peer_name_does_not_fall_back_to_cn_when_a_san_exists)
 {
-    /* san_no_cn_fallback.phpt: the matcher ignores the CN once the certificate
-     * has a SAN */
+    /* san_no_cn_fallback.phpt: without the flag the matcher never reads the CN,
+     * so a SAN that does not match still rejects the name */
     X509KeyCertPairConfig config = leaf_config("cn.example.org", "DNS:san.example.org");
 
     EXPECT_PEER_MATCH(config, "san.example.org");
@@ -197,9 +197,56 @@ TEST(cat_ssl, peer_name_ignores_the_common_name_by_default)
     EXPECT_PEER_MISMATCH(config, "cn.example.org");
     EXPECT_PEER_MISMATCH(config, "other.example.org");
     EXPECT_PEER_MATCH_EX(config, "cn.example.org", CAT_STRLEN("cn.example.org"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
     EXPECT_PEER_MISMATCH_EX(config, "other.example.org", CAT_STRLEN("other.example.org"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+}
+
+TEST(cat_ssl, peer_name_allows_the_common_name_after_a_failed_subject_alt_name)
+{
+    /* A subjectAltName entry that does not match does not stop the check from
+     * looking at the common name once the caller allows that name */
+    X509KeyCertPairConfig config = leaf_config("cn.example.org", "DNS:other.example.org");
+
+    EXPECT_PEER_MISMATCH(config, "cn.example.org");
+    EXPECT_PEER_MATCH_EX(config, "cn.example.org", CAT_STRLEN("cn.example.org"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+    /* a matching subjectAltName still wins */
+    EXPECT_PEER_MATCH_EX(config, "other.example.org", CAT_STRLEN("other.example.org"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+    EXPECT_PEER_MISMATCH_EX(config, "unknown.example.org", CAT_STRLEN("unknown.example.org"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+}
+
+TEST(cat_ssl, peer_name_reads_the_common_name_after_a_service_subject_alt_name)
+{
+    /* RFC 6125 6.4.4 forbids reading the common name when the certificate holds
+     * a URI-ID, and the default follows that rule. The flag selects the PHP
+     * behaviour instead, where a subjectAltName that does not match falls back
+     * to the common name */
+    X509KeyCertPairConfig uri = leaf_config("svc.internal", "URI:spiffe://cluster.local/ns/x");
+    EXPECT_PEER_MISMATCH(uri, "svc.internal");
+    EXPECT_PEER_MATCH_EX(uri, "svc.internal", CAT_STRLEN("svc.internal"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+
+    X509KeyCertPairConfig srv_name = leaf_config("host.internal",
+        "otherName:1.3.6.1.5.5.7.8.7;IA5:_http.host.internal");
+    EXPECT_PEER_MISMATCH(srv_name, "host.internal");
+    EXPECT_PEER_MATCH_EX(srv_name, "host.internal", CAT_STRLEN("host.internal"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+}
+
+TEST(cat_ssl, peer_name_never_reads_the_common_name_for_an_ip_san)
+{
+    /* A numeric reference name is an IP identity, so the common name never names
+     * it, also not when the caller allows that name */
+    X509KeyCertPairConfig config = leaf_config("10.0.0.1", "IP:10.0.0.1");
+
+    EXPECT_PEER_MATCH(config, "10.0.0.1");
+    EXPECT_PEER_MATCH_EX(config, "10.0.0.1", CAT_STRLEN("10.0.0.1"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+    EXPECT_PEER_MISMATCH_EX(config, "10.0.0.2", CAT_STRLEN("10.0.0.2"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
 TEST(cat_ssl, peer_name_matches_a_wildcard_leftmost_label)
@@ -261,14 +308,14 @@ TEST(cat_ssl, peer_name_matches_an_ip_san)
     /* The common name is not an identity unless the caller asks for it */
     EXPECT_PEER_MISMATCH(config, "leaf");
     EXPECT_PEER_MATCH_EX(config, "leaf", CAT_STRLEN("leaf"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
     EXPECT_PEER_MISMATCH(config, "10.0.0.1");
     X509KeyCertPairConfig cn_only = leaf_config("10.0.0.1", nullptr);
     EXPECT_PEER_MISMATCH(cn_only, "10.0.0.1");
     /* A numeric reference name is an IP identity. The common name does not name
      * it, also when the caller asks for the common name */
     EXPECT_PEER_MISMATCH_EX(cn_only, "10.0.0.1", CAT_STRLEN("10.0.0.1"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
 TEST(cat_ssl, peer_name_matches_an_ipv6_san)
@@ -444,13 +491,7 @@ TEST(cat_ssl, peer_name_accepts_a_partial_wildcard_by_default)
 
 /*
  * The matcher rejects a certificate that names the host only in its subject
- * common name, as current browsers do. CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME
- * restores the older behaviour. The common name then follows the same wildcard
- * rules as a subjectAltName entry.
- */
-/*
- * The matcher rejects a certificate that names the host only in its subject
- * common name, as current browsers do. CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME
+ * common name, as current browsers do. CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME
  * restores the older behaviour. The common name then takes the same wildcard
  * rules as a SAN.
  */
@@ -460,14 +501,14 @@ TEST(cat_ssl, peer_name_rejects_a_common_name_identity_by_default)
 
     EXPECT_PEER_MISMATCH(config, "cn.badssl.com");
     EXPECT_PEER_MATCH_EX(config, "cn.badssl.com", CAT_STRLEN("cn.badssl.com"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 
     X509KeyCertPairConfig wildcard = leaf_config("*.badssl.com", nullptr);
     EXPECT_PEER_MISMATCH(wildcard, "foo.badssl.com");
     EXPECT_PEER_MATCH_EX(wildcard, "foo.badssl.com", CAT_STRLEN("foo.badssl.com"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
     EXPECT_PEER_MISMATCH_EX(wildcard, "wrong.host.badssl.com", CAT_STRLEN("wrong.host.badssl.com"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
 /*
@@ -548,8 +589,8 @@ TEST(cat_ssl, peer_name_rejects_an_embedded_nul_in_a_san_entry)
     EXPECT_PEER_MISMATCH(config, "good.example.com.evil");
 }
 
-/* An unrelated otherName is not a service identity, so the common name can
- * still name the host when the caller asks for it */
+/* An unrelated otherName does not stop the common name from naming the host
+ * when the caller asks for it */
 TEST(cat_ssl, peer_name_ignores_an_unrelated_other_name)
 {
     X509KeyCertPairConfig config = leaf_config("cn.example.com",
@@ -557,7 +598,7 @@ TEST(cat_ssl, peer_name_ignores_an_unrelated_other_name)
 
     EXPECT_PEER_MISMATCH(config, "cn.example.com");
     EXPECT_PEER_MATCH_EX(config, "cn.example.com", CAT_STRLEN("cn.example.com"),
-        CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME);
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
 #endif /* CAT_SSL */

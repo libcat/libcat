@@ -619,6 +619,15 @@ typedef struct cat_socket_crypto_options_s {
      */
     const char *peer_name;
     /*
+     * peer_name_check_flags: how the check of peer_name treats the subject
+     * common name and wildcards, see cat_ssl_check_host_flag_e.
+     * defaults to CAT_SSL_CHECK_HOST_FLAG_NONE, which follows RFC 6125 and only
+     * accepts a subjectAltName. Pass CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME
+     * for the PHP behaviour, where the common name is read once no
+     * subjectAltName entry names the host
+     */
+    cat_ssl_check_host_flags_t peer_name_check_flags;
+    /*
      * peer_fingerprints: is used to verify the peer fingerprints
      * array of cat_ssl_peer_fingerprint_t, ends with an empty struct. see cat_ssl_peer_fingerprint_t for detail.
      */

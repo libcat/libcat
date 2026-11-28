@@ -2213,6 +2213,7 @@ CAT_API void cat_socket_crypto_options_init(cat_socket_crypto_options_t *options
 {
     options->is_client = is_client;
     options->peer_name = NULL;
+    options->peer_name_check_flags = CAT_SSL_CHECK_HOST_FLAG_NONE;
     options->ca_file = NULL;
     options->ca_path = NULL;
     options->load_ca = NULL;
@@ -2381,6 +2382,7 @@ static cat_bool_t cat_socket_enable_crypto_impl(cat_socket_t *socket, const cat_
         }
         if (ioptions.verify_peer_name) {
             ssl->expected_peer_name = cat_strdup(ioptions.peer_name);
+            ssl->peer_name_check_flags = ioptions.peer_name_check_flags;
         }
     }
     ssl->verify_peer = ioptions.verify_peer;

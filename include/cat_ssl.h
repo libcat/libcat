@@ -205,6 +205,15 @@ typedef struct cat_ssl_peer_fingerprint_s {
 #define CAT_SSL_PEER_FINGERPRINT_END {NULL, NULL}
 
 typedef struct cat_ssl_s cat_ssl_t;
+
+typedef enum cat_ssl_check_host_flag_e {
+    CAT_SSL_CHECK_HOST_FLAG_NONE = 0,
+    CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD = 1 << 0,
+    CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME = 1 << 1,
+} cat_ssl_check_host_flag_t;
+
+typedef int cat_ssl_check_host_flags_t;
+
 /* Called after OpenSSL returns; false ends the connection before application data
  * is delivered. The callback must not yield or perform TLS I/O on this connection. */
 typedef cat_bool_t (*cat_ssl_renegotiation_callback_t)(cat_ssl_t *ssl, void *data);
@@ -221,6 +230,8 @@ struct cat_ssl_s {
     unsigned int verify_peer :1;
     unsigned int allow_self_signed :1;
     const char *expected_peer_name;
+    /* the flags for the check of expected_peer_name, see cat_ssl_check_host_flag_e */
+    cat_ssl_check_host_flags_t peer_name_check_flags;
     /* Retained for diagnostics when OpenSSL discards an unverified peer certificate. */
     X509 *failed_peer_certificate;
     /* Preserve the OpenSSL reason before formatting drains its thread-local error queue. */
@@ -300,28 +311,24 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
  * Peer identity matching. The flags change how the reference name is compared
  * with the names in the peer certificate.
  *
- * CAT_SSL_CHECK_HOST_FLAG_NONE keeps the libcat defaults: a wildcard may fill
- * only part of the left-most label, and a certificate names a host only through
- * its subjectAltName.
+ * CAT_SSL_CHECK_HOST_FLAG_NONE follows RFC 6125: only a subjectAltName entry
+ * names a host, and a wildcard may fill part of the left-most label. The
+ * subject common name stays unread even when the certificate carries no
+ * subjectAltName, as current browsers do.
  *
  * CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD accepts a wildcard only when it is
  * the whole left-most label, as RFC 9525 6.3 and the CA/B baseline requirements
  * require.
  *
- * CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME also treats the subject common name as an
- * identity. Without it only a subjectAltName entry names a host, which is what
- * current browsers do; the common name is then ignored even when the
- * certificate carries no subjectAltName. A numeric reference name stays an IP
- * identity, so only an IP SAN may name it either way.
+ * CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME selects the PHP behaviour instead:
+ * the subject common name is read whenever no subjectAltName entry names the
+ * host. RFC 6125 6.4.4 forbids that fallback when the certificate carries a
+ * URI-ID or a SRV-ID, so this flag is a deliberate deviation and exists for
+ * compatibility with the PHP stream layer.
+ *
+ * A numeric reference name stays an IP identity under every flag, so only an IP
+ * SAN may name it.
  */
-typedef enum cat_ssl_check_host_flag_e {
-    CAT_SSL_CHECK_HOST_FLAG_NONE = 0,
-    CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD = 1 << 0,
-    CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME = 1 << 1,
-} cat_ssl_check_host_flag_t;
-
-typedef int cat_ssl_check_host_flags_t;
-
 CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t name_length);
 CAT_API cat_bool_t cat_ssl_check_host_ex(cat_ssl_t *ssl, const char *name, size_t name_length,
     cat_ssl_check_host_flags_t flags);

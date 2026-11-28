@@ -709,7 +709,7 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
     /* check peer name */
     if (ssl->expected_peer_name != NULL &&
         !_cat_ssl_check_host(cert, ssl->expected_peer_name, strlen(ssl->expected_peer_name),
-            CAT_SSL_CHECK_HOST_FLAG_NONE)
+            ssl->peer_name_check_flags)
     ) {
         CAT_LOG_DEBUG(SSL, "SSL cert name mismatch, abort");
         X509_STORE_CTX_set_error(ctx, X509_V_ERR_HOSTNAME_MISMATCH);
@@ -839,6 +839,7 @@ CAT_API cat_ssl_t *cat_ssl_create(cat_ssl_t *ssl, cat_ssl_context_t *context)
     ssl->verify_peer = cat_true;
     ssl->allow_self_signed = cat_false;
     ssl->expected_peer_name = NULL;
+    ssl->peer_name_check_flags = CAT_SSL_CHECK_HOST_FLAG_NONE;
     ssl->failed_peer_certificate = NULL;
     ssl->handshake_error = 0;
     ssl->renegotiation_callback = NULL;
@@ -1337,8 +1338,8 @@ static cat_bool_t _cat_ssl_match_ip(const ASN1_STRING *entry,
         && memcmp(ASN1_STRING_get0_data(entry), address, address_length) == 0;
 }
 
-/* The caller reaches this function only when the certificate presents no DNS
- * name and no service identity. The common name is the identity in that case */
+/* The caller reaches this function after no subjectAltName entry named the host,
+ * and only when CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME is set */
 static cat_bool_t _cat_ssl_match_common_name(X509 *cert, const char *name, size_t name_length,
     cat_ssl_check_host_flags_t flags)
 {
@@ -1376,7 +1377,7 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
     GENERAL_NAMES *names;
     unsigned char address[16];
     size_t address_length = 0;
-    cat_bool_t numeric, has_dns_id = cat_false, has_service_id = cat_false;
+    cat_bool_t numeric;
     cat_bool_t matched = cat_false;
     int i;
 
@@ -1394,7 +1395,6 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
             const char *text = (const char *) ASN1_STRING_get0_data(dns);
             size_t text_length = ASN1_STRING_get_length((ASN1_STRING *) dns);
 
-            has_dns_id = cat_true;
             /* An entry that holds an embedded NUL names nothing */
             if (strlen(text) != text_length) {
                 continue;
@@ -1416,17 +1416,6 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
                 matched = cat_true;
                 break;
             }
-        } else if (san->type == GEN_URI) {
-            has_service_id = cat_true;
-        } else if (san->type == GEN_OTHERNAME) {
-            static const char srv_name_oid[] = "1.3.6.1.5.5.7.8.7";
-            char oid[sizeof(srv_name_oid)];
-
-            if (OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
-                == (int) (sizeof(srv_name_oid) - 1)
-                && strcmp(oid, srv_name_oid) == 0) {
-                has_service_id = cat_true;
-            }
         }
     }
     if (names != NULL) {
@@ -1437,16 +1426,11 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
         return cat_true;
     }
 
-    /* A certificate that presents a name of its own does not fall back to the
-     * common name */
-    if (has_dns_id || has_service_id) {
-        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subjectAltName did not match", (int) name_length, name);
-        return cat_false;
-    }
     /* By default only a subjectAltName names a host, as in current browsers.
-     * The caller must ask for the common name */
-    if ((flags & CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME) == 0) {
-        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": no subjectAltName", (int) name_length, name);
+     * The caller must ask for the common name, and that name is then consulted
+     * even when the certificate carries a subjectAltName that did not match */
+    if ((flags & CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME) == 0) {
+        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subjectAltName did not match", (int) name_length, name);
         return cat_false;
     }
     /* A numeric reference name is an IP identity. Only an IP SAN names it, also
