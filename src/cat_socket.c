@@ -1756,7 +1756,12 @@ static cat_bool_t cat_socket_internal_accept(
             uv__io_start(server_i->u.stream.loop, &server_i->u.stream.io_watcher, POLLIN);
         }
 #endif
-        ret = cat_time_wait(timeout);
+        do {
+            cat_coroutine_wait_t wait;
+            cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_ACCEPT, server_i, NULL, timeout);
+            ret = cat_time_wait(timeout);
+            cat_coroutine_wait_end(&wait);
+        } while (0);
 #ifdef CAT_OS_UNIX_LIKE
         if (server_i->flags & CAT_SOCKET_INTERNAL_FLAG_SERVER) {
             uv__io_stop(server_i->u.stream.loop, &server_i->u.stream.io_watcher, POLLIN);
@@ -1947,7 +1952,12 @@ static cat_bool_t cat_socket_internal_connect(
             socket_i->context.connect.data.status = CAT_ECANCELED;
             socket_i->context.connect.coroutine = CAT_COROUTINE_G(current);
             socket_i->io_flags = CAT_SOCKET_IO_FLAG_CONNECT;
-            ret = cat_time_wait(timeout);
+            do {
+                cat_coroutine_wait_t wait;
+                cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_CONNECT, socket_i, NULL, timeout);
+                ret = cat_time_wait(timeout);
+                cat_coroutine_wait_end(&wait);
+            } while (0);
             socket_i->io_flags = CAT_SOCKET_IO_FLAG_NONE;
             socket_i->context.connect.coroutine = NULL;
             if (unlikely(!ret)) {
@@ -2957,7 +2967,12 @@ static int cat_socket_internal_udg_wait_readable(cat_socket_internal_t *socket_i
     }
     socket_i->context.io.read.coroutine = CAT_COROUTINE_G(current);
     socket_i->io_flags |= CAT_SOCKET_IO_FLAG_READ;
-    ret = cat_poll_one(socket_i->u.udg.readfd, POLLIN, NULL, timeout);
+    do {
+        cat_coroutine_wait_t wait;
+        cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_READ, socket_i, NULL, timeout);
+        ret = cat_poll_one(socket_i->u.udg.readfd, POLLIN, NULL, timeout);
+        cat_coroutine_wait_end(&wait);
+    } while (0);
     socket_i->io_flags ^= CAT_SOCKET_IO_FLAG_READ;
     socket_i->context.io.read.coroutine = NULL;
     if (ret == CAT_RET_OK) {
@@ -3105,7 +3120,14 @@ static ssize_t cat_socket_internal_read_raw(
         } else {
             error = uv_udp_recv_start(&socket_i->u.udp, cat_socket_read_alloc_callback, cat_socket_udp_recv_callback);
         }
-        ret = error == 0 && cat_time_wait(timeout);
+        if (error == 0) {
+            cat_coroutine_wait_t wait;
+            cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_READ, socket_i, NULL, timeout);
+            ret = cat_time_wait(timeout);
+            cat_coroutine_wait_end(&wait);
+        } else {
+            ret = cat_false;
+        }
         socket_i->io_flags ^= CAT_SOCKET_IO_FLAG_READ;
         socket_i->context.io.read.coroutine = NULL;
         socket_i->context.io.read.data.ptr = NULL;
@@ -3516,7 +3538,10 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
         cat_bool_t can_write;
         cat_queue_push_back(queue, &CAT_COROUTINE_G(current)->waiter.node);
         CAT_TIME_WAIT_START() {
+            cat_coroutine_wait_t wait;
+            cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_WRITE, socket_i, NULL, timeout);
             wait_ret = cat_time_wait(timeout);
+            cat_coroutine_wait_end(&wait);
         } CAT_TIME_WAIT_END(timeout);
         /* A canceled waiter must not take ownership from the active writer. */
         can_write = !(socket_i->io_flags & CAT_SOCKET_IO_FLAG_WRITE) &&
@@ -3554,7 +3579,10 @@ static cat_never_inline cat_bool_t cat_socket_internal_udg_write(
                     }
                 }
                 socket_i->u.udg.write_coroutine = CAT_COROUTINE_G(current);
+                cat_coroutine_wait_t wait;
+                cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_WRITE, socket_i, NULL, timeout);
                 cat_ret_t poll_ret = cat_poll_one(socket_i->u.udg.writefd, POLLOUT, NULL, timeout);
+                cat_coroutine_wait_end(&wait);
                 socket_i->u.udg.write_coroutine = NULL;
                 if (poll_ret == CAT_RET_OK) {
                     continue;
@@ -3655,7 +3683,12 @@ static cat_bool_t cat_socket_internal_write_raw(
         request->u.coroutine = CAT_COROUTINE_G(current);
         socket_i->io_flags |= CAT_SOCKET_IO_FLAG_WRITE;
         cat_queue_push_back(&socket_i->context.io.write.coroutines, &CAT_COROUTINE_G(current)->waiter.node);
-        ret = cat_time_wait(timeout);
+        do {
+            cat_coroutine_wait_t wait;
+            cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_WRITE, socket_i, NULL, timeout);
+            ret = cat_time_wait(timeout);
+            cat_coroutine_wait_end(&wait);
+        } while (0);
         cat_queue_remove(&CAT_COROUTINE_G(current)->waiter.node);
         request->u.coroutine = NULL;
         error = request->error;
@@ -4557,7 +4590,10 @@ static ssize_t cat_socket_internal_peekfrom(
                 nread = 0;
                 if (timeout != 0) {
                     /* wait for readable when timeout is not 0 */
+                    cat_coroutine_wait_t wait;
+                    cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_READ, socket_i, NULL, timeout);
                     cat_ret_t ret = cat_poll_one(fd, POLLIN, NULL, timeout);
+                    cat_coroutine_wait_end(&wait);
                     if (ret == CAT_RET_OK) {
                         continue;
                     } else if (ret == CAT_RET_NONE) {
@@ -4878,7 +4914,10 @@ static cat_always_inline ssize_t cat_socket_internal_native_sendfile(cat_socket_
                 cat_ret_t ret;
                 cat_socket_internal_sendfile_wait_start(socket_i);
                 CAT_TIME_WAIT_START() {
+                    cat_coroutine_wait_t wait;
+                    cat_coroutine_wait_begin(&wait, CAT_COROUTINE_WAIT_KIND_SOCKET, CAT_SOCKET_IO_FLAG_WRITE, socket_i, NULL, timeout);
                     ret = cat_poll_one(fd, POLLOUT, NULL, timeout);
+                    cat_coroutine_wait_end(&wait);
                 } CAT_TIME_WAIT_END(timeout);
                 cat_socket_internal_sendfile_wait_end(socket_i);
                 if (unlikely(ret != CAT_RET_OK)) {
