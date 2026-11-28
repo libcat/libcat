@@ -19,6 +19,7 @@
 #include "cat_time.h"
 #include "cat_coroutine.h"
 #include "cat_event.h"
+#include "cat_interrupt.h"
 
 #ifndef CAT_OS_WIN
 #include "../deps/libuv/src/unix/internal.h"
@@ -104,10 +105,15 @@ CAT_API char *cat_time_format_msec(cat_msec_t msec)
 #undef SECOND
 }
 
-typedef union {
-    cat_coroutine_t *coroutine;
-    uv_handle_t handle;
-    uv_timer_t timer;
+typedef struct cat_timer_s {
+    union {
+        cat_coroutine_t *coroutine;
+        uv_handle_t handle;
+        uv_timer_t timer;
+    };
+    cat_interrupt_waiter_t interrupt;
+    /* an interrupt resumed the coroutine before the timer fired */
+    cat_bool_t interrupted;
 } cat_timer_t;
 
 static void cat_timer_callback(uv_timer_t* handle)
@@ -125,7 +131,41 @@ static void cat_timer_close_callback(uv_handle_t *handle)
     cat_free(timer);
 }
 
-static cat_timer_t *cat_timer_wait(cat_msec_t msec)
+/* Runs in the poll phase. The coroutine resumes inside this call and closes the
+ * timer, so this callback must not close or free it: cat_timer_wait() does the
+ * only uv_close(). The coroutine pointer stays set, because a NULL one means
+ * that the timer fired */
+static void cat_timer_wake(cat_interrupt_waiter_t *waiter)
+{
+    cat_timer_t *timer = cat_container_of(waiter, cat_timer_t, interrupt);
+    cat_coroutine_t *coroutine = timer->coroutine;
+
+    if (coroutine == NULL) {
+        /* the timer already fired; the timeout result wins */
+        return;
+    }
+
+    /*
+     * The poll phase runs before the timer phase, and it refreshes the loop time
+     * when it returns. A deadline can thus pass while the poll blocks, and this
+     * callback then runs before the timer phase reports the deadline. The
+     * timeout wins in that case as well, so leave the timer armed and let
+     * cat_timer_callback() resume the coroutine with the timeout result.
+     *
+     * libuv holds back a timer that started in the current round, so the wait
+     * and a poll that blocks past its deadline never share a round here. No
+     * test reaches this branch. The guard keeps the rule correct if that
+     * changes.
+     */
+    if (timer->timer.timeout <= CAT_EVENT_G(loop).time) {
+        return;
+    }
+
+    timer->interrupted = cat_true;
+    cat_coroutine_schedule(coroutine, TIME, "Timer interrupted");
+}
+
+static cat_timer_t *cat_timer_wait(cat_msec_t msec, cat_bool_t interruptible)
 {
     cat_timer_t *timer;
     cat_bool_t ret;
@@ -146,8 +186,20 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
     (void) uv_timer_start(&timer->timer, cat_timer_callback, msec, 0);
 
     timer->coroutine = CAT_COROUTINE_G(current);
+    timer->interrupted = cat_false;
+    timer->interrupt.wake = cat_timer_wake;
+
+    if (interruptible) {
+        cat_interrupt_waiter_register(&timer->interrupt);
+    }
 
     ret = cat_coroutine_yield(NULL, NULL);
+
+    if (interruptible) {
+        /* A waiter covers one wait only: a registration left in the queue would
+         * let a later signal schedule a coroutine that no longer waits */
+        cat_interrupt_waiter_unregister(&timer->interrupt);
+    }
 
     uv_close(&timer->handle, cat_timer_close_callback);
 
@@ -157,6 +209,58 @@ static cat_timer_t *cat_timer_wait(cat_msec_t msec)
     }
 
     return timer;
+}
+
+/* CAT_TIMEOUT_FOREVER has no timer, so this waiter owns the coroutine pointer.
+ * The wake clears it, which makes a second wake in the same round do nothing */
+typedef struct cat_time_forever_s {
+    cat_interrupt_waiter_t waiter;
+    cat_coroutine_t *coroutine;
+} cat_time_forever_t;
+
+static void cat_time_forever_wake(cat_interrupt_waiter_t *waiter)
+{
+    cat_time_forever_t *wait = cat_container_of(waiter, cat_time_forever_t, waiter);
+    cat_coroutine_t *coroutine = wait->coroutine;
+
+    if (coroutine == NULL) {
+        return;
+    }
+
+    wait->coroutine = NULL;
+    cat_coroutine_schedule(coroutine, TIME, "Time wait interrupted");
+}
+
+static cat_always_inline cat_bool_t cat_time_is_interruptible(cat_time_flags_t flags)
+{
+    return (flags & CAT_TIME_FLAG_INTERRUPTIBLE) != 0;
+}
+
+/* The waiter lives on the suspended stack of the waiting coroutine. Returns the
+ * yield result and reports the interrupt through the out parameter */
+static cat_always_inline cat_bool_t cat_time_wait_forever(cat_time_flags_t flags,
+    cat_bool_t *interrupted)
+{
+    cat_time_forever_t wait = {
+        .waiter = {
+            .wake = cat_time_forever_wake,
+        },
+    };
+    cat_bool_t ret;
+
+    *interrupted = cat_false;
+
+    if (!cat_time_is_interruptible(flags)) {
+        return cat_coroutine_yield(NULL, NULL);
+    }
+
+    wait.coroutine = CAT_COROUTINE_G(current);
+    cat_interrupt_waiter_register(&wait.waiter);
+    ret = cat_coroutine_yield(NULL, NULL);
+    cat_interrupt_waiter_unregister(&wait.waiter);
+    *interrupted = cat_interrupt_waiter_is_interrupted(&wait.waiter);
+
+    return ret;
 }
 
 static void cat_time_wait_0_callback(cat_event_loop_defer_task_t *task, cat_data_t *data)
@@ -180,10 +284,16 @@ static cat_ret_t cat_time_delay_0(void)
     return cat_event_loop_defer_task_close(task) ? CAT_RET_OK : CAT_RET_NONE;
 }
 
-static cat_always_inline cat_bool_t cat_time_wait_impl(cat_timeout_t timeout)
+static cat_always_inline cat_bool_t cat_time_wait_impl(cat_timeout_t timeout, cat_time_flags_t flags)
 {
     if (timeout < 0) {
-        return cat_coroutine_yield(NULL, NULL);
+        cat_bool_t interrupted;
+        cat_bool_t ret = cat_time_wait_forever(flags, &interrupted);
+        if (unlikely(interrupted)) {
+            cat_update_last_error(CAT_EINTR, "Time wait interrupted");
+            return cat_false;
+        }
+        return ret;
     } else if (timeout == 0) {
         cat_ret_t ret = cat_time_delay_0();
         if (ret == CAT_RET_ERROR) {
@@ -195,8 +305,12 @@ static cat_always_inline cat_bool_t cat_time_wait_impl(cat_timeout_t timeout)
         }
         return cat_true;
     } else {
-        cat_timer_t *timer = cat_timer_wait(timeout);
+        cat_timer_t *timer = cat_timer_wait(timeout, cat_time_is_interruptible(flags));
         if (unlikely(timer == NULL)) {
+            return cat_false;
+        }
+        if (unlikely(timer->interrupted)) {
+            cat_update_last_error(CAT_EINTR, "Time wait interrupted");
             return cat_false;
         }
         if (unlikely(timer->coroutine == NULL)) {
@@ -208,26 +322,40 @@ static cat_always_inline cat_bool_t cat_time_wait_impl(cat_timeout_t timeout)
     return cat_true;
 }
 
-CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout)
+CAT_API cat_bool_t cat_time_wait_ex(cat_timeout_t timeout, cat_time_flags_t flags)
 {
     CAT_LOG_DEBUG(TIME, "time_wait(" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR, timeout);
 
-    cat_bool_t ret = cat_time_wait_impl(timeout);
+    cat_bool_t ret = cat_time_wait_impl(timeout, flags);
 
     CAT_LOG_DEBUG(TIME, "time_wait(" CAT_TIMEOUT_FMT ") = " CAT_LOG_BOOL_RET_FMT, timeout, CAT_LOG_BOOL_RET_C(ret));
 
     return ret;
 }
 
-static cat_always_inline cat_ret_t cat_time_delay_impl(cat_timeout_t timeout)
+CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout)
+{
+    return cat_time_wait_ex(timeout, CAT_TIME_FLAG_NONE);
+}
+
+static cat_always_inline cat_ret_t cat_time_delay_impl(cat_timeout_t timeout, cat_time_flags_t flags)
 {
     if (timeout < 0) {
-        cat_coroutine_yield(NULL, NULL);
+        cat_bool_t interrupted;
+        (void) cat_time_wait_forever(flags, &interrupted);
+        if (unlikely(interrupted)) {
+            cat_update_last_error(CAT_EINTR, "Time delay interrupted");
+            return CAT_RET_ERROR;
+        }
     } else if (timeout == 0) {
         return cat_time_delay_0();
     } else {
-        cat_timer_t *timer = cat_timer_wait(timeout);
+        cat_timer_t *timer = cat_timer_wait(timeout, cat_time_is_interruptible(flags));
         if (unlikely(timer == NULL)) {
+            return CAT_RET_ERROR;
+        }
+        if (unlikely(timer->interrupted)) {
+            cat_update_last_error(CAT_EINTR, "Time delay interrupted");
             return CAT_RET_ERROR;
         }
         if (timer->coroutine == NULL) {
@@ -238,18 +366,23 @@ static cat_always_inline cat_ret_t cat_time_delay_impl(cat_timeout_t timeout)
     return CAT_RET_NONE;
 }
 
-CAT_API cat_ret_t cat_time_delay(cat_timeout_t timeout)
+CAT_API cat_ret_t cat_time_delay_ex(cat_timeout_t timeout, cat_time_flags_t flags)
 {
     CAT_LOG_DEBUG(TIME, "time_delay(" CAT_TIMEOUT_FMT ") = " CAT_LOG_UNFINISHED_STR, timeout);
 
-    cat_ret_t ret = cat_time_delay_impl(timeout);
+    cat_ret_t ret = cat_time_delay_impl(timeout, flags);
 
     CAT_LOG_DEBUG(TIME, "time_delay(" CAT_TIMEOUT_FMT ") = " CAT_LOG_RET_RET_FMT, timeout, CAT_LOG_RET_RET_C(ret));
 
     return ret;
 }
 
-static cat_always_inline cat_msec_t cat_time_msleep_impl(cat_msec_t msec)
+CAT_API cat_ret_t cat_time_delay(cat_timeout_t timeout)
+{
+    return cat_time_delay_ex(timeout, CAT_TIME_FLAG_NONE);
+}
+
+static cat_always_inline cat_msec_t cat_time_msleep_impl(cat_msec_t msec, cat_time_flags_t flags)
 {
     if (msec == 0) {
         (void) cat_time_delay_0();
@@ -257,10 +390,20 @@ static cat_always_inline cat_msec_t cat_time_msleep_impl(cat_msec_t msec)
     } else {
         cat_timer_t *timer;
 
-        timer = cat_timer_wait(msec);
+        timer = cat_timer_wait(msec, cat_time_is_interruptible(flags));
 
         if (unlikely(timer == NULL)) {
             return msec;
+        }
+
+        if (unlikely(timer->interrupted)) {
+            cat_update_last_error(CAT_EINTR, "Time sleep interrupted");
+            if (unlikely(timer->timer.timeout <= CAT_EVENT_G(loop).time)) {
+                /* blocking IO lead it to be negative or 0
+                * we can not know the real reserve time */
+                return msec;
+            }
+            return timer->timer.timeout - CAT_EVENT_G(loop).time;
         }
 
         if (unlikely(timer->coroutine != NULL)) {
@@ -281,7 +424,7 @@ CAT_API unsigned int cat_time_sleep(unsigned int seconds)
 {
     CAT_LOG_DEBUG(TIME, "time_sleep(%u) = " CAT_LOG_UNFINISHED_STR, seconds);
 
-    unsigned int ret = (unsigned int) cat_time_msleep_impl((cat_msec_t) (seconds * 1000)) / 1000;
+    unsigned int ret = (unsigned int) cat_time_msleep_impl((cat_msec_t) (seconds * 1000), CAT_TIME_FLAG_NONE) / 1000;
 
     CAT_LOG_DEBUG(TIME, "time_sleep(%u) = %u" CAT_LOG_STRERRNO_FMT, seconds, ret,
         CAT_LOG_STRERRNO_C(ret == 0, cat_get_last_error_code()));
@@ -289,15 +432,20 @@ CAT_API unsigned int cat_time_sleep(unsigned int seconds)
     return ret;
 }
 
-CAT_API cat_msec_t cat_time_msleep(cat_msec_t millisecond)
+CAT_API cat_msec_t cat_time_msleep_ex(cat_msec_t msec, cat_time_flags_t flags)
 {
-    CAT_LOG_DEBUG(TIME, "time_msleep(" CAT_MSEC_FMT ") = " CAT_LOG_UNFINISHED_STR, millisecond);
+    CAT_LOG_DEBUG(TIME, "time_msleep(" CAT_MSEC_FMT ") = " CAT_LOG_UNFINISHED_STR, msec);
 
-    cat_msec_t ret = cat_time_msleep_impl(millisecond);
+    cat_msec_t ret = cat_time_msleep_impl(msec, flags);
 
-    CAT_LOG_DEBUG(TIME, "time_msleep(" CAT_MSEC_FMT ") = " CAT_MSEC_FMT, millisecond, ret);
+    CAT_LOG_DEBUG(TIME, "time_msleep(" CAT_MSEC_FMT ") = " CAT_MSEC_FMT, msec, ret);
 
     return ret;
+}
+
+CAT_API cat_msec_t cat_time_msleep(cat_msec_t millisecond)
+{
+    return cat_time_msleep_ex(millisecond, CAT_TIME_FLAG_NONE);
 }
 
 CAT_API int cat_time_usleep(cat_usec_t microseconds)
@@ -306,7 +454,7 @@ CAT_API int cat_time_usleep(cat_usec_t microseconds)
 
     /* Round positive fractions up to the timer tick; only zero is a pure yield. */
     cat_msec_t msec = microseconds / 1000 + (microseconds % 1000 != 0);
-    int ret = cat_time_msleep_impl(msec) == 0 ? 0 : -1;
+    int ret = cat_time_msleep_impl(msec, CAT_TIME_FLAG_NONE) == 0 ? 0 : -1;
 
     CAT_LOG_DEBUG(TIME, "time_usleep(" CAT_USEC_FMT ") = " CAT_LOG_INT_RET_FMT, microseconds, CAT_LOG_INT_RET_C(ret));
 
@@ -321,7 +469,7 @@ static cat_always_inline int cat_time_nanosleep_impl(const struct cat_timespec *
     } else {
         cat_msec_t msec = (cat_msec_t) req->tv_sec * 1000 + req->tv_nsec / (1000 * 1000) +
             (req->tv_nsec % (1000 * 1000) != 0);
-        cat_msec_t rmsec = cat_time_msleep_impl(msec);
+        cat_msec_t rmsec = cat_time_msleep_impl(msec, CAT_TIME_FLAG_NONE);
         if (rmsec > 0 && rem) {
             rem->tv_sec = (rmsec - (rmsec % 1000)) / 1000;
             rem->tv_nsec = (rmsec % 1000) * 1000 * 1000;

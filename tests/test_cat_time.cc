@@ -18,6 +18,9 @@
 
 #include "test.h"
 
+/* cat_api.h does not aggregate the interrupt header yet */
+#include "cat_interrupt.h"
+
 TEST(cat_time, nsec)
 {
     cat_nsec_t s = cat_time_nsec();
@@ -263,3 +266,270 @@ TEST(cat_time, delay_does_not_return_early)
         ASSERT_TRUE(cat_coroutine_wait_all());
     }
 }
+
+#ifdef CAT_OS_WIN
+
+/* A Windows process has no signal to forward, and uv_poll only accepts sockets,
+ * so there is no descriptor to use as an interrupt source */
+TEST(cat_time, interruptible_waits_are_not_available)
+{
+    SKIP_IF_(true, "Interrupt sources are not available on Windows");
+}
+
+#else
+
+#include <unistd.h>
+
+namespace {
+
+/* The read end is the interrupt source, the write end stands in for the signal
+ * handler that forwards the signal */
+struct time_interrupt_pipe_s {
+    int fds[2];
+    int write_count;
+
+    time_interrupt_pipe_s()
+    {
+        fds[0] = -1;
+        fds[1] = -1;
+        write_count = 0;
+    }
+
+    ~time_interrupt_pipe_s()
+    {
+        if (fds[0] >= 0) {
+            close(fds[0]);
+        }
+        if (fds[1] >= 0) {
+            close(fds[1]);
+        }
+    }
+
+    bool open()
+    {
+        return pipe(fds) == 0;
+    }
+
+    bool write_byte()
+    {
+        if (write(fds[1], "!", 1) != 1) {
+            return false;
+        }
+        write_count++;
+        return true;
+    }
+};
+
+/* A timer callback runs after the poll of its round, so a byte written here is
+ * reported to the waiter in the next loop round */
+void time_interrupt_write(cat_time_timeout_t *timer, cat_data_t *data)
+{
+    time_interrupt_pipe_s *pipe = (time_interrupt_pipe_s *) data;
+
+    (void) timer;
+    ASSERT_TRUE(pipe->write_byte());
+}
+
+cat_msec_t time_elapsed_msec(cat_nsec_t begin)
+{
+    return (cat_time_nsec() - begin) / (1000 * 1000);
+}
+
+} // namespace
+
+TEST(cat_time, wait_ex_is_interrupted_by_a_source)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_nsec_t begin = cat_time_nsec();
+    bool ret = cat_time_wait_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    ASSERT_FALSE(ret);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINTR);
+    ASSERT_GE(elapsed, 5);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, delay_ex_is_interrupted_by_a_source)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_nsec_t begin = cat_time_nsec();
+    cat_ret_t ret = cat_time_delay_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    ASSERT_EQ(ret, CAT_RET_ERROR);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINTR);
+    ASSERT_GE(elapsed, 5);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, msleep_ex_reports_the_remaining_time)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_nsec_t begin = cat_time_nsec();
+    cat_msec_t remaining = cat_time_msleep_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    ASSERT_EQ(cat_get_last_error_code(), CAT_EINTR);
+    /* the unslept time is what the deadline has left, neither the whole request
+     * nor the zero that an expired timer reports */
+    ASSERT_GT(remaining, 0);
+    ASSERT_LE(remaining, 1000 - 5);
+    ASSERT_GE(elapsed, 5);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, wait_ex_forever_is_interrupted_by_a_source)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_bool_t interrupted = cat_false;
+    /* CAT_TIMEOUT_FOREVER has no timer, so the main coroutine keeps the loop
+     * alive with a delay while the child waits without a deadline */
+    co([&] {
+        interrupted = !cat_time_wait_ex(CAT_TIMEOUT_FOREVER, CAT_TIME_FLAG_INTERRUPTIBLE) &&
+            cat_get_last_error_code() == CAT_EINTR;
+    });
+    ASSERT_EQ(cat_time_delay(100), CAT_RET_OK);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+
+    ASSERT_TRUE(interrupted);
+}
+
+TEST(cat_time, delay_ex_forever_is_interrupted_by_a_source)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_bool_t interrupted = cat_false;
+    co([&] {
+        interrupted = cat_time_delay_ex(CAT_TIMEOUT_FOREVER, CAT_TIME_FLAG_INTERRUPTIBLE) == CAT_RET_ERROR &&
+            cat_get_last_error_code() == CAT_EINTR;
+    });
+    ASSERT_EQ(cat_time_delay(100), CAT_RET_OK);
+    ASSERT_TRUE(cat_coroutine_wait_all());
+
+    ASSERT_TRUE(interrupted);
+}
+
+TEST(cat_time, delay_ignores_a_source_without_the_flag)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_clear_last_error();
+    cat_nsec_t begin = cat_time_nsec();
+    cat_ret_t ret = cat_time_delay(100);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    /* the default variant is not registered, so the signal leaves it alone */
+    ASSERT_EQ(ret, CAT_RET_OK);
+    ASSERT_NE(cat_get_last_error_code(), CAT_EINTR);
+    ASSERT_GE(elapsed + TEST_DELAY_GRANULARITY_US / 1000, 100);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, wait_ignores_a_source_without_the_flag)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_clear_last_error();
+    cat_nsec_t begin = cat_time_nsec();
+    bool ret = cat_time_wait(100);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    /* a wake would return true, so the timeout result proves the signal did not
+     * end the wait */
+    ASSERT_FALSE(ret);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_GE(elapsed + TEST_DELAY_GRANULARITY_US / 1000, 100);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, wait_ex_reports_the_timeout_without_a_signal)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+
+    cat_nsec_t begin = cat_time_nsec();
+    bool ret = cat_time_wait_ex(10, CAT_TIME_FLAG_INTERRUPTIBLE);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    /* registration alone must not turn the expiry into an interrupt */
+    ASSERT_FALSE(ret);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_GE(elapsed + TEST_DELAY_GRANULARITY_US / 1000, 10);
+    ASSERT_LT(elapsed, 500);
+}
+
+TEST(cat_time, a_signal_after_the_timeout_does_not_report_eintr)
+{
+    time_interrupt_pipe_s pipe;
+    ASSERT_TRUE(pipe.open());
+    ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
+    DEFER(cat_interrupt_source_clear());
+    /* the byte arrives after the wait has already expired, so the timeout wins */
+    cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 50);
+    ASSERT_NE(writer, nullptr);
+    DEFER(cat_time_timeout_close(writer));
+
+    cat_nsec_t begin = cat_time_nsec();
+    bool ret = cat_time_wait_ex(10, CAT_TIME_FLAG_INTERRUPTIBLE);
+    cat_msec_t elapsed = time_elapsed_msec(begin);
+
+    ASSERT_FALSE(ret);
+    ASSERT_EQ(cat_get_last_error_code(), CAT_ETIMEDOUT);
+    ASSERT_GE(elapsed + TEST_DELAY_GRANULARITY_US / 1000, 10);
+    ASSERT_LT(elapsed, 50);
+
+    /* let the late byte arrive and be drained with no waiter registered */
+    ASSERT_EQ(cat_time_delay(60), CAT_RET_OK);
+    ASSERT_EQ(pipe.write_count, 1);
+}
+
+#endif /* CAT_OS_WIN */

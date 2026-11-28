@@ -59,8 +59,24 @@ CAT_API cat_time_timeout_t *cat_time_timeout_init(cat_time_timeout_callback_t ca
 /* Safe to call with NULL and safe to call twice through the same pointer. */
 CAT_API void cat_time_timeout_close(cat_time_timeout_t *timer); CAT_INTERNAL
 
+/*
+ * cat_time_wait(), cat_time_delay() and cat_time_msleep() wait for the whole
+ * time even when a signal arrives, because they are CAT_TIME_FLAG_NONE. Their
+ * _ex variants take the flags below.
+ */
+typedef enum cat_time_flag_e {
+    CAT_TIME_FLAG_NONE = 0,
+    /* a signal ends the wait early; the caller sees CAT_EINTR or the remaining time */
+    CAT_TIME_FLAG_INTERRUPTIBLE = 1 << 0,
+} cat_time_flag_t;
+
+typedef int cat_time_flags_t;
+
 /* cat_false: yield failed or sleep failed or timeout, cat_true: cancelled */
 CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout);
+/* An interrupt reports cat_false with CAT_EINTR; an expired timeout still
+ * reports the timeout when both happen in the same round */
+CAT_API cat_bool_t cat_time_wait_ex(cat_timeout_t timeout, cat_time_flags_t flags);
 
 #define CAT_TIME_WAIT_START() do { \
     cat_msec_t __time_cached = cat_time_msec_cached(); \
@@ -77,10 +93,14 @@ CAT_API cat_bool_t cat_time_wait(cat_timeout_t timeout);
 
 /* OK: timeout, NONE: cancelled, ERROR: error occured */
 CAT_API cat_ret_t cat_time_delay(cat_timeout_t timeout);
+/* An interrupt reports CAT_RET_ERROR with CAT_EINTR */
+CAT_API cat_ret_t cat_time_delay_ex(cat_timeout_t timeout, cat_time_flags_t flags);
 
 CAT_API unsigned int cat_time_sleep(unsigned int seconds);
 /* behaviour is same with sleep() but use msec */
 CAT_API cat_msec_t cat_time_msleep(cat_msec_t millisecond);
+/* An interrupt reports the unslept milliseconds, like sleep(), with CAT_EINTR */
+CAT_API cat_msec_t cat_time_msleep_ex(cat_msec_t msec, cat_time_flags_t flags);
 CAT_API int cat_time_usleep(cat_usec_t microseconds);
 CAT_API int cat_time_nanosleep(const struct cat_timespec *req, struct cat_timespec *rem);
 
