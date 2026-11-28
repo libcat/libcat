@@ -1377,7 +1377,7 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
     GENERAL_NAMES *names;
     unsigned char address[16];
     size_t address_length = 0;
-    cat_bool_t numeric;
+    cat_bool_t numeric, has_service_id = cat_false;
     cat_bool_t matched = cat_false;
     int i;
 
@@ -1395,6 +1395,7 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
             const char *text = (const char *) ASN1_STRING_get0_data(dns);
             size_t text_length = ASN1_STRING_get_length((ASN1_STRING *) dns);
 
+            has_service_id = cat_true;
             /* An entry that holds an embedded NUL names nothing */
             if (strlen(text) != text_length) {
                 continue;
@@ -1416,6 +1417,17 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
                 matched = cat_true;
                 break;
             }
+        } else if (san->type == GEN_URI) {
+            has_service_id = cat_true;
+        } else if (san->type == GEN_OTHERNAME) {
+            static const char srv_name_oid[] = "1.3.6.1.5.5.7.8.7";
+            char oid[sizeof(srv_name_oid)];
+
+            if (OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
+                == (int) (sizeof(srv_name_oid) - 1)
+                && strcmp(oid, srv_name_oid) == 0) {
+                has_service_id = cat_true;
+            }
         }
     }
     if (names != NULL) {
@@ -1426,11 +1438,17 @@ static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_
         return cat_true;
     }
 
-    /* By default only a subjectAltName names a host, as in current browsers.
-     * The caller must ask for the common name, and that name is then consulted
-     * even when the certificate carries a subjectAltName that did not match */
+    /* By default only a subjectAltName names a host, as in current browsers */
     if ((flags & CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME) == 0) {
         CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subjectAltName did not match", (int) name_length, name);
+        return cat_false;
+    }
+    /* A certificate that presents a DNS-ID, a URI-ID or a SRV-ID names a host
+     * through that entry only, as RFC 6125 6.4.4 and the PHP stream layer
+     * require. An IP entry is not such an identity, so the common name still
+     * names a host then */
+    if (has_service_id) {
+        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": service identity did not match", (int) name_length, name);
         return cat_false;
     }
     /* A numeric reference name is an IP identity. Only an IP SAN names it, also

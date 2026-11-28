@@ -320,11 +320,11 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
  * the whole left-most label, as RFC 9525 6.3 and the CA/B baseline requirements
  * require.
  *
- * CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME selects the PHP behaviour instead:
- * the subject common name is read whenever no subjectAltName entry names the
- * host. RFC 6125 6.4.4 forbids that fallback when the certificate carries a
- * URI-ID or a SRV-ID, so this flag is a deliberate deviation and exists for
- * compatibility with the PHP stream layer.
+ * CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME also reads the subject common name,
+ * as the PHP stream layer does. The certificate decides whether that name is
+ * present: when it carries a DNS-ID, a URI-ID or a SRV-ID, only that entry may
+ * name the host, as RFC 6125 6.4.4 requires. A certificate that carries no such
+ * entry, or only an IP entry, is named by its common name then.
  *
  * A numeric reference name stays an IP identity under every flag, so only an IP
  * SAN may name it.

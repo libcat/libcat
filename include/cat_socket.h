@@ -623,8 +623,8 @@ typedef struct cat_socket_crypto_options_s {
      * common name and wildcards, see cat_ssl_check_host_flag_e.
      * defaults to CAT_SSL_CHECK_HOST_FLAG_NONE, which follows RFC 6125 and only
      * accepts a subjectAltName. Pass CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME
-     * for the PHP behaviour, where the common name is read once no
-     * subjectAltName entry names the host
+     * for the PHP behaviour, which also reads the common name, unless the
+     * certificate carries a DNS-ID, a URI-ID or a SRV-ID of its own
      */
     cat_ssl_check_host_flags_t peer_name_check_flags;
     /*

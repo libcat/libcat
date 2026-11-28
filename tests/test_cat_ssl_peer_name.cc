@@ -202,14 +202,14 @@ TEST(cat_ssl, peer_name_ignores_the_common_name_by_default)
         CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
-TEST(cat_ssl, peer_name_allows_the_common_name_after_a_failed_subject_alt_name)
+TEST(cat_ssl, peer_name_ignores_the_common_name_when_a_dns_name_is_present)
 {
-    /* A subjectAltName entry that does not match does not stop the check from
-     * looking at the common name once the caller allows that name */
+    /* RFC 6125 6.4.4 and the PHP stream layer both ignore the common name once
+     * the certificate presents a DNS-ID, so the flag does not reach it */
     X509KeyCertPairConfig config = leaf_config("cn.example.org", "DNS:other.example.org");
 
     EXPECT_PEER_MISMATCH(config, "cn.example.org");
-    EXPECT_PEER_MATCH_EX(config, "cn.example.org", CAT_STRLEN("cn.example.org"),
+    EXPECT_PEER_MISMATCH_EX(config, "cn.example.org", CAT_STRLEN("cn.example.org"),
         CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
     /* a matching subjectAltName still wins */
     EXPECT_PEER_MATCH_EX(config, "other.example.org", CAT_STRLEN("other.example.org"),
@@ -218,21 +218,30 @@ TEST(cat_ssl, peer_name_allows_the_common_name_after_a_failed_subject_alt_name)
         CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 
-TEST(cat_ssl, peer_name_reads_the_common_name_after_a_service_subject_alt_name)
+TEST(cat_ssl, peer_name_ignores_the_common_name_for_a_service_identity)
 {
-    /* RFC 6125 6.4.4 forbids reading the common name when the certificate holds
-     * a URI-ID, and the default follows that rule. The flag selects the PHP
-     * behaviour instead, where a subjectAltName that does not match falls back
-     * to the common name */
+    /* A URI-ID or a SRV-ID is a service identity, so the common name stays
+     * unread even when the caller allows that name */
     X509KeyCertPairConfig uri = leaf_config("svc.internal", "URI:spiffe://cluster.local/ns/x");
     EXPECT_PEER_MISMATCH(uri, "svc.internal");
-    EXPECT_PEER_MATCH_EX(uri, "svc.internal", CAT_STRLEN("svc.internal"),
+    EXPECT_PEER_MISMATCH_EX(uri, "svc.internal", CAT_STRLEN("svc.internal"),
         CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 
     X509KeyCertPairConfig srv_name = leaf_config("host.internal",
         "otherName:1.3.6.1.5.5.7.8.7;IA5:_http.host.internal");
     EXPECT_PEER_MISMATCH(srv_name, "host.internal");
-    EXPECT_PEER_MATCH_EX(srv_name, "host.internal", CAT_STRLEN("host.internal"),
+    EXPECT_PEER_MISMATCH_EX(srv_name, "host.internal", CAT_STRLEN("host.internal"),
+        CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
+}
+
+TEST(cat_ssl, peer_name_reads_the_common_name_when_only_an_ip_san_is_present)
+{
+    /* An IP sanity entry is not a service identity, so the common name still
+     * names a DNS reference name once the caller allows that name */
+    X509KeyCertPairConfig config = leaf_config("cn.example.org", "IP:10.0.0.1");
+
+    EXPECT_PEER_MISMATCH(config, "cn.example.org");
+    EXPECT_PEER_MATCH_EX(config, "cn.example.org", CAT_STRLEN("cn.example.org"),
         CAT_SSL_CHECK_HOST_FLAG_ALLOW_COMMON_NAME);
 }
 

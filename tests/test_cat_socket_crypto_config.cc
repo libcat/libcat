@@ -614,9 +614,8 @@ TEST(cat_socket, crypto_peer_name_check_flags_reach_the_handshake)
             {"keyUsage", "critical,digitalSignature,keyEncipherment"},
             {"extKeyUsage", "serverAuth"},
             {"basicConstraints", "CA:FALSE"},
-            /* an unrelated SAN keeps the certificate valid for a handshake while
-             * the common name stays the only identity that names the host */
-            {"subjectAltName", "DNS:other.test"},
+            /* the certificate carries no subjectAltName, so the common name is
+             * the only identity that can name the host */
         };
         std::shared_ptr<X509KeyCertPair> pair = X509KeyCertPair::create(cert_config);
         ASSERT_NE(pair, nullptr);
