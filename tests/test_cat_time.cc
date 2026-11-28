@@ -337,17 +337,19 @@ cat_msec_t time_elapsed_msec(cat_nsec_t begin)
 
 } // namespace
 
+/* The elapsed interval starts before the writer timer is armed. Arming it takes a
+ * real interval on a loaded runner, and a later start would leave that interval
+ * out of the measurement */
 TEST(cat_time, wait_ex_is_interrupted_by_a_source)
 {
     time_interrupt_pipe_s pipe;
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
-
-    cat_nsec_t begin = cat_time_nsec();
     bool ret = cat_time_wait_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
@@ -363,11 +365,10 @@ TEST(cat_time, delay_ex_is_interrupted_by_a_source)
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
-
-    cat_nsec_t begin = cat_time_nsec();
     cat_ret_t ret = cat_time_delay_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
@@ -383,11 +384,10 @@ TEST(cat_time, msleep_ex_reports_the_remaining_time)
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
-
-    cat_nsec_t begin = cat_time_nsec();
     cat_msec_t remaining = cat_time_msleep_ex(1000, CAT_TIME_FLAG_INTERRUPTIBLE);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
@@ -450,12 +450,12 @@ TEST(cat_time, delay_ignores_a_source_without_the_flag)
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
 
     cat_clear_last_error();
-    cat_nsec_t begin = cat_time_nsec();
     cat_ret_t ret = cat_time_delay(100);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
@@ -472,12 +472,12 @@ TEST(cat_time, wait_ignores_a_source_without_the_flag)
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 10);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
 
     cat_clear_last_error();
-    cat_nsec_t begin = cat_time_nsec();
     bool ret = cat_time_wait(100);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
@@ -513,12 +513,11 @@ TEST(cat_time, a_signal_after_the_timeout_does_not_report_eintr)
     ASSERT_TRUE(pipe.open());
     ASSERT_TRUE(cat_interrupt_source_set(pipe.fds[0]));
     DEFER(cat_interrupt_source_clear());
+    cat_nsec_t begin = cat_time_nsec();
     /* the byte arrives after the wait has already expired, so the timeout wins */
     cat_time_timeout_t *writer = cat_time_timeout_init(time_interrupt_write, &pipe, 50);
     ASSERT_NE(writer, nullptr);
     DEFER(cat_time_timeout_close(writer));
-
-    cat_nsec_t begin = cat_time_nsec();
     bool ret = cat_time_wait_ex(10, CAT_TIME_FLAG_INTERRUPTIBLE);
     cat_msec_t elapsed = time_elapsed_msec(begin);
 
