@@ -18,6 +18,7 @@
 
 #include "cat_event.h"
 #include "cat_coroutine.h"
+#include "cat_interrupt.h"
 
 #ifdef CAT_IDE_HELPER
 #include "uv-common.h"
@@ -86,6 +87,9 @@ CAT_API cat_bool_t cat_event_runtime_init(void)
 
     cat_queue_init(&CAT_EVENT_G(runtime_shutdown_tasks));
     cat_queue_init(&CAT_EVENT_G(io_defer_tasks));
+    cat_queue_init(&CAT_EVENT_G(interrupt_waits));
+    CAT_EVENT_G(interrupt_poll) = NULL;
+    CAT_EVENT_G(interrupt_fd) = CAT_OS_INVALID_SOCKET;
 
 #ifdef CAT_THREAD_SAFE
     /* One wakeup handle for each thread. Another thread uses it to bring this
@@ -134,6 +138,7 @@ CAT_API cat_bool_t cat_event_runtime_shutdown(void)
     cat_event_schedule();
 
     uv_close((uv_handle_t *) &CAT_EVENT_G(io_defer_check), NULL);
+    cat_interrupt_poll_close();
 #ifdef CAT_THREAD_SAFE
     uv_close((uv_handle_t *) &CAT_EVENT_G(wakeup), NULL);
 #endif

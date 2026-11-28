@@ -47,6 +47,11 @@ CAT_GLOBALS_STRUCT_BEGIN(cat_event) {
     cat_queue_t runtime_shutdown_tasks;
     cat_queue_t io_defer_tasks;
     uv_check_t io_defer_check;
+    /* The external interrupt source. The watcher is allocated when a source is
+     * set for the first time, because the module init creates nothing */
+    uv_poll_t *interrupt_poll;
+    cat_os_socket_t interrupt_fd;
+    cat_queue_t interrupt_waits;
 } CAT_GLOBALS_STRUCT_END(cat_event);
 
 extern CAT_API CAT_GLOBALS_DECLARE(cat_event);

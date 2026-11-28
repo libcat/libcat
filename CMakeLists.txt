@@ -85,6 +85,7 @@ set(cat_sources
     src/cat_channel.c
     src/cat_sync.c
     src/cat_event.c
+    src/cat_interrupt.c
     src/cat_poll.c
     src/cat_time.c
     src/cat_socket.c
@@ -1031,6 +1032,7 @@ if (LIBCAT_BUILD_TESTS)
         tests/test_cat_coroutine.cc
         tests/test_cat_coroutine_control.cc
         tests/test_cat_event.cc
+        tests/test_cat_interrupt.cc
         tests/test_cat_poll.cc
         tests/test_cat_time.cc
         tests/test_cat_channel.cc
