@@ -162,6 +162,7 @@ TEST(cat_ssl, encrypted_private_key)
     X509KeyCertPairConfig config = {
         {"keyType", "RSA2048"},
         {"CN", "localhost"},
+        {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
         {"notBeforeOffsetSeconds", 0},
         {"notAfterOffsetSeconds", 86400},
     };
@@ -494,6 +495,7 @@ TEST(cat_ssl, self_signed_and_expired_peer_certificates)
         X509KeyCertPairConfig config = {
             {"keyType", "RSA2048"},
             {"CN", "localhost"},
+            {"subjectAltName", "DNS:localhost,IP:127.0.0.1"},
             {"notBeforeOffsetSeconds", -3600},
             {"notAfterOffsetSeconds", expired ? -1800 : 86400},
         };

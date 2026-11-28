@@ -296,7 +296,35 @@ CAT_API cat_bool_t cat_ssl_is_established(const cat_ssl_t *ssl);
 CAT_API cat_ssl_ret_t cat_ssl_handshake(cat_ssl_t *ssl);
 
 CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_signed);
+/*
+ * Peer identity matching. The flags change how the reference name is compared
+ * with the names in the peer certificate.
+ *
+ * CAT_SSL_CHECK_HOST_FLAG_NONE keeps the libcat defaults: a wildcard may fill
+ * only part of the left-most label, and a certificate names a host only through
+ * its subjectAltName.
+ *
+ * CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD accepts a wildcard only when it is
+ * the whole left-most label, as RFC 9525 6.3 and the CA/B baseline requirements
+ * require.
+ *
+ * CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME also treats the subject common name as an
+ * identity. Without it only a subjectAltName entry names a host, which is what
+ * current browsers do; the common name is then ignored even when the
+ * certificate carries no subjectAltName. A numeric reference name stays an IP
+ * identity, so only an IP SAN may name it either way.
+ */
+typedef enum cat_ssl_check_host_flag_e {
+    CAT_SSL_CHECK_HOST_FLAG_NONE = 0,
+    CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD = 1 << 0,
+    CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME = 1 << 1,
+} cat_ssl_check_host_flag_t;
+
+typedef int cat_ssl_check_host_flags_t;
+
 CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t name_length);
+CAT_API cat_bool_t cat_ssl_check_host_ex(cat_ssl_t *ssl, const char *name, size_t name_length,
+    cat_ssl_check_host_flags_t flags);
 
 CAT_API int cat_ssl_read_encrypted_bytes(cat_ssl_t *ssl, char *buffer, size_t size);
 CAT_API int cat_ssl_write_encrypted_bytes(cat_ssl_t *ssl, const char *buffer, size_t length);

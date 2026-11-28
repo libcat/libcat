@@ -20,6 +20,12 @@
 
 #ifdef CAT_SSL
 #include "cat_coroutine.h"
+
+#if OPENSSL_VERSION_NUMBER < 0x40100000L
+/* ASN1_STRING_get_length() arrived in OpenSSL 4.1 as the size_t replacement for
+ * the then deprecated int-returning ASN1_STRING_length() */
+#define ASN1_STRING_get_length(string) ((size_t) ASN1_STRING_length(string))
+#endif
 /*
 This diagram shows how the read and write memory BIO's (rbio & wbio) are
 associated with the socket read and write respectively.  On the inbound flow
@@ -643,7 +649,8 @@ CAT_API void cat_ssl_context_configure_cert_verify_callback(cat_ssl_context_t *c
 }
 #endif
 
-static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_t name_length);
+static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_t name_length,
+    cat_ssl_check_host_flags_t flags);
 static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{ */
 {
     /* conjure the stream & context to use */
@@ -701,7 +708,8 @@ static int cat_ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) /* {{{
 
     /* check peer name */
     if (ssl->expected_peer_name != NULL &&
-        !_cat_ssl_check_host(cert, ssl->expected_peer_name, strlen(ssl->expected_peer_name))
+        !_cat_ssl_check_host(cert, ssl->expected_peer_name, strlen(ssl->expected_peer_name),
+            CAT_SSL_CHECK_HOST_FLAG_NONE)
     ) {
         CAT_LOG_DEBUG(SSL, "SSL cert name mismatch, abort");
         X509_STORE_CTX_set_error(ctx, X509_V_ERR_HOSTNAME_MISMATCH);
@@ -1153,94 +1161,313 @@ CAT_API cat_bool_t cat_ssl_verify_peer(cat_ssl_t *ssl, cat_bool_t allow_self_sig
     return cat_false;
 }
 
-static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_t name_length)
+/* A DNS label holds letters, digits and hyphens only. A label cannot start or
+ * end with a hyphen. A wildcard label cannot be an A-label */
+static cat_bool_t _cat_ssl_is_valid_label(const char *label, size_t length, cat_bool_t allow_wildcard)
 {
-    cat_bool_t has_rooted_dns_id = cat_false;
-    unsigned int flags = 0;
+    size_t i;
+
+    if (length == 0) {
+        return cat_false;
+    }
+    if (label[0] == '-' || label[length - 1] == '-') {
+        return cat_false;
+    }
+    for (i = 0; i < length; i++) {
+        char c = label[i];
+        if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
+            || c == '-') {
+            continue;
+        }
+        if (c == '*' && allow_wildcard) {
+            continue;
+        }
+        return cat_false;
+    }
+    /* RFC 5890: a label that starts with "xn--" is an A-label. An A-label is
+     * never a wildcard pattern */
+    if (allow_wildcard && length >= 4
+        && cat_strncasecmp(label, "xn--", 4) == 0) {
+        return cat_false;
+    }
+
+    return cat_true;
+}
+
+/* The wildcard grammar follows wildcard_match() and valid_star() in OpenSSL.
+ * This function accepts a name when X509_check_host() accepts it */
+static cat_bool_t _cat_ssl_match_dns(const char *name, size_t name_length,
+    const char *pattern, size_t pattern_length, cat_ssl_check_host_flags_t flags)
+{
+    size_t i, start, prefix_length, suffix_length, wildcard_length, dot_count = 0;
+    const char *star, *label_start, *label_end, *suffix;
+
+    if (name_length == pattern_length
+        && cat_strncasecmp(name, pattern, name_length) == 0) {
+        return cat_true;
+    }
+
+    star = (const char *) memchr(pattern, '*', pattern_length);
+    if (star == NULL) {
+        return cat_false;
+    }
+    /* At most one wildcard. It sits in the left-most label, not at either end
+     * of the pattern and not inside a label */
+    if (memchr(star + 1, '*', pattern_length - (size_t) (star + 1 - pattern)) != NULL) {
+        return cat_false;
+    }
+    prefix_length = (size_t) (star - pattern);
+    if (memchr(pattern, '.', prefix_length) != NULL) {
+        return cat_false;
+    }
+    label_start = pattern;
+    label_end = (const char *) memchr(star, '.', pattern_length - prefix_length);
+    if (label_end == NULL) {
+        return cat_false;
+    }
+    /* The pattern needs a domain below the wildcard. It never ends in the root
+     * dot */
+    for (i = 0; i < pattern_length; i++) {
+        if (pattern[i] == '.') {
+            dot_count++;
+        }
+    }
+    if (dot_count < 2 || pattern[pattern_length - 1] == '.') {
+        return cat_false;
+    }
+    /* The wildcard covers the whole label or a part of it. It never covers the
+     * middle of a label */
+    wildcard_length = (size_t) (label_end - (star + 1));
+    if (prefix_length != 0 && wildcard_length != 0) {
+        return cat_false;
+    }
+    if (flags & CAT_SSL_CHECK_HOST_FLAG_STRICT_WILDCARD) {
+        if (prefix_length != 0 || wildcard_length != 0) {
+            return cat_false;
+        }
+    }
+    if (!_cat_ssl_is_valid_label(label_start, (size_t) (label_end - label_start), cat_true)) {
+        return cat_false;
+    }
+    /* Every label of the pattern must be well formed */
+    start = (size_t) (label_end - pattern) + 1;
+    while (start < pattern_length) {
+        const char *next = (const char *) memchr(pattern + start, '.',
+            pattern_length - start);
+        size_t stop = next == NULL ? pattern_length : (size_t) (next - pattern);
+        if (!_cat_ssl_is_valid_label(pattern + start, stop - start, cat_false)) {
+            return cat_false;
+        }
+        start = stop + 1;
+    }
+
+    suffix = label_end;
+    suffix_length = pattern_length - (size_t) (label_end - pattern);
+    if (name_length < prefix_length + wildcard_length + suffix_length) {
+        return cat_false;
+    }
+    if (prefix_length != 0 && cat_strncasecmp(name, pattern, prefix_length) != 0) {
+        return cat_false;
+    }
+    if (cat_strncasecmp(name + name_length - suffix_length, suffix, suffix_length) != 0) {
+        return cat_false;
+    }
+    if (wildcard_length != 0
+        && cat_strncasecmp(name + name_length - suffix_length - wildcard_length,
+            star + 1, wildcard_length) != 0) {
+        return cat_false;
+    }
+    /* The text that the wildcard covers holds letters, digits and hyphens
+     * only */
+    for (i = prefix_length; i < name_length - suffix_length; i++) {
+        char c = name[i];
+        if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
+            || c == '-') {
+            continue;
+        }
+        return cat_false;
+    }
+    /* A whole label wildcard covers at least one character. A partial
+     * wildcard never matches an A-label */
+    if (prefix_length == 0 && wildcard_length == 0
+        && name_length == suffix_length) {
+        return cat_false;
+    }
+    if ((prefix_length != 0 || wildcard_length != 0) && name_length >= 4
+        && cat_strncasecmp(name, "xn--", 4) == 0) {
+        return cat_false;
+    }
+    return memchr(name + prefix_length, '.',
+        name_length - prefix_length - wildcard_length - suffix_length) == NULL;
+}
+
+/* Parse a reference name into a binary address. An address has more textual
+ * spellings than the SAN comparison allows, so this function decides what
+ * counts as numeric. The IP entries are then compared as bytes */
+static cat_bool_t _cat_ssl_name_to_ip(const char *name, size_t name_length,
+    unsigned char *address, size_t *address_length)
+{
+    char *text = cat_strndup(name, name_length);
+
+#if CAT_ALLOC_HANDLE_ERRORS
+    if (text == NULL) {
+        return cat_false;
+    }
+#endif
+    /* A reference name is a string. It never carries brackets */
+    if (inet_pton(AF_INET, text, address) == 1) {
+        *address_length = 4;
+        cat_free(text);
+        return cat_true;
+    }
+    if (inet_pton(AF_INET6, text, address) == 1) {
+        *address_length = 16;
+        cat_free(text);
+        return cat_true;
+    }
+    cat_free(text);
+
+    return cat_false;
+}
+
+static cat_bool_t _cat_ssl_match_ip(const ASN1_STRING *entry,
+    const unsigned char *address, size_t address_length)
+{
+    return ASN1_STRING_get_length((ASN1_STRING *) entry) == (int) address_length
+        && memcmp(ASN1_STRING_get0_data(entry), address, address_length) == 0;
+}
+
+/* The caller reaches this function only when the certificate presents no DNS
+ * name and no service identity. The common name is the identity in that case */
+static cat_bool_t _cat_ssl_match_common_name(X509 *cert, const char *name, size_t name_length,
+    cat_ssl_check_host_flags_t flags)
+{
+    const X509_NAME *subject;
+    const X509_NAME_ENTRY *entry;
+    const ASN1_STRING *data;
+    const unsigned char *text;
+    size_t text_length;
+    int index;
+
+    subject = X509_get_subject_name(cert);
+    index = X509_NAME_get_index_by_NID((X509_NAME *) subject, NID_commonName, -1);
+    if (index < 0) {
+        return cat_false;
+    }
+    entry = X509_NAME_get_entry(subject, index);
+    if (entry == NULL) {
+        return cat_false;
+    }
+    data = X509_NAME_ENTRY_get_data(entry);
+    text_length = ASN1_STRING_get_length((ASN1_STRING *) data);
+    text = ASN1_STRING_get0_data(data);
+    /* OpenSSL terminates the value. A shorter string therefore holds an
+     * embedded NUL */
+    if (text_length == 0 || strlen((const char *) text) != text_length) {
+        return cat_false;
+    }
+
+    return _cat_ssl_match_dns(name, name_length, (const char *) text, text_length, flags);
+}
+
+static inline cat_bool_t _cat_ssl_check_host(X509 *cert, const char *name, size_t name_length,
+    cat_ssl_check_host_flags_t flags)
+{
+    GENERAL_NAMES *names;
+    unsigned char address[16];
+    size_t address_length = 0;
+    cat_bool_t numeric, has_dns_id = cat_false, has_service_id = cat_false;
+    cat_bool_t matched = cat_false;
+    int i;
 
     if (name_length == 0 || memchr(name, '\0', name_length) != NULL) {
         return cat_false;
     }
-    char *address_name = cat_strndup(name, name_length);
-#if CAT_ALLOC_HANDLE_ERRORS
-    if (address_name == NULL) {
-        return cat_false;
-    }
-#endif
-    ASN1_OCTET_STRING *address = a2i_IPADDRESS(address_name);
-    cat_free(address_name);
-    if (address != NULL) {
-        /* Numeric addresses require an IP SAN; DNS names and CNs are not IP identities. */
-        const unsigned char *address_data = ASN1_STRING_get0_data(address);
-        cat_bool_t ret = X509_check_ip(cert, address_data,
-            (size_t) ASN1_STRING_length(address), 0) == 1;
-        ASN1_OCTET_STRING_free(address);
-        return ret;
-    }
-    GENERAL_NAMES *names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
-    for (int i = 0; names != NULL && i < sk_GENERAL_NAME_num(names); i++) {
+
+    numeric = _cat_ssl_name_to_ip(name, name_length, address, &address_length);
+    names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
+    for (i = 0; names != NULL && i < sk_GENERAL_NAME_num(names); i++) {
         GENERAL_NAME *san = sk_GENERAL_NAME_value(names, i);
+
         if (san->type == GEN_DNS) {
-            int length = ASN1_STRING_length(san->d.dNSName);
-            const unsigned char *value = ASN1_STRING_get0_data(san->d.dNSName);
-            if (length > 0 && value[length - 1] == '.') {
-                has_rooted_dns_id = cat_true;
+            const ASN1_STRING *dns = san->d.dNSName;
+            const char *text = (const char *) ASN1_STRING_get0_data(dns);
+            size_t text_length = ASN1_STRING_get_length((ASN1_STRING *) dns);
+
+            has_dns_id = cat_true;
+            /* An entry that holds an embedded NUL names nothing */
+            if (strlen(text) != text_length) {
+                continue;
             }
-        }
-        cat_bool_t is_service_id = san->type == GEN_DNS || san->type == GEN_URI;
-        if (san->type == GEN_OTHERNAME) {
+            /* A trailing dot marks a fully qualified name. Drop it, because a
+             * reference name rarely carries it. A wildcard pattern keeps it,
+             * because the pattern check then rejects the pattern */
+            if (text_length != 0 && text[text_length - 1] == '.'
+                && memchr(text, '*', text_length) == NULL) {
+                text_length--;
+            }
+            if (!numeric
+                && _cat_ssl_match_dns(name, name_length, text, text_length, flags)) {
+                matched = cat_true;
+                break;
+            }
+        } else if (san->type == GEN_IPADD) {
+            if (numeric && _cat_ssl_match_ip(san->d.iPAddress, address, address_length)) {
+                matched = cat_true;
+                break;
+            }
+        } else if (san->type == GEN_URI) {
+            has_service_id = cat_true;
+        } else if (san->type == GEN_OTHERNAME) {
             static const char srv_name_oid[] = "1.3.6.1.5.5.7.8.7";
             char oid[sizeof(srv_name_oid)];
-            is_service_id = OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
-                == (int) (sizeof(srv_name_oid) - 1) && strcmp(oid, srv_name_oid) == 0;
-        }
-        if (is_service_id) {
-            /* a service ID replaces the subject common name */
-            flags |= X509_CHECK_FLAG_NEVER_CHECK_SUBJECT;
+
+            if (OBJ_obj2txt(oid, (int) sizeof(oid), san->d.otherName->type_id, 1)
+                == (int) (sizeof(srv_name_oid) - 1)
+                && strcmp(oid, srv_name_oid) == 0) {
+                has_service_id = cat_true;
+            }
         }
     }
-    GENERAL_NAMES_free(names);
-    if (X509_check_host(cert, (char *) name, name_length, flags, NULL) != 1) {
-        /* A terminal DNS root dot identifies the same SAN name. Keep OpenSSL's
-         * wildcard and SAN precedence checks; do not extend this rule to CNs. */
-        if (has_rooted_dns_id && name[name_length - 1] != '.') {
-            char *rooted_name = (char *) cat_malloc(name_length + 2);
-#if CAT_ALLOC_HANDLE_ERRORS
-            if (rooted_name == NULL) {
-                return cat_false;
-            }
-#endif
-            memcpy(rooted_name, name, name_length);
-            rooted_name[name_length] = '.';
-            rooted_name[name_length + 1] = '\0';
-            cat_bool_t matched = X509_check_host(cert, rooted_name, name_length + 1, flags, NULL) == 1;
-            cat_free(rooted_name);
-            if (matched) {
-                return cat_true;
-            }
-        }
-#if OPENSSL_VERSION_NUMBER >= 0x40000000L
-        /*
-         * OpenSSL 4 no longer falls back to the subject common name on its own,
-         * so ask for it explicitly. A certificate that holds a service ID names a
-         * host by that ID only, and a numeric name never reaches this point
-         */
-        if ((flags & X509_CHECK_FLAG_NEVER_CHECK_SUBJECT) == 0
-            && X509_check_host(cert, (char *) name, name_length,
-                X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT, NULL) == 1
-        ) {
-            CAT_LOG_DEBUG(SSL, "X509_check_host(%p, \"%.*s\", %zu): common name match", cert, (int) name_length, name, name_length);
-            return cat_true;
-        }
-#endif
-        CAT_LOG_DEBUG(SSL, "X509_check_host(%p, \"%.*s\", %zu): no match", cert, (int) name_length, name, name_length);
+    if (names != NULL) {
+        GENERAL_NAMES_free(names);
+    }
+    if (matched) {
+        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subjectAltName match", (int) name_length, name);
+        return cat_true;
+    }
+
+    /* A certificate that presents a name of its own does not fall back to the
+     * common name */
+    if (has_dns_id || has_service_id) {
+        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subjectAltName did not match", (int) name_length, name);
         return cat_false;
     }
-    CAT_LOG_DEBUG(SSL, "X509_check_host(%p, \"%.*s\", %zu): match", cert, (int) name_length, name, name_length);
-    return cat_true;
+    /* By default only a subjectAltName names a host, as in current browsers.
+     * The caller must ask for the common name */
+    if ((flags & CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME) == 0) {
+        CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": no subjectAltName", (int) name_length, name);
+        return cat_false;
+    }
+    /* A numeric reference name is an IP identity. Only an IP SAN names it, also
+     * when the caller asks for the common name */
+    if (numeric) {
+        return cat_false;
+    }
+    matched = _cat_ssl_match_common_name(cert, name, name_length, flags);
+    CAT_LOG_DEBUG(SSL, "peer name \"%.*s\": subject common name %s", (int) name_length, name,
+        matched ? "match" : "did not match");
+
+    return matched;
 }
 
 CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t name_length)
+{
+    return cat_ssl_check_host_ex(ssl, name, name_length, CAT_SSL_CHECK_HOST_FLAG_NONE);
+}
+
+CAT_API cat_bool_t cat_ssl_check_host_ex(cat_ssl_t *ssl, const char *name, size_t name_length,
+    cat_ssl_check_host_flags_t flags)
 {
     X509 *cert;
 
@@ -1254,7 +1481,7 @@ CAT_API cat_bool_t cat_ssl_check_host(cat_ssl_t *ssl, const char *name, size_t n
         return cat_false;
     }
 
-    cat_bool_t ret = _cat_ssl_check_host(cert, name, name_length);
+    cat_bool_t ret = _cat_ssl_check_host(cert, name, name_length, flags);
 
 #if OPENSSL_VERSION_NUMBER < 0x30000000L
     X509_free(cert);

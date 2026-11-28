@@ -352,6 +352,9 @@ public:
             {"C", "CN"},
             {"O", "TestCA"},
             {"CN", "TestCA"},
+            /* Some tests use this certificate as a server certificate and check
+             * the peer name against it, and a common name alone names no host */
+            {"subjectAltName", "DNS:TestCA"},
             {"notBeforeOffsetSeconds", 0},
             {"notAfterOffsetSeconds", 365 * 86400 /* 1 year */},
             {"keyUsage", "critical,digitalSignature,keyCertSign"},

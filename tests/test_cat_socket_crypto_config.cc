@@ -459,7 +459,9 @@ TEST(cat_ssl, peer_certificate_identity_rules)
         {"DNS:localhost.", "localhost", "other.example", cat_false},
         {"URI:https://service.example", "localhost", "localhost", cat_false},
         {"otherName:1.3.6.1.5.5.7.8.7;IA5:_http.localhost", "localhost", "localhost", cat_false},
-        {"otherName:1.2.3.4;UTF8:unrelated", "localhost", "localhost", cat_true},
+        /* an unrelated otherName is not an identity, and the common name is
+         * not consulted by default */
+        {"otherName:1.2.3.4;UTF8:unrelated", "localhost", "localhost", cat_false},
         {"DNS:127.0.0.1", "localhost", "127.0.0.1", cat_false},
         {"IP:127.0.0.1", "localhost", "127.0.0.1", cat_true},
         {"DNS:*.example.com", "localhost", "www.example.com", cat_true},
@@ -484,8 +486,8 @@ TEST(cat_ssl, peer_certificate_identity_rules)
         {"DNS:*.example.com.", "localhost", "www.example.com", cat_false},
         {"DNS:*.example.com.", "localhost", "deep.www.example.com", cat_false},
         {"DNS:other.example", "localhost", "localhost", cat_false},
-        /* the common name is the identity when the certificate holds no SAN */
-        {nullptr, "localhost", "localhost", cat_true},
+        /* without a SAN only the explicit opt-in makes the common name an identity */
+        {nullptr, "localhost", "localhost", cat_false},
         {nullptr, "localhost", "other.example", cat_false},
         /*
          * A numeric name is an IP identity: only an IP SAN may name it, never the
@@ -552,6 +554,15 @@ TEST(cat_ssl, peer_certificate_identity_rules)
         ASSERT_TRUE(wg(TEST_IO_TIMEOUT));
         ASSERT_TRUE(peer_ready);
         ASSERT_EQ(cat_ssl_check_host(&peer, test_case.peer_name, strlen(test_case.peer_name)), test_case.matches);
+        if (test_case.alternative_names == nullptr
+            && strcmp(test_case.peer_name, test_case.common_name) == 0
+            && cat_ssl_check_host(&peer, CAT_STRL("127.0.0.1")) == cat_false
+            && strcmp(test_case.peer_name, "127.0.0.1") != 0) {
+            /* the same certificate names the host once the common name is
+             * allowed as an identity */
+            ASSERT_TRUE(cat_ssl_check_host_ex(&peer, test_case.peer_name,
+                strlen(test_case.peer_name), CAT_SSL_CHECK_HOST_FLAG_COMMON_NAME));
+        }
     }
 }
 #endif
