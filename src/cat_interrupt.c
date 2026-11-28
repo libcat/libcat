@@ -66,8 +66,9 @@ static cat_interrupt_drain_ret_t cat_interrupt_drain(cat_os_socket_t fd)
 }
 
 /* Keep the watcher referenced while at least one waiter depends on it, so a
- * wait with no handle of its own does not let the loop return. The runtime
- * shutdown still completes, because it clears the source first */
+ * wait with no handle of its own does not let the loop return. The reference
+ * stays while such a waiter is registered, so the embedder must end those waits
+ * before it shuts the runtime down */
 static void cat_interrupt_poll_ref(cat_bool_t wanted)
 {
     uv_poll_t *poll = CAT_EVENT_G(interrupt_poll);
