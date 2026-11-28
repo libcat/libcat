@@ -37,7 +37,7 @@ static int cat_pq_flush(PGconn *conn)
     int flush_ret = -1;
 
     do {
-        cat_ret_t poll_ret = cat_poll_one(PQsocket(conn), POLLOUT, NULL, -1);
+        cat_ret_t poll_ret = cat_poll_one_ex(PQsocket(conn), POLLOUT, NULL, -1, CAT_POLL_FLAG_RETRY_ON_INTERRUPT);
         if (unlikely(poll_ret == CAT_RET_ERROR)) {
             return -1;
         }
@@ -51,7 +51,7 @@ static int cat_pq_flush(PGconn *conn)
 static PGresult *cat_pq_get_result(PGconn *conn)
 {
     PGresult *result, *last_result = NULL;
-    cat_ret_t poll_ret = cat_poll_one(PQsocket(conn), POLLIN, NULL, -1);
+    cat_ret_t poll_ret = cat_poll_one_ex(PQsocket(conn), POLLIN, NULL, -1, CAT_POLL_FLAG_RETRY_ON_INTERRUPT);
     if (unlikely(poll_ret == CAT_RET_ERROR)) {
         return NULL;
     }
@@ -94,7 +94,7 @@ static cat_bool_t cat_pq_poll_connection(PGconn *conn)
             return cat_false;
         }
 
-        cat_ret_t ret = cat_poll_one(PQsocket(conn), events, NULL, -1);
+        cat_ret_t ret = cat_poll_one_ex(PQsocket(conn), events, NULL, -1, CAT_POLL_FLAG_RETRY_ON_INTERRUPT);
         if (unlikely(ret == CAT_RET_ERROR)) {
             return cat_false;
         }

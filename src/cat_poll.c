@@ -20,6 +20,7 @@
 
 #include "cat_coroutine.h"
 #include "cat_event.h"
+#include "cat_interrupt.h"
 #include "cat_time.h"
 
 #include "cat_ref.h"
@@ -101,6 +102,16 @@ static cat_always_inline int cat_poll_translate_sys_events_to_uv_events(cat_poll
     }
 
     return uv_events;
+}
+
+static cat_always_inline uv_events_t cat_poll_translate_requested_events(cat_pollfd_events_t sys_events)
+{
+    /* poll(2) reports hangup and errors for a descriptor that requested
+     * nothing, so an empty request still has to be watched for disconnect */
+    if (sys_events == POLLNONE) {
+        return UV_EVENT_DISCONNECT;
+    }
+    return cat_poll_translate_sys_events_to_uv_events(sys_events);
 }
 
 static CAT_COLD cat_pollfd_events_t cat_poll_translate_error_to_sys_events(cat_pollfd_events_t input_events, int error)
@@ -186,6 +197,8 @@ typedef struct cat_poll_one_s {
         uv_events_t events; // uv events, e.g UV_EVENT_READABLE, UV_EVENT_WRITABLE...
     } ret;
     cat_event_io_defer_task_t *done_task;
+    cat_interrupt_waiter_t interrupt;
+    cat_bool_t retry_on_interrupt;
 } cat_poll_one_t;
 
 static void cat_poll_one_close_callback(uv_handle_t *handle)
@@ -207,6 +220,17 @@ static void cat_poll_one_done_callback(cat_event_io_defer_task_t *task, cat_data
      * whether it exists here, but now we are using event_defer_task_close()
      * to cancel this callback, so schedule is always safe. */
     cat_coroutine_schedule(poll->u.coroutine, EVENT, "Poll one");
+}
+
+/* Runs in the poll phase. An io event of the same round has already deferred
+ * the resume, and a repeated wake must not schedule it twice */
+static void cat_poll_one_interrupt_wake(cat_interrupt_waiter_t *waiter)
+{
+    cat_poll_one_t *poll = cat_container_of(waiter, cat_poll_one_t, interrupt);
+
+    if (poll->done_task == NULL) {
+        poll->done_task = cat_event_io_defer_task_create(cat_poll_one_done_callback, poll);
+    }
 }
 
 static void cat_poll_one_callback(uv_poll_t* handle, int status, uv_events_t events)
@@ -244,12 +268,13 @@ static void cat_poll_one_callback(uv_poll_t* handle, int status, uv_events_t eve
 
 CAT_API cat_poll_one_emulate_t cat_poll_one_emulate;
 
-static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
+static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout, cat_poll_flags_t flags)
 {
     CAT_POLL_ONE_EMULATE(fd, events, revents);
     CAT_POLL_CHECK_TIMEOUT(timeout);
     cat_poll_one_t *poll;
     cat_os_socket_t _fd = fd;
+    cat_bool_t interrupted;
     cat_ret_t ret;
     int error;
 
@@ -282,7 +307,7 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
         *revents = cat_poll_translate_error_to_sys_events(events, cat_poll_filter_init_error(error));
         return CAT_RET_ERROR;
     }
-    error = uv_poll_start(&poll->u.poll, cat_poll_translate_sys_events_to_uv_events(events), cat_poll_one_callback);
+    error = uv_poll_start(&poll->u.poll, cat_poll_translate_requested_events(events), cat_poll_one_callback);
     if (unlikely(error != 0)) {
         cat_update_last_error_with_reason(error, "Poll start failed");
         uv_close(&poll->u.handle, cat_poll_one_close_callback);
@@ -296,11 +321,55 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
     poll->ret.events = UV_EVENT_NONE;
     poll->u.coroutine = CAT_COROUTINE_G(current);
     poll->done_task = NULL;
+    poll->interrupt.wake = cat_poll_one_interrupt_wake;
+    poll->retry_on_interrupt = (flags & CAT_POLL_FLAG_RETRY_ON_INTERRUPT) != 0;
 
-    ret = cat_time_delay(timeout);
+    for (;;) {
+        CAT_TIME_WAIT_START() {
+            if (timeout == 0) {
+                /* No time is left, so an interruptible wait would only spin the
+                 * loop on a source that keeps firing. cat_time_delay(0) yields
+                 * for one round and collects what that round reports */
+                ret = cat_time_delay(0);
+                interrupted = cat_false;
+            } else {
+                cat_interrupt_waiter_register(&poll->interrupt);
+                ret = cat_time_delay_ex(timeout, CAT_TIME_FLAG_INTERRUPTIBLE);
+                interrupted = cat_interrupt_waiter_is_interrupted(&poll->interrupt);
+                cat_interrupt_waiter_unregister(&poll->interrupt);
+            }
+        } CAT_TIME_WAIT_END(timeout);
 
-    if (poll->done_task != NULL) {
-        cat_event_io_defer_task_close(poll->done_task);
+        if (poll->done_task != NULL) {
+            cat_event_io_defer_task_close(poll->done_task);
+            /* a later wake would reuse the pointer and skip its own defer */
+            poll->done_task = NULL;
+        }
+
+        /* A wake that the timer did not cause is an interrupt, whether the wait
+         * reports it as a failed delay or as an early return. An expired timer
+         * wins over an interrupt of the same round, and that reports CAT_RET_OK */
+        if (!interrupted || ret == CAT_RET_OK) {
+            break;
+        }
+
+        /* A descriptor that reported an error keeps that result: libuv stops the
+         * handle of a descriptor that reported POLLERR, and a retry would then
+         * wait on a handle that never fires again */
+        if (poll->ret.status == CAT_ECANCELED) {
+            /* poll(2) reports the interrupt and leaves revents unset, so the
+             * events collected with it belong to the retry */
+            *revents = POLLNONE;
+            poll->ret.events = UV_EVENT_NONE;
+        } else {
+            break;
+        }
+
+        if (!poll->retry_on_interrupt) {
+            cat_update_last_error(CAT_EINTR, "Poll one interrupted");
+            ret = CAT_RET_ERROR;
+            break;
+        }
     }
 
     uv_close(&poll->u.handle, cat_poll_one_close_callback);
@@ -333,6 +402,10 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
             } else {
                 ret = CAT_RET_OK;
                 *revents = cat_poll_translate_uv_events_to_sys_events(poll->ret.events);
+                if (events == POLLNONE) {
+                    /* an empty request only reports hangup and errors */
+                    *revents &= POLLERR | POLLHUP | POLLNVAL;
+                }
             }
             break;
         }
@@ -342,6 +415,11 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
             break;
         /* error */
         case CAT_RET_ERROR:
+            if (interrupted) {
+                /* the interrupt is the whole result, so its CAT_EINTR stays the
+                 * last error of this call */
+                break;
+            }
             cat_update_last_error_with_previous("Poll wait failed");
             break;
         default:
@@ -351,7 +429,7 @@ static cat_ret_t cat_poll_one_impl(cat_os_socket_t fd, cat_pollfd_events_t event
     return ret;
 }
 
-CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
+static cat_ret_t cat_poll_one_entry(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout, cat_poll_flags_t flags)
 {
     cat_pollfd_events_t _revents;
     if (revents == NULL) {
@@ -365,7 +443,7 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
         cat_buffer_str_free(events_str);
     });
 
-    cat_ret_t ret = cat_poll_one_impl(fd, events, revents, timeout);
+    cat_ret_t ret = cat_poll_one_impl(fd, events, revents, timeout, flags);
 
     CAT_LOG_DEBUG_VA(POLL, {
         char *events_str = cat_pollfd_events_str(events);
@@ -379,10 +457,22 @@ CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, c
     return ret;
 }
 
+CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout)
+{
+    return cat_poll_one_entry(fd, events, revents, timeout, CAT_POLL_FLAG_NONE);
+}
+
+CAT_API cat_ret_t cat_poll_one_ex(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout, cat_poll_flags_t flags)
+{
+    return cat_poll_one_entry(fd, events, revents, timeout, flags);
+}
+
 typedef struct cat_poll_context_s {
     CAT_REF_FIELD;
     cat_coroutine_t *coroutine;
     cat_event_io_defer_task_t *done_task;
+    cat_interrupt_waiter_t interrupt;
+    cat_bool_t retry_on_interrupt;
 } cat_poll_context_t;
 
 typedef struct {
@@ -436,6 +526,17 @@ static void cat_poll_done_callback(cat_event_io_defer_task_t *task, cat_data_t *
     cat_coroutine_schedule(context->coroutine, EVENT, "Poll");
 }
 
+/* Runs in the poll phase. An io event of the same round has already deferred
+ * the resume, and a repeated wake must not schedule it twice */
+static void cat_poll_interrupt_wake(cat_interrupt_waiter_t *waiter)
+{
+    cat_poll_context_t *context = cat_container_of(waiter, cat_poll_context_t, interrupt);
+
+    if (context->done_task == NULL) {
+        context->done_task = cat_event_io_defer_task_create(cat_poll_done_callback, context);
+    }
+}
+
 static void cat_poll_callback(uv_poll_t* handle, int status, uv_events_t events)
 {
     cat_poll_t *poll = (cat_poll_t *) handle;
@@ -481,13 +582,14 @@ static cat_always_inline cat_bool_t cat_poll_nfds_is_valid(cat_nfds_t nfds)
            (uintmax_t) nfds <= (uintmax_t) ((SIZE_MAX - sizeof(cat_poll_context_t)) / sizeof(cat_poll_t));
 }
 
-static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
+static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout, cat_poll_flags_t flags)
 {
     CAT_POLL_EMULATE(fds, nfds);
     CAT_POLL_CHECK_TIMEOUT(timeout);
     cat_poll_context_t *context;
     cat_poll_t *polls;
-    cat_nfds_t i = 0, e = 0;
+    cat_nfds_t i = 0, e = 0, started = 0;
+    cat_bool_t ready_now = cat_false;
     cat_ret_t ret;
     int n = 0; // use int instead, because nfds_t maybe unsigned, can not be -1 (ERROR)
     int error = 0;
@@ -505,6 +607,8 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
     CAT_REF_INIT(context);
     context->coroutine = CAT_COROUTINE_G(current);
     context->done_task = NULL;
+    context->interrupt.wake = cat_poll_interrupt_wake;
+    context->retry_on_interrupt = (flags & CAT_POLL_FLAG_RETRY_ON_INTERRUPT) != 0;
     for (; i < nfds; i++) {
         cat_pollfd_t *fd = &fds[i];
         cat_poll_t *poll = &polls[i];
@@ -537,32 +641,92 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
             }
             poll->initialized = cat_true;
             CAT_REF_ADD(context);
-            if (e > 0) {
-                /* fast return without starting handle */
-                break;
-            }
-            error = uv_poll_start(&poll->u.poll, cat_poll_translate_sys_events_to_uv_events(fd->events), cat_poll_callback);
+            error = uv_poll_start(&poll->u.poll, cat_poll_translate_requested_events(fd->events), cat_poll_callback);
             if (unlikely(error != 0)) {
                 poll->ret.status = error;
                 e++;
                 break;
             }
+            started++;
             poll->ret.status = CAT_ECANCELED;
         } while (0);
     }
 
     if (e > 0) {
-        /* fast return without waiting */
+        /* poll(2) reports a descriptor that cannot be registered as ready, so
+         * a batch holding one has to return at once; the wait below still runs
+         * one round to collect the registered descriptors */
+        cat_nfds_t j;
+        for (j = 0; j < nfds; j++) {
+            cat_poll_t *poll = &polls[j];
+            if (poll->ret.status < 0 && poll->ret.status != CAT_ECANCELED &&
+                cat_poll_translate_error_to_sys_events(fds[j].events, poll->ret.status) != POLLNONE) {
+                ready_now = cat_true;
+                break;
+            }
+        }
+    }
+
+    if (e > 0 && started == 0) {
+        /* nothing is registered, poll(2) reports the failures without waiting */
         ret = CAT_RET_NONE;
         CAT_ASSERT(context->done_task == NULL);
     } else {
-        ret = cat_time_delay(timeout);
+        cat_bool_t interrupted = cat_false;
+        cat_nfds_t j;
+
+        if (ready_now) {
+            timeout = 0;
+            CAT_POLL_CHECK_TIMEOUT(timeout);
+        }
+        for (;;) {
+            CAT_TIME_WAIT_START() {
+                if (timeout == 0) {
+                    /* No time is left, so an interruptible wait would only spin
+                     * the loop on a source that keeps firing. One round still
+                     * collects what the registered descriptors report */
+                    ret = cat_time_delay(0);
+                    interrupted = cat_false;
+                } else {
+                    cat_interrupt_waiter_register(&context->interrupt);
+                    ret = cat_time_delay_ex(timeout, CAT_TIME_FLAG_INTERRUPTIBLE);
+                    interrupted = cat_interrupt_waiter_is_interrupted(&context->interrupt);
+                    cat_interrupt_waiter_unregister(&context->interrupt);
+                }
+            } CAT_TIME_WAIT_END(timeout);
+
+            if (context->done_task != NULL) {
+                cat_event_io_defer_task_close(context->done_task);
+                /* a later wake would reuse the pointer and skip its own defer */
+                context->done_task = NULL;
+            }
+
+            /* An expired timer wins over an interrupt of the same round */
+            if (!interrupted || ret != CAT_RET_ERROR) {
+                break;
+            }
+
+            /* poll(2) reports the interrupt and leaves revents unset, so the
+             * readiness collected with it belongs to a later round. A failure
+             * to register a descriptor is not a readiness and stays reported */
+            for (j = 0; j < nfds; j++) {
+                if (polls[j].ret.status == 0) {
+                    polls[j].ret.status = CAT_ECANCELED;
+                    polls[j].ret.events = UV_EVENT_NONE;
+                }
+            }
+
+            if (!context->retry_on_interrupt) {
+                cat_update_last_error(CAT_EINTR, "Poll interrupted");
+                n = CAT_RET_ERROR;
+                break;
+            }
+        }
         if (unlikely(ret == CAT_RET_ERROR)) {
-            CAT_ASSERT(context->done_task == NULL);
-            cat_update_last_error_with_previous("Poll wait failed");
+            if (!interrupted) {
+                cat_update_last_error_with_previous("Poll wait failed");
+            }
             n = CAT_RET_ERROR;
-        } else if (context->done_task != NULL) {
-            cat_event_io_defer_task_close(context->done_task);
         }
     }
 
@@ -581,7 +745,7 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
             /* just close handle and go to the next one */
             continue;
         }
-        if (unlikely(ret == CAT_RET_NONE && poll->ret.status < 0)) {
+        if (poll->ret.status < 0) {
             if (poll->ret.status == CAT_ECANCELED) {
                 fd->revents = POLLNONE;
             }
@@ -594,10 +758,18 @@ static int cat_poll_impl(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeo
 #endif
             else {
                 fd->revents = cat_poll_translate_error_to_sys_events(fd->events, poll->ret.status);
-                n++;
+                /* CAT_EEXIST describes a descriptor that an earlier entry already
+                 * holds, and it reports no event, so it is not a ready one */
+                if (fd->revents != POLLNONE) {
+                    n++;
+                }
             }
         } else {
             fd->revents = cat_poll_translate_uv_events_to_sys_events(poll->ret.events);
+            if (fd->events == POLLNONE) {
+                /* an empty request only reports hangup and errors */
+                fd->revents &= POLLERR | POLLHUP | POLLNVAL;
+            }
             if (fd->revents != POLLNONE) {
                 n++;
             }
@@ -638,7 +810,7 @@ static CAT_BUFFER_STR_FREE char *cat_pollfds_str(cat_pollfd_t *fds, cat_nfds_t n
 }
 #endif
 
-CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
+static int cat_poll_entry(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout, cat_poll_flags_t flags)
 {
     if (unlikely(!cat_poll_nfds_is_valid(nfds))) {
         cat_update_last_error(CAT_EOVERFLOW, "Too many descriptors");
@@ -651,7 +823,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
         cat_buffer_str_free(fds_str);
     });
 
-    int ret = cat_poll_impl(fds, nfds, timeout);
+    int ret = cat_poll_impl(fds, nfds, timeout, flags);
 
     CAT_LOG_DEBUG_VA(POLL, {
         char *fds_str = cat_pollfds_str(fds, nfds, cat_true);
@@ -661,6 +833,16 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
     });
 
     return ret;
+}
+
+CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
+{
+    return cat_poll_entry(fds, nfds, timeout, CAT_POLL_FLAG_NONE);
+}
+
+CAT_API int cat_poll_ex(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout, cat_poll_flags_t flags)
+{
+    return cat_poll_entry(fds, nfds, timeout, flags);
 }
 
 #define SAFE_FD_ZERO(set) do { \
@@ -676,7 +858,7 @@ CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout)
 
 #define SAFE_FD_ISSET(fd, set) (set != NULL && FD_ISSET(fd, set))
 
-CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+static int cat_select_impl(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout, cat_poll_flags_t flags)
 {
     cat_pollfd_t *pfds, *pfd;
     cat_nfds_t nfds = 0, ifds;
@@ -697,18 +879,40 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
     /* nothing to do */
     if (nfds == 0) {
         cat_timeout_t timeout_ms = cat_time_tv2to(timeout);
-        if (timeout_ms > 0) {
-            cat_ret_t delay_ret = cat_time_delay(timeout_ms);
+        cat_ret_t delay_ret;
+
+        if (timeout_ms <= 0) {
+            /* select() without descriptors and with no positive timeout has
+             * nothing to wait for */
+            return 0;
+        }
+        for (;;) {
+            CAT_TIME_WAIT_START() {
+                if (timeout_ms == 0) {
+                    /* No time is left, so an interruptible wait would only spin
+                     * the loop on a source that keeps firing */
+                    delay_ret = cat_time_delay(0);
+                } else {
+                    delay_ret = cat_time_delay_ex(timeout_ms, CAT_TIME_FLAG_INTERRUPTIBLE);
+                }
+            } CAT_TIME_WAIT_END(timeout_ms);
+
             if (delay_ret == CAT_RET_NONE) {
                 cat_update_last_error(CAT_ECANCELED, "Select wait has been canceled");
                 return -1;
             }
-            if (delay_ret == CAT_RET_ERROR) {
+            if (delay_ret != CAT_RET_ERROR) {
+                return 0;
+            }
+            if (cat_get_last_error_code() != CAT_EINTR) {
                 cat_update_last_error_with_previous("Select wait failed");
                 return -1;
             }
+            if (!(flags & CAT_POLL_FLAG_RETRY_ON_INTERRUPT)) {
+                cat_update_last_error(CAT_EINTR, "Select wait interrupted");
+                return -1;
+            }
         }
-        return 0;
     }
 
     /* malloc for poll fds */
@@ -744,7 +948,7 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
     }
     CAT_ASSERT(ifds == nfds);
 
-    ret = cat_poll(pfds, nfds, cat_time_tv2to(timeout));
+    ret = cat_poll_ex(pfds, nfds, cat_time_tv2to(timeout), flags);
 
     if (unlikely(ret < 0)) {
         goto _out;
@@ -787,4 +991,14 @@ CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds
     _out:
     cat_free(pfds);
     return ret;
+}
+
+CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    return cat_select_impl(max_fd, readfds, writefds, exceptfds, timeout, CAT_POLL_FLAG_NONE);
+}
+
+CAT_API int cat_select_ex(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout, cat_poll_flags_t flags)
+{
+    return cat_select_impl(max_fd, readfds, writefds, exceptfds, timeout, flags);
 }

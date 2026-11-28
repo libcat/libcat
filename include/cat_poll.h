@@ -59,21 +59,40 @@ typedef SHORT cat_pollfd_events_t;
     XX(HUP) \
     XX(NVAL) \
 
+/* A signal ends the wait by default, as the kernel does for poll(2) and
+ * select(2); the caller sees CAT_EINTR and the ready events of that round are
+ * dropped. */
+typedef enum cat_poll_flag_e {
+    CAT_POLL_FLAG_NONE = 0,
+    /* keep waiting when a signal arrives; the total timeout still applies */
+    CAT_POLL_FLAG_RETRY_ON_INTERRUPT = 1 << 0,
+} cat_poll_flag_t;
+
+typedef int cat_poll_flags_t;
+
 /** OK: events triggered, NONE: timedout, ERROR: error ocurred.
  * @note: it does not always return ERROR when it was cancelled,
- * because poll() operation may be partially done. */
+ * because poll() operation may be partially done.
+ * @note: a signal reports ERROR with CAT_EINTR unless
+ * CAT_POLL_FLAG_RETRY_ON_INTERRUPT is set. */
 CAT_API cat_ret_t cat_poll_one(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout);
+CAT_API cat_ret_t cat_poll_one_ex(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents, cat_timeout_t timeout, cat_poll_flags_t flags);
 
 /** same with poll(),
  * returns the number of descriptors that are ready for I/O, or -1 if an error occurred.
  * If the time limit expires, poll() returns 0.
  * @see: same with poll_one() note. */
 CAT_API int cat_poll(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout);
+/* A signal reports -1 with CAT_EINTR and leaves every revents unset unless
+ * CAT_POLL_FLAG_RETRY_ON_INTERRUPT is set. */
+CAT_API int cat_poll_ex(cat_pollfd_t *fds, cat_nfds_t nfds, cat_timeout_t timeout, cat_poll_flags_t flags);
 
 /** same with select(),
  * but we can not use it for file IO.
  * @see: same with poll_one() note. */
 CAT_API int cat_select(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+/* @see: same with poll_ex() note on a signal. */
+CAT_API int cat_select_ex(cat_os_socket_t max_fd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout, cat_poll_flags_t flags);
 
 /** poll emulation APIs */
 typedef cat_ret_t (*cat_poll_one_emulate_t)(cat_os_socket_t fd, cat_pollfd_events_t events, cat_pollfd_events_t *revents);
