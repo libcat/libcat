@@ -1334,7 +1334,9 @@ static cat_bool_t _cat_ssl_name_to_ip(const char *name, size_t name_length,
 static cat_bool_t _cat_ssl_match_ip(const ASN1_STRING *entry,
     const unsigned char *address, size_t address_length)
 {
-    return ASN1_STRING_get_length((ASN1_STRING *) entry) == (int) address_length
+    /* ASN1_STRING_get_length() returns a size_t, so both sides of the
+     * comparison stay unsigned: address_length is 4 or 16 here */
+    return ASN1_STRING_get_length((ASN1_STRING *) entry) == address_length
         && memcmp(ASN1_STRING_get0_data(entry), address, address_length) == 0;
 }
 
